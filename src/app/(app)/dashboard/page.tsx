@@ -1,69 +1,227 @@
-import { ArrowUpRight, Briefcase, Trophy, UserPlus, Users } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import {
+  AlertCircle,
+  Briefcase,
+  Building2,
+  CheckSquare,
+  Coins,
+  PlaneTakeoff,
+  Sparkles,
+  Trophy,
+  UserPlus,
+  Users,
+} from 'lucide-react';
+import Link from 'next/link';
 import { FadeUp, StaggerContainer, StaggerItem } from '@/components/motion/motion-primitives';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { requireRole } from '@/lib/auth/session';
+import { cn } from '@/lib/utils';
+import { fetchDashboardMetrics } from '@/modules/dashboard/service';
 
-const stats = [
-  { label: 'Active candidates', value: '—', delta: 'Awaiting first import', icon: Users },
-  { label: 'New leads (7d)', value: '—', delta: 'Awaiting lead intake', icon: UserPlus },
-  { label: 'Open requisitions', value: '—', delta: 'Awaiting employers', icon: Briefcase },
-  { label: 'Placements (30d)', value: '—', delta: 'Awaiting first placement', icon: Trophy },
-] as const;
+export const dynamic = 'force-dynamic';
 
-export default function DashboardPage() {
+type Tile = {
+  label: string;
+  value: number | string;
+  hint?: string;
+  href: string;
+  icon: LucideIcon;
+  emphasis?: 'default' | 'warn';
+};
+
+function TileCard({ tile }: { tile: Tile }) {
+  return (
+    <Link href={tile.href} className="block group">
+      <Card
+        className={cn(
+          'transition-all hover:shadow-md hover:-translate-y-px',
+          tile.emphasis === 'warn' && Number(tile.value) > 0 && 'border-amber-400/60',
+        )}
+      >
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardDescription className="text-xs">{tile.label}</CardDescription>
+            <tile.icon
+              className={cn(
+                'size-4',
+                tile.emphasis === 'warn' && Number(tile.value) > 0
+                  ? 'text-amber-500'
+                  : 'text-muted-foreground',
+              )}
+            />
+          </div>
+          <CardTitle className="text-3xl font-semibold tracking-tight">{tile.value}</CardTitle>
+        </CardHeader>
+        {tile.hint && (
+          <CardContent>
+            <p className="text-xs text-muted-foreground">{tile.hint}</p>
+          </CardContent>
+        )}
+      </Card>
+    </Link>
+  );
+}
+
+export default async function DashboardPage() {
+  await requireRole(['ADMIN', 'STAFF']);
+  const m = await fetchDashboardMetrics();
+
+  const candidateTiles: Tile[] = [
+    {
+      label: 'Total candidates',
+      value: m.candidates.total,
+      hint: `${m.candidates.available} available · ${m.candidates.placed} placed`,
+      href: '/candidates',
+      icon: Users,
+    },
+    {
+      label: 'New leads (7d)',
+      value: m.leads.lastSevenDays,
+      hint: `${m.leads.total} open · ${m.leads.awaitingPayment} awaiting payment`,
+      href: '/leads',
+      icon: UserPlus,
+    },
+    {
+      label: 'Payments to verify',
+      value: m.payments.awaitingVerification,
+      hint: `${m.payments.verifiedLast30Days} verified last 30d`,
+      href: '/payments',
+      icon: Coins,
+      emphasis: 'warn',
+    },
+  ];
+
+  const recruitmentTiles: Tile[] = [
+    {
+      label: 'Employers',
+      value: m.employers.total,
+      hint: `${m.employers.active} active`,
+      href: '/employers',
+      icon: Building2,
+    },
+    {
+      label: 'Open requisitions',
+      value: m.requisitions.open + m.requisitions.inProgress,
+      hint: `${m.requisitions.totalPositionsOpen} positions open · ${m.requisitions.filledLast30Days} filled 30d`,
+      href: '/requisitions',
+      icon: Briefcase,
+    },
+    {
+      label: 'Active placements',
+      value: m.placements.activeConfirmed,
+      hint: `${m.placements.createdLast30Days} new last 30d`,
+      href: '/placements',
+      icon: Trophy,
+    },
+    {
+      label: 'Ads expiring (30d)',
+      value: m.ads.expiringWithin30Days,
+      hint: `${m.ads.active} active · ${m.ads.expired} expired`,
+      href: '/campaigns',
+      icon: Sparkles,
+      emphasis: 'warn',
+    },
+  ];
+
+  const immigrationTiles: Tile[] = [
+    {
+      label: 'Open immigration cases',
+      value: m.immigration.open,
+      hint: `${m.immigration.submitted} submitted`,
+      href: '/immigration',
+      icon: PlaneTakeoff,
+    },
+    {
+      label: 'Cases expiring (60d)',
+      value: m.immigration.expiringWithin60Days,
+      hint: 'Renewals to plan',
+      href: '/immigration',
+      icon: AlertCircle,
+      emphasis: 'warn',
+    },
+  ];
+
+  const activityTiles: Tile[] = [
+    {
+      label: 'Overdue tasks',
+      value: m.tasks.overdue,
+      hint: `${m.tasks.dueThisWeek} due this week · ${m.tasks.open} total open`,
+      href: '/tasks',
+      icon: CheckSquare,
+      emphasis: 'warn',
+    },
+  ];
+
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
       <FadeUp className="mb-8 flex items-end justify-between gap-4">
         <div>
           <div className="mb-1 flex items-center gap-2">
             <Badge variant="secondary" className="rounded-full">
-              Foundation
+              Overview
             </Badge>
-            <span className="text-xs text-muted-foreground">Milestone 5.0</span>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">Good day, team.</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Career Ireland — today</h1>
           <p className="text-sm text-muted-foreground">
-            The shell is live. Real data appears as modules ship in Milestone 5.1 onward.
+            Live metrics across every workspace. Click any tile to drill in.
           </p>
         </div>
       </FadeUp>
 
-      <StaggerContainer className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map((s) => (
-          <StaggerItem key={s.label}>
-            <Card className="transition-shadow hover:shadow-sm">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardDescription className="text-xs">{s.label}</CardDescription>
-                  <s.icon className="size-4 text-muted-foreground" />
-                </div>
-                <CardTitle className="text-3xl font-semibold tracking-tight">{s.value}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <ArrowUpRight className="size-3" />
-                  {s.delta}
-                </div>
-              </CardContent>
-            </Card>
-          </StaggerItem>
-        ))}
-      </StaggerContainer>
+      <div className="space-y-8">
+        <section>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Candidate services
+          </h2>
+          <StaggerContainer className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {candidateTiles.map((t) => (
+              <StaggerItem key={t.label}>
+                <TileCard tile={t} />
+              </StaggerItem>
+            ))}
+          </StaggerContainer>
+        </section>
 
-      <FadeUp delay={0.15} className="mt-10">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">What's next</CardTitle>
-            <CardDescription>The roadmap ships vertically — one module at a time.</CardDescription>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Milestone 5.1 (Users & Auth) adds real login, password hashing, session cookies,
-            middleware protection, and an admin seed script. Once you provision a Neon database and
-            set <code className="rounded bg-muted px-1 py-0.5 text-xs">DATABASE_URL</code>, we can
-            begin.
-          </CardContent>
-        </Card>
-      </FadeUp>
+        <section>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Recruitment
+          </h2>
+          <StaggerContainer className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {recruitmentTiles.map((t) => (
+              <StaggerItem key={t.label}>
+                <TileCard tile={t} />
+              </StaggerItem>
+            ))}
+          </StaggerContainer>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Immigration
+          </h2>
+          <StaggerContainer className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {immigrationTiles.map((t) => (
+              <StaggerItem key={t.label}>
+                <TileCard tile={t} />
+              </StaggerItem>
+            ))}
+          </StaggerContainer>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Activities
+          </h2>
+          <StaggerContainer className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {activityTiles.map((t) => (
+              <StaggerItem key={t.label}>
+                <TileCard tile={t} />
+              </StaggerItem>
+            ))}
+          </StaggerContainer>
+        </section>
+      </div>
     </div>
   );
 }
