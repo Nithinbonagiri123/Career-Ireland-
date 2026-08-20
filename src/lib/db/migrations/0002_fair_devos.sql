@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "sessions_invalidated_after" timestamp with time zone DEFAULT now() NOT NULL;

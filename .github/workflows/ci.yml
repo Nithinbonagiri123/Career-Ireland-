@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  # Placeholder values so `src/lib/env.ts` boots during typecheck/build.
+  # Real secrets live in Vercel; CI never touches production data.
+  DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+  AUTH_SECRET: ci-placeholder-secret-must-be-at-least-32-chars-long
+  AUTH_URL: http://localhost:3000
+  AWS_REGION: eu-west-1
+  S3_BUCKET_DOCUMENTS: ci-placeholder-bucket
+  LOG_LEVEL: warn
+  NODE_ENV: test
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Approve required build scripts
+        # argon2 needs a native compile; approve non-interactively.
+        run: pnpm rebuild argon2
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Verify all migrations are committed
+        # Regenerate — if diff appears, schema drifted from migrations. Fail the build.
+        run: |
+          pnpm db:generate
+          if [ -n "$(git status --porcelain src/lib/db/migrations)" ]; then
+            echo "::error::Uncommitted migration files — run 'pnpm db:generate' and commit the SQL."
+            git status --porcelain src/lib/db/migrations
+            exit 1
+          fi
