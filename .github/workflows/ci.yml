@@ -25,10 +25,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # pnpm/action-setup reads the version from `packageManager` in package.json.
+      # Do NOT set `with: version:` here — it errors when packageManager is also declared.
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Setup Node
         uses: actions/setup-node@v5
