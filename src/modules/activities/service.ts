@@ -1,0 +1,200 @@
+import { asc, desc, eq, sql } from 'drizzle-orm';
+import { recordAudit } from '@/lib/audit/withAudit';
+import { requireRole } from '@/lib/auth/session';
+import { db } from '@/lib/db/client';
+import {
+  type CommunicationLog,
+  communicationLogs,
+  type Task,
+  tasks,
+} from '@/lib/db/schema/activities';
+import { users } from '@/lib/db/schema/users';
+import { BusinessRuleError, ValidationError } from '@/lib/errors';
+import {
+  type CreateCommunicationInput,
+  CreateCommunicationSchema,
+  type CreateTaskInput,
+  CreateTaskSchema,
+  type UpdateTaskStatusInput,
+  UpdateTaskStatusSchema,
+} from './schemas';
+
+function blankToNull(v: string | undefined | null): string | null {
+  return v && v.trim().length > 0 ? v : null;
+}
+
+function blankToUndef(v: string | undefined | null): string | undefined {
+  return v && v.trim().length > 0 ? v : undefined;
+}
+
+export type CommunicationRow = CommunicationLog & { staffName: string };
+export type TaskRow = Task & { assignedName: string };
+
+export async function fetchRecentCommunications(limit = 50): Promise<CommunicationRow[]> {
+  await requireRole(['ADMIN', 'STAFF']);
+  const rows = await db
+    .select({ c: communicationLogs, staffName: users.fullName })
+    .from(communicationLogs)
+    .innerJoin(users, eq(users.id, communicationLogs.staffUserId))
+    .orderBy(desc(communicationLogs.occurredAt))
+    .limit(limit);
+  return rows.map((r) => ({ ...r.c, staffName: r.staffName }));
+}
+
+export async function fetchTasks(): Promise<TaskRow[]> {
+  await requireRole(['ADMIN', 'STAFF']);
+  const rows = await db
+    .select({ t: tasks, assignedName: users.fullName })
+    .from(tasks)
+    .innerJoin(users, eq(users.id, tasks.assignedUserId))
+    .orderBy(asc(tasks.status), asc(tasks.dueAt), desc(tasks.createdAt));
+  return rows.map((r) => ({ ...r.t, assignedName: r.assignedName }));
+}
+
+export async function createCommunication(
+  input: CreateCommunicationInput,
+): Promise<CommunicationLog> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = CreateCommunicationSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid communication',
+      parsed.error.flatten().fieldErrors as Record<string, string>,
+    );
+  }
+  const d = parsed.data;
+  return db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(communicationLogs)
+      .values({
+        type: d.type,
+        direction: d.direction,
+        occurredAt: d.occurredAt ? new Date(d.occurredAt) : new Date(),
+        staffUserId: session.user.id,
+        subject: blankToNull(d.subject),
+        body: blankToNull(d.body),
+        personId: blankToUndef(d.personId),
+        employerId: blankToUndef(d.employerId),
+        employerContactId: blankToUndef(d.employerContactId),
+        jobRequisitionId: blankToUndef(d.jobRequisitionId),
+        serviceEngagementId: blankToUndef(d.serviceEngagementId),
+        immigrationCaseId: blankToUndef(d.immigrationCaseId),
+        followUpRequired: d.followUpRequired,
+      })
+      .returning();
+    if (!created) throw new Error('insert returned no row');
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'communication_log',
+      entityId: created.id,
+      action: 'CREATED',
+      after: {
+        type: created.type,
+        subject: created.subject,
+        followUpRequired: created.followUpRequired,
+      },
+    });
+
+    // If follow-up requested, auto-create a task assigned to the staff user.
+    if (d.followUpRequired) {
+      const [task] = await tx
+        .insert(tasks)
+        .values({
+          title: `Follow up: ${created.subject ?? created.type}`,
+          description: created.body,
+          assignedUserId: session.user.id,
+          priority: 'NORMAL',
+          personId: created.personId,
+          employerId: created.employerId,
+          jobRequisitionId: created.jobRequisitionId,
+          serviceEngagementId: created.serviceEngagementId,
+          immigrationCaseId: created.immigrationCaseId,
+        })
+        .returning();
+      if (task) {
+        await recordAudit(tx, {
+          actorUserId: session.user.id,
+          entityType: 'task',
+          entityId: task.id,
+          action: 'CREATED',
+          after: { title: task.title },
+          context: { via: 'communication_follow_up', communicationLogId: created.id },
+        });
+      }
+    }
+
+    return created;
+  });
+}
+
+export async function createTask(input: CreateTaskInput): Promise<Task> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = CreateTaskSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid task',
+      parsed.error.flatten().fieldErrors as Record<string, string>,
+    );
+  }
+  const d = parsed.data;
+  return db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(tasks)
+      .values({
+        title: d.title,
+        description: blankToNull(d.description),
+        dueAt: d.dueAt ? new Date(d.dueAt) : null,
+        assignedUserId: d.assignedUserId,
+        priority: d.priority,
+        personId: blankToUndef(d.personId),
+        employerId: blankToUndef(d.employerId),
+        jobRequisitionId: blankToUndef(d.jobRequisitionId),
+        serviceEngagementId: blankToUndef(d.serviceEngagementId),
+        immigrationCaseId: blankToUndef(d.immigrationCaseId),
+      })
+      .returning();
+    if (!created) throw new Error('insert returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'task',
+      entityId: created.id,
+      action: 'CREATED',
+      after: {
+        title: created.title,
+        assignedUserId: created.assignedUserId,
+        priority: created.priority,
+      },
+    });
+    return created;
+  });
+}
+
+export async function updateTaskStatus(input: UpdateTaskStatusInput): Promise<Task> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = UpdateTaskStatusSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const [before] = await tx.select().from(tasks).where(eq(tasks.id, parsed.taskId)).limit(1);
+    if (!before) throw new BusinessRuleError('TASK_NOT_FOUND', 'Task not found');
+    if (before.status === parsed.status) return before;
+    const [after] = await tx
+      .update(tasks)
+      .set({
+        status: parsed.status,
+        completedAt: parsed.status === 'DONE' ? new Date() : null,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(tasks.id, parsed.taskId))
+      .returning();
+    if (!after) throw new Error('update returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'task',
+      entityId: after.id,
+      action: 'STATUS_CHANGED',
+      before: { status: before.status },
+      after: { status: after.status },
+    });
+    return after;
+  });
+}

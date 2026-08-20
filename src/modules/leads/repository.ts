@@ -1,0 +1,76 @@
+import { desc, eq, isNull } from 'drizzle-orm';
+import type { DbExecutor } from '@/lib/audit/withAudit';
+import { db } from '@/lib/db/client';
+import { type Lead, leads, type NewLead } from '@/lib/db/schema/leads';
+import { persons } from '@/lib/db/schema/persons';
+import { users } from '@/lib/db/schema/users';
+
+export type LeadListRow = {
+  id: string;
+  status: Lead['status'];
+  personId: string;
+  personName: string;
+  personEmail: string | null;
+  personPhone: string | null;
+  assignedUserName: string | null;
+  createdAt: Date;
+  convertedAt: Date | null;
+};
+
+export async function listLeads(): Promise<LeadListRow[]> {
+  return db
+    .select({
+      id: leads.id,
+      status: leads.status,
+      personId: leads.personId,
+      personName: persons.firstName,
+      // stitched below
+      personEmail: persons.email,
+      personPhone: persons.phone,
+      assignedUserName: users.fullName,
+      createdAt: leads.createdAt,
+      convertedAt: leads.convertedAt,
+      lastName: persons.lastName,
+    })
+    .from(leads)
+    .innerJoin(persons, eq(persons.id, leads.personId))
+    .leftJoin(users, eq(users.id, leads.assignedUserId))
+    .where(isNull(leads.archivedAt))
+    .orderBy(desc(leads.createdAt))
+    .then((rows) =>
+      rows.map((r) => ({
+        id: r.id,
+        status: r.status,
+        personId: r.personId,
+        personName: `${r.personName} ${r.lastName}`.trim(),
+        personEmail: r.personEmail,
+        personPhone: r.personPhone,
+        assignedUserName: r.assignedUserName,
+        createdAt: r.createdAt,
+        convertedAt: r.convertedAt,
+      })),
+    );
+}
+
+export async function getLead(id: string): Promise<Lead | null> {
+  const [row] = await db.select().from(leads).where(eq(leads.id, id)).limit(1);
+  return row ?? null;
+}
+
+export async function insertLead(tx: DbExecutor, data: NewLead): Promise<Lead> {
+  const [row] = await tx.insert(leads).values(data).returning();
+  if (!row) throw new Error('leads insert returned no row');
+  return row;
+}
+
+export async function updateLead(
+  tx: DbExecutor,
+  id: string,
+  patch: Partial<
+    Pick<Lead, 'status' | 'notes' | 'convertedAt' | 'convertedByUserId' | 'conversionMethod'>
+  >,
+): Promise<Lead> {
+  const [row] = await tx.update(leads).set(patch).where(eq(leads.id, id)).returning();
+  if (!row) throw new Error(`lead ${id} not found`);
+  return row;
+}

@@ -8,6 +8,8 @@ export type AuthorizedUser = {
   email: string;
   name: string;
   role: UserRole;
+  personId: string | null;
+  employerId: string | null;
 };
 
 const ARGON2_OPTIONS: argon2.HashOptions = {
@@ -59,5 +61,7 @@ export async function verifyCredentials(
     email: user.email,
     name: user.fullName,
     role: user.role,
+    personId: user.personId,
+    employerId: user.employerId,
   };
 }
