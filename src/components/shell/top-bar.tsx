@@ -1,6 +1,7 @@
 'use client';
 
 import { Bell, LogOut, Menu, Search, Settings, User as UserIcon } from 'lucide-react';
+import Link from 'next/link';
 import { useTransition } from 'react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -37,7 +38,13 @@ function initialsFromName(name: string): string {
   );
 }
 
-export function TopBar({ user }: { user: TopBarUser }) {
+export function TopBar({
+  user,
+  unreadNotifications = 0,
+}: {
+  user: TopBarUser;
+  unreadNotifications?: number;
+}) {
   const [signingOut, startSignOut] = useTransition();
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur-md">
@@ -68,9 +75,21 @@ export function TopBar({ user }: { user: TopBarUser }) {
       </div>
 
       <div className="ml-auto flex items-center gap-1">
-        <Button variant="ghost" size="icon" aria-label="Notifications">
+        <Link
+          href="/notifications"
+          aria-label={`Notifications${unreadNotifications > 0 ? ` (${unreadNotifications} unread)` : ''}`}
+          className="relative inline-flex size-9 items-center justify-center rounded-md hover:bg-accent/50"
+        >
           <Bell className="size-4" />
-        </Button>
+          {unreadNotifications > 0 && (
+            <Badge
+              variant="default"
+              className="absolute -right-0.5 -top-0.5 size-4 min-w-0 justify-center rounded-full p-0 text-[9px] leading-none"
+            >
+              {unreadNotifications > 9 ? '9+' : unreadNotifications}
+            </Badge>
+          )}
+        </Link>
         <ThemeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger
