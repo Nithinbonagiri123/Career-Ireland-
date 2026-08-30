@@ -1,0 +1,1 @@
+ALTER TABLE "candidate_matches" ADD COLUMN "reasons" jsonb DEFAULT '[]'::jsonb NOT NULL;
