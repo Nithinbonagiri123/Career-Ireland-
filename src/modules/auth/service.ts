@@ -1,7 +1,9 @@
 import argon2 from 'argon2';
+import { checkPasswordPolicy, type PasswordContext } from '@/lib/auth/password-policy';
 import type { UserRole } from '@/lib/db/schema/users';
+import { AuthenticationError, ValidationError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
-import { findUserByEmail, touchLastLogin } from './repository';
+import { findUserByEmail, findUserById, touchLastLogin, updatePasswordHash } from './repository';
 
 export type AuthorizedUser = {
   id: string;
@@ -64,4 +66,49 @@ export async function verifyCredentials(
     personId: user.personId,
     employerId: user.employerId,
   };
+}
+
+/**
+ * Change a user's password. Verifies the current password, hashes the new one,
+ * and revokes every existing session (including this one — the caller should
+ * redirect to /login afterwards).
+ */
+export async function changeOwnPassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const user = await findUserById(userId);
+  if (!user?.isActive) throw new AuthenticationError();
+
+  let currentValid = false;
+  try {
+    currentValid = await verifyPasswordHash(user.passwordHash, currentPassword);
+  } catch (e) {
+    logger.warn({ err: e, userId }, 'argon2 verify threw during change-password');
+    throw new AuthenticationError('Current password is incorrect');
+  }
+  if (!currentValid) {
+    throw new ValidationError('Current password is incorrect', {
+      currentPassword: 'Current password is incorrect',
+    });
+  }
+
+  // Enforce contextual password policy — must not contain user's own name/email.
+  const [firstName, ...rest] = user.fullName.split(/\s+/);
+  const lastName = rest.join(' ');
+  const ctx: PasswordContext = {
+    email: user.email,
+    firstName: firstName ?? null,
+    lastName: lastName || null,
+  };
+  const issues = checkPasswordPolicy(newPassword, ctx);
+  if (issues.length > 0) {
+    throw new ValidationError(issues[0] ?? 'Password does not meet the policy', {
+      newPassword: issues.join(' · '),
+    });
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await updatePasswordHash(userId, passwordHash);
 }

@@ -5,6 +5,7 @@ import { db } from '@/lib/db/client';
 import type { Lead } from '@/lib/db/schema/leads';
 import { candidateProfiles } from '@/lib/db/schema/persons';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
+import type { AssignmentScope } from '@/lib/scope';
 import { insertPerson } from '@/modules/persons/repository';
 import { getLead, insertLead, type LeadListRow, listLeads, updateLead } from './repository';
 import {
@@ -20,9 +21,9 @@ function blankToNull(v: string | undefined | null): string | null {
   return v && v.trim().length > 0 ? v : null;
 }
 
-export async function fetchLeads(): Promise<LeadListRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
-  return listLeads();
+export async function fetchLeads(scope?: AssignmentScope): Promise<LeadListRow[]> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  return listLeads({ scope: scope ?? 'all', currentUserId: session.user.id });
 }
 
 export async function fetchLead(id: string): Promise<Lead | null> {
@@ -175,6 +176,11 @@ export async function convertLead(input: ConvertLeadInput) {
       conversionMethod: parsed.method,
     });
 
+    const proofId =
+      parsed.paymentProofDocumentInstanceId && parsed.paymentProofDocumentInstanceId.length > 0
+        ? parsed.paymentProofDocumentInstanceId
+        : null;
+
     await recordAudit(tx, {
       actorUserId: session.user.id,
       entityType: 'lead',
@@ -187,6 +193,7 @@ export async function convertLead(input: ConvertLeadInput) {
         method: parsed.method,
         candidateProfileId: profileId,
         createdNewProfile,
+        ...(proofId ? { paymentProofDocumentInstanceId: proofId } : {}),
       },
     });
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from '@/lib/auth/password-policy';
 
 export const InviteCandidateSchema = z.object({
   personId: z.string().uuid(),
@@ -14,7 +15,10 @@ export const InviteEmployerSchema = z.object({
 
 export const AcceptInvitationSchema = z.object({
   token: z.string().min(10).max(64),
-  password: z.string().min(8).max(200),
+  password: z
+    .string()
+    .min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`)
+    .max(MAX_PASSWORD_LENGTH),
 });
 
 export type InviteCandidateInput = z.infer<typeof InviteCandidateSchema>;

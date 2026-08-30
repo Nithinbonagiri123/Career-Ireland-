@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { eq, gt } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
+import { checkPasswordPolicy } from '@/lib/auth/password-policy';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { type PortalInvitation, portalInvitations, users } from '@/lib/db/schema/users';
@@ -184,6 +185,19 @@ export async function acceptInvitation(input: AcceptInvitationInput): Promise<{ 
         'USER_EMAIL_EXISTS',
         'A user account with that email was created after this invitation. Contact Career Ireland.',
       );
+    }
+
+    // Enforce contextual password policy — can't contain the invitee's own name/email.
+    const [firstName, ...rest] = inv.fullName.split(/\s+/);
+    const issues = checkPasswordPolicy(parsed.data.password, {
+      email: inv.email,
+      firstName: firstName ?? null,
+      lastName: rest.join(' ') || null,
+    });
+    if (issues.length > 0) {
+      throw new ValidationError(issues[0] ?? 'Password does not meet the policy', {
+        password: issues.join(' · '),
+      });
     }
 
     const passwordHash = await hashPassword(parsed.data.password);

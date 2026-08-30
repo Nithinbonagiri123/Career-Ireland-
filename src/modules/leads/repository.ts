@@ -1,9 +1,10 @@
-import { desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { DbExecutor } from '@/lib/audit/withAudit';
 import { db } from '@/lib/db/client';
 import { type Lead, leads, type NewLead } from '@/lib/db/schema/leads';
 import { persons } from '@/lib/db/schema/persons';
 import { users } from '@/lib/db/schema/users';
+import { type AssignmentScope, assignmentCondition } from '@/lib/scope';
 
 export type LeadListRow = {
   id: string;
@@ -12,12 +13,21 @@ export type LeadListRow = {
   personName: string;
   personEmail: string | null;
   personPhone: string | null;
+  assignedUserId: string | null;
   assignedUserName: string | null;
   createdAt: Date;
   convertedAt: Date | null;
 };
 
-export async function listLeads(): Promise<LeadListRow[]> {
+export async function listLeads(opts?: {
+  scope?: AssignmentScope;
+  currentUserId?: string;
+}): Promise<LeadListRow[]> {
+  const scopeCond =
+    opts?.scope && opts.currentUserId
+      ? assignmentCondition(opts.scope, leads.assignedUserId, opts.currentUserId)
+      : undefined;
+
   return db
     .select({
       id: leads.id,
@@ -27,6 +37,7 @@ export async function listLeads(): Promise<LeadListRow[]> {
       // stitched below
       personEmail: persons.email,
       personPhone: persons.phone,
+      assignedUserId: leads.assignedUserId,
       assignedUserName: users.fullName,
       createdAt: leads.createdAt,
       convertedAt: leads.convertedAt,
@@ -35,7 +46,7 @@ export async function listLeads(): Promise<LeadListRow[]> {
     .from(leads)
     .innerJoin(persons, eq(persons.id, leads.personId))
     .leftJoin(users, eq(users.id, leads.assignedUserId))
-    .where(isNull(leads.archivedAt))
+    .where(scopeCond ? and(isNull(leads.archivedAt), scopeCond) : isNull(leads.archivedAt))
     .orderBy(desc(leads.createdAt))
     .then((rows) =>
       rows.map((r) => ({
@@ -45,6 +56,7 @@ export async function listLeads(): Promise<LeadListRow[]> {
         personName: `${r.personName} ${r.lastName}`.trim(),
         personEmail: r.personEmail,
         personPhone: r.personPhone,
+        assignedUserId: r.assignedUserId,
         assignedUserName: r.assignedUserName,
         createdAt: r.createdAt,
         convertedAt: r.convertedAt,

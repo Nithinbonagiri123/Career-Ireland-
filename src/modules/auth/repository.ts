@@ -21,3 +21,15 @@ export async function insertUser(data: NewUser): Promise<User> {
 export async function touchLastLogin(id: string): Promise<void> {
   await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, id));
 }
+
+/**
+ * Update password + revoke other sessions atomically. The caller must have
+ * already verified the current password.
+ */
+export async function updatePasswordHash(id: string, passwordHash: string): Promise<void> {
+  const now = new Date();
+  await db
+    .update(users)
+    .set({ passwordHash, sessionsInvalidatedAfter: now, updatedAt: now })
+    .where(eq(users.id, id));
+}

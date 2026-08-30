@@ -46,6 +46,8 @@ export const ConvertLeadSchema = z.object({
   leadId: z.string().uuid(),
   method: z.enum(['PAYMENT_VERIFIED', 'MANUAL_OVERRIDE']),
   reason: z.string().min(3).max(500),
+  /** Optional link to the uploaded payment proof document instance. Captured in audit context. */
+  paymentProofDocumentInstanceId: z.string().uuid().optional().or(z.literal('')),
 });
 
 export type CreateLeadInput = z.infer<typeof CreateLeadSchema>;

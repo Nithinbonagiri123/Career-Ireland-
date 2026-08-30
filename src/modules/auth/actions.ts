@@ -2,8 +2,15 @@
 
 import { AuthError } from 'next-auth';
 import { signIn, signOut } from '@/lib/auth/config';
-import { fail, ok } from '@/lib/result';
-import { type LoginInput, LoginSchema } from './schemas';
+import { requireSession } from '@/lib/auth/session';
+import { fail, ok, toActionResult } from '@/lib/result';
+import {
+  type ChangePasswordInput,
+  ChangePasswordSchema,
+  type LoginInput,
+  LoginSchema,
+} from './schemas';
+import { changeOwnPassword } from './service';
 
 export async function loginAction(input: LoginInput) {
   const parsed = LoginSchema.safeParse(input);
@@ -31,4 +38,22 @@ export async function loginAction(input: LoginInput) {
 
 export async function signOutAction() {
   await signOut({ redirectTo: '/login' });
+}
+
+export async function changePasswordAction(input: ChangePasswordInput) {
+  const parsed = ChangePasswordSchema.safeParse(input);
+  if (!parsed.success) {
+    const f = parsed.error.flatten().fieldErrors;
+    return fail('VALIDATION_ERROR', 'Please check your input', {
+      currentPassword: f.currentPassword?.[0] ?? '',
+      newPassword: f.newPassword?.[0] ?? '',
+      confirmPassword: f.confirmPassword?.[0] ?? '',
+    });
+  }
+
+  const session = await requireSession();
+  return toActionResult(async () => {
+    await changeOwnPassword(session.user.id, parsed.data.currentPassword, parsed.data.newPassword);
+    return null;
+  });
 }
