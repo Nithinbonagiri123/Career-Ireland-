@@ -2,12 +2,13 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
-import { MoreHorizontal } from 'lucide-react';
+import { ArrowRight, MoreHorizontal, Trophy } from 'lucide-react';
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -131,30 +132,30 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
               <DropdownMenuLabel>Placement status</DropdownMenuLabel>
               <DropdownMenuItem
                 disabled={p.status !== 'PROPOSED'}
-                onSelect={() => setStatus(p, 'CONFIRMED')}
+                onClick={() => setStatus(p, 'CONFIRMED')}
               >
                 Confirm (flips availability to PLACED)
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={p.status !== 'CONFIRMED'}
-                onSelect={() => setStatus(p, 'STARTED')}
+                onClick={() => setStatus(p, 'STARTED')}
               >
                 Mark started
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={p.status !== 'STARTED'}
-                onSelect={() => setStatus(p, 'COMPLETED')}
+                onClick={() => setStatus(p, 'COMPLETED')}
               >
                 Mark completed
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={p.status !== 'CONFIRMED' && p.status !== 'STARTED'}
-                onSelect={() => setStatus(p, 'TERMINATED_EARLY')}
+                onClick={() => setStatus(p, 'TERMINATED_EARLY')}
               >
                 Terminate early
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={!isTerminal} onSelect={() => restoreAvailability(p)}>
+              <DropdownMenuItem disabled={!isTerminal} onClick={() => restoreAvailability(p)}>
                 Restore candidate to AVAILABLE…
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -168,8 +169,14 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
     <DataTable
       columns={columns}
       data={placements}
+      emptyIcon={Trophy}
       emptyTitle="No placements yet"
-      emptyDescription="Placements are the successful outcome — created when an application is accepted."
+      emptyDescription="Placements are created automatically when an application is marked ACCEPTED, or when an offer is accepted. Start by opening a requisition."
+      emptyAction={
+        <Link href="/requisitions" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+          Go to Requisitions <ArrowRight className="ml-1.5 size-3.5" />
+        </Link>
+      }
     />
   );
 }

@@ -3,10 +3,12 @@ import { Briefcase, Plus } from 'lucide-react';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
+import { ScopeFilter } from '@/components/scope-filter';
 import { Button } from '@/components/ui/button';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { occupations } from '@/lib/db/schema/occupations';
+import { parseAssignmentScope } from '@/lib/scope';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchEmployers } from '@/modules/employers/service';
 import { fetchRequisitions } from '@/modules/requisitions/service';
@@ -15,10 +17,16 @@ import { RequisitionsTable } from './requisitions-table';
 
 export const dynamic = 'force-dynamic';
 
-export default async function RequisitionsPage() {
+export default async function RequisitionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ assigned?: string }>;
+}) {
   await requireRole(['ADMIN', 'STAFF']);
+  const { assigned } = await searchParams;
+  const scope = parseAssignmentScope(assigned);
   const [requisitions, employers, currencies, occupationList] = await Promise.all([
-    fetchRequisitions(),
+    fetchRequisitions(scope),
     fetchEmployers(),
     fetchCurrencies(),
     db.select().from(occupations).orderBy(asc(occupations.name)),
@@ -32,7 +40,8 @@ export default async function RequisitionsPage() {
           title="Job requisitions"
           description="Employer staffing needs. Each requisition has its own lifecycle, matches, applications, and placements."
           action={
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <ScopeFilter current={scope} />
               <CsvExportButton href="/api/export/requisitions" />
               <RequisitionDialog
                 employers={employers}

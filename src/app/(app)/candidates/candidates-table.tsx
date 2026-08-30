@@ -2,10 +2,17 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
+import { UserPlus, Users } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useCallback, useState } from 'react';
 import { DataTable } from '@/components/data-table/data-table';
 import { Badge } from '@/components/ui/badge';
+import { buttonVariants } from '@/components/ui/button';
 import type { CandidateListRow } from '@/modules/candidates/repository';
+import { CandidatesBulkActionBar } from './bulk-action-bar';
+
+type StaffUserOption = { id: string; fullName: string; email: string };
 
 const AVAILABILITY_LABEL: Record<CandidateListRow['availabilityStatus'], string> = {
   AVAILABLE: 'Available',
@@ -67,6 +74,16 @@ const columns: ColumnDef<CandidateListRow>[] = [
     ),
   },
   {
+    header: 'Assigned',
+    accessorKey: 'assignedUserName',
+    size: 140,
+    cell: ({ row }) => (
+      <span className="text-xs text-muted-foreground">
+        {row.original.assignedUserName ?? 'Unassigned'}
+      </span>
+    ),
+  },
+  {
     header: 'Activated',
     accessorKey: 'activatedAt',
     size: 140,
@@ -78,15 +95,49 @@ const columns: ColumnDef<CandidateListRow>[] = [
   },
 ];
 
-export function CandidatesTable({ candidates }: { candidates: CandidateListRow[] }) {
+export function CandidatesTable({
+  candidates,
+  staffUsers,
+}: {
+  candidates: CandidateListRow[];
+  staffUsers: StaffUserOption[];
+}) {
   const router = useRouter();
+  const [selected, setSelected] = useState<CandidateListRow[]>([]);
+  const [resetKey, setResetKey] = useState(0);
+
+  const handleSelectionChange = useCallback((rows: CandidateListRow[]) => {
+    setSelected(rows);
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setResetKey((k) => k + 1);
+    setSelected([]);
+  }, []);
+
   return (
-    <DataTable
-      columns={columns}
-      data={candidates}
-      emptyTitle="No candidates yet"
-      emptyDescription="Candidates appear here after a Lead is converted (payment-verified or staff manual override)."
-      onRowClick={(row) => router.push(`/candidates/${row.personId}`)}
-    />
+    <>
+      <DataTable
+        columns={columns}
+        data={candidates}
+        emptyIcon={Users}
+        emptyTitle="No candidates yet"
+        emptyDescription="Candidates appear here after a Lead is converted (payment-verified or staff manual override)."
+        emptyAction={
+          <Link href="/leads" className={buttonVariants({ size: 'sm' })}>
+            <UserPlus className="mr-1.5 size-4" /> Go to Leads
+          </Link>
+        }
+        onRowClick={(row) => router.push(`/candidates/${row.personId}`)}
+        enableRowSelection
+        onSelectionChange={handleSelectionChange}
+        selectionResetKey={resetKey}
+      />
+      <CandidatesBulkActionBar
+        selectedIds={selected.map((r) => r.personId)}
+        onClear={clearSelection}
+        staffUsers={staffUsers}
+      />
+    </>
   );
 }

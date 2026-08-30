@@ -2,12 +2,13 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
-import { Check, MoreHorizontal, X } from 'lucide-react';
+import { ArrowRight, Check, Coins, MoreHorizontal, X } from 'lucide-react';
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -131,11 +132,11 @@ export function PaymentsTable({ payments, role }: { payments: Row[]; role: UserR
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Payment decision</DropdownMenuLabel>
-              <DropdownMenuItem onSelect={() => verify(p)}>
+              <DropdownMenuItem onClick={() => verify(p)}>
                 <Check className="mr-2 size-4" /> Verify
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => reject(p)}>
+              <DropdownMenuItem onClick={() => reject(p)}>
                 <X className="mr-2 size-4" /> Reject…
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -149,8 +150,14 @@ export function PaymentsTable({ payments, role }: { payments: Row[]; role: UserR
     <DataTable
       columns={columns}
       data={payments}
+      emptyIcon={Coins}
       emptyTitle="No payments yet"
-      emptyDescription="Record a payment against an open Service Engagement to start."
+      emptyDescription="Payments are recorded against Service Engagements. Open an engagement first, then record a payment on it."
+      emptyAction={
+        <Link href="/engagements" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+          Go to Engagements <ArrowRight className="ml-1.5 size-3.5" />
+        </Link>
+      }
     />
   );
 }

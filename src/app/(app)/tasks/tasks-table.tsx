@@ -2,12 +2,13 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
-import { Check, Play, X } from 'lucide-react';
+import { ArrowRight, Check, CheckSquare, Play, X } from 'lucide-react';
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { updateTaskStatusAction } from '@/modules/activities/actions';
 import type { TaskRow } from '@/modules/activities/service';
 
@@ -143,8 +144,14 @@ export function TasksTable({ tasks }: { tasks: TaskRow[] }) {
     <DataTable
       columns={columns}
       data={tasks}
+      emptyIcon={CheckSquare}
       emptyTitle="No tasks yet"
-      emptyDescription="Create a task or turn on 'Follow-up required' when logging a communication."
+      emptyDescription="Tasks appear here from three sources: manually created, auto-generated on immigration case status changes, and 'follow-up required' on communications."
+      emptyAction={
+        <Link href="/communications" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+          Log a communication <ArrowRight className="ml-1.5 size-3.5" />
+        </Link>
+      }
     />
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
+import { useRouter } from 'next/navigation';
 import { DataTable } from '@/components/data-table/data-table';
 import { Badge } from '@/components/ui/badge';
 import type { CaseListRow } from '@/modules/immigration/service';
@@ -75,12 +76,14 @@ const columns: ColumnDef<CaseListRow>[] = [
 ];
 
 export function CasesTable({ cases }: { cases: CaseListRow[] }) {
+  const router = useRouter();
   return (
     <DataTable
       columns={columns}
       data={cases}
+      onRowClick={(row) => router.push(`/immigration/${row.id}`)}
       emptyTitle="No immigration cases yet"
-      emptyDescription="Employment Permits, Visas, and Visa Extensions all live here."
+      emptyDescription="Employment Permits, Visas, and Visa Extensions all live here. Click 'Open case' above to record the first one."
     />
   );
 }

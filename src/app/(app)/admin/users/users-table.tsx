@@ -139,23 +139,23 @@ export function UsersTable({ users, currentUserId }: Props) {
               <DropdownMenuLabel>Change role</DropdownMenuLabel>
               <DropdownMenuItem
                 disabled={isSelf || user.role === 'ADMIN'}
-                onSelect={() => handleChangeRole(user, 'ADMIN')}
+                onClick={() => handleChangeRole(user, 'ADMIN')}
               >
                 <UserCog className="mr-2 size-4" /> Make ADMIN
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={isSelf || user.role === 'STAFF'}
-                onSelect={() => handleChangeRole(user, 'STAFF')}
+                onClick={() => handleChangeRole(user, 'STAFF')}
               >
                 <UserCog className="mr-2 size-4" /> Make STAFF
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               {user.isActive ? (
-                <DropdownMenuItem disabled={isSelf} onSelect={() => handleSetActive(user, false)}>
+                <DropdownMenuItem disabled={isSelf} onClick={() => handleSetActive(user, false)}>
                   <UserX className="mr-2 size-4" /> Deactivate
                 </DropdownMenuItem>
               ) : (
-                <DropdownMenuItem onSelect={() => handleSetActive(user, true)}>
+                <DropdownMenuItem onClick={() => handleSetActive(user, true)}>
                   <UserCog className="mr-2 size-4" /> Reactivate
                 </DropdownMenuItem>
               )}

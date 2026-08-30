@@ -2,12 +2,20 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
-import { MoreHorizontal, UserCheck } from 'lucide-react';
-import { useState, useTransition } from 'react';
+import { CheckCircle2, FileText, MoreHorizontal, UserCheck } from 'lucide-react';
+import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import { DocumentUploader } from '@/components/document-uploader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +24,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { ensurePaymentProofTypeAction } from '@/modules/document-types/actions';
 import { convertLeadAction, updateLeadStatusAction } from '@/modules/leads/actions';
 import type { LeadListRow } from '@/modules/leads/repository';
 
@@ -32,7 +43,21 @@ type Props = { leads: LeadListRow[] };
 
 export function LeadsTable({ leads }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [convertTarget, setConvertTarget] = useState<LeadListRow | null>(null);
+  const [reason, setReason] = useState('');
+  const [paymentProofTypeId, setPaymentProofTypeId] = useState<string | null>(null);
+  const [proofDocId, setProofDocId] = useState<string | null>(null);
+  const [proofFilename, setProofFilename] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  // Ensure the PAYMENT_PROOF document type exists as soon as the dialog opens.
+  useEffect(() => {
+    if (!convertTarget || paymentProofTypeId) return;
+    (async () => {
+      const r = await ensurePaymentProofTypeAction();
+      if (r.ok) setPaymentProofTypeId(r.data.id);
+    })();
+  }, [convertTarget, paymentProofTypeId]);
 
   const setStatus = (
     lead: LeadListRow,
@@ -47,21 +72,40 @@ export function LeadsTable({ leads }: Props) {
     });
   };
 
-  const convert = (lead: LeadListRow) => {
-    const reason = window.prompt(
-      `Manually activating ${lead.personName} as a candidate.\n\nWhy are you overriding the normal payment-verified flow? (audited)`,
-    );
-    if (!reason || reason.trim().length < 3) return;
-    setBusyId(lead.id);
+  const openConvert = (lead: LeadListRow) => {
+    setReason('');
+    setProofDocId(null);
+    setProofFilename(null);
+    setConvertTarget(lead);
+  };
+
+  const closeConvert = () => {
+    setConvertTarget(null);
+    setReason('');
+    setProofDocId(null);
+    setProofFilename(null);
+  };
+
+  const confirmConvert = () => {
+    if (!convertTarget) return;
+    if (reason.trim().length < 3) return;
+    const target = convertTarget;
+    const method = proofDocId ? 'PAYMENT_VERIFIED' : 'MANUAL_OVERRIDE';
+    setBusyId(target.id);
     startTransition(async () => {
       const result = await convertLeadAction({
-        leadId: lead.id,
-        method: 'MANUAL_OVERRIDE',
+        leadId: target.id,
+        method,
         reason: reason.trim(),
+        paymentProofDocumentInstanceId: proofDocId ?? '',
       });
       setBusyId(null);
-      if (result.ok) toast.success(`${lead.personName} is now an active candidate`);
-      else toast.error(result.error.message);
+      if (result.ok) {
+        toast.success(`${target.personName} is now an active candidate`);
+        closeConvert();
+      } else {
+        toast.error(result.error.message);
+      }
     });
   };
 
@@ -127,27 +171,27 @@ export function LeadsTable({ leads }: Props) {
               <DropdownMenuLabel>Change status</DropdownMenuLabel>
               <DropdownMenuItem
                 disabled={!canTransition}
-                onSelect={() => setStatus(lead, 'CONTACTED')}
+                onClick={() => setStatus(lead, 'CONTACTED')}
               >
                 Mark contacted
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!canTransition}
-                onSelect={() => setStatus(lead, 'AWAITING_PAYMENT')}
+                onClick={() => setStatus(lead, 'AWAITING_PAYMENT')}
               >
                 Awaiting payment
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={!canTransition} onSelect={() => convert(lead)}>
+              <DropdownMenuItem disabled={!canTransition} onClick={() => openConvert(lead)}>
                 <UserCheck className="mr-2 size-4" /> Convert to candidate…
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={!canTransition} onSelect={() => setStatus(lead, 'LOST')}>
+              <DropdownMenuItem disabled={!canTransition} onClick={() => setStatus(lead, 'LOST')}>
                 Mark lost
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!canTransition}
-                onSelect={() => setStatus(lead, 'REJECTED')}
+                onClick={() => setStatus(lead, 'REJECTED')}
               >
                 Mark rejected
               </DropdownMenuItem>
@@ -159,11 +203,107 @@ export function LeadsTable({ leads }: Props) {
   ];
 
   return (
-    <DataTable
-      columns={columns}
-      data={leads}
-      emptyTitle="No leads yet"
-      emptyDescription="Every candidate starts as a Lead. Create the first one with the button above."
-    />
+    <>
+      <DataTable
+        columns={columns}
+        data={leads}
+        emptyTitle="No leads yet"
+        emptyDescription="Every candidate starts as a Lead. Create the first one with the button above."
+      />
+      <Dialog
+        open={convertTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) closeConvert();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Convert to candidate</DialogTitle>
+          </DialogHeader>
+          {convertTarget && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Activating <span className="font-medium">{convertTarget.personName}</span> as a
+                candidate. Upload the payment proof to record method{' '}
+                <span className="font-mono text-[11px]">PAYMENT_VERIFIED</span> — or skip to record
+                a manual override. Both paths are audited.
+              </p>
+
+              <div className="space-y-1">
+                <Label>Payment proof (optional)</Label>
+                {proofDocId ? (
+                  <div className="flex items-center gap-2 rounded-md border bg-emerald-500/5 px-3 py-2 text-xs">
+                    <CheckCircle2 className="size-3.5 text-emerald-600" />
+                    <span className="truncate font-medium">{proofFilename ?? 'Uploaded'}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto"
+                      onClick={() => {
+                        setProofDocId(null);
+                        setProofFilename(null);
+                      }}
+                    >
+                      Replace
+                    </Button>
+                  </div>
+                ) : paymentProofTypeId ? (
+                  <DocumentUploader
+                    ownerType="PERSON"
+                    ownerId={convertTarget.personId}
+                    documentTypeId={paymentProofTypeId}
+                    accept=".pdf,.png,.doc,.docx"
+                    buttonLabel="Upload payment proof"
+                    onUploaded={(doc) => {
+                      setProofDocId(doc.id);
+                      setProofFilename(doc.originalFilename);
+                    }}
+                  />
+                ) : (
+                  <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    <FileText className="size-3.5" /> Preparing uploader…
+                  </div>
+                )}
+                <p className="text-[11px] text-muted-foreground">
+                  PNG, PDF, or Word only. Max 10 MB. Attaches to the candidate's documents.
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="convertReason">Reason (audited) *</Label>
+                <Input
+                  id="convertReason"
+                  autoFocus
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="e.g. Bank transfer received 2026-08-27"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && reason.trim().length >= 3) {
+                      e.preventDefault();
+                      confirmConvert();
+                    }
+                  }}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  At least 3 characters. Written to the audit log.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={closeConvert} disabled={busyId === convertTarget?.id}>
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmConvert}
+              disabled={reason.trim().length < 3 || busyId === convertTarget?.id}
+            >
+              <UserCheck className="mr-1.5 size-4" /> Convert
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

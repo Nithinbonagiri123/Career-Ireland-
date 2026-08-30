@@ -2,8 +2,10 @@ import { PlaneTakeoff, Plus } from 'lucide-react';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
+import { ScopeFilter } from '@/components/scope-filter';
 import { Button } from '@/components/ui/button';
 import { requireRole } from '@/lib/auth/session';
+import { parseAssignmentScope } from '@/lib/scope';
 import { fetchEmployers } from '@/modules/employers/service';
 import { fetchCases } from '@/modules/immigration/service';
 import { fetchPersons } from '@/modules/persons/service';
@@ -12,10 +14,16 @@ import { CasesTable } from './cases-table';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ImmigrationPage() {
+export default async function ImmigrationPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ assigned?: string }>;
+}) {
   await requireRole(['ADMIN', 'STAFF']);
+  const { assigned } = await searchParams;
+  const scope = parseAssignmentScope(assigned);
   const [cases, persons, employers] = await Promise.all([
-    fetchCases(),
+    fetchCases(scope),
     fetchPersons(),
     fetchEmployers(),
   ]);
@@ -28,7 +36,8 @@ export default async function ImmigrationPage() {
           title="Immigration cases"
           description="Employment Permits, Visas, and Visa Extensions. Independent of placements — can run for any employer / person combination."
           action={
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <ScopeFilter current={scope} />
               <CsvExportButton href="/api/export/immigration" />
               <CaseDialog
                 persons={persons}

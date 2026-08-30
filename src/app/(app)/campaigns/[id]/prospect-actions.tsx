@@ -45,7 +45,7 @@ export function ProspectRowActions({ prospect }: { prospect: ProspectListRow }) 
       />
       <DropdownMenuContent align="end">
         {STATUSES.filter((s) => s !== prospect.status).map((s) => (
-          <DropdownMenuItem key={s} onSelect={() => setStatus(s)}>
+          <DropdownMenuItem key={s} onClick={() => setStatus(s)}>
             {s.replace(/_/g, ' ')}
           </DropdownMenuItem>
         ))}

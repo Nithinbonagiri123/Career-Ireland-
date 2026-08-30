@@ -150,11 +150,11 @@ export function DocumentsTable({ documents }: { documents: StaffDocumentRow[] })
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuLabel>Review decision</DropdownMenuLabel>
-                  <DropdownMenuItem onSelect={() => decide(doc.id, 'ACCEPTED')}>
+                  <DropdownMenuItem onClick={() => decide(doc.id, 'ACCEPTED')}>
                     <Check className="mr-2 size-4" /> Accept
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => decide(doc.id, 'REJECTED')}>
+                  <DropdownMenuItem onClick={() => decide(doc.id, 'REJECTED')}>
                     <X className="mr-2 size-4" /> Reject…
                   </DropdownMenuItem>
                 </DropdownMenuContent>
