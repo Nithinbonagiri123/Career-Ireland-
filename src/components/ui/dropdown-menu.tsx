@@ -52,15 +52,20 @@ function DropdownMenuGroup({ ...props }: MenuPrimitive.Group.Props) {
   return <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />;
 }
 
+/**
+ * Section header inside a dropdown menu. Rendered as a plain div rather than
+ * base-ui's Menu.GroupLabel — GroupLabel throws when it's not inside a
+ * Menu.Group, and requiring every caller to wrap for a single label is noise.
+ * If you need proper aria-labelledby group semantics, wrap in DropdownMenuGroup
+ * explicitly and the primitive's own label handling still works there.
+ */
 function DropdownMenuLabel({
   className,
   inset,
   ...props
-}: MenuPrimitive.GroupLabel.Props & {
-  inset?: boolean;
-}) {
+}: React.HTMLAttributes<HTMLDivElement> & { inset?: boolean }) {
   return (
-    <MenuPrimitive.GroupLabel
+    <div
       data-slot="dropdown-menu-label"
       data-inset={inset}
       className={cn(

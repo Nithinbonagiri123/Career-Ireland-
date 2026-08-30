@@ -108,7 +108,7 @@ export function PortalShell({
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 disabled={signingOut}
-                onSelect={() => startSignOut(() => signOutAction())}
+                onClick={() => startSignOut(() => signOutAction())}
               >
                 <LogOut className="mr-2 size-4" />
                 {signingOut ? 'Signing out…' : 'Sign out'}

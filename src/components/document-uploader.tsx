@@ -4,9 +4,12 @@ import { CheckCircle2, Loader2, UploadCloud, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import type { DocumentInstance } from '@/lib/db/schema/documents';
 import { registerUploadAction } from '@/modules/documents/actions';
 
 type OwnerType = 'PERSON' | 'EMPLOYER';
+
+const DEFAULT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.doc,.docx';
 
 /**
  * Two-step upload: (1) POST /api/documents/presign for a signed PUT URL,
@@ -19,12 +22,17 @@ export function DocumentUploader({
   documentTypeId,
   fulfilRequirementId,
   onUploaded,
+  accept = DEFAULT_ACCEPT,
+  buttonLabel = 'Upload file',
 }: {
   ownerType: OwnerType;
   ownerId: string;
   documentTypeId: string;
   fulfilRequirementId?: string;
-  onUploaded?: () => void;
+  onUploaded?: (doc: DocumentInstance) => void;
+  /** CSV of file extensions for the native picker, e.g. ".pdf,.png,.doc,.docx". */
+  accept?: string;
+  buttonLabel?: string;
 }) {
   const [state, setState] = useState<'idle' | 'uploading' | 'ok' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -74,7 +82,7 @@ export function DocumentUploader({
 
       setState('ok');
       toast.success(`${file.name} uploaded`);
-      onUploaded?.();
+      onUploaded?.(registerResult.data);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Upload failed';
       setErrorMessage(message);
@@ -104,13 +112,13 @@ export function DocumentUploader({
             ? 'Uploaded'
             : state === 'error'
               ? 'Retry'
-              : 'Upload file'}
+              : buttonLabel}
       </label>
       <input
         id={`file-${documentTypeId}`}
         type="file"
         className="sr-only"
-        accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+        accept={accept}
         onChange={(e) => {
           const f = e.currentTarget.files?.[0];
           if (f) handleFile(f);

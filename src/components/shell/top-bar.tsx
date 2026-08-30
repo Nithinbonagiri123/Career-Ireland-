@@ -1,7 +1,8 @@
 'use client';
 
-import { Bell, LogOut, Menu, Search, Settings, User as UserIcon } from 'lucide-react';
+import { Bell, KeyRound, LogOut, Menu, User as UserIcon } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -19,6 +20,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/s
 import type { UserRole } from '@/lib/db/schema/users';
 import { signOutAction } from '@/modules/auth/actions';
 import { AppSidebar } from './app-sidebar';
+import { GlobalSearch } from './global-search';
 
 export type TopBarUser = {
   id: string;
@@ -45,6 +47,7 @@ export function TopBar({
   user: TopBarUser;
   unreadNotifications?: number;
 }) {
+  const router = useRouter();
   const [signingOut, startSignOut] = useTransition();
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur-md">
@@ -62,17 +65,7 @@ export function TopBar({
         </SheetContent>
       </Sheet>
 
-      <div className="relative w-full max-w-md">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-        <input
-          type="search"
-          placeholder="Search candidates, employers…"
-          className="h-9 w-full rounded-md border border-input bg-transparent pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-        />
-        <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 items-center gap-1 rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline-flex">
-          ⌘K
-        </kbd>
-      </div>
+      <GlobalSearch />
 
       <div className="ml-auto flex items-center gap-1">
         <Link
@@ -117,13 +110,14 @@ export function TopBar({
             <DropdownMenuItem disabled>
               <UserIcon className="mr-2 size-4" /> Profile
             </DropdownMenuItem>
-            <DropdownMenuItem disabled>
-              <Settings className="mr-2 size-4" /> Settings
+            <DropdownMenuItem onClick={() => router.push('/account/security')}>
+              <KeyRound className="mr-2 size-4" /> Change password
             </DropdownMenuItem>
+
             <DropdownMenuSeparator />
             <DropdownMenuItem
               disabled={signingOut}
-              onSelect={() => startSignOut(() => signOutAction())}
+              onClick={() => startSignOut(() => signOutAction())}
             >
               <LogOut className="mr-2 size-4" />
               {signingOut ? 'Signing out…' : 'Sign out'}

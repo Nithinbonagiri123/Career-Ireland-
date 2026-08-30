@@ -1,9 +1,17 @@
 'use client';
 
-import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  type RowSelectionState,
+  useReactTable,
+} from '@tanstack/react-table';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -26,6 +34,11 @@ export type DataTableProps<TData, TValue> = {
   emptyAction?: ReactNode;
   onRowClick?: (row: TData) => void;
   className?: string;
+  /** When set, prepend a checkbox column and fire `onSelectionChange` with the selected rows. */
+  enableRowSelection?: boolean;
+  onSelectionChange?: (rows: TData[]) => void;
+  /** Bump this number to force the table to clear its internal selection state. */
+  selectionResetKey?: number;
 };
 
 /**
@@ -45,12 +58,61 @@ export function DataTable<TData, TValue>({
   emptyAction,
   onRowClick,
   className,
+  enableRowSelection,
+  onSelectionChange,
+  selectionResetKey,
 }: DataTableProps<TData, TValue>) {
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  const columnsWithSelect = useMemo<ColumnDef<TData, TValue>[]>(() => {
+    if (!enableRowSelection) return columns;
+    const selectCol: ColumnDef<TData, TValue> = {
+      id: '__select',
+      size: 36,
+      header: ({ table }) => (
+        <Checkbox
+          aria-label="Select all rows"
+          checked={table.getIsAllPageRowsSelected()}
+          indeterminate={!table.getIsAllPageRowsSelected() && table.getIsSomePageRowsSelected()}
+          onCheckedChange={(v) => table.toggleAllPageRowsSelected(v === true)}
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          aria-label="Select row"
+          checked={row.getIsSelected()}
+          onCheckedChange={(v) => row.toggleSelected(v === true)}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ),
+    };
+    return [selectCol, ...columns];
+  }, [enableRowSelection, columns]);
+
   const table = useReactTable({
     data,
-    columns,
+    columns: columnsWithSelect,
+    state: enableRowSelection ? { rowSelection } : undefined,
+    onRowSelectionChange: enableRowSelection ? setRowSelection : undefined,
+    enableRowSelection,
     getCoreRowModel: getCoreRowModel(),
   });
+
+  // Broadcast selection changes upstream. `rowSelection` is the source of truth
+  // that this hook observes; `table` is derived from it, so re-running when
+  // `rowSelection` changes gives us the fresh selection to publish.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rowSelection triggers the recompute
+  useEffect(() => {
+    if (!enableRowSelection || !onSelectionChange) return;
+    const selected = table.getSelectedRowModel().rows.map((r) => r.original);
+    onSelectionChange(selected);
+  }, [rowSelection, enableRowSelection, onSelectionChange, table]);
+
+  // Allow caller to force a selection reset.
+  useEffect(() => {
+    if (selectionResetKey === undefined) return;
+    setRowSelection({});
+  }, [selectionResetKey]);
 
   if (!isLoading && data.length === 0) {
     return (
@@ -84,7 +146,7 @@ export function DataTable<TData, TValue>({
             ? Array.from({ length: loadingRows }).map((_, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows have no id
                 <TableRow key={`sk-${i}`}>
-                  {columns.map((_c, ci) => (
+                  {columnsWithSelect.map((_c, ci) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: skeleton cells have no id
                     <TableCell key={`sk-${i}-${ci}`}>
                       <Skeleton className="h-4 w-full max-w-[200px]" />
@@ -97,6 +159,7 @@ export function DataTable<TData, TValue>({
                   key={row.id}
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
                   className={onRowClick ? 'cursor-pointer' : undefined}
+                  data-state={row.getIsSelected() ? 'selected' : undefined}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>

@@ -4,6 +4,7 @@ import {
   Bell,
   Briefcase,
   Building2,
+  CalendarClock,
   CheckSquare,
   ClipboardList,
   Coins,
@@ -11,6 +12,7 @@ import {
   GitMerge,
   Globe,
   GraduationCap,
+  KeyRound,
   LayoutDashboard,
   ListChecks,
   MessagesSquare,
@@ -63,6 +65,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Requisitions', href: '/requisitions', icon: Briefcase },
       { label: 'Matching', href: '/matching', icon: SearchCheck },
       { label: 'Shortlists', href: '/shortlists', icon: ListChecks },
+      { label: 'Interviews', href: '/interviews', icon: CalendarClock },
       { label: 'Campaigns', href: '/campaigns', icon: Sparkles },
       { label: 'Placements', href: '/placements', icon: Trophy },
     ],
@@ -97,5 +100,9 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Currencies', href: '/admin/currencies', icon: Globe },
       { label: 'Audit Log', href: '/admin/audit', icon: ShieldCheck },
     ],
+  },
+  {
+    label: 'Account',
+    items: [{ label: 'Security', href: '/account/security', icon: KeyRound }],
   },
 ];
