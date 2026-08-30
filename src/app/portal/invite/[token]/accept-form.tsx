@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
-import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { AlertCircle, Check, CheckCircle2, Loader2, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -10,12 +10,22 @@ import { z } from 'zod';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  checkPasswordPolicy,
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_POLICY_RULES,
+} from '@/lib/auth/password-policy';
+import { cn } from '@/lib/utils';
 import { acceptInvitationAction } from '@/modules/portal/actions';
 
 const FormSchema = z
   .object({
-    password: z.string().min(8, 'Minimum 8 characters').max(200),
-    confirm: z.string().min(8),
+    password: z
+      .string()
+      .min(MIN_PASSWORD_LENGTH, `Minimum ${MIN_PASSWORD_LENGTH} characters`)
+      .max(MAX_PASSWORD_LENGTH),
+    confirm: z.string().min(MIN_PASSWORD_LENGTH),
   })
   .refine((v) => v.password === v.confirm, {
     message: "Passwords don't match",
@@ -25,6 +35,7 @@ const FormSchema = z
 export function AcceptInviteForm({ token, email }: { token: string; email: string }) {
   const [state, setState] = useState<'idle' | 'accepted' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [passwordValue, setPasswordValue] = useState('');
 
   const {
     register,
@@ -34,6 +45,12 @@ export function AcceptInviteForm({ token, email }: { token: string; email: strin
     resolver: zodResolver(FormSchema),
     defaultValues: { password: '', confirm: '' },
   });
+
+  const passwordReg = register('password', {
+    onChange: (e) => setPasswordValue(e.target.value),
+  });
+  const policyIssues = passwordValue ? checkPasswordPolicy(passwordValue, { email }) : [];
+  const passesPolicy = passwordValue !== '' && policyIssues.length === 0;
 
   const onSubmit = handleSubmit(async (data) => {
     setErrorMessage(null);
@@ -78,9 +95,36 @@ export function AcceptInviteForm({ token, email }: { token: string; email: strin
           type="password"
           autoComplete="new-password"
           aria-invalid={Boolean(errors.password)}
-          {...register('password')}
+          {...passwordReg}
         />
         {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+        {passwordValue && (
+          <ul className="mt-1 grid gap-0.5 text-[11px]">
+            {PASSWORD_POLICY_RULES.map((rule) => {
+              // Rough per-rule check for the visual indicator; the server does the authoritative check.
+              const ok =
+                (rule.startsWith('At least') && passwordValue.length >= MIN_PASSWORD_LENGTH) ||
+                (rule.startsWith('Mix of') &&
+                  ['[a-z]', '[A-Z]', '\\d', '[^A-Za-z0-9]'].filter((c) =>
+                    new RegExp(c).test(passwordValue),
+                  ).length >= 3) ||
+                (rule.startsWith('Not a common') && passesPolicy) ||
+                (rule.startsWith("Doesn't contain") && passesPolicy);
+              return (
+                <li
+                  key={rule}
+                  className={cn(
+                    'flex items-center gap-1.5',
+                    ok ? 'text-emerald-600' : 'text-muted-foreground',
+                  )}
+                >
+                  {ok ? <Check className="size-3" /> : <X className="size-3" />}
+                  <span>{rule}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="ai-confirm">Confirm password</Label>
