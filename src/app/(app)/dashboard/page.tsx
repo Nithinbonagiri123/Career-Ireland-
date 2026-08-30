@@ -17,7 +17,9 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireRole } from '@/lib/auth/session';
 import { cn } from '@/lib/utils';
+import { fetchDashboardDrilldowns } from '@/modules/dashboard/drilldowns';
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
+import { DashboardDrilldownsSection } from './drilldowns-section';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,7 +67,7 @@ function TileCard({ tile }: { tile: Tile }) {
 
 export default async function DashboardPage() {
   await requireRole(['ADMIN', 'STAFF']);
-  const m = await fetchDashboardMetrics();
+  const [m, drilldowns] = await Promise.all([fetchDashboardMetrics(), fetchDashboardDrilldowns()]);
 
   const candidateTiles: Tile[] = [
     {
@@ -220,6 +222,15 @@ export default async function DashboardPage() {
               </StaggerItem>
             ))}
           </StaggerContainer>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Act on this now
+          </h2>
+          <FadeUp delay={0.05}>
+            <DashboardDrilldownsSection data={drilldowns} />
+          </FadeUp>
         </section>
       </div>
     </div>

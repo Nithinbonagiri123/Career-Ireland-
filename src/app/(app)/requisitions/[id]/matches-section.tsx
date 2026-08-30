@@ -1,12 +1,14 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { Check, X } from 'lucide-react';
+import { Check, HelpCircle, MinusCircle, X } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import type { MatchReasonSnapshot } from '@/lib/db/schema/recruitment';
 import { dismissMatchAction, shortlistMatchAction } from '@/modules/matching/actions';
 import type { MatchListRow } from '@/modules/matching/service';
 
@@ -16,6 +18,53 @@ const BUCKET_VARIANT: Record<MatchListRow['scoreBucket'], 'default' | 'secondary
   LOW: 'outline',
 };
 
+function ReasonBreakdown({ reasons, total }: { reasons: MatchReasonSnapshot[]; total: number }) {
+  if (reasons.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        This match was created before the scoring engine tracked per-component reasons. Re-run
+        matching to populate the breakdown.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <ul className="divide-y rounded-md border bg-card">
+        {reasons.map((r) => (
+          <li key={r.label} className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                {r.matched ? (
+                  <Check className="size-3.5 text-emerald-600" />
+                ) : (
+                  <MinusCircle className="size-3.5 text-muted-foreground" />
+                )}
+                <span className={r.matched ? 'font-medium' : 'text-muted-foreground'}>
+                  {r.label}
+                </span>
+              </div>
+              {r.detail && (
+                <p className="mt-0.5 pl-5 text-[11px] text-muted-foreground">{r.detail}</p>
+              )}
+            </div>
+            <span
+              className={`shrink-0 font-mono text-xs ${
+                r.points > 0 ? 'text-emerald-600' : 'text-muted-foreground'
+              }`}
+            >
+              {r.points > 0 ? `+${r.points}` : '·'}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
+        <span className="font-medium">Total</span>
+        <span className="font-mono font-semibold">{total} / 100</span>
+      </div>
+    </div>
+  );
+}
+
 export function MatchesSection({
   requisitionId,
   matches,
@@ -24,6 +73,7 @@ export function MatchesSection({
   matches: MatchListRow[];
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [reasonsFor, setReasonsFor] = useState<MatchListRow | null>(null);
   const [, startTransition] = useTransition();
 
   const shortlist = (id: string) => {
@@ -60,8 +110,20 @@ export function MatchesSection({
     {
       header: 'Score',
       accessorKey: 'score',
-      size: 80,
-      cell: ({ row }) => <span className="font-mono text-xs">{row.original.score}</span>,
+      size: 120,
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-xs">{row.original.score}</span>
+          <button
+            type="button"
+            onClick={() => setReasonsFor(row.original)}
+            className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+            aria-label={`Why is ${row.original.personName} scored ${row.original.score}?`}
+          >
+            <HelpCircle className="size-3" /> Why?
+          </button>
+        </div>
+      ),
     },
     {
       header: 'Bucket',
@@ -126,11 +188,34 @@ export function MatchesSection({
   ];
 
   return (
-    <DataTable
-      columns={columns}
-      data={matches}
-      emptyTitle="No matches yet"
-      emptyDescription="Click 'Run assisted matching' above to score every active candidate against this requisition."
-    />
+    <>
+      <DataTable
+        columns={columns}
+        data={matches}
+        emptyTitle="No matches yet"
+        emptyDescription="Click 'Run assisted matching' above to score every active candidate against this requisition."
+      />
+      <Dialog
+        open={reasonsFor !== null}
+        onOpenChange={(open) => {
+          if (!open) setReasonsFor(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Score breakdown</DialogTitle>
+          </DialogHeader>
+          {reasonsFor && (
+            <div className="space-y-3">
+              <p className="text-sm">
+                <span className="font-medium">{reasonsFor.personName}</span>{' '}
+                <span className="text-muted-foreground">against this requisition</span>
+              </p>
+              <ReasonBreakdown reasons={reasonsFor.reasons ?? []} total={reasonsFor.score} />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

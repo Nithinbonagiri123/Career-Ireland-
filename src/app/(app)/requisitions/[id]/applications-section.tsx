@@ -2,6 +2,8 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
+import { ExternalLink } from 'lucide-react';
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -63,7 +65,15 @@ export function ApplicationsSection({
     {
       header: 'Candidate',
       accessorKey: 'personName',
-      cell: ({ row }) => <span className="text-sm font-medium">{row.original.personName}</span>,
+      cell: ({ row }) => (
+        <Link
+          href={`/applications/${row.original.id}`}
+          className="inline-flex items-center gap-1 text-sm font-medium hover:underline"
+        >
+          {row.original.personName}
+          <ExternalLink className="size-3 opacity-60" />
+        </Link>
+      ),
     },
     {
       header: 'Status',

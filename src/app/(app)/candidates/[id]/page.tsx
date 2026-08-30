@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from 'date-fns';
+import { eq } from 'drizzle-orm';
 import type { LucideIcon } from 'lucide-react';
 import {
   Briefcase,
@@ -12,6 +13,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { notFound } from 'next/navigation';
+import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
@@ -20,9 +22,27 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireRole } from '@/lib/auth/session';
+import { db } from '@/lib/db/client';
+import { candidateProfiles } from '@/lib/db/schema/persons';
+import { listApplicationsForPerson } from '@/modules/applications/service';
+import {
+  listCandidateQualifications,
+  listCandidateSkills,
+  listEmploymentHistory,
+} from '@/modules/candidate-details/service';
 import { fetchPersonDocuments, fetchPersonRequirements } from '@/modules/documents/service';
+import { getEmailAccountForCandidate } from '@/modules/email-accounts/service';
 import { fetchPersonDetail, type PersonTimelineItem } from '@/modules/persons/detail';
+import { fetchQualifications } from '@/modules/qualifications/service';
+import { fetchSkills } from '@/modules/skills/service';
+import { ApplicationsPanel } from './applications-panel';
+import {
+  EmploymentHistorySection,
+  QualificationsSection,
+  SkillsSection,
+} from './candidate-details-panel';
 import { DocumentsSection } from './documents-section';
+import { EmailAccountPanel } from './email-account-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,14 +70,37 @@ const AVAILABILITY_DOT = {
 } as const;
 
 export default async function CandidateDetail({ params }: { params: Promise<{ id: string }> }) {
-  await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireRole(['ADMIN', 'STAFF']);
   const { id } = await params;
   const detail = await fetchPersonDetail(id);
   if (!detail) notFound();
+  const [assignedRow] = await db
+    .select({ assignedUserId: candidateProfiles.assignedUserId })
+    .from(candidateProfiles)
+    .where(eq(candidateProfiles.personId, id))
+    .limit(1);
+  const assignedUserId = assignedRow?.assignedUserId ?? null;
   const { person, candidateProfile, timeline } = detail;
-  const [requirements, documents] = await Promise.all([
+  const [
+    requirements,
+    documents,
+    candidateSkillRows,
+    candidateQualRows,
+    employmentRows,
+    emailAccount,
+    allSkills,
+    allQualifications,
+    candidateApplications,
+  ] = await Promise.all([
     fetchPersonRequirements(id),
     fetchPersonDocuments(id),
+    listCandidateSkills(id),
+    listCandidateQualifications(id),
+    listEmploymentHistory(id),
+    getEmailAccountForCandidate(id),
+    fetchSkills(),
+    fetchQualifications(),
+    listApplicationsForPerson(id),
   ]);
 
   return (
@@ -77,16 +120,26 @@ export default async function CandidateDetail({ params }: { params: Promise<{ id
           }
           badge={candidateProfile ? 'CANDIDATE' : (person.source ?? 'PERSON')}
           action={
-            <InvitePortalDialog
-              target={{ kind: 'CANDIDATE', personId: person.id }}
-              defaultEmail={person.email ?? undefined}
-              defaultFullName={`${person.firstName} ${person.lastName}`}
-              trigger={
-                <Button size="sm" variant="outline">
-                  <Send className="mr-1.5 size-4" /> Invite to portal
-                </Button>
-              }
-            />
+            <div className="flex items-center gap-2">
+              {candidateProfile && (
+                <AssignToMeButton
+                  entity="candidate"
+                  id={person.id}
+                  currentUserId={session.user.id}
+                  currentAssignedUserId={assignedUserId}
+                />
+              )}
+              <InvitePortalDialog
+                target={{ kind: 'CANDIDATE', personId: person.id }}
+                defaultEmail={person.email ?? undefined}
+                defaultFullName={`${person.firstName} ${person.lastName}`}
+                trigger={
+                  <Button size="sm" variant="outline">
+                    <Send className="mr-1.5 size-4" /> Invite to portal
+                  </Button>
+                }
+              />
+            </div>
           }
         />
       </FadeUp>
@@ -204,7 +257,31 @@ export default async function CandidateDetail({ params }: { params: Promise<{ id
         </FadeUp>
       </div>
 
-      <FadeUp delay={0.15} className="mt-8">
+      <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <FadeUp delay={0.15}>
+          <SkillsSection personId={id} rows={candidateSkillRows} allSkills={allSkills} />
+        </FadeUp>
+        <FadeUp delay={0.2}>
+          <QualificationsSection
+            personId={id}
+            rows={candidateQualRows}
+            allQualifications={allQualifications}
+          />
+        </FadeUp>
+        <FadeUp delay={0.25}>
+          <EmploymentHistorySection personId={id} rows={employmentRows} />
+        </FadeUp>
+      </div>
+
+      <FadeUp delay={0.3} className="mt-6">
+        <ApplicationsPanel personId={id} rows={candidateApplications} />
+      </FadeUp>
+
+      <FadeUp delay={0.35} className="mt-6">
+        <EmailAccountPanel personId={id} account={emailAccount} />
+      </FadeUp>
+
+      <FadeUp delay={0.4} className="mt-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Documents</CardTitle>

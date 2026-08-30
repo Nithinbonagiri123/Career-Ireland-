@@ -2,6 +2,7 @@ import { asc } from 'drizzle-orm';
 import { ArrowRight, Briefcase, Building2, Pencil, Plus, Send, User } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
@@ -32,7 +33,7 @@ const REQ_STATUS_VARIANT = {
 } as const;
 
 export default async function EmployerDetail({ params }: { params: Promise<{ id: string }> }) {
-  await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireRole(['ADMIN', 'STAFF']);
   const { id } = await params;
   const employer = await fetchEmployer(id);
   if (!employer) notFound();
@@ -58,6 +59,12 @@ export default async function EmployerDetail({ params }: { params: Promise<{ id:
           badge={employer.relationshipStatus.replace(/_/g, ' ')}
           action={
             <div className="flex gap-2">
+              <AssignToMeButton
+                entity="employer"
+                id={employer.id}
+                currentUserId={session.user.id}
+                currentAssignedUserId={employer.assignedUserId}
+              />
               <EmployerDialog
                 initial={employer}
                 trigger={

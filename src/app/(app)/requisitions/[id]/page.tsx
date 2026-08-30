@@ -1,6 +1,7 @@
 import { Briefcase } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -12,24 +13,43 @@ import {
   listShortlistPromotionCandidates,
 } from '@/modules/applications/service';
 import { listMatches } from '@/modules/matching/service';
-import { fetchRequisition } from '@/modules/requisitions/service';
+import { fetchQualifications } from '@/modules/qualifications/service';
+import {
+  fetchRequisition,
+  listRequisitionQualifications,
+  listRequisitionSkills,
+} from '@/modules/requisitions/service';
+import { fetchSkills } from '@/modules/skills/service';
 import { ApplicationsSection } from './applications-section';
 import { MatchesSection } from './matches-section';
 import { PromoteShortlistSection } from './promote-shortlist';
+import { RequisitionQualificationsSection, RequisitionSkillsSection } from './requirements-section';
 import { RunMatchingButton } from './requisition-actions';
 
 export const dynamic = 'force-dynamic';
 
 export default async function RequisitionDetail({ params }: { params: Promise<{ id: string }> }) {
-  await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireRole(['ADMIN', 'STAFF']);
   const { id } = await params;
   const requisition = await fetchRequisition(id);
   if (!requisition) notFound();
 
-  const [matches, applications, shortlistPromotions] = await Promise.all([
+  const [
+    matches,
+    applications,
+    shortlistPromotions,
+    requisitionSkillRows,
+    requisitionQualRows,
+    allSkills,
+    allQualifications,
+  ] = await Promise.all([
     listMatches(id),
     listApplicationsForRequisition(id),
     listShortlistPromotionCandidates(id),
+    listRequisitionSkills(id),
+    listRequisitionQualifications(id),
+    fetchSkills(),
+    fetchQualifications(),
   ]);
 
   return (
@@ -53,9 +73,36 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
             </>
           }
           badge={requisition.status.replace(/_/g, ' ')}
-          action={<RunMatchingButton requisitionId={id} />}
+          action={
+            <div className="flex items-center gap-2">
+              <AssignToMeButton
+                entity="requisition"
+                id={id}
+                currentUserId={session.user.id}
+                currentAssignedUserId={requisition.assignedUserId}
+              />
+              <RunMatchingButton requisitionId={id} />
+            </div>
+          }
         />
       </FadeUp>
+
+      <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <FadeUp delay={0.03}>
+          <RequisitionSkillsSection
+            requisitionId={id}
+            rows={requisitionSkillRows}
+            allSkills={allSkills}
+          />
+        </FadeUp>
+        <FadeUp delay={0.04}>
+          <RequisitionQualificationsSection
+            requisitionId={id}
+            rows={requisitionQualRows}
+            allQualifications={allQualifications}
+          />
+        </FadeUp>
+      </div>
 
       <FadeUp delay={0.05} className="mb-8">
         <Card>
@@ -63,8 +110,9 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
             <div>
               <CardTitle className="text-base">Matches</CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">
-                Deterministic score: occupation match (+60), availability (+25), lifecycle active
-                (+10), location overlap (+5). Bucket: ≥70 HIGH, 40–69 MEDIUM, else LOW.
+                Score: occupation +40 · available +15 · active +5 · location +5 · required skills up
+                to +25 (proportional) · required qualifications up to +10. Click "Why?" on any row
+                for the breakdown. Bucket: ≥70 HIGH · 40–69 MEDIUM · else LOW.
               </p>
             </div>
             <Badge variant="secondary" className="rounded-full">
