@@ -1,11 +1,15 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   char,
+  check,
   date,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -14,8 +18,10 @@ import {
 } from 'drizzle-orm/pg-core';
 import { createdAt, updatedAt } from './_shared';
 import { currencies } from './currencies';
+import { documentInstances } from './documents';
 import { occupations } from './occupations';
 import { candidateProfiles, persons } from './persons';
+import { qualifications, skills } from './reference';
 import { users } from './users';
 
 export const employers = pgTable(
@@ -42,6 +48,7 @@ export const employers = pgTable(
   (t) => [
     index('employers_legal_name_idx').on(t.legalName),
     index('employers_status_idx').on(t.relationshipStatus),
+    index('employers_assigned_idx').on(t.assignedUserId),
   ],
 );
 
@@ -107,6 +114,46 @@ export const jobRequisitions = pgTable(
   ],
 );
 
+/** Structured skill requirements per requisition — replaces free-text `candidateRequirements`. */
+export const requisitionSkills = pgTable(
+  'requisition_skills',
+  {
+    jobRequisitionId: uuid('job_requisition_id')
+      .notNull()
+      .references(() => jobRequisitions.id, { onDelete: 'cascade' }),
+    skillId: uuid('skill_id')
+      .notNull()
+      .references(() => skills.id),
+    isRequired: boolean('is_required').notNull().default(true),
+    /** Higher weight → higher score contribution during matching. */
+    weight: integer('weight').notNull().default(1),
+    createdAt,
+  },
+  (t) => [
+    primaryKey({ columns: [t.jobRequisitionId, t.skillId] }),
+    index('requisition_skills_skill_idx').on(t.skillId),
+  ],
+);
+
+/** Structured qualification requirements per requisition. */
+export const requisitionQualifications = pgTable(
+  'requisition_qualifications',
+  {
+    jobRequisitionId: uuid('job_requisition_id')
+      .notNull()
+      .references(() => jobRequisitions.id, { onDelete: 'cascade' }),
+    qualificationId: uuid('qualification_id')
+      .notNull()
+      .references(() => qualifications.id),
+    isRequired: boolean('is_required').notNull().default(true),
+    createdAt,
+  },
+  (t) => [
+    primaryKey({ columns: [t.jobRequisitionId, t.qualificationId] }),
+    index('requisition_quals_qual_idx').on(t.qualificationId),
+  ],
+);
+
 export const candidateMatches = pgTable(
   'candidate_matches',
   {
@@ -129,6 +176,12 @@ export const candidateMatches = pgTable(
     })
       .notNull()
       .default('SUGGESTED'),
+    /**
+     * Per-component score breakdown persisted alongside the total so staff can see
+     * why a candidate ranked where they did. Shape: `MatchReason[]` — label + points
+     * + matched flag per signal. See src/modules/matching/service.ts.
+     */
+    reasons: jsonb('reasons').$type<MatchReasonSnapshot[]>().notNull().default([]),
     suggestedByUserId: uuid('suggested_by_user_id').references(() => users.id),
     createdAt,
     updatedAt,
@@ -138,6 +191,15 @@ export const candidateMatches = pgTable(
     index('candidate_matches_requisition_bucket_idx').on(t.jobRequisitionId, t.scoreBucket),
   ],
 );
+
+/** Persisted shape of a match reason — inserted by matching service, read by UI. */
+export type MatchReasonSnapshot = {
+  label: string;
+  points: number;
+  matched: boolean;
+  /** Optional extra context (e.g. matched skill names). */
+  detail?: string;
+};
 
 export const shortlistEntries = pgTable(
   'shortlist_entries',
@@ -158,16 +220,44 @@ export const shortlistEntries = pgTable(
   (t) => [unique('shortlist_entries_requisition_person_unique').on(t.jobRequisitionId, t.personId)],
 );
 
+/**
+ * Applications may target an internal Requisition OR an external job board
+ * (IrishJobs, Indeed, JobsIreland, LinkedIn, direct company site).
+ * Exactly one of jobRequisitionId or (source != INTERNAL + externalCompanyName) is set.
+ */
 export const jobApplications = pgTable(
   'job_applications',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    jobRequisitionId: uuid('job_requisition_id')
-      .notNull()
-      .references(() => jobRequisitions.id),
+    /** NULL when applying to an external job board (see `source`). */
+    jobRequisitionId: uuid('job_requisition_id').references(() => jobRequisitions.id),
     personId: uuid('person_id')
       .notNull()
       .references(() => persons.id),
+    source: text('source', {
+      enum: [
+        'INTERNAL',
+        'IRISH_JOBS',
+        'INDEED',
+        'JOBS_IRELAND',
+        'LINKEDIN',
+        'COMPANY_WEBSITE',
+        'REFERRAL',
+        'OTHER',
+      ],
+    })
+      .notNull()
+      .default('INTERNAL'),
+    /** External-only: URL of the job posting on the board. */
+    externalJobUrl: varchar('external_job_url', { length: 500 }),
+    /** External-only: name of the company the candidate applied to. */
+    externalCompanyName: varchar('external_company_name', { length: 200 }),
+    /** External-only: job title as advertised. */
+    externalJobTitle: varchar('external_job_title', { length: 200 }),
+    /** External-only: job reference/ID from the source board. */
+    externalJobReference: varchar('external_job_reference', { length: 200 }),
+    /** Which CV document instance was submitted with this application. */
+    cvDocumentInstanceId: uuid('cv_document_instance_id').references(() => documentInstances.id),
     status: text('status', {
       enum: [
         'APPLIED',
@@ -185,12 +275,22 @@ export const jobApplications = pgTable(
     appliedAt: timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
     interviewAt: timestamp('interview_at', { withTimezone: true }),
     rejectionReason: text('rejection_reason'),
+    /** Free-text notes from the applicant/staff — cover letter summary, etc. */
+    notes: text('notes'),
     createdAt,
     updatedAt,
   },
   (t) => [
+    // Internal applications are unique per (requisition, person). Postgres treats NULL requisitionIds
+    // as distinct, so external applications naturally bypass this constraint.
     unique('job_applications_requisition_person_unique').on(t.jobRequisitionId, t.personId),
     index('job_applications_person_status_idx').on(t.personId, t.status),
+    index('job_applications_source_idx').on(t.source),
+    check(
+      'job_applications_source_shape',
+      sql`(${t.source} = 'INTERNAL' AND ${t.jobRequisitionId} IS NOT NULL)
+          OR (${t.source} <> 'INTERNAL' AND ${t.externalCompanyName} IS NOT NULL)`,
+    ),
   ],
 );
 
@@ -245,6 +345,10 @@ export type JobApplication = typeof jobApplications.$inferSelect;
 export type NewJobApplication = typeof jobApplications.$inferInsert;
 export type Placement = typeof placements.$inferSelect;
 export type NewPlacement = typeof placements.$inferInsert;
+export type RequisitionSkill = typeof requisitionSkills.$inferSelect;
+export type NewRequisitionSkill = typeof requisitionSkills.$inferInsert;
+export type RequisitionQualification = typeof requisitionQualifications.$inferSelect;
+export type NewRequisitionQualification = typeof requisitionQualifications.$inferInsert;
 
 // Reference candidateProfiles so the linter sees the import as used (it's the target of availability flip triggered by placement changes).
 export const _candidateProfilesRef = candidateProfiles;

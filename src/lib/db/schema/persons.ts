@@ -5,10 +5,12 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
 import { citext, createdAt, updatedAt } from './_shared';
+import { users } from './users';
 
 /**
  * Root identity for every human in the system.
@@ -48,6 +50,9 @@ export const persons = pgTable(
     index('persons_normalized_phone_idx').on(t.normalizedPhone),
     index('persons_name_idx').on(t.lastName, t.firstName),
     index('persons_merged_idx').on(t.mergedIntoPersonId),
+    // Uniqueness on normalized values; multiple NULLs are allowed (persons without email/phone).
+    unique('persons_normalized_email_unique').on(t.normalizedEmail),
+    unique('persons_normalized_phone_unique').on(t.normalizedPhone),
   ],
 );
 
@@ -59,31 +64,37 @@ export type PersonSource = NonNullable<Person['source']>;
  * Materialised active-candidate role record. One-to-one with Person.
  * A Person becomes a Candidate through Lead activation (payment or manual override).
  */
-export const candidateProfiles = pgTable('candidate_profiles', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  personId: uuid('person_id')
-    .notNull()
-    .unique()
-    .references(() => persons.id),
-  primaryOccupationId: uuid('primary_occupation_id'),
-  yearsOfExperience: text('years_of_experience'),
-  workEligibility: text('work_eligibility'),
-  preferredLocation: varchar('preferred_location', { length: 200 }),
-  profileSummary: text('profile_summary'),
-  lifecycleStatus: text('lifecycle_status', {
-    enum: ['ACTIVE', 'INACTIVE', 'ARCHIVED'],
-  })
-    .notNull()
-    .default('ACTIVE'),
-  availabilityStatus: text('availability_status', {
-    enum: ['AVAILABLE', 'TEMPORARILY_UNAVAILABLE', 'PLACED'],
-  })
-    .notNull()
-    .default('AVAILABLE'),
-  activatedAt: timestamp('activated_at', { withTimezone: true }).notNull().defaultNow(),
-  createdAt,
-  updatedAt,
-});
+export const candidateProfiles = pgTable(
+  'candidate_profiles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    personId: uuid('person_id')
+      .notNull()
+      .unique()
+      .references(() => persons.id),
+    primaryOccupationId: uuid('primary_occupation_id'),
+    yearsOfExperience: text('years_of_experience'),
+    workEligibility: text('work_eligibility'),
+    preferredLocation: varchar('preferred_location', { length: 200 }),
+    profileSummary: text('profile_summary'),
+    lifecycleStatus: text('lifecycle_status', {
+      enum: ['ACTIVE', 'INACTIVE', 'ARCHIVED'],
+    })
+      .notNull()
+      .default('ACTIVE'),
+    availabilityStatus: text('availability_status', {
+      enum: ['AVAILABLE', 'TEMPORARILY_UNAVAILABLE', 'PLACED'],
+    })
+      .notNull()
+      .default('AVAILABLE'),
+    /** Recruiter this candidate is currently assigned to. NULL = unassigned. */
+    assignedUserId: uuid('assigned_user_id').references(() => users.id),
+    activatedAt: timestamp('activated_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [index('candidate_profiles_assigned_idx').on(t.assignedUserId)],
+);
 
 export type CandidateProfile = typeof candidateProfiles.$inferSelect;
 export type NewCandidateProfile = typeof candidateProfiles.$inferInsert;
