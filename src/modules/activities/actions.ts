@@ -20,8 +20,16 @@ export async function createTaskAction(input: CreateTaskInput) {
   if (r.ok) rev();
   return r;
 }
-export async function updateTaskStatusAction(input: UpdateTaskStatusInput) {
+export async function updateTaskStatusAction(
+  input: UpdateTaskStatusInput,
+  extraRevalidatePaths?: string[],
+) {
   const r = await toActionResult(() => updateTaskStatus(input));
-  if (r.ok) rev();
+  if (r.ok) {
+    rev();
+    if (extraRevalidatePaths) {
+      for (const p of extraRevalidatePaths) revalidatePath(p);
+    }
+  }
   return r;
 }

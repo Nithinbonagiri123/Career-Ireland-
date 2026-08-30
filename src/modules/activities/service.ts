@@ -51,6 +51,17 @@ export async function fetchTasks(): Promise<TaskRow[]> {
   return rows.map((r) => ({ ...r.t, assignedName: r.assignedName }));
 }
 
+export async function fetchTasksForImmigrationCase(caseId: string): Promise<TaskRow[]> {
+  await requireRole(['ADMIN', 'STAFF']);
+  const rows = await db
+    .select({ t: tasks, assignedName: users.fullName })
+    .from(tasks)
+    .innerJoin(users, eq(users.id, tasks.assignedUserId))
+    .where(eq(tasks.immigrationCaseId, caseId))
+    .orderBy(asc(tasks.status), asc(tasks.dueAt), desc(tasks.createdAt));
+  return rows.map((r) => ({ ...r.t, assignedName: r.assignedName }));
+}
+
 export async function createCommunication(
   input: CreateCommunicationInput,
 ): Promise<CommunicationLog> {
