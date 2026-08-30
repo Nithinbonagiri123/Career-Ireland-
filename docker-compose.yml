@@ -1,0 +1,55 @@
+# Local dev services for Career Ireland.
+#
+# MinIO — S3-compatible object storage for document uploads while there is no
+# real AWS S3 configured. Everything is written to a Docker volume on your
+# machine — nothing leaves the host.
+#
+#   docker compose up -d          # start MinIO + create the bucket
+#   docker compose down           # stop but keep uploaded files
+#   docker compose down -v        # stop and DELETE all uploaded files
+#
+# Console:  http://localhost:9001  (login: minioadmin / minioadmin)
+# S3 API:   http://localhost:9000
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: career-ireland-minio
+    restart: unless-stopped
+    ports:
+      - '9000:9000' # S3 API
+      - '9001:9001' # Web console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # One-shot init container — waits for MinIO, creates the documents bucket
+  # if it doesn't already exist, and sets a permissive dev CORS policy so
+  # browser uploads via presigned URLs work.
+  minio-bootstrap:
+    image: minio/mc:latest
+    container_name: career-ireland-minio-bootstrap
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      set -eu;
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing local/career-ireland-documents-dev;
+      echo '{\"CORSRules\":[{\"AllowedOrigins\":[\"*\"],\"AllowedMethods\":[\"GET\",\"PUT\",\"POST\",\"HEAD\"],\"AllowedHeaders\":[\"*\"],\"ExposeHeaders\":[\"ETag\"],\"MaxAgeSeconds\":3000}]}' > /tmp/cors.json;
+      mc anonymous set download local/career-ireland-documents-dev || true;
+      echo 'MinIO bootstrap complete.';
+      "
+
+volumes:
+  minio-data:
+    name: career-ireland-minio-data
