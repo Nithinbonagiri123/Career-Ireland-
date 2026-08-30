@@ -12,6 +12,7 @@ import type {
 import {
   addPersonSpecificRequirement,
   deleteRequirementRule,
+  fetchPersonDocumentsByTypeCode,
   materialiseRequirementsForPerson,
   registerUpload,
   reviewDocument,
@@ -61,4 +62,9 @@ export async function addPersonSpecificRequirementAction(input: AddRequirementFo
   const r = await toActionResult(() => addPersonSpecificRequirement(input));
   if (r.ok) revalidatePath(`/candidates/${input.personId}`);
   return r;
+}
+
+/** Fetch a person's documents filtered by document-type code — used by the CV picker. */
+export async function listPersonDocumentsByTypeCodeAction(personId: string, typeCode: string) {
+  return toActionResult(() => fetchPersonDocumentsByTypeCode(personId, typeCode));
 }

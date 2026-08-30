@@ -16,6 +16,38 @@ export async function fetchDocumentTypes(): Promise<DocumentType[]> {
   return db.select().from(documentTypes).orderBy(asc(documentTypes.name));
 }
 
+/**
+ * Idempotently fetch (or create) a document type by its stable machine `code`.
+ * Used by workflows that need a well-known type to exist (e.g. PAYMENT_PROOF for
+ * lead conversion) without forcing an admin to hand-configure it first.
+ */
+export async function ensureDocumentTypeByCode(args: {
+  code: string;
+  name: string;
+  appliesTo?: 'PERSON' | 'EMPLOYER' | 'BOTH';
+  hasExpiry?: boolean;
+}): Promise<DocumentType> {
+  await requireRole(['ADMIN', 'STAFF']);
+  const [existing] = await db
+    .select()
+    .from(documentTypes)
+    .where(eq(documentTypes.code, args.code))
+    .limit(1);
+  if (existing) return existing;
+  const [created] = await db
+    .insert(documentTypes)
+    .values({
+      code: args.code,
+      name: args.name,
+      appliesTo: args.appliesTo ?? 'PERSON',
+      hasExpiry: args.hasExpiry ?? false,
+      isActive: true,
+    })
+    .returning();
+  if (!created) throw new Error('document type insert returned no row');
+  return created;
+}
+
 async function getById(id: string): Promise<DocumentType | null> {
   const [row] = await db.select().from(documentTypes).where(eq(documentTypes.id, id)).limit(1);
   return row ?? null;

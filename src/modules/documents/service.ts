@@ -428,6 +428,21 @@ export async function fetchPersonDocuments(personId: string): Promise<DocumentIn
     .orderBy(desc(documentInstances.createdAt));
 }
 
+/** Fetch a person's documents filtered by document-type code (e.g. 'CV', 'PAYMENT_PROOF'). */
+export async function fetchPersonDocumentsByTypeCode(
+  personId: string,
+  typeCode: string,
+): Promise<DocumentInstance[]> {
+  await assertCanReadPersonDocs(personId);
+  const rows = await db
+    .select({ doc: documentInstances })
+    .from(documentInstances)
+    .innerJoin(documentTypes, eq(documentTypes.id, documentInstances.documentTypeId))
+    .where(and(eq(documentInstances.ownerPersonId, personId), eq(documentTypes.code, typeCode)))
+    .orderBy(desc(documentInstances.createdAt));
+  return rows.map((r) => r.doc);
+}
+
 /**
  * Materialise requirement rules for a person: for every applicable rule
  * (currently: candidate's primary occupation + GLOBAL rules), insert a
