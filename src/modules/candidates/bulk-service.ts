@@ -1,0 +1,116 @@
+import { inArray, sql } from 'drizzle-orm';
+import { recordAudit } from '@/lib/audit/withAudit';
+import { requireRole } from '@/lib/auth/session';
+import { db } from '@/lib/db/client';
+import { candidateProfiles } from '@/lib/db/schema/persons';
+import { BusinessRuleError } from '@/lib/errors';
+
+const MAX_BULK_SIZE = 200;
+
+export type LifecycleStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+
+/**
+ * Assign (or clear) the responsible recruiter on many candidates at once.
+ * Runs in a single transaction; emits one audit event per changed profile so
+ * per-record history stays granular.
+ * Returns the count of profiles actually changed (unchanged rows are silently skipped).
+ */
+export async function bulkAssignCandidates(
+  personIds: string[],
+  userId: string | null,
+): Promise<{ changed: number }> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  if (personIds.length === 0) return { changed: 0 };
+  if (personIds.length > MAX_BULK_SIZE) {
+    throw new BusinessRuleError(
+      'BULK_TOO_LARGE',
+      `At most ${MAX_BULK_SIZE} candidates per bulk operation`,
+    );
+  }
+
+  return db.transaction(async (tx) => {
+    // Fetch current values so we can (a) skip no-ops and (b) record before/after.
+    const rows = await tx
+      .select({
+        id: candidateProfiles.id,
+        personId: candidateProfiles.personId,
+        assignedUserId: candidateProfiles.assignedUserId,
+      })
+      .from(candidateProfiles)
+      .where(inArray(candidateProfiles.personId, personIds));
+
+    const toChange = rows.filter((r) => r.assignedUserId !== userId);
+    if (toChange.length === 0) return { changed: 0 };
+
+    const ids = toChange.map((r) => r.id);
+    await tx
+      .update(candidateProfiles)
+      .set({ assignedUserId: userId, updatedAt: sql`NOW()` })
+      .where(inArray(candidateProfiles.id, ids));
+
+    for (const row of toChange) {
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'candidate_profile',
+        entityId: row.id,
+        action: userId ? 'ASSIGNED' : 'UNASSIGNED',
+        before: { assignedUserId: row.assignedUserId },
+        after: { assignedUserId: userId },
+        context: { bulk: true, batchSize: toChange.length },
+      });
+    }
+    return { changed: toChange.length };
+  });
+}
+
+/**
+ * Bulk-set lifecycle status on many candidates. Idempotent; unchanged rows skipped.
+ * Note: does NOT touch availabilityStatus — those are two independent lifecycles.
+ */
+export async function bulkUpdateCandidateLifecycle(
+  personIds: string[],
+  lifecycleStatus: LifecycleStatus,
+): Promise<{ changed: number }> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  if (personIds.length === 0) return { changed: 0 };
+  if (personIds.length > MAX_BULK_SIZE) {
+    throw new BusinessRuleError(
+      'BULK_TOO_LARGE',
+      `At most ${MAX_BULK_SIZE} candidates per bulk operation`,
+    );
+  }
+
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .select({
+        id: candidateProfiles.id,
+        personId: candidateProfiles.personId,
+        lifecycleStatus: candidateProfiles.lifecycleStatus,
+      })
+      .from(candidateProfiles)
+      // We filter no-ops in memory below so we can emit per-row audit events cleanly.
+      .where(inArray(candidateProfiles.personId, personIds));
+
+    const toChange = rows.filter((r) => r.lifecycleStatus !== lifecycleStatus);
+    if (toChange.length === 0) return { changed: 0 };
+
+    const ids = toChange.map((r) => r.id);
+    await tx
+      .update(candidateProfiles)
+      .set({ lifecycleStatus, updatedAt: sql`NOW()` })
+      .where(inArray(candidateProfiles.id, ids));
+
+    for (const row of toChange) {
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'candidate_profile',
+        entityId: row.id,
+        action: 'LIFECYCLE_CHANGED',
+        before: { lifecycleStatus: row.lifecycleStatus },
+        after: { lifecycleStatus },
+        context: { bulk: true, batchSize: toChange.length },
+      });
+    }
+    return { changed: toChange.length };
+  });
+}

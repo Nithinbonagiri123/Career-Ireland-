@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
 import type { UpsertContactInput, UpsertEmployerInput } from './schemas';
-import { upsertEmployer, upsertEmployerContact } from './service';
+import { findSimilarEmployers, upsertEmployer, upsertEmployerContact } from './service';
 
 export async function upsertEmployerAction(input: UpsertEmployerInput) {
   const r = await toActionResult(() => upsertEmployer(input));
@@ -18,4 +18,13 @@ export async function upsertEmployerContactAction(input: UpsertContactInput) {
   const r = await toActionResult(() => upsertEmployerContact(input));
   if (r.ok) revalidatePath(`/employers/${input.employerId}`);
   return r;
+}
+
+/** Duplicate-detection lookup used by the create-employer dialog. */
+export async function findSimilarEmployersAction(input: {
+  legalName?: string;
+  tradingName?: string;
+  website?: string;
+}) {
+  return toActionResult(() => findSimilarEmployers(input));
 }

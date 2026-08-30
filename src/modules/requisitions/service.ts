@@ -1,10 +1,29 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
-import { employers, type JobRequisition, jobRequisitions } from '@/lib/db/schema/recruitment';
-import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import {
+  employers,
+  type JobRequisition,
+  jobRequisitions,
+  type RequisitionQualification,
+  type RequisitionSkill,
+  requisitionQualifications,
+  requisitionSkills,
+} from '@/lib/db/schema/recruitment';
+import { qualifications, skills } from '@/lib/db/schema/reference';
+import { BusinessRuleError, ValidationError } from '@/lib/errors';
+import { type AssignmentScope, assignmentCondition } from '@/lib/scope';
+import { assertTransition, REQUISITION_TRANSITIONS } from '@/lib/state-machine';
+import {
+  type AttachRequisitionQualificationInput,
+  AttachRequisitionQualificationSchema,
+  type AttachRequisitionSkillInput,
+  AttachRequisitionSkillSchema,
+  type DetachRequisitionQualificationInput,
+  DetachRequisitionQualificationSchema,
+  type DetachRequisitionSkillInput,
+  DetachRequisitionSkillSchema,
   type UpdateStatusInput,
   UpdateStatusSchema,
   type UpsertRequisitionInput,
@@ -32,8 +51,11 @@ export async function fetchRequisitionsForEmployer(
   return rows.map((r) => ({ ...r.requisition, employerName: r.employerName }));
 }
 
-export async function fetchRequisitions(): Promise<RequisitionListRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+export async function fetchRequisitions(scope?: AssignmentScope): Promise<RequisitionListRow[]> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const scopeCond = scope
+    ? assignmentCondition(scope, jobRequisitions.assignedUserId, session.user.id)
+    : undefined;
   const rows = await db
     .select({
       requisition: jobRequisitions,
@@ -41,6 +63,7 @@ export async function fetchRequisitions(): Promise<RequisitionListRow[]> {
     })
     .from(jobRequisitions)
     .innerJoin(employers, eq(employers.id, jobRequisitions.employerId))
+    .where(scopeCond)
     .orderBy(desc(jobRequisitions.createdAt));
   return rows.map((r) => ({ ...r.requisition, employerName: r.employerName }));
 }
@@ -139,6 +162,7 @@ export async function updateRequisitionStatus(input: UpdateStatusInput): Promise
       .limit(1);
     if (!before) throw new BusinessRuleError('REQUISITION_NOT_FOUND', 'Requisition not found');
     if (before.status === parsed.status) return before;
+    assertTransition('requisition', before.status, parsed.status, REQUISITION_TRANSITIONS);
     const [after] = await tx
       .update(jobRequisitions)
       .set({ status: parsed.status, updatedAt: sql`NOW()` })
@@ -154,5 +178,173 @@ export async function updateRequisitionStatus(input: UpdateStatusInput): Promise
       after: { status: after.status },
     });
     return after;
+  });
+}
+
+// ─── Requisition skills ───────────────────────────────────────────────────────
+
+export type RequisitionSkillRow = RequisitionSkill & { skillName: string };
+
+export async function listRequisitionSkills(requisitionId: string): Promise<RequisitionSkillRow[]> {
+  await requireRole(['ADMIN', 'STAFF']);
+  const rows = await db
+    .select({ rs: requisitionSkills, name: skills.name })
+    .from(requisitionSkills)
+    .innerJoin(skills, eq(skills.id, requisitionSkills.skillId))
+    .where(eq(requisitionSkills.jobRequisitionId, requisitionId))
+    .orderBy(desc(requisitionSkills.isRequired), desc(requisitionSkills.weight), asc(skills.name));
+  return rows.map((r) => ({ ...r.rs, skillName: r.name }));
+}
+
+export async function attachRequisitionSkill(
+  input: AttachRequisitionSkillInput,
+): Promise<RequisitionSkill> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = AttachRequisitionSkillSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(requisitionSkills)
+      .where(
+        and(
+          eq(requisitionSkills.jobRequisitionId, parsed.jobRequisitionId),
+          eq(requisitionSkills.skillId, parsed.skillId),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      const [updated] = await tx
+        .update(requisitionSkills)
+        .set({ isRequired: parsed.isRequired, weight: parsed.weight })
+        .where(
+          and(
+            eq(requisitionSkills.jobRequisitionId, parsed.jobRequisitionId),
+            eq(requisitionSkills.skillId, parsed.skillId),
+          ),
+        )
+        .returning();
+      if (!updated) throw new Error('update returned no row');
+      return updated;
+    }
+    const [row] = await tx.insert(requisitionSkills).values(parsed).returning();
+    if (!row) throw new Error('insert returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'requisition_skill',
+      entityId: parsed.jobRequisitionId,
+      action: 'SKILL_ATTACHED',
+      after: {
+        skillId: parsed.skillId,
+        isRequired: parsed.isRequired,
+        weight: parsed.weight,
+      },
+    });
+    return row;
+  });
+}
+
+export async function detachRequisitionSkill(input: DetachRequisitionSkillInput): Promise<void> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = DetachRequisitionSkillSchema.parse(input);
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(requisitionSkills)
+      .where(
+        and(
+          eq(requisitionSkills.jobRequisitionId, parsed.jobRequisitionId),
+          eq(requisitionSkills.skillId, parsed.skillId),
+        ),
+      );
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'requisition_skill',
+      entityId: parsed.jobRequisitionId,
+      action: 'SKILL_DETACHED',
+      before: { skillId: parsed.skillId },
+    });
+  });
+}
+
+// ─── Requisition qualifications ───────────────────────────────────────────────
+
+export type RequisitionQualificationRow = RequisitionQualification & { qualificationName: string };
+
+export async function listRequisitionQualifications(
+  requisitionId: string,
+): Promise<RequisitionQualificationRow[]> {
+  await requireRole(['ADMIN', 'STAFF']);
+  const rows = await db
+    .select({ rq: requisitionQualifications, name: qualifications.name })
+    .from(requisitionQualifications)
+    .innerJoin(qualifications, eq(qualifications.id, requisitionQualifications.qualificationId))
+    .where(eq(requisitionQualifications.jobRequisitionId, requisitionId))
+    .orderBy(desc(requisitionQualifications.isRequired), asc(qualifications.name));
+  return rows.map((r) => ({ ...r.rq, qualificationName: r.name }));
+}
+
+export async function attachRequisitionQualification(
+  input: AttachRequisitionQualificationInput,
+): Promise<RequisitionQualification> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = AttachRequisitionQualificationSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(requisitionQualifications)
+      .where(
+        and(
+          eq(requisitionQualifications.jobRequisitionId, parsed.jobRequisitionId),
+          eq(requisitionQualifications.qualificationId, parsed.qualificationId),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      const [updated] = await tx
+        .update(requisitionQualifications)
+        .set({ isRequired: parsed.isRequired })
+        .where(
+          and(
+            eq(requisitionQualifications.jobRequisitionId, parsed.jobRequisitionId),
+            eq(requisitionQualifications.qualificationId, parsed.qualificationId),
+          ),
+        )
+        .returning();
+      if (!updated) throw new Error('update returned no row');
+      return updated;
+    }
+    const [row] = await tx.insert(requisitionQualifications).values(parsed).returning();
+    if (!row) throw new Error('insert returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'requisition_qualification',
+      entityId: parsed.jobRequisitionId,
+      action: 'QUALIFICATION_ATTACHED',
+      after: { qualificationId: parsed.qualificationId, isRequired: parsed.isRequired },
+    });
+    return row;
+  });
+}
+
+export async function detachRequisitionQualification(
+  input: DetachRequisitionQualificationInput,
+): Promise<void> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = DetachRequisitionQualificationSchema.parse(input);
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(requisitionQualifications)
+      .where(
+        and(
+          eq(requisitionQualifications.jobRequisitionId, parsed.jobRequisitionId),
+          eq(requisitionQualifications.qualificationId, parsed.qualificationId),
+        ),
+      );
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'requisition_qualification',
+      entityId: parsed.jobRequisitionId,
+      action: 'QUALIFICATION_DETACHED',
+      before: { qualificationId: parsed.qualificationId },
+    });
   });
 }

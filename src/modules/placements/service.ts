@@ -1,4 +1,4 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -10,6 +10,7 @@ import {
   placements,
 } from '@/lib/db/schema/recruitment';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
+import { assertTransition, PLACEMENT_TRANSITIONS } from '@/lib/state-machine';
 import {
   type CreatePlacementInput,
   CreatePlacementSchema,
@@ -99,10 +100,8 @@ export async function createPlacement(input: CreatePlacementInput): Promise<Plac
       await flipAvailabilityToPlaced(tx, session.user.id, created.personId, created.id);
     }
 
-    // Update requisition positions filled if we've reached CONFIRMED
-    if (created.status === 'CONFIRMED' || created.status === 'STARTED') {
-      await updateRequisitionFillCount(tx, session.user.id, created.jobRequisitionId, +1);
-    }
+    // Recompute the requisition fill count from placements after any change.
+    await recomputeRequisitionFillCount(tx, session.user.id, created.jobRequisitionId);
 
     return created;
   });
@@ -138,11 +137,21 @@ async function flipAvailabilityToPlaced(
   });
 }
 
-async function updateRequisitionFillCount(
+/**
+ * Recomputes `positions_filled` from the placements table (source of truth) rather than
+ * tracking a delta. A placement counts as "filling a seat" while it is CONFIRMED, STARTED
+ * or COMPLETED. PROPOSED and TERMINATED_EARLY do not consume a seat.
+ *
+ * Status roll-up:
+ *  - filled >= required                 → FILLED
+ *  - 0 < filled < required              → PARTIALLY_FILLED
+ *  - filled == 0 and was FILLED/PARTIAL → IN_PROGRESS (staff can reopen manually)
+ *  - otherwise                          → unchanged
+ */
+async function recomputeRequisitionFillCount(
   tx: Parameters<typeof recordAudit>[0],
   actorUserId: string,
   requisitionId: string,
-  delta: number,
 ) {
   const [req] = await tx
     .select()
@@ -150,24 +159,43 @@ async function updateRequisitionFillCount(
     .where(eq(jobRequisitions.id, requisitionId))
     .limit(1);
   if (!req) return;
-  const newFilled = Math.max(0, req.positionsFilled + delta);
-  const newStatus =
-    newFilled >= req.positionsRequired ? 'FILLED' : newFilled > 0 ? 'PARTIALLY_FILLED' : req.status;
+
+  const [{ filled }] = await tx
+    .select({ filled: count() })
+    .from(placements)
+    .where(
+      and(
+        eq(placements.jobRequisitionId, requisitionId),
+        inArray(placements.status, ['CONFIRMED', 'STARTED', 'COMPLETED']),
+      ),
+    );
+
+  const newFilled = filled ?? 0;
+  let newStatus: typeof req.status = req.status;
+  if (newFilled >= req.positionsRequired) {
+    newStatus = 'FILLED';
+  } else if (newFilled > 0) {
+    newStatus = 'PARTIALLY_FILLED';
+  } else if (req.status === 'FILLED' || req.status === 'PARTIALLY_FILLED') {
+    newStatus = 'IN_PROGRESS';
+  }
+
+  if (newFilled === req.positionsFilled && newStatus === req.status) return;
+
   await tx
     .update(jobRequisitions)
     .set({ positionsFilled: newFilled, status: newStatus, updatedAt: sql`NOW()` })
     .where(eq(jobRequisitions.id, requisitionId));
-  if (newStatus !== req.status) {
-    await recordAudit(tx, {
-      actorUserId,
-      entityType: 'job_requisition',
-      entityId: requisitionId,
-      action: 'STATUS_CHANGED',
-      before: { status: req.status, positionsFilled: req.positionsFilled },
-      after: { status: newStatus, positionsFilled: newFilled },
-      context: { via: 'placement_transition' },
-    });
-  }
+
+  await recordAudit(tx, {
+    actorUserId,
+    entityType: 'job_requisition',
+    entityId: requisitionId,
+    action: newStatus !== req.status ? 'STATUS_CHANGED' : 'UPDATED',
+    before: { status: req.status, positionsFilled: req.positionsFilled },
+    after: { status: newStatus, positionsFilled: newFilled },
+    context: { via: 'placement_recompute' },
+  });
 }
 
 export async function updatePlacementStatus(input: UpdatePlacementStatusInput): Promise<Placement> {
@@ -182,6 +210,8 @@ export async function updatePlacementStatus(input: UpdatePlacementStatusInput): 
       .limit(1);
     if (!before) throw new BusinessRuleError('PLACEMENT_NOT_FOUND', 'Placement not found');
     if (before.status === parsed.status) return before;
+
+    assertTransition('placement', before.status, parsed.status, PLACEMENT_TRANSITIONS);
 
     const [after] = await tx
       .update(placements)
@@ -203,22 +233,13 @@ export async function updatePlacementStatus(input: UpdatePlacementStatusInput): 
       after: { status: after.status },
     });
 
-    // PROPOSED → CONFIRMED: fill count + availability flip
+    // PROPOSED → CONFIRMED: flip candidate availability (still manual to restore on completion)
     if (before.status === 'PROPOSED' && parsed.status === 'CONFIRMED') {
       await flipAvailabilityToPlaced(tx, session.user.id, before.personId, before.id);
-      await updateRequisitionFillCount(tx, session.user.id, before.jobRequisitionId, +1);
     }
 
-    // Terminated / Completed → maybe free up seat + availability back?
-    // Business rule: DO NOT auto-restore availability on completion — staff drives explicitly.
-    // But DO decrement positionsFilled when a CONFIRMED/STARTED placement is terminated early,
-    // because that seat is now open again.
-    if (
-      (before.status === 'CONFIRMED' || before.status === 'STARTED') &&
-      parsed.status === 'TERMINATED_EARLY'
-    ) {
-      await updateRequisitionFillCount(tx, session.user.id, before.jobRequisitionId, -1);
-    }
+    // Recompute fill count from source of truth after any status change.
+    await recomputeRequisitionFillCount(tx, session.user.id, before.jobRequisitionId);
 
     return after;
   });

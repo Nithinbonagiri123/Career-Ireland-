@@ -35,5 +35,38 @@ export const UpdateStatusSchema = z.object({
   status: RequisitionStatusSchema,
 });
 
+// ─── Structured requirements ──────────────────────────────────────────────────
+
+export const AttachRequisitionSkillSchema = z.object({
+  jobRequisitionId: z.string().uuid(),
+  skillId: z.string().uuid(),
+  isRequired: z.boolean().default(true),
+  weight: z.coerce.number().int().min(1).max(10).default(1),
+});
+
+export const DetachRequisitionSkillSchema = z.object({
+  jobRequisitionId: z.string().uuid(),
+  skillId: z.string().uuid(),
+});
+
+export const AttachRequisitionQualificationSchema = z.object({
+  jobRequisitionId: z.string().uuid(),
+  qualificationId: z.string().uuid(),
+  isRequired: z.boolean().default(true),
+});
+
+export const DetachRequisitionQualificationSchema = z.object({
+  jobRequisitionId: z.string().uuid(),
+  qualificationId: z.string().uuid(),
+});
+
 export type UpsertRequisitionInput = z.infer<typeof UpsertRequisitionSchema>;
 export type UpdateStatusInput = z.infer<typeof UpdateStatusSchema>;
+export type AttachRequisitionSkillInput = z.infer<typeof AttachRequisitionSkillSchema>;
+export type DetachRequisitionSkillInput = z.infer<typeof DetachRequisitionSkillSchema>;
+export type AttachRequisitionQualificationInput = z.infer<
+  typeof AttachRequisitionQualificationSchema
+>;
+export type DetachRequisitionQualificationInput = z.infer<
+  typeof DetachRequisitionQualificationSchema
+>;

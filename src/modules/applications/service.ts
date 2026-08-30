@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
+import { documentInstances } from '@/lib/db/schema/documents';
 import { persons } from '@/lib/db/schema/persons';
 import {
   type JobApplication,
@@ -11,17 +12,73 @@ import {
   shortlistEntries,
 } from '@/lib/db/schema/recruitment';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
+import { APPLICATION_TRANSITIONS, assertTransition } from '@/lib/state-machine';
 import {
   type CreateApplicationInput,
   CreateApplicationSchema,
+  type CreateExternalApplicationInput,
+  CreateExternalApplicationSchema,
   type UpdateApplicationStatusInput,
   UpdateApplicationStatusSchema,
 } from './schemas';
+
+function blankToNull(v: string | undefined | null): string | null {
+  return v && v.trim().length > 0 ? v : null;
+}
 
 export type ApplicationListRow = JobApplication & {
   personName: string;
   requisitionTitle: string;
 };
+
+export type ApplicationDetail = JobApplication & {
+  personName: string;
+  personEmail: string | null;
+  requisitionTitle: string | null;
+  requisitionEmployerId: string | null;
+  cvDocument: {
+    id: string;
+    originalFilename: string;
+    version: number;
+  } | null;
+};
+
+export async function fetchApplication(id: string): Promise<ApplicationDetail | null> {
+  await requireRole(['ADMIN', 'STAFF']);
+  const [row] = await db
+    .select({
+      app: jobApplications,
+      firstName: persons.firstName,
+      lastName: persons.lastName,
+      personEmail: persons.email,
+      requisitionTitle: jobRequisitions.title,
+      requisitionEmployerId: jobRequisitions.employerId,
+      cvId: documentInstances.id,
+      cvFilename: documentInstances.originalFilename,
+      cvVersion: documentInstances.version,
+    })
+    .from(jobApplications)
+    .innerJoin(persons, eq(persons.id, jobApplications.personId))
+    .leftJoin(jobRequisitions, eq(jobRequisitions.id, jobApplications.jobRequisitionId))
+    .leftJoin(documentInstances, eq(documentInstances.id, jobApplications.cvDocumentInstanceId))
+    .where(eq(jobApplications.id, id))
+    .limit(1);
+  if (!row) return null;
+  return {
+    ...row.app,
+    personName: `${row.firstName} ${row.lastName}`,
+    personEmail: row.personEmail,
+    requisitionTitle: row.requisitionTitle,
+    requisitionEmployerId: row.requisitionEmployerId,
+    cvDocument: row.cvId
+      ? {
+          id: row.cvId,
+          originalFilename: row.cvFilename ?? 'CV',
+          version: row.cvVersion ?? 1,
+        }
+      : null,
+  };
+}
 
 export async function listApplicationsForRequisition(
   requisitionId: string,
@@ -121,8 +178,11 @@ export async function createApplication(input: CreateApplicationInput): Promise<
       .values({
         jobRequisitionId: d.jobRequisitionId,
         personId: d.personId,
+        source: 'INTERNAL',
         status: 'APPLIED',
         appliedAt: new Date(),
+        cvDocumentInstanceId: blankToNull(d.cvDocumentInstanceId ?? undefined),
+        notes: blankToNull(d.notes ?? undefined),
       })
       .returning();
     if (!created) throw new Error('insert returned no row');
@@ -141,6 +201,108 @@ export async function createApplication(input: CreateApplicationInput): Promise<
   });
 }
 
+/**
+ * Create an application against an external job board (IrishJobs, Indeed, JobsIreland, …).
+ * Deduplicates by (person, source, external company, external reference) if a reference is provided.
+ */
+export async function createExternalApplication(
+  input: CreateExternalApplicationInput,
+): Promise<JobApplication> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = CreateExternalApplicationSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid external application',
+      parsed.error.flatten().fieldErrors as Record<string, string>,
+    );
+  }
+  const d = parsed.data;
+
+  return db.transaction(async (tx) => {
+    const ref = blankToNull(d.externalJobReference ?? undefined);
+    if (ref) {
+      const [dup] = await tx
+        .select({ id: jobApplications.id })
+        .from(jobApplications)
+        .where(
+          and(
+            eq(jobApplications.personId, d.personId),
+            eq(jobApplications.source, d.source),
+            eq(jobApplications.externalJobReference, ref),
+          ),
+        )
+        .limit(1);
+      if (dup) {
+        throw new BusinessRuleError(
+          'APPLICATION_EXISTS',
+          'This person has already applied to this external job reference',
+        );
+      }
+    }
+
+    const appliedAt = d.appliedAt && d.appliedAt.length > 0 ? new Date(d.appliedAt) : new Date();
+
+    const [created] = await tx
+      .insert(jobApplications)
+      .values({
+        jobRequisitionId: null,
+        personId: d.personId,
+        source: d.source,
+        externalJobUrl: blankToNull(d.externalJobUrl ?? undefined),
+        externalCompanyName: d.externalCompanyName,
+        externalJobTitle: blankToNull(d.externalJobTitle ?? undefined),
+        externalJobReference: ref,
+        cvDocumentInstanceId: blankToNull(d.cvDocumentInstanceId ?? undefined),
+        notes: blankToNull(d.notes ?? undefined),
+        status: 'APPLIED',
+        appliedAt,
+      })
+      .returning();
+    if (!created) throw new Error('insert returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'job_application',
+      entityId: created.id,
+      action: 'CREATED',
+      after: {
+        source: created.source,
+        personId: created.personId,
+        externalCompanyName: created.externalCompanyName,
+        status: created.status,
+      },
+      context: { external: true },
+    });
+    return created;
+  });
+}
+
+export type CandidateApplicationRow = JobApplication & {
+  requisitionTitle: string | null;
+  displayCompany: string | null;
+};
+
+/** All applications belonging to a person — internal (with requisition title) and external. */
+export async function listApplicationsForPerson(
+  personId: string,
+): Promise<CandidateApplicationRow[]> {
+  await requireRole(['ADMIN', 'STAFF']);
+  const rows = await db
+    .select({
+      app: jobApplications,
+      requisitionTitle: jobRequisitions.title,
+      employerName: sql<string | null>`NULL`,
+    })
+    .from(jobApplications)
+    .leftJoin(jobRequisitions, eq(jobRequisitions.id, jobApplications.jobRequisitionId))
+    .where(eq(jobApplications.personId, personId))
+    .orderBy(desc(jobApplications.appliedAt));
+  return rows.map((r) => ({
+    ...r.app,
+    requisitionTitle: r.requisitionTitle,
+    displayCompany: r.app.externalCompanyName,
+  }));
+}
+
 export async function updateApplicationStatus(
   input: UpdateApplicationStatusInput,
 ): Promise<JobApplication> {
@@ -156,16 +318,7 @@ export async function updateApplicationStatus(
     if (!before) throw new BusinessRuleError('APPLICATION_NOT_FOUND', 'Application not found');
     if (before.status === parsed.status) return before;
 
-    // Terminal states can only move to WITHDRAWN
-    if (
-      (before.status === 'ACCEPTED' || before.status === 'REJECTED') &&
-      parsed.status !== 'WITHDRAWN'
-    ) {
-      throw new BusinessRuleError(
-        'APPLICATION_TERMINAL',
-        `Cannot transition from ${before.status} to ${parsed.status}`,
-      );
-    }
+    assertTransition('application', before.status, parsed.status, APPLICATION_TRANSITIONS);
 
     const [after] = await tx
       .update(jobApplications)
@@ -192,8 +345,8 @@ export async function updateApplicationStatus(
     });
 
     // ACCEPTED → auto-create a Placement in PROPOSED (staff confirms with details later).
-    // Idempotent: skip if a placement already exists for this application.
-    if (parsed.status === 'ACCEPTED') {
+    // Only for INTERNAL applications with a requisition — external offers don't materialise placements automatically.
+    if (parsed.status === 'ACCEPTED' && after.jobRequisitionId) {
       const [existingPlacement] = await tx
         .select({ id: placements.id })
         .from(placements)

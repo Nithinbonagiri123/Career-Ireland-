@@ -2,8 +2,12 @@
 
 import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
-import type { CreateApplicationInput, UpdateApplicationStatusInput } from './schemas';
-import { createApplication, updateApplicationStatus } from './service';
+import type {
+  CreateApplicationInput,
+  CreateExternalApplicationInput,
+  UpdateApplicationStatusInput,
+} from './schemas';
+import { createApplication, createExternalApplication, updateApplicationStatus } from './service';
 
 export async function createApplicationAction(input: CreateApplicationInput) {
   const r = await toActionResult(() => createApplication(input));
@@ -11,11 +15,23 @@ export async function createApplicationAction(input: CreateApplicationInput) {
   return r;
 }
 
+export async function createExternalApplicationAction(input: CreateExternalApplicationInput) {
+  const r = await toActionResult(() => createExternalApplication(input));
+  if (r.ok) {
+    revalidatePath('/applications');
+    revalidatePath(`/candidates/${input.personId}`);
+  }
+  return r;
+}
+
 export async function updateApplicationStatusAction(
   input: UpdateApplicationStatusInput,
-  requisitionId: string,
+  requisitionId: string | null,
 ) {
   const r = await toActionResult(() => updateApplicationStatus(input));
-  if (r.ok) revalidatePath(`/requisitions/${requisitionId}`);
+  if (r.ok) {
+    if (requisitionId) revalidatePath(`/requisitions/${requisitionId}`);
+    revalidatePath('/applications');
+  }
   return r;
 }
