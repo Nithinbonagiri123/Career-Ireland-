@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, lte, or, sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { tasks } from '@/lib/db/schema/activities';
@@ -134,9 +134,7 @@ export async function fetchMyRecentNotifications(
   return db
     .select()
     .from(notifications)
-    .where(
-      sql`${notifications.recipientUserId} = ${userId} OR ${notifications.recipientUserId} IS NULL`,
-    )
+    .where(or(eq(notifications.recipientUserId, userId), isNull(notifications.recipientUserId)))
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
 }
@@ -148,7 +146,7 @@ export async function countMyUnread(userId: string): Promise<number> {
     .from(notifications)
     .where(
       and(
-        sql`${notifications.recipientUserId} = ${userId} OR ${notifications.recipientUserId} IS NULL`,
+        or(eq(notifications.recipientUserId, userId), isNull(notifications.recipientUserId)),
         isNull(notifications.readAt),
       ),
     );
@@ -162,7 +160,7 @@ export async function markAllRead(userId: string): Promise<{ updated: number }> 
     .set({ readAt: new Date() })
     .where(
       and(
-        sql`${notifications.recipientUserId} = ${userId} OR ${notifications.recipientUserId} IS NULL`,
+        or(eq(notifications.recipientUserId, userId), isNull(notifications.recipientUserId)),
         isNull(notifications.readAt),
       ),
     );

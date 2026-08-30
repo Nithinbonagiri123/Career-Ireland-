@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, lte, ne, sql } from 'drizzle-orm';
+import { and, between, eq, gt, isNull, lte, ne, sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { tasks } from '@/lib/db/schema/activities';
@@ -214,7 +214,7 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
       .where(
         and(
           sql`${tasks.status} IN ('OPEN','IN_PROGRESS')`,
-          sql`${tasks.dueAt} BETWEEN ${now} AND ${oneWeekAhead}`,
+          between(tasks.dueAt, now, oneWeekAhead),
         ),
       )
       .then((r) => r[0]?.n ?? 0),

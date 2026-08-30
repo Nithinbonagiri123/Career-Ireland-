@@ -8,6 +8,13 @@ const EnvSchema = z.object({
   S3_BUCKET_DOCUMENTS: z.string().min(1),
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  /** Custom S3 endpoint. Set for MinIO or other S3-compatible dev backends. */
+  S3_ENDPOINT: z.string().url().optional(),
+  /** MinIO needs path-style URLs (bucket in the path, not the subdomain). */
+  S3_FORCE_PATH_STYLE: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
   CRON_SECRET: z.string().optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
