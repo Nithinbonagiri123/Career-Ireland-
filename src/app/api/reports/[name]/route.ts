@@ -1,7 +1,22 @@
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth/session';
 import { toCsv } from '@/lib/csv';
-import { placementsInPeriod, revenueByCurrencyAndService } from '@/modules/reports/service';
+import {
+  applicationFunnel,
+  placementsInPeriod,
+  recruiterActivity,
+  requisitionPerformance,
+  revenueByCurrencyAndService,
+} from '@/modules/reports/service';
+
+function csvResponse(name: string, csv: string, days: number) {
+  return new Response(csv, {
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${name}-${days}d.csv"`,
+    },
+  });
+}
 
 export async function GET(request: Request, { params }: { params: Promise<{ name: string }> }) {
   await requireRole(['ADMIN', 'STAFF']);
@@ -24,12 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ name
       { key: 'currency', header: 'Currency' },
       { key: 'createdAt', header: 'Created at' },
     ]);
-    return new Response(csv, {
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="placements-${days}d.csv"`,
-      },
-    });
+    return csvResponse('placements', csv, days);
   }
 
   if (name === 'revenue') {
@@ -41,12 +51,50 @@ export async function GET(request: Request, { params }: { params: Promise<{ name
       { key: 'paymentCount', header: 'Payments' },
       { key: 'totalAmount', header: 'Total amount' },
     ]);
-    return new Response(csv, {
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="revenue-${days}d.csv"`,
-      },
-    });
+    return csvResponse('revenue', csv, days);
+  }
+
+  if (name === 'recruiter-activity') {
+    const rows = await recruiterActivity(days);
+    const csv = toCsv(rows, [
+      { key: 'userId', header: 'User ID' },
+      { key: 'fullName', header: 'Recruiter' },
+      { key: 'role', header: 'Role' },
+      { key: 'candidatesAssigned', header: 'Candidates assigned' },
+      { key: 'applicationsCreated', header: 'Applications created' },
+      { key: 'interviewsScheduled', header: 'Interviews scheduled' },
+      { key: 'placementsConfirmed', header: 'Placements confirmed' },
+      { key: 'totalActions', header: 'Total actions' },
+    ]);
+    return csvResponse('recruiter-activity', csv, days);
+  }
+
+  if (name === 'requisition-performance') {
+    const rows = await requisitionPerformance(days);
+    const csv = toCsv(rows, [
+      { key: 'requisitionId', header: 'Requisition ID' },
+      { key: 'title', header: 'Title' },
+      { key: 'employerName', header: 'Employer' },
+      { key: 'status', header: 'Status' },
+      { key: 'positionsRequired', header: 'Required' },
+      { key: 'positionsFilled', header: 'Filled' },
+      { key: 'fillRatePct', header: 'Fill %' },
+      { key: 'applications', header: 'Applications' },
+      { key: 'matches', header: 'Matches' },
+      { key: 'ageDays', header: 'Age (days)' },
+      { key: 'createdAt', header: 'Created at' },
+    ]);
+    return csvResponse('requisition-performance', csv, days);
+  }
+
+  if (name === 'application-funnel') {
+    const rows = await applicationFunnel(days);
+    const csv = toCsv(rows, [
+      { key: 'stage', header: 'Stage' },
+      { key: 'count', header: 'Count' },
+      { key: 'pctOfApplied', header: '% of total' },
+    ]);
+    return csvResponse('application-funnel', csv, days);
   }
 
   return NextResponse.json({ ok: false, error: 'unknown report' }, { status: 404 });
