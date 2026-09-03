@@ -1,13 +1,19 @@
 import { inArray, sql } from 'drizzle-orm';
+import type { z } from 'zod';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { candidateProfiles } from '@/lib/db/schema/persons';
-import { BusinessRuleError } from '@/lib/errors';
+import { ValidationError } from '@/lib/errors';
+import {
+  type BulkAssignCandidatesInput,
+  BulkAssignCandidatesSchema,
+  type BulkUpdateLifecycleInput,
+  BulkUpdateLifecycleSchema,
+  type LifecycleStatusSchema,
+} from './schemas';
 
-const MAX_BULK_SIZE = 200;
-
-export type LifecycleStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+export type LifecycleStatus = z.infer<typeof LifecycleStatusSchema>;
 
 /**
  * Assign (or clear) the responsible recruiter on many candidates at once.
@@ -16,17 +22,17 @@ export type LifecycleStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
  * Returns the count of profiles actually changed (unchanged rows are silently skipped).
  */
 export async function bulkAssignCandidates(
-  personIds: string[],
-  userId: string | null,
+  input: BulkAssignCandidatesInput,
 ): Promise<{ changed: number }> {
   const session = await requireRole(['ADMIN', 'STAFF']);
-  if (personIds.length === 0) return { changed: 0 };
-  if (personIds.length > MAX_BULK_SIZE) {
-    throw new BusinessRuleError(
-      'BULK_TOO_LARGE',
-      `At most ${MAX_BULK_SIZE} candidates per bulk operation`,
+  const parsed = BulkAssignCandidatesSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid bulk assign input',
+      parsed.error.flatten().fieldErrors as Record<string, string>,
     );
   }
+  const { personIds, userId } = parsed.data;
 
   return db.transaction(async (tx) => {
     // Fetch current values so we can (a) skip no-ops and (b) record before/after.
@@ -68,17 +74,17 @@ export async function bulkAssignCandidates(
  * Note: does NOT touch availabilityStatus — those are two independent lifecycles.
  */
 export async function bulkUpdateCandidateLifecycle(
-  personIds: string[],
-  lifecycleStatus: LifecycleStatus,
+  input: BulkUpdateLifecycleInput,
 ): Promise<{ changed: number }> {
   const session = await requireRole(['ADMIN', 'STAFF']);
-  if (personIds.length === 0) return { changed: 0 };
-  if (personIds.length > MAX_BULK_SIZE) {
-    throw new BusinessRuleError(
-      'BULK_TOO_LARGE',
-      `At most ${MAX_BULK_SIZE} candidates per bulk operation`,
+  const parsed = BulkUpdateLifecycleSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid bulk lifecycle input',
+      parsed.error.flatten().fieldErrors as Record<string, string>,
     );
   }
+  const { personIds, lifecycleStatus } = parsed.data;
 
   return db.transaction(async (tx) => {
     const rows = await tx

@@ -13,10 +13,21 @@ export const InterviewStatusSchema = z.enum([
 ]);
 export const InterviewOutcomeSchema = z.enum(['PENDING', 'PASS', 'FAIL', 'HOLD']);
 
+/**
+ * Accepts an ISO datetime string OR the browser <input type="datetime-local"> shape
+ * (`YYYY-MM-DDTHH:mm[:ss]` with no timezone). Rejects anything that `new Date(v)`
+ * would parse to `Invalid Date` — catches the failure at the action boundary so
+ * callers get a field-level error instead of a downstream 500.
+ */
+const datetimeString = z
+  .string()
+  .min(1, 'Required')
+  .refine((v) => !Number.isNaN(new Date(v).getTime()), 'Invalid date/time');
+
 export const ScheduleInterviewSchema = z.object({
   jobApplicationId: uuid,
   /** ISO datetime string (from datetime-local input). */
-  scheduledAt: z.string().min(1),
+  scheduledAt: datetimeString,
   durationMinutes: z.coerce.number().int().min(5).max(600).optional().nullable(),
   mode: InterviewModeSchema.default('VIDEO'),
   round: z.coerce.number().int().min(1).max(20).default(1),
@@ -34,7 +45,7 @@ export const UpdateInterviewSchema = z.object({
 
 export const RescheduleInterviewSchema = z.object({
   id: uuid,
-  scheduledAt: z.string().min(1),
+  scheduledAt: datetimeString,
   location: z.string().max(500).optional().or(blank),
 });
 
