@@ -16,6 +16,7 @@ import {
   listCaseDocumentRequirements,
   listCaseDocuments,
 } from '@/modules/immigration/service';
+import { ArchiveCaseButton } from './archive-button';
 import { CaseDocumentsSection } from './case-documents-section';
 import { CaseTasksSection } from './tasks-section';
 
@@ -84,12 +85,15 @@ export default async function ImmigrationCaseDetail({
           }
           badge={c.status.replace(/_/g, ' ')}
           action={
-            <AssignToMeButton
-              entity="immigration_case"
-              id={id}
-              currentUserId={session.user.id}
-              currentAssignedUserId={c.assignedUserId}
-            />
+            <div className="flex items-center gap-2">
+              <AssignToMeButton
+                entity="immigration_case"
+                id={id}
+                currentUserId={session.user.id}
+                currentAssignedUserId={c.assignedUserId}
+              />
+              <ArchiveCaseButton caseId={id} beneficiaryName={c.beneficiaryName} />
+            </div>
           }
         />
       </FadeUp>

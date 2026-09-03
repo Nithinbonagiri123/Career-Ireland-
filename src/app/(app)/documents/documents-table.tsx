@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import { PromptDialog } from '@/components/prompt-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
@@ -30,24 +31,44 @@ const STATUS_VARIANT: Record<StaffDocumentRow['status'], 'default' | 'secondary'
 
 export function DocumentsTable({ documents }: { documents: StaffDocumentRow[] }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [decideTarget, setDecideTarget] = useState<{
+    docId: string;
+    decision: 'ACCEPTED' | 'REJECTED';
+  } | null>(null);
   const [, startTransition] = useTransition();
 
-  const decide = (docId: string, decision: 'ACCEPTED' | 'REJECTED') => {
-    const notes =
-      decision === 'REJECTED'
-        ? (window.prompt('Rejection reason (audited):') ?? '')
-        : (window.prompt('Optional review notes:') ?? '');
-    if (decision === 'REJECTED' && notes.trim().length < 3) return;
+  const accept = (docId: string) => {
+    // Accept doesn't require a reason. Fire directly.
     setBusy(docId);
     startTransition(async () => {
       const r = await reviewDocumentAction({
         documentInstanceId: docId,
-        decision,
+        decision: 'ACCEPTED',
+        reviewNotes: '',
+      });
+      setBusy(null);
+      if (r.ok) toast.success('Document accepted');
+      else toast.error(r.error.message);
+    });
+  };
+
+  const confirmDecide = (notes: string) => {
+    if (!decideTarget) return;
+    const target = decideTarget;
+    setBusy(target.docId);
+    startTransition(async () => {
+      const r = await reviewDocumentAction({
+        documentInstanceId: target.docId,
+        decision: target.decision,
         reviewNotes: notes,
       });
       setBusy(null);
-      if (r.ok) toast.success(`Document ${decision.toLowerCase()}`);
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success(`Document ${target.decision.toLowerCase()}`);
+        setDecideTarget(null);
+      } else {
+        toast.error(r.error.message);
+      }
     });
   };
 
@@ -150,11 +171,13 @@ export function DocumentsTable({ documents }: { documents: StaffDocumentRow[] })
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuLabel>Review decision</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => decide(doc.id, 'ACCEPTED')}>
+                  <DropdownMenuItem onClick={() => accept(doc.id)}>
                     <Check className="mr-2 size-4" /> Accept
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => decide(doc.id, 'REJECTED')}>
+                  <DropdownMenuItem
+                    onClick={() => setDecideTarget({ docId: doc.id, decision: 'REJECTED' })}
+                  >
                     <X className="mr-2 size-4" /> Reject…
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -167,12 +190,26 @@ export function DocumentsTable({ documents }: { documents: StaffDocumentRow[] })
   ];
 
   return (
-    <DataTable
-      columns={columns}
-      data={documents}
-      emptyTitle="No documents yet"
-      emptyDescription="Documents uploaded from candidate/employer portals or the internal CRM appear here."
-    />
+    <>
+      <DataTable
+        columns={columns}
+        data={documents}
+        emptyTitle="No documents yet"
+        emptyDescription="Documents uploaded from candidate/employer portals or the internal CRM appear here."
+      />
+      <PromptDialog
+        open={decideTarget !== null}
+        onCancel={() => setDecideTarget(null)}
+        onConfirm={confirmDecide}
+        title="Reject document"
+        description="The reason is stored on the document instance and visible to the owner."
+        label="Rejection reason (audited)"
+        placeholder="e.g. Illegible / wrong document type / expired"
+        confirmLabel="Reject"
+        confirmVariant="destructive"
+        pending={decideTarget ? busy === decideTarget.docId : false}
+      />
+    </>
   );
 }
 

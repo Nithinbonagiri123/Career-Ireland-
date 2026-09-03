@@ -11,6 +11,10 @@ import {
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { type AssignmentScope, assignmentCondition } from '@/lib/scope';
 import {
+  type ArchiveEmployerInput,
+  ArchiveEmployerSchema,
+  type UnarchiveEmployerInput,
+  UnarchiveEmployerSchema,
   type UpsertContactInput,
   UpsertContactSchema,
   type UpsertEmployerInput,
@@ -278,5 +282,71 @@ export async function upsertEmployerContact(input: UpsertContactInput): Promise<
       after: { employerId: created.employerId, fullName: created.fullName },
     });
     return created;
+  });
+}
+
+/** Soft-archive an employer. List queries filter archived rows out; the record itself is untouched. */
+export async function archiveEmployer(input: ArchiveEmployerInput): Promise<Employer> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = ArchiveEmployerSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(employers)
+      .where(eq(employers.id, parsed.employerId))
+      .limit(1);
+    if (!before) throw new BusinessRuleError('EMPLOYER_NOT_FOUND', 'Employer not found');
+    if (before.archivedAt) {
+      throw new BusinessRuleError('ALREADY_ARCHIVED', 'Employer is already archived');
+    }
+    const [after] = await tx
+      .update(employers)
+      .set({ archivedAt: new Date(), updatedAt: sql`NOW()` })
+      .where(eq(employers.id, parsed.employerId))
+      .returning();
+    if (!after) throw new Error('archive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'employer',
+      entityId: after.id,
+      action: 'ARCHIVED',
+      before: { archivedAt: null },
+      after: { archivedAt: after.archivedAt },
+      context: { reason: parsed.reason },
+    });
+    return after;
+  });
+}
+
+/** Restore a previously archived employer back to the active list. */
+export async function unarchiveEmployer(input: UnarchiveEmployerInput): Promise<Employer> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = UnarchiveEmployerSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(employers)
+      .where(eq(employers.id, parsed.employerId))
+      .limit(1);
+    if (!before) throw new BusinessRuleError('EMPLOYER_NOT_FOUND', 'Employer not found');
+    if (!before.archivedAt) {
+      throw new BusinessRuleError('NOT_ARCHIVED', 'Employer is not archived');
+    }
+    const [after] = await tx
+      .update(employers)
+      .set({ archivedAt: null, updatedAt: sql`NOW()` })
+      .where(eq(employers.id, parsed.employerId))
+      .returning();
+    if (!after) throw new Error('unarchive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'employer',
+      entityId: after.id,
+      action: 'UNARCHIVED',
+      before: { archivedAt: before.archivedAt },
+      after: { archivedAt: null },
+      context: { reason: parsed.reason },
+    });
+    return after;
   });
 }

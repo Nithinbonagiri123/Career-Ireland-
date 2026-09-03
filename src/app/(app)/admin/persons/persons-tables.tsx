@@ -2,10 +2,15 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
-import { GitMerge } from 'lucide-react';
+import { Archive, GitMerge } from 'lucide-react';
+import { useState, useTransition } from 'react';
+import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import { PromptDialog } from '@/components/prompt-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import type { Person } from '@/lib/db/schema/persons';
+import { archivePersonAction } from '@/modules/persons/actions';
 
 const activeColumns: ColumnDef<Person>[] = [
   {
@@ -55,13 +60,68 @@ const activeColumns: ColumnDef<Person>[] = [
 ];
 
 export function ActivePersonsTable({ persons }: { persons: Person[] }) {
+  const [archiveTarget, setArchiveTarget] = useState<Person | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  const confirmArchive = (reason: string) => {
+    if (!archiveTarget) return;
+    const target = archiveTarget;
+    setBusyId(target.id);
+    startTransition(async () => {
+      const r = await archivePersonAction({ personId: target.id, reason });
+      setBusyId(null);
+      if (r.ok) {
+        toast.success(`${target.firstName} ${target.lastName} archived`);
+        setArchiveTarget(null);
+      } else {
+        toast.error(r.error.message);
+      }
+    });
+  };
+
+  const columnsWithActions: ColumnDef<Person>[] = [
+    ...activeColumns,
+    {
+      header: '',
+      id: 'actions',
+      size: 60,
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={`Archive ${row.original.firstName} ${row.original.lastName}`}
+          disabled={busyId === row.original.id}
+          onClick={() => setArchiveTarget(row.original)}
+          className="text-muted-foreground hover:text-destructive"
+        >
+          <Archive className="size-3.5" />
+        </Button>
+      ),
+    },
+  ];
+
   return (
-    <DataTable
-      columns={activeColumns}
-      data={persons}
-      emptyTitle="No persons yet"
-      emptyDescription="Every human in the system appears here — added via Leads, Prospects, or Immigration cases."
-    />
+    <>
+      <DataTable
+        columns={columnsWithActions}
+        data={persons}
+        emptyTitle="No persons yet"
+        emptyDescription="Every human in the system appears here — added via Leads, Prospects, or Immigration cases."
+      />
+      <PromptDialog
+        open={archiveTarget !== null}
+        onCancel={() => setArchiveTarget(null)}
+        onConfirm={confirmArchive}
+        title={`Archive ${archiveTarget?.firstName ?? ''} ${archiveTarget?.lastName ?? ''}?`}
+        description="Removes this person from every active list globally (candidates, leads, immigration). Audit history and existing records are preserved. Use Merge instead if this is a duplicate."
+        label="Reason (audited)"
+        placeholder="e.g. Requested account removal (GDPR)"
+        confirmLabel="Archive"
+        confirmVariant="destructive"
+        pending={busyId === archiveTarget?.id}
+      />
+    </>
   );
 }
 

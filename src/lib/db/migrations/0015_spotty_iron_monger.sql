@@ -1,0 +1,7 @@
+ALTER TABLE "communication_logs" ADD CONSTRAINT "communication_logs_immigration_case_id_immigration_cases_id_fk" FOREIGN KEY ("immigration_case_id") REFERENCES "public"."immigration_cases"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tasks" ADD CONSTRAINT "tasks_immigration_case_id_immigration_cases_id_fk" FOREIGN KEY ("immigration_case_id") REFERENCES "public"."immigration_cases"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "payments" ADD CONSTRAINT "payments_proof_document_instance_id_document_instances_id_fk" FOREIGN KEY ("proof_document_instance_id") REFERENCES "public"."document_instances"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "service_engagements" ADD CONSTRAINT "service_engagements_payer_employer_id_employers_id_fk" FOREIGN KEY ("payer_employer_id") REFERENCES "public"."employers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "persons" ADD CONSTRAINT "persons_archived_by_user_id_users_id_fk" FOREIGN KEY ("archived_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "tasks_requisition_idx" ON "tasks" USING btree ("job_requisition_id");--> statement-breakpoint
+CREATE INDEX "tasks_immigration_case_idx" ON "tasks" USING btree ("immigration_case_id");

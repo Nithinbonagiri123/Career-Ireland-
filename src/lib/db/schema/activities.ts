@@ -11,6 +11,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { createdAt, updatedAt } from './_shared';
 import { serviceEngagements } from './commerce';
+import { immigrationCases } from './immigration';
 import { persons } from './persons';
 import { employerContacts, employers, jobRequisitions } from './recruitment';
 import { users } from './users';
@@ -39,7 +40,7 @@ export const communicationLogs = pgTable(
     employerContactId: uuid('employer_contact_id').references(() => employerContacts.id),
     jobRequisitionId: uuid('job_requisition_id').references(() => jobRequisitions.id),
     serviceEngagementId: uuid('service_engagement_id').references(() => serviceEngagements.id),
-    immigrationCaseId: uuid('immigration_case_id'),
+    immigrationCaseId: uuid('immigration_case_id').references(() => immigrationCases.id),
     followUpRequired: boolean('follow_up_required').notNull().default(false),
     createdAt,
     updatedAt,
@@ -77,7 +78,7 @@ export const tasks = pgTable(
     employerId: uuid('employer_id').references(() => employers.id),
     jobRequisitionId: uuid('job_requisition_id').references(() => jobRequisitions.id),
     serviceEngagementId: uuid('service_engagement_id').references(() => serviceEngagements.id),
-    immigrationCaseId: uuid('immigration_case_id'),
+    immigrationCaseId: uuid('immigration_case_id').references(() => immigrationCases.id),
     createdAt,
     updatedAt,
   },
@@ -85,6 +86,8 @@ export const tasks = pgTable(
     index('tasks_assigned_status_due_idx').on(t.assignedUserId, t.status, t.dueAt),
     index('tasks_person_idx').on(t.personId),
     index('tasks_employer_idx').on(t.employerId),
+    index('tasks_requisition_idx').on(t.jobRequisitionId),
+    index('tasks_immigration_case_idx').on(t.immigrationCaseId),
   ],
 );
 

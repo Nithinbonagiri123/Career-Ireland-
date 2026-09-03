@@ -2,11 +2,12 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
-import { CheckCircle2, FileText, MoreHorizontal, UserCheck, UserX } from 'lucide-react';
+import { Archive, CheckCircle2, FileText, MoreHorizontal, UserCheck, UserX } from 'lucide-react';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
 import { DocumentUploader } from '@/components/document-uploader';
+import { PromptDialog } from '@/components/prompt-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,7 +29,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { assignEntityAction } from '@/modules/assignments/actions';
 import { ensurePaymentProofTypeAction } from '@/modules/document-types/actions';
-import { convertLeadAction, updateLeadStatusAction } from '@/modules/leads/actions';
+import {
+  archiveLeadAction,
+  convertLeadAction,
+  updateLeadStatusAction,
+} from '@/modules/leads/actions';
 import type { LeadListRow } from '@/modules/leads/repository';
 
 const STATUS_VARIANT: Record<LeadListRow['status'], 'default' | 'secondary' | 'outline'> = {
@@ -45,11 +50,28 @@ type Props = { leads: LeadListRow[]; currentUserId: string };
 export function LeadsTable({ leads, currentUserId }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [convertTarget, setConvertTarget] = useState<LeadListRow | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<LeadListRow | null>(null);
   const [reason, setReason] = useState('');
   const [paymentProofTypeId, setPaymentProofTypeId] = useState<string | null>(null);
   const [proofDocId, setProofDocId] = useState<string | null>(null);
   const [proofFilename, setProofFilename] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  const confirmArchive = (archiveReason: string) => {
+    if (!archiveTarget) return;
+    const target = archiveTarget;
+    setBusyId(target.id);
+    startTransition(async () => {
+      const r = await archiveLeadAction({ leadId: target.id, reason: archiveReason });
+      setBusyId(null);
+      if (r.ok) {
+        toast.success(`${target.personName}'s lead archived`);
+        setArchiveTarget(null);
+      } else {
+        toast.error(r.error.message);
+      }
+    });
+  };
 
   // Ensure the PAYMENT_PROOF document type exists as soon as the dialog opens.
   useEffect(() => {
@@ -225,6 +247,13 @@ export function LeadsTable({ leads, currentUserId }: Props) {
               >
                 Mark rejected
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setArchiveTarget(lead)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Archive className="mr-2 size-4" /> Archive lead…
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         );
@@ -239,6 +268,18 @@ export function LeadsTable({ leads, currentUserId }: Props) {
         data={leads}
         emptyTitle="No leads yet"
         emptyDescription="Every candidate starts as a Lead. Create the first one with the button above."
+      />
+      <PromptDialog
+        open={archiveTarget !== null}
+        onCancel={() => setArchiveTarget(null)}
+        onConfirm={confirmArchive}
+        title={`Archive ${archiveTarget?.personName ?? ''}'s lead?`}
+        description="Removes the lead from the active list. The record and its audit history are preserved and can be restored later. Underlying person is not archived."
+        label="Reason (audited)"
+        placeholder="e.g. Duplicate lead — kept the newer one"
+        confirmLabel="Archive"
+        confirmVariant="destructive"
+        pending={busyId === archiveTarget?.id}
       />
       <Dialog
         open={convertTarget !== null}

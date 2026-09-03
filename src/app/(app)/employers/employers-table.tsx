@@ -2,12 +2,16 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
-import { ArrowRight, Pencil } from 'lucide-react';
+import { Archive, ArrowRight, Pencil } from 'lucide-react';
 import Link from 'next/link';
+import { useState, useTransition } from 'react';
+import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import { PromptDialog } from '@/components/prompt-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import type { Employer } from '@/lib/db/schema/recruitment';
+import { archiveEmployerAction } from '@/modules/employers/actions';
 import { EmployerDialog } from './employer-dialog';
 
 const STATUS_VARIANT: Record<Employer['relationshipStatus'], 'default' | 'secondary' | 'outline'> =
@@ -19,6 +23,26 @@ const STATUS_VARIANT: Record<Employer['relationshipStatus'], 'default' | 'second
   };
 
 export function EmployersTable({ employers }: { employers: Employer[] }) {
+  const [archiveTarget, setArchiveTarget] = useState<Employer | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  const confirmArchive = (reason: string) => {
+    if (!archiveTarget) return;
+    const target = archiveTarget;
+    setBusyId(target.id);
+    startTransition(async () => {
+      const r = await archiveEmployerAction({ employerId: target.id, reason });
+      setBusyId(null);
+      if (r.ok) {
+        toast.success(`${target.legalName} archived`);
+        setArchiveTarget(null);
+      } else {
+        toast.error(r.error.message);
+      }
+    });
+  };
+
   const columns: ColumnDef<Employer>[] = [
     {
       header: 'Employer',
@@ -73,7 +97,7 @@ export function EmployersTable({ employers }: { employers: Employer[] }) {
     {
       header: '',
       id: 'actions',
-      size: 200,
+      size: 240,
       cell: ({ row }) => (
         <div className="flex items-center justify-end gap-2">
           <EmployerDialog
@@ -84,6 +108,16 @@ export function EmployersTable({ employers }: { employers: Employer[] }) {
               </Button>
             }
           />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Archive ${row.original.legalName}`}
+            disabled={busyId === row.original.id}
+            onClick={() => setArchiveTarget(row.original)}
+            className="text-muted-foreground hover:text-destructive"
+          >
+            <Archive className="size-3.5" />
+          </Button>
           <Link
             href={`/employers/${row.original.id}`}
             className={buttonVariants({ variant: 'outline', size: 'sm' })}
@@ -96,11 +130,25 @@ export function EmployersTable({ employers }: { employers: Employer[] }) {
   ];
 
   return (
-    <DataTable
-      columns={columns}
-      data={employers}
-      emptyTitle="No employers yet"
-      emptyDescription="Add the companies Career Ireland recruits for."
-    />
+    <>
+      <DataTable
+        columns={columns}
+        data={employers}
+        emptyTitle="No employers yet"
+        emptyDescription="Add the companies Career Ireland recruits for."
+      />
+      <PromptDialog
+        open={archiveTarget !== null}
+        onCancel={() => setArchiveTarget(null)}
+        onConfirm={confirmArchive}
+        title={`Archive ${archiveTarget?.legalName ?? ''}?`}
+        description="Removes the employer from the active list. Requisitions, placements, and history stay intact and can be restored."
+        label="Reason (audited)"
+        placeholder="e.g. Client relationship ended 2026-09-01"
+        confirmLabel="Archive"
+        confirmVariant="destructive"
+        pending={busyId === archiveTarget?.id}
+      />
+    </>
   );
 }

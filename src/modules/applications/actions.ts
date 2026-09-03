@@ -11,7 +11,11 @@ import { createApplication, createExternalApplication, updateApplicationStatus }
 
 export async function createApplicationAction(input: CreateApplicationInput) {
   const r = await toActionResult(() => createApplication(input));
-  if (r.ok) revalidatePath(`/requisitions/${input.jobRequisitionId}`);
+  if (r.ok) {
+    revalidatePath(`/requisitions/${input.jobRequisitionId}`);
+    revalidatePath('/applications');
+    revalidatePath(`/candidates/${input.personId}`);
+  }
   return r;
 }
 

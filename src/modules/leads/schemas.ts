@@ -50,6 +50,18 @@ export const ConvertLeadSchema = z.object({
   paymentProofDocumentInstanceId: z.string().uuid().optional().or(z.literal('')),
 });
 
+export const ArchiveLeadSchema = z.object({
+  leadId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
+export const UnarchiveLeadSchema = z.object({
+  leadId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
 export type CreateLeadInput = z.infer<typeof CreateLeadSchema>;
 export type UpdateLeadStatusInput = z.infer<typeof UpdateLeadStatusSchema>;
 export type ConvertLeadInput = z.infer<typeof ConvertLeadSchema>;
+export type ArchiveLeadInput = z.infer<typeof ArchiveLeadSchema>;
+export type UnarchiveLeadInput = z.infer<typeof UnarchiveLeadSchema>;

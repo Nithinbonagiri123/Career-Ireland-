@@ -4,18 +4,22 @@ import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
 import type {
   AddCaseDocumentRequirementInput,
+  ArchiveCaseInput,
   AttachCaseDocumentInput,
   DetachCaseDocumentInput,
   RemoveCaseDocumentRequirementInput,
+  UnarchiveCaseInput,
   UpdateCaseDocumentRequirementInput,
   UpdateCaseStatusInput,
   UpsertCaseInput,
 } from './schemas';
 import {
   addCaseDocumentRequirement,
+  archiveCase,
   attachDocumentToCase,
   detachDocumentFromCase,
   removeCaseDocumentRequirement,
+  unarchiveCase,
   updateCaseDocumentRequirement,
   updateCaseStatus,
   upsertCase,
@@ -72,5 +76,17 @@ export async function attachCaseDocumentAction(input: AttachCaseDocumentInput) {
 export async function detachCaseDocumentAction(input: DetachCaseDocumentInput) {
   const r = await toActionResult(() => detachDocumentFromCase(input));
   if (r.ok) revCase(input.immigrationCaseId);
+  return r;
+}
+
+export async function archiveCaseAction(input: ArchiveCaseInput) {
+  const r = await toActionResult(() => archiveCase(input));
+  if (r.ok) revCase(input.caseId);
+  return r;
+}
+
+export async function unarchiveCaseAction(input: UnarchiveCaseInput) {
+  const r = await toActionResult(() => unarchiveCase(input));
+  if (r.ok) revCase(input.caseId);
   return r;
 }

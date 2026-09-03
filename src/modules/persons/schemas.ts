@@ -34,6 +34,18 @@ export const MergePersonsSchema = z.object({
   reason: z.string().min(3).max(500),
 });
 
+export const ArchivePersonSchema = z.object({
+  personId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
+export const UnarchivePersonSchema = z.object({
+  personId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
 export type CreatePersonInput = z.infer<typeof CreatePersonSchema>;
 export type FindSimilarInput = z.infer<typeof FindSimilarSchema>;
 export type MergePersonsInput = z.infer<typeof MergePersonsSchema>;
+export type ArchivePersonInput = z.infer<typeof ArchivePersonSchema>;
+export type UnarchivePersonInput = z.infer<typeof UnarchivePersonSchema>;

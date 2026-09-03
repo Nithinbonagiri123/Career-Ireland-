@@ -20,12 +20,16 @@ import { assertTransition, IMMIGRATION_CASE_TRANSITIONS } from '@/lib/state-mach
 import {
   type AddCaseDocumentRequirementInput,
   AddCaseDocumentRequirementSchema,
+  type ArchiveCaseInput,
+  ArchiveCaseSchema,
   type AttachCaseDocumentInput,
   AttachCaseDocumentSchema,
   type DetachCaseDocumentInput,
   DetachCaseDocumentSchema,
   type RemoveCaseDocumentRequirementInput,
   RemoveCaseDocumentRequirementSchema,
+  type UnarchiveCaseInput,
+  UnarchiveCaseSchema,
   type UpdateCaseDocumentRequirementInput,
   UpdateCaseDocumentRequirementSchema,
   type UpdateCaseStatusInput,
@@ -517,5 +521,73 @@ export async function detachDocumentFromCase(input: DetachCaseDocumentInput): Pr
       action: 'DOCUMENT_DETACHED',
       before: { documentInstanceId: parsed.documentInstanceId },
     });
+  });
+}
+
+// ─── Archive / unarchive ──────────────────────────────────────────────────────
+
+/** Soft-archive an immigration case. List queries filter archived rows out; the record is untouched. */
+export async function archiveCase(input: ArchiveCaseInput): Promise<ImmigrationCase> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = ArchiveCaseSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(immigrationCases)
+      .where(eq(immigrationCases.id, parsed.caseId))
+      .limit(1);
+    if (!before) throw new BusinessRuleError('CASE_NOT_FOUND', 'Immigration case not found');
+    if (before.archivedAt) {
+      throw new BusinessRuleError('ALREADY_ARCHIVED', 'Case is already archived');
+    }
+    const [after] = await tx
+      .update(immigrationCases)
+      .set({ archivedAt: new Date(), updatedAt: sql`NOW()` })
+      .where(eq(immigrationCases.id, parsed.caseId))
+      .returning();
+    if (!after) throw new Error('archive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'immigration_case',
+      entityId: after.id,
+      action: 'ARCHIVED',
+      before: { archivedAt: null },
+      after: { archivedAt: after.archivedAt },
+      context: { reason: parsed.reason },
+    });
+    return after;
+  });
+}
+
+/** Restore a previously archived immigration case back to the active list. */
+export async function unarchiveCase(input: UnarchiveCaseInput): Promise<ImmigrationCase> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = UnarchiveCaseSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(immigrationCases)
+      .where(eq(immigrationCases.id, parsed.caseId))
+      .limit(1);
+    if (!before) throw new BusinessRuleError('CASE_NOT_FOUND', 'Immigration case not found');
+    if (!before.archivedAt) {
+      throw new BusinessRuleError('NOT_ARCHIVED', 'Case is not archived');
+    }
+    const [after] = await tx
+      .update(immigrationCases)
+      .set({ archivedAt: null, updatedAt: sql`NOW()` })
+      .where(eq(immigrationCases.id, parsed.caseId))
+      .returning();
+    if (!after) throw new Error('unarchive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'immigration_case',
+      entityId: after.id,
+      action: 'UNARCHIVED',
+      before: { archivedAt: before.archivedAt },
+      after: { archivedAt: null },
+      context: { reason: parsed.reason },
+    });
+    return after;
   });
 }

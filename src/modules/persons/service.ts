@@ -1,7 +1,8 @@
+import { eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
-import type { Person } from '@/lib/db/schema/persons';
+import { type Person, persons } from '@/lib/db/schema/persons';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import {
   findSimilarPersons,
@@ -13,12 +14,16 @@ import {
   type SimilarMatch,
 } from './repository';
 import {
+  type ArchivePersonInput,
+  ArchivePersonSchema,
   type CreatePersonInput,
   CreatePersonSchema,
   type FindSimilarInput,
   FindSimilarSchema,
   type MergePersonsInput,
   MergePersonsSchema,
+  type UnarchivePersonInput,
+  UnarchivePersonSchema,
 } from './schemas';
 
 /** Blank/empty-string → null for optional columns. */
@@ -127,5 +132,74 @@ export async function mergePersons(input: MergePersonsInput): Promise<Person> {
     const survivorAfter = await getPerson(parsed.survivorPersonId);
     if (!survivorAfter) throw new Error('survivor missing post-merge');
     return survivorAfter;
+  });
+}
+
+/** Soft-archive a person. List queries filter archived rows out; the record itself is untouched. */
+export async function archivePerson(input: ArchivePersonInput): Promise<Person> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = ArchivePersonSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const before = await getPerson(parsed.personId);
+    if (!before) throw new BusinessRuleError('PERSON_NOT_FOUND', 'Person not found');
+    if (before.archivedAt) {
+      throw new BusinessRuleError('ALREADY_ARCHIVED', 'Person is already archived');
+    }
+    if (before.mergedIntoPersonId) {
+      throw new BusinessRuleError('CANNOT_ARCHIVE_MERGED', 'Merged persons cannot be archived');
+    }
+    const [after] = await tx
+      .update(persons)
+      .set({
+        archivedAt: new Date(),
+        archivedByUserId: session.user.id,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(persons.id, parsed.personId))
+      .returning();
+    if (!after) throw new Error('archive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'person',
+      entityId: after.id,
+      action: 'ARCHIVED',
+      before: { archivedAt: null },
+      after: { archivedAt: after.archivedAt },
+      context: { reason: parsed.reason },
+    });
+    return after;
+  });
+}
+
+/** Restore a previously archived person back to the active list. */
+export async function unarchivePerson(input: UnarchivePersonInput): Promise<Person> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = UnarchivePersonSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const before = await getPerson(parsed.personId);
+    if (!before) throw new BusinessRuleError('PERSON_NOT_FOUND', 'Person not found');
+    if (!before.archivedAt) {
+      throw new BusinessRuleError('NOT_ARCHIVED', 'Person is not archived');
+    }
+    const [after] = await tx
+      .update(persons)
+      .set({
+        archivedAt: null,
+        archivedByUserId: null,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(persons.id, parsed.personId))
+      .returning();
+    if (!after) throw new Error('unarchive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'person',
+      entityId: after.id,
+      action: 'UNARCHIVED',
+      before: { archivedAt: before.archivedAt },
+      after: { archivedAt: null },
+      context: { reason: parsed.reason },
+    });
+    return after;
   });
 }

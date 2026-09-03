@@ -25,5 +25,17 @@ export const UpsertContactSchema = z.object({
   isPrimary: z.boolean(),
 });
 
+export const ArchiveEmployerSchema = z.object({
+  employerId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
+export const UnarchiveEmployerSchema = z.object({
+  employerId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
 export type UpsertEmployerInput = z.infer<typeof UpsertEmployerSchema>;
 export type UpsertContactInput = z.infer<typeof UpsertContactSchema>;
+export type ArchiveEmployerInput = z.infer<typeof ArchiveEmployerSchema>;
+export type UnarchiveEmployerInput = z.infer<typeof UnarchiveEmployerSchema>;

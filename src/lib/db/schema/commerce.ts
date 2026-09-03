@@ -2,7 +2,9 @@ import { sql } from 'drizzle-orm';
 import { char, check, index, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, updatedAt } from './_shared';
 import { currencies } from './currencies';
+import { documentInstances } from './documents';
 import { persons } from './persons';
+import { employers } from './recruitment';
 import { serviceCatalogItems, servicePackages } from './services';
 import { users } from './users';
 
@@ -21,7 +23,7 @@ export const serviceEngagements = pgTable(
       .references(() => serviceCatalogItems.id),
     servicePackageId: uuid('service_package_id').references(() => servicePackages.id),
     payerPersonId: uuid('payer_person_id').references(() => persons.id),
-    payerEmployerId: uuid('payer_employer_id'), // FK added in 5.9 when employers table exists
+    payerEmployerId: uuid('payer_employer_id').references(() => employers.id),
     beneficiaryPersonId: uuid('beneficiary_person_id').references(() => persons.id),
     /** Reserved for cross-module linking; FKs added when those modules land. */
     relatedPlacementId: uuid('related_placement_id'),
@@ -79,7 +81,9 @@ export const payments = pgTable(
       .default('PENDING'),
     /** External reference (bank statement ID, cash receipt number). Real S3 proof lands in 5.7. */
     proofReference: text('proof_reference'),
-    proofDocumentInstanceId: uuid('proof_document_instance_id'),
+    proofDocumentInstanceId: uuid('proof_document_instance_id').references(
+      () => documentInstances.id,
+    ),
     receivedAt: timestamp('received_at', { withTimezone: true }),
     verifiedByUserId: uuid('verified_by_user_id').references(() => users.id),
     verifiedAt: timestamp('verified_at', { withTimezone: true }),

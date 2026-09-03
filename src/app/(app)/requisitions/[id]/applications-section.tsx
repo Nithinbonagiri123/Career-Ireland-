@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import { PromptDialog } from '@/components/prompt-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { updateApplicationStatusAction } from '@/modules/applications/actions';
@@ -31,6 +32,7 @@ export function ApplicationsSection({
   applications: ApplicationListRow[];
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<ApplicationListRow | null>(null);
   const [, startTransition] = useTransition();
 
   const change = (app: ApplicationListRow, next: ApplicationListRow['status']) => {
@@ -46,18 +48,22 @@ export function ApplicationsSection({
     });
   };
 
-  const reject = (app: ApplicationListRow) => {
-    const reason = window.prompt('Reject application. Reason? (audited)');
-    if (!reason || reason.trim().length < 3) return;
-    setBusy(app.id);
+  const confirmReject = (reason: string) => {
+    if (!rejectTarget) return;
+    const target = rejectTarget;
+    setBusy(target.id);
     startTransition(async () => {
       const r = await updateApplicationStatusAction(
-        { applicationId: app.id, status: 'REJECTED', rejectionReason: reason.trim() },
+        { applicationId: target.id, status: 'REJECTED', rejectionReason: reason },
         requisitionId,
       );
       setBusy(null);
-      if (r.ok) toast.success('Application rejected');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Application rejected');
+        setRejectTarget(null);
+      } else {
+        toast.error(r.error.message);
+      }
     });
   };
 
@@ -121,7 +127,7 @@ export function ApplicationsSection({
               variant="ghost"
               size="sm"
               disabled={busy === app.id}
-              onClick={() => reject(app)}
+              onClick={() => setRejectTarget(app)}
             >
               Reject
             </Button>
@@ -132,11 +138,25 @@ export function ApplicationsSection({
   ];
 
   return (
-    <DataTable
-      columns={columns}
-      data={applications}
-      emptyTitle="No applications yet"
-      emptyDescription="Promote a match to Shortlist, then to Application, or create one directly from a candidate profile."
-    />
+    <>
+      <DataTable
+        columns={columns}
+        data={applications}
+        emptyTitle="No applications yet"
+        emptyDescription="Promote a match to Shortlist, then to Application, or create one directly from a candidate profile."
+      />
+      <PromptDialog
+        open={rejectTarget !== null}
+        onCancel={() => setRejectTarget(null)}
+        onConfirm={confirmReject}
+        title="Reject application"
+        description={rejectTarget ? `${rejectTarget.personName} — this is final.` : undefined}
+        label="Rejection reason (audited, stored on the application)"
+        placeholder="e.g. Overqualified / not enough experience / withdrew"
+        confirmLabel="Reject"
+        confirmVariant="destructive"
+        pending={busy === rejectTarget?.id}
+      />
+    </>
   );
 }

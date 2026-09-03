@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import { PromptDialog } from '@/components/prompt-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
@@ -33,6 +34,7 @@ const STATUS_VARIANT: Record<PlacementListRow['status'], 'default' | 'secondary'
 
 export function PlacementsTable({ placements }: { placements: PlacementListRow[] }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<PlacementListRow | null>(null);
   const [, startTransition] = useTransition();
 
   const setStatus = (p: PlacementListRow, next: PlacementListRow['status']) => {
@@ -45,18 +47,22 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
     });
   };
 
-  const restoreAvailability = (p: PlacementListRow) => {
-    const reason = window.prompt(`Restore ${p.personName} to AVAILABLE?\n\nReason (audited):`);
-    if (!reason || reason.trim().length < 3) return;
-    setBusy(p.id);
+  const confirmRestore = (reason: string) => {
+    if (!restoreTarget) return;
+    const target = restoreTarget;
+    setBusy(target.id);
     startTransition(async () => {
       const r = await restoreCandidateAvailabilityAction({
-        personId: p.personId,
-        reason: reason.trim(),
+        personId: target.personId,
+        reason,
       });
       setBusy(null);
-      if (r.ok) toast.success(`${p.personName} is now available again`);
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success(`${target.personName} is now available again`);
+        setRestoreTarget(null);
+      } else {
+        toast.error(r.error.message);
+      }
     });
   };
 
@@ -155,7 +161,7 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
                 Terminate early
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={!isTerminal} onClick={() => restoreAvailability(p)}>
+              <DropdownMenuItem disabled={!isTerminal} onClick={() => setRestoreTarget(p)}>
                 Restore candidate to AVAILABLE…
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -166,17 +172,30 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
   ];
 
   return (
-    <DataTable
-      columns={columns}
-      data={placements}
-      emptyIcon={Trophy}
-      emptyTitle="No placements yet"
-      emptyDescription="Placements are created automatically when an application is marked ACCEPTED, or when an offer is accepted. Start by opening a requisition."
-      emptyAction={
-        <Link href="/requisitions" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
-          Go to Requisitions <ArrowRight className="ml-1.5 size-3.5" />
-        </Link>
-      }
-    />
+    <>
+      <DataTable
+        columns={columns}
+        data={placements}
+        emptyIcon={Trophy}
+        emptyTitle="No placements yet"
+        emptyDescription="Placements are created automatically when an application is marked ACCEPTED, or when an offer is accepted. Start by opening a requisition."
+        emptyAction={
+          <Link href="/requisitions" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+            Go to Requisitions <ArrowRight className="ml-1.5 size-3.5" />
+          </Link>
+        }
+      />
+      <PromptDialog
+        open={restoreTarget !== null}
+        onCancel={() => setRestoreTarget(null)}
+        onConfirm={confirmRestore}
+        title={`Restore ${restoreTarget?.personName ?? ''} to AVAILABLE?`}
+        description="Flips availability from PLACED back to AVAILABLE so they can be matched again."
+        label="Reason (audited)"
+        placeholder="e.g. Placement fell through — candidate available again"
+        confirmLabel="Restore"
+        pending={busy === restoreTarget?.id}
+      />
+    </>
   );
 }

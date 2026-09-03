@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
+import { requireSession } from '@/lib/auth/session';
 import { AppError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { presignDocumentUpload } from '@/modules/documents/service';
 
 export async function POST(request: Request) {
   try {
+    // Defence-in-depth: gate the route as well as the service. Rejects anonymous
+    // callers before they can even reach body parsing.
+    await requireSession();
     const body = await request.json();
     const result = await presignDocumentUpload(body);
     return NextResponse.json({ ok: true, ...result });

@@ -1,18 +1,23 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
-import type { Lead } from '@/lib/db/schema/leads';
+import { type Lead, leads } from '@/lib/db/schema/leads';
 import { candidateProfiles } from '@/lib/db/schema/persons';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import type { AssignmentScope } from '@/lib/scope';
+import { assertTransition, LEAD_TRANSITIONS } from '@/lib/state-machine';
 import { insertPerson } from '@/modules/persons/repository';
 import { getLead, insertLead, type LeadListRow, listLeads, updateLead } from './repository';
 import {
+  type ArchiveLeadInput,
+  ArchiveLeadSchema,
   type ConvertLeadInput,
   ConvertLeadSchema,
   type CreateLeadInput,
   CreateLeadSchema,
+  type UnarchiveLeadInput,
+  UnarchiveLeadSchema,
   type UpdateLeadStatusInput,
   UpdateLeadStatusSchema,
 } from './schemas';
@@ -104,6 +109,7 @@ export async function updateLeadStatus(input: UpdateLeadStatusInput): Promise<Le
       );
     }
     if (before.status === parsed.status) return before;
+    assertTransition('lead', before.status, parsed.status, LEAD_TRANSITIONS);
     const after = await updateLead(tx, parsed.leadId, {
       status: parsed.status,
       notes: parsed.notes ? parsed.notes : before.notes,
@@ -198,5 +204,63 @@ export async function convertLead(input: ConvertLeadInput) {
     });
 
     return { lead: updatedLead, candidateProfileId: profileId, createdNewProfile };
+  });
+}
+
+/** Soft-archive a lead. List queries filter archived rows out; the record itself is untouched. */
+export async function archiveLead(input: ArchiveLeadInput): Promise<Lead> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = ArchiveLeadSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const before = await getLead(parsed.leadId);
+    if (!before) throw new BusinessRuleError('LEAD_NOT_FOUND', 'Lead not found');
+    if (before.archivedAt) {
+      throw new BusinessRuleError('ALREADY_ARCHIVED', 'Lead is already archived');
+    }
+    const [after] = await tx
+      .update(leads)
+      .set({ archivedAt: new Date(), updatedAt: sql`NOW()` })
+      .where(eq(leads.id, parsed.leadId))
+      .returning();
+    if (!after) throw new Error('archive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'lead',
+      entityId: after.id,
+      action: 'ARCHIVED',
+      before: { archivedAt: null },
+      after: { archivedAt: after.archivedAt },
+      context: { reason: parsed.reason },
+    });
+    return after;
+  });
+}
+
+/** Restore a previously archived lead back to the active list. */
+export async function unarchiveLead(input: UnarchiveLeadInput): Promise<Lead> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = UnarchiveLeadSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const before = await getLead(parsed.leadId);
+    if (!before) throw new BusinessRuleError('LEAD_NOT_FOUND', 'Lead not found');
+    if (!before.archivedAt) {
+      throw new BusinessRuleError('NOT_ARCHIVED', 'Lead is not archived');
+    }
+    const [after] = await tx
+      .update(leads)
+      .set({ archivedAt: null, updatedAt: sql`NOW()` })
+      .where(eq(leads.id, parsed.leadId))
+      .returning();
+    if (!after) throw new Error('unarchive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'lead',
+      entityId: after.id,
+      action: 'UNARCHIVED',
+      before: { archivedAt: before.archivedAt },
+      after: { archivedAt: null },
+      context: { reason: parsed.reason },
+    });
+    return after;
   });
 }

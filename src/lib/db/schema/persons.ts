@@ -41,7 +41,7 @@ export const persons = pgTable(
     mergedIntoPersonId: uuid('merged_into_person_id').references((): AnyPgColumn => persons.id),
     mergedAt: timestamp('merged_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
-    archivedByUserId: uuid('archived_by_user_id'),
+    archivedByUserId: uuid('archived_by_user_id').references(() => users.id),
     createdAt,
     updatedAt,
   },

@@ -16,7 +16,10 @@ export async function inviteCandidateAction(input: InviteCandidateInput) {
 
 export async function inviteEmployerAction(input: InviteEmployerInput) {
   const r = await toActionResult(() => inviteEmployer(input));
-  if (r.ok) revalidatePath(`/employers/${input.employerId}`);
+  if (r.ok) {
+    revalidatePath(`/employers/${input.employerId}`);
+    revalidatePath('/employers');
+  }
   return r;
 }
 

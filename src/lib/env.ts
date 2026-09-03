@@ -16,6 +16,12 @@ const EnvSchema = z.object({
     .optional()
     .transform((v) => v === 'true'),
   CRON_SECRET: z.string().optional(),
+  /**
+   * AES-256-GCM key for at-rest secrets (candidate email account passwords).
+   * Base64-encoded 32 bytes. Required in production; optional in dev/test so
+   * migrations and CI can boot without a real key.
+   */
+  EMAIL_CRED_ENC_KEY: z.string().optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
@@ -27,3 +33,30 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+// Fail-fast validation for secrets that must be present in production at
+// *runtime*. `next build` sets NODE_ENV=production while collecting page data,
+// but the code paths that consume these secrets aren't reached — skipping this
+// check during the build phase avoids forcing production secrets into CI. The
+// production *server* (phase-production-server) still enforces it.
+const nextPhase = process.env.NEXT_PHASE;
+if (env.NODE_ENV === 'production' && nextPhase !== 'phase-production-build') {
+  const missing: string[] = [];
+  if (!env.CRON_SECRET) missing.push('CRON_SECRET');
+  if (!env.EMAIL_CRED_ENC_KEY) missing.push('EMAIL_CRED_ENC_KEY');
+  if (missing.length > 0) {
+    throw new Error(`Missing required production env vars: ${missing.join(', ')}`);
+  }
+  // Also validate EMAIL_CRED_ENC_KEY shape (32 bytes base64) so we fail at boot,
+  // not at first candidate-email-account read.
+  try {
+    const key = Buffer.from(env.EMAIL_CRED_ENC_KEY ?? '', 'base64');
+    if (key.length !== 32) {
+      throw new Error(`EMAIL_CRED_ENC_KEY must decode to 32 bytes, got ${key.length}`);
+    }
+  } catch (err) {
+    throw new Error(
+      `EMAIL_CRED_ENC_KEY is malformed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}

@@ -66,6 +66,16 @@ export const DetachCaseDocumentSchema = z.object({
   documentInstanceId: z.string().uuid(),
 });
 
+export const ArchiveCaseSchema = z.object({
+  caseId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
+export const UnarchiveCaseSchema = z.object({
+  caseId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
 export type UpsertCaseInput = z.infer<typeof UpsertCaseSchema>;
 export type UpdateCaseStatusInput = z.infer<typeof UpdateCaseStatusSchema>;
 export type AddCaseDocumentRequirementInput = z.infer<typeof AddCaseDocumentRequirementSchema>;
@@ -77,3 +87,5 @@ export type RemoveCaseDocumentRequirementInput = z.infer<
 >;
 export type AttachCaseDocumentInput = z.infer<typeof AttachCaseDocumentSchema>;
 export type DetachCaseDocumentInput = z.infer<typeof DetachCaseDocumentSchema>;
+export type ArchiveCaseInput = z.infer<typeof ArchiveCaseSchema>;
+export type UnarchiveCaseInput = z.infer<typeof UnarchiveCaseSchema>;

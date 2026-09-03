@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import { PromptDialog } from '@/components/prompt-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
@@ -32,6 +33,7 @@ type Row = Payment & { serviceName: string };
 
 export function PaymentsTable({ payments, role }: { payments: Row[]; role: UserRole }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<Row | null>(null);
   const [, startTransition] = useTransition();
 
   const verify = (p: Row) => {
@@ -44,15 +46,19 @@ export function PaymentsTable({ payments, role }: { payments: Row[]; role: UserR
     });
   };
 
-  const reject = (p: Row) => {
-    const reason = window.prompt('Reject payment. Reason? (audited)');
-    if (!reason || reason.trim().length < 3) return;
-    setBusy(p.id);
+  const confirmReject = (reason: string) => {
+    if (!rejectTarget) return;
+    const target = rejectTarget;
+    setBusy(target.id);
     startTransition(async () => {
-      const r = await rejectPaymentAction({ paymentId: p.id, reason: reason.trim() });
+      const r = await rejectPaymentAction({ paymentId: target.id, reason });
       setBusy(null);
-      if (r.ok) toast.success('Payment rejected');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Payment rejected');
+        setRejectTarget(null);
+      } else {
+        toast.error(r.error.message);
+      }
     });
   };
 
@@ -136,7 +142,7 @@ export function PaymentsTable({ payments, role }: { payments: Row[]; role: UserR
                 <Check className="mr-2 size-4" /> Verify
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => reject(p)}>
+              <DropdownMenuItem onClick={() => setRejectTarget(p)}>
                 <X className="mr-2 size-4" /> Reject…
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -147,17 +153,35 @@ export function PaymentsTable({ payments, role }: { payments: Row[]; role: UserR
   ];
 
   return (
-    <DataTable
-      columns={columns}
-      data={payments}
-      emptyIcon={Coins}
-      emptyTitle="No payments yet"
-      emptyDescription="Payments are recorded against Service Engagements. Open an engagement first, then record a payment on it."
-      emptyAction={
-        <Link href="/engagements" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
-          Go to Engagements <ArrowRight className="ml-1.5 size-3.5" />
-        </Link>
-      }
-    />
+    <>
+      <DataTable
+        columns={columns}
+        data={payments}
+        emptyIcon={Coins}
+        emptyTitle="No payments yet"
+        emptyDescription="Payments are recorded against Service Engagements. Open an engagement first, then record a payment on it."
+        emptyAction={
+          <Link href="/engagements" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+            Go to Engagements <ArrowRight className="ml-1.5 size-3.5" />
+          </Link>
+        }
+      />
+      <PromptDialog
+        open={rejectTarget !== null}
+        onCancel={() => setRejectTarget(null)}
+        onConfirm={confirmReject}
+        title="Reject payment"
+        description={
+          rejectTarget
+            ? `${rejectTarget.amount} ${rejectTarget.currencyCode} for ${rejectTarget.serviceName}.`
+            : undefined
+        }
+        label="Reason (audited)"
+        placeholder="e.g. Wrong amount / duplicate transfer / no proof"
+        confirmLabel="Reject"
+        confirmVariant="destructive"
+        pending={busy === rejectTarget?.id}
+      />
+    </>
   );
 }
