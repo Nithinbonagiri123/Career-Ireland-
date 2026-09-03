@@ -86,10 +86,14 @@ export async function assignEntity(input: {
     const beforeUserId = (before as { assignedUserId: string | null }).assignedUserId;
     if (beforeUserId === input.userId) return null;
 
+    // All five assignable tables happen to name the field `assignedUserId` (JS) →
+    // `assigned_user_id` (DB). Drizzle's .set() takes the JS field name, so we
+    // hardcode it rather than dereferencing target.assignedColumn.name (which
+    // returns the DB column name and gets silently dropped by drizzle).
     await tx
       .update(target.table)
-      // biome-ignore lint/suspicious/noExplicitAny: polymorphic column update
-      .set({ [target.assignedColumn.name]: input.userId, updatedAt: sql`NOW()` } as any)
+      // biome-ignore lint/suspicious/noExplicitAny: polymorphic table — set-key type widened
+      .set({ assignedUserId: input.userId, updatedAt: sql`NOW()` } as any)
       .where(eq(target.keyColumn, input.id));
 
     await recordAudit(tx, {

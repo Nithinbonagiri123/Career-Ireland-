@@ -16,7 +16,7 @@ export default async function LeadsPage({
 }: {
   searchParams: Promise<{ assigned?: string }>;
 }) {
-  await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireRole(['ADMIN', 'STAFF']);
   const { assigned } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const leads = await fetchLeads(scope);
@@ -38,7 +38,7 @@ export default async function LeadsPage({
         />
       </FadeUp>
       <FadeUp delay={0.05}>
-        <LeadsTable leads={leads} />
+        <LeadsTable leads={leads} currentUserId={session.user.id} />
       </FadeUp>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
-import { CheckCircle2, FileText, MoreHorizontal, UserCheck } from 'lucide-react';
+import { CheckCircle2, FileText, MoreHorizontal, UserCheck, UserX } from 'lucide-react';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { assignEntityAction } from '@/modules/assignments/actions';
 import { ensurePaymentProofTypeAction } from '@/modules/document-types/actions';
 import { convertLeadAction, updateLeadStatusAction } from '@/modules/leads/actions';
 import type { LeadListRow } from '@/modules/leads/repository';
@@ -39,9 +40,9 @@ const STATUS_VARIANT: Record<LeadListRow['status'], 'default' | 'secondary' | 'o
   REJECTED: 'outline',
 };
 
-type Props = { leads: LeadListRow[] };
+type Props = { leads: LeadListRow[]; currentUserId: string };
 
-export function LeadsTable({ leads }: Props) {
+export function LeadsTable({ leads, currentUserId }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [convertTarget, setConvertTarget] = useState<LeadListRow | null>(null);
   const [reason, setReason] = useState('');
@@ -69,6 +70,21 @@ export function LeadsTable({ leads }: Props) {
       setBusyId(null);
       if (result.ok) toast.success(`Lead marked ${status.toLowerCase().replace(/_/g, ' ')}`);
       else toast.error(result.error.message);
+    });
+  };
+
+  const toggleAssignToMe = (lead: LeadListRow) => {
+    const isMine = lead.assignedUserId === currentUserId;
+    setBusyId(lead.id);
+    startTransition(async () => {
+      const r = await assignEntityAction({
+        entity: 'lead',
+        id: lead.id,
+        userId: isMine ? null : currentUserId,
+      });
+      setBusyId(null);
+      if (r.ok) toast.success(isMine ? 'Unassigned' : 'Assigned to you');
+      else toast.error(r.error.message);
     });
   };
 
@@ -160,6 +176,7 @@ export function LeadsTable({ leads }: Props) {
         const lead = row.original;
         const isBusy = busyId === lead.id;
         const canTransition = lead.status !== 'CONVERTED';
+        const isMine = lead.assignedUserId === currentUserId;
         return (
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -168,6 +185,19 @@ export function LeadsTable({ leads }: Props) {
               <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Assignment</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => toggleAssignToMe(lead)}>
+                {isMine ? (
+                  <>
+                    <UserX className="mr-2 size-4" /> Unassign from me
+                  </>
+                ) : (
+                  <>
+                    <UserCheck className="mr-2 size-4" /> Assign to me
+                  </>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuLabel>Change status</DropdownMenuLabel>
               <DropdownMenuItem
                 disabled={!canTransition}
