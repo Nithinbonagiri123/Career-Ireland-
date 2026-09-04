@@ -37,6 +37,9 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/admin.json',
       },
+      // `.anon.spec.ts` files run under the anonymous project only — they
+      // assert unauthenticated flows and would fail with a stored session.
+      testIgnore: /.*\.anon\.spec\.ts/,
     },
     {
       name: 'anonymous',

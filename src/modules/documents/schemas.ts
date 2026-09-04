@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_UPLOAD_BYTES } from '@/lib/s3/presign';
 
 export const OwnerTypeSchema = z.enum(['PERSON', 'EMPLOYER']);
 
@@ -8,11 +9,7 @@ export const PresignUploadSchema = z.object({
   documentTypeId: z.string().uuid(),
   originalFilename: z.string().min(1).max(255),
   mimeType: z.string().min(1).max(120),
-  fileSizeBytes: z
-    .number()
-    .int()
-    .positive()
-    .max(50 * 1024 * 1024),
+  fileSizeBytes: z.number().int().positive().max(MAX_UPLOAD_BYTES),
 });
 
 export const RegisterUploadSchema = z.object({

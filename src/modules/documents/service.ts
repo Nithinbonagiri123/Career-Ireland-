@@ -122,6 +122,22 @@ export async function registerUpload(input: RegisterUploadInput): Promise<Docume
   const d = parsed.data;
   const { userId } = await assertOwnershipOrStaff(d.ownerType, d.ownerId);
 
+  // Defence-in-depth: presign already gated these, but the client could call
+  // register directly with a spoofed MIME or size. Re-enforce so the DB row
+  // can't lie about what's actually stored.
+  if (!ALLOWED_UPLOAD_MIME.has(d.mimeType)) {
+    throw new BusinessRuleError(
+      'MIME_NOT_ALLOWED',
+      `File type ${d.mimeType} is not allowed. PDF, images, or Word documents only.`,
+    );
+  }
+  if (d.fileSizeBytes > MAX_UPLOAD_BYTES) {
+    throw new BusinessRuleError(
+      'FILE_TOO_LARGE',
+      `File exceeds ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB limit`,
+    );
+  }
+
   return db.transaction(async (tx) => {
     // Determine next version for this owner+type.
     const ownerFilter =

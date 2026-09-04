@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { safeCallbackUrl } from '@/lib/auth/safe-callback';
 import { cn } from '@/lib/utils';
 import { loginAction } from '@/modules/auth/actions';
 import { type LoginInput, LoginSchema } from '@/modules/auth/schemas';
@@ -52,7 +53,7 @@ function AppleIcon() {
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') ?? '/dashboard';
+  const callbackUrl = safeCallbackUrl(searchParams.get('callbackUrl'));
   const [formError, setFormError] = useState<string | null>(null);
 
   const {

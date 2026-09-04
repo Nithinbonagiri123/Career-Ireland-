@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
+import { checkPasswordPolicy } from '@/lib/auth/password-policy';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { users } from '@/lib/db/schema/users';
@@ -36,6 +37,21 @@ export async function createUser(input: unknown): Promise<UserListRow> {
   }
   const data = parsed.data;
   const email = data.email.trim().toLowerCase();
+
+  // Enforce the shared password policy — schema only checks length; contextual
+  // policy (no user's own name/email as substring) matches invite acceptance
+  // and change-password so admin-provisioned passwords aren't a weaker path.
+  const [firstName, ...rest] = data.fullName.split(/\s+/);
+  const issues = checkPasswordPolicy(data.password, {
+    email,
+    firstName: firstName ?? null,
+    lastName: rest.join(' ') || null,
+  });
+  if (issues.length > 0) {
+    throw new ValidationError(issues[0] ?? 'Password does not meet the policy', {
+      password: issues.join(' · '),
+    });
+  }
 
   return db.transaction(async (tx) => {
     const existing = await tx
