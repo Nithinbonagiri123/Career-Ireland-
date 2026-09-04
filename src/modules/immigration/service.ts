@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
+import { todayInDublin } from '@/lib/dates';
 import { db } from '@/lib/db/client';
 import { type DocumentInstance, documentInstances } from '@/lib/db/schema/documents';
 import {
@@ -220,11 +221,11 @@ export async function updateCaseStatus(input: UpdateCaseStatusInput): Promise<Im
           : before.authorityReference,
         submittedAt:
           parsed.status === 'SUBMITTED' && !before.submittedAt
-            ? new Date().toISOString().slice(0, 10)
+            ? todayInDublin()
             : before.submittedAt,
         decisionAt:
           (parsed.status === 'APPROVED' || parsed.status === 'REJECTED') && !before.decisionAt
-            ? new Date().toISOString().slice(0, 10)
+            ? todayInDublin()
             : before.decisionAt,
         updatedAt: sql`NOW()`,
       })

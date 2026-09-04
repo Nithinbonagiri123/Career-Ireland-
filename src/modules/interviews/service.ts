@@ -8,6 +8,7 @@ import { jobApplications, jobRequisitions } from '@/lib/db/schema/recruitment';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import type { AssignmentScope } from '@/lib/scope';
 import { assertTransition, INTERVIEW_TRANSITIONS } from '@/lib/state-machine';
+import { assertNoTimeConflict } from './conflict-check';
 import {
   type RemoveInterviewInput,
   RemoveInterviewSchema,
@@ -127,6 +128,12 @@ export async function scheduleInterview(input: ScheduleInterviewInput): Promise<
   }
 
   return db.transaction(async (tx) => {
+    await assertNoTimeConflict(tx, {
+      jobApplicationId: d.jobApplicationId,
+      scheduledAt,
+      durationMinutes: d.durationMinutes ?? null,
+    });
+
     const [row] = await tx
       .insert(interviews)
       .values({
@@ -218,6 +225,14 @@ export async function rescheduleInterview(input: RescheduleInterviewInput): Prom
         `Cannot reschedule a ${before.status.toLowerCase()} interview`,
       );
     }
+
+    await assertNoTimeConflict(tx, {
+      jobApplicationId: before.jobApplicationId,
+      scheduledAt,
+      durationMinutes: before.durationMinutes,
+      ignoreInterviewId: before.id,
+    });
+
     const [after] = await tx
       .update(interviews)
       .set({

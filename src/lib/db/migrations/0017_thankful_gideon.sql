@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "tasks_requisition_title_active_uidx" ON "tasks" USING btree ("job_requisition_id","title") WHERE "tasks"."job_requisition_id" IS NOT NULL AND "tasks"."status" IN ('OPEN', 'IN_PROGRESS');--> statement-breakpoint
+CREATE UNIQUE INDEX "tasks_engagement_title_active_uidx" ON "tasks" USING btree ("service_engagement_id","title") WHERE "tasks"."service_engagement_id" IS NOT NULL AND "tasks"."status" IN ('OPEN', 'IN_PROGRESS');

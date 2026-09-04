@@ -1,5 +1,6 @@
 import { and, desc, eq, isNull, lte, or, sql } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth/session';
+import { todayInDublin } from '@/lib/dates';
 import { db } from '@/lib/db/client';
 import { tasks } from '@/lib/db/schema/activities';
 import { advertisements } from '@/lib/db/schema/campaigns';
@@ -22,7 +23,9 @@ async function insertIfNew(row: typeof notifications.$inferInsert) {
 }
 
 export async function runNotificationScan(): Promise<{ created: number }> {
-  const todayIso = new Date().toISOString().slice(0, 10);
+  // Dedup keys are per-Irish-day so a scan that spans UTC midnight doesn't
+  // double-fire notifications (or skip them) for staff who use the Irish calendar.
+  const todayIso = todayInDublin();
   let created = 0;
 
   // Advertisement expiring thresholds
@@ -106,7 +109,7 @@ export async function runNotificationScan(): Promise<{ created: number }> {
     .where(and(sql`${tasks.status} IN ('OPEN','IN_PROGRESS')`, lte(tasks.dueAt, now)));
   for (const t of overdueTasks) {
     if (!t.dueAt) continue;
-    const dayStr = new Date().toISOString().slice(0, 10);
+    const dayStr = todayInDublin();
     const dedup = `task-overdue:${t.id}:${dayStr}`;
     await insertIfNew({
       recipientUserId: t.assignedUserId,

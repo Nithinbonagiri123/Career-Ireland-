@@ -10,7 +10,10 @@
       "!src/lib/db/migrations",
       "!src/components/ui",
       "!**/*.css",
-      "!public"
+      "!public",
+      "!playwright-report",
+      "!test-results",
+      "!playwright/.auth"
     ]
   },
   "formatter": {
@@ -22,7 +25,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "style": {
         "useConst": "error",
         "useTemplate": "error"
