@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "tasks_immigration_case_title_active_uidx" ON "tasks" USING btree ("immigration_case_id","title") WHERE "tasks"."immigration_case_id" IS NOT NULL AND "tasks"."status" IN ('OPEN', 'IN_PROGRESS');

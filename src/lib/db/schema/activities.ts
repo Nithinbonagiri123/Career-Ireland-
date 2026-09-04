@@ -6,6 +6,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -88,6 +89,19 @@ export const tasks = pgTable(
     index('tasks_employer_idx').on(t.employerId),
     index('tasks_requisition_idx').on(t.jobRequisitionId),
     index('tasks_immigration_case_idx').on(t.immigrationCaseId),
+    // Partial unique indexes — close the auto-task-generator race pattern for
+    // every task-parent entity. Two concurrent triggers on the same parent can
+    // no longer both insert the same (parent, title) with an active status.
+    // Repro: scripts/repro-task-generator-race.ts (immigration case).
+    uniqueIndex('tasks_immigration_case_title_active_uidx')
+      .on(t.immigrationCaseId, t.title)
+      .where(sql`${t.immigrationCaseId} IS NOT NULL AND ${t.status} IN ('OPEN', 'IN_PROGRESS')`),
+    uniqueIndex('tasks_requisition_title_active_uidx')
+      .on(t.jobRequisitionId, t.title)
+      .where(sql`${t.jobRequisitionId} IS NOT NULL AND ${t.status} IN ('OPEN', 'IN_PROGRESS')`),
+    uniqueIndex('tasks_engagement_title_active_uidx')
+      .on(t.serviceEngagementId, t.title)
+      .where(sql`${t.serviceEngagementId} IS NOT NULL AND ${t.status} IN ('OPEN', 'IN_PROGRESS')`),
   ],
 );
 

@@ -88,6 +88,22 @@ const EXPIRY_REMINDER: TaskTemplate = {
   priority: 'HIGH',
 };
 
+/**
+ * Idempotent insert. Two guards protect against the check-then-insert race
+ * two concurrent status transitions on the same case can trigger:
+ *
+ *  1. Application-level SELECT — cheap, catches the common case and avoids
+ *     wasted INSERT + unique-violation abort of the whole transaction.
+ *  2. Partial unique index `tasks_immigration_case_title_active_uidx` — the
+ *     authoritative guard. If two transactions both pass step 1, only one
+ *     INSERT succeeds; the loser's insert throws a 23505 unique_violation
+ *     which we catch and treat as "already inserted by the other tx".
+ *
+ * The `.onConflictDoNothing()` clause below relies on the partial index and
+ * makes drizzle return an empty result set for the loser instead of throwing.
+ * We inspect the returned array to know whether WE created the row (and thus
+ * should emit the audit event) or the other transaction won.
+ */
 async function insertIfMissing(
   tx: DbExecutor,
   caseId: string,
@@ -112,7 +128,12 @@ async function insertIfMissing(
     .limit(1);
   if (existing) return false;
 
-  const [row] = await tx
+  // `.onConflictDoNothing()` with no target maps to `ON CONFLICT DO NOTHING`,
+  // which applies to *any* unique constraint violation — including the partial
+  // index `tasks_immigration_case_title_active_uidx`. If the concurrent race
+  // is lost, the INSERT returns 0 rows without throwing; the whole outer
+  // transaction stays alive so the remaining templates can still be inserted.
+  const inserted = await tx
     .insert(tasks)
     .values({
       title: template.title,
@@ -123,7 +144,9 @@ async function insertIfMissing(
       immigrationCaseId: caseId,
       assignedUserId: args.assignedUserId,
     })
+    .onConflictDoNothing()
     .returning();
+  const row = inserted[0];
   if (!row) return false;
 
   await recordAudit(tx, {
