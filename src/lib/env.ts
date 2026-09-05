@@ -59,4 +59,28 @@ if (env.NODE_ENV === 'production' && nextPhase !== 'phase-production-build') {
       `EMAIL_CRED_ENC_KEY is malformed: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+
+  // Refuse to boot if the S3 endpoint is a local/dev URL — this almost always
+  // means a `.env.local` MinIO block leaked into a production deploy. Real
+  // AWS/R2/etc. never point at localhost or private-network hosts.
+  if (env.S3_ENDPOINT) {
+    let host = '';
+    try {
+      host = new URL(env.S3_ENDPOINT).hostname.toLowerCase();
+    } catch {
+      throw new Error(`S3_ENDPOINT is not a valid URL: ${env.S3_ENDPOINT}`);
+    }
+    const isLoopback = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    const isPrivate =
+      host.startsWith('10.') ||
+      host.startsWith('192.168.') ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
+      host.endsWith('.local') ||
+      host.endsWith('.internal');
+    if (isLoopback || isPrivate) {
+      throw new Error(
+        `S3_ENDPOINT=${env.S3_ENDPOINT} looks like a dev backend (loopback / private network). Remove S3_ENDPOINT + S3_FORCE_PATH_STYLE from production env and use real AWS credentials instead.`,
+      );
+    }
+  }
 }

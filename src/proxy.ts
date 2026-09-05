@@ -46,6 +46,15 @@ export default auth((req) => {
     if ((role === 'ADMIN' || role === 'STAFF') && isPortalPath) {
       return NextResponse.redirect(new URL('/dashboard', req.nextUrl));
     }
+    // STAFF hitting an admin-only route: bounce to dashboard. Every /admin page
+    // also enforces `requireRole(['ADMIN'])` server-side (which the error
+    // boundary catches as a 403), but the middleware short-circuit fails-closed
+    // earlier and avoids rendering an admin surface at all.
+    // /account/security is user-scoped (any role can change their own password)
+    // so it lives under the app group but is NOT gated here.
+    if (role === 'STAFF' && (path === '/admin' || path.startsWith('/admin/'))) {
+      return NextResponse.redirect(new URL('/dashboard', req.nextUrl));
+    }
     // Candidate accessing employer portal or vice versa.
     if (role === 'CANDIDATE' && path.startsWith('/portal/employer')) {
       return NextResponse.redirect(new URL('/portal/candidate', req.nextUrl));
