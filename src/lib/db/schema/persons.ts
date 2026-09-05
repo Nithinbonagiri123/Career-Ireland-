@@ -1,5 +1,7 @@
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
+  boolean,
   date,
   index,
   pgTable,
@@ -42,6 +44,15 @@ export const persons = pgTable(
     mergedAt: timestamp('merged_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     archivedByUserId: uuid('archived_by_user_id').references(() => users.id),
+    /**
+     * Draft state: the staff-created candidate onboarding form is still open
+     * and hasn't been finalised (payment + candidate profile creation). Draft
+     * rows are hidden from every downstream reader — list pages, CSV exports,
+     * search, matching, dashboards — until the form's Create action commits.
+     * A nightly cron sweeps drafts older than 7 days.
+     */
+    isDraft: boolean('is_draft').notNull().default(false),
+    draftedByUserId: uuid('drafted_by_user_id').references(() => users.id),
     createdAt,
     updatedAt,
   },
@@ -50,6 +61,8 @@ export const persons = pgTable(
     index('persons_normalized_phone_idx').on(t.normalizedPhone),
     index('persons_name_idx').on(t.lastName, t.firstName),
     index('persons_merged_idx').on(t.mergedIntoPersonId),
+    // Partial index — most lookups skip drafts, keep this narrow.
+    index('persons_draft_idx').on(t.isDraft).where(sql`${t.isDraft} = true`),
     // Uniqueness on normalized values; multiple NULLs are allowed (persons without email/phone).
     unique('persons_normalized_email_unique').on(t.normalizedEmail),
     unique('persons_normalized_phone_unique').on(t.normalizedPhone),

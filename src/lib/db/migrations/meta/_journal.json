@@ -127,6 +127,13 @@
       "when": 1788474183687,
       "tag": "0017_thankful_gideon",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788550256274,
+      "tag": "0018_stormy_makkari",
+      "breakpoints": true
     }
   ]
 }

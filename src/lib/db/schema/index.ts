@@ -1,6 +1,7 @@
 export * from './_shared';
 export * from './activities';
 export * from './audit_events';
+export * from './billing';
 export * from './campaigns';
 export * from './candidate_details';
 export * from './commerce';

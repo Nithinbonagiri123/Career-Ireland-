@@ -111,7 +111,15 @@ export async function runAssistedMatching(requisitionId: string): Promise<{ upse
     })
     .from(candidateProfiles)
     .innerJoin(persons, eq(persons.id, candidateProfiles.personId))
-    .where(isNull(persons.mergedIntoPersonId));
+    // Skip draft, archived, and merged persons — matching must not score
+    // half-filled onboarding drafts or candidates staff have retired.
+    .where(
+      and(
+        eq(persons.isDraft, false),
+        isNull(persons.mergedIntoPersonId),
+        isNull(persons.archivedAt),
+      ),
+    );
 
   if (candidateRows.length === 0) return { upserted: 0 };
 

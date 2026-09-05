@@ -1,8 +1,10 @@
-import { Users } from 'lucide-react';
+import { Plus, Users } from 'lucide-react';
+import Link from 'next/link';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ScopeFilter } from '@/components/scope-filter';
+import { buttonVariants } from '@/components/ui/button';
 import { requireRole } from '@/lib/auth/session';
 import { parseAssignmentScope } from '@/lib/scope';
 import { fetchCandidates } from '@/modules/candidates/service';
@@ -35,6 +37,10 @@ export default async function CandidatesPage({
             <div className="flex items-center gap-2">
               <ScopeFilter current={scope} />
               <CsvExportButton href="/api/export/candidates" />
+              <Link href="/candidates/new" className={buttonVariants({ size: 'default' })}>
+                <Plus className="mr-1.5 size-4" />
+                Add candidate
+              </Link>
             </div>
           }
         />

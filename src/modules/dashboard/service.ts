@@ -101,7 +101,13 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
       })
       .from(candidateProfiles)
       .innerJoin(persons, eq(persons.id, candidateProfiles.personId))
-      .where(isNull(persons.mergedIntoPersonId))
+      .where(
+        and(
+          eq(persons.isDraft, false),
+          isNull(persons.mergedIntoPersonId),
+          isNull(persons.archivedAt),
+        ),
+      )
       .then((r) => r[0] ?? { total: 0, available: 0, placed: 0, inactive: 0 }),
     db
       .select({

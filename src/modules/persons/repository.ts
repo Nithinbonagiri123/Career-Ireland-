@@ -8,7 +8,13 @@ export async function listActivePersons(): Promise<Person[]> {
   return db
     .select()
     .from(persons)
-    .where(and(isNull(persons.archivedAt), isNull(persons.mergedIntoPersonId)))
+    .where(
+      and(
+        eq(persons.isDraft, false),
+        isNull(persons.archivedAt),
+        isNull(persons.mergedIntoPersonId),
+      ),
+    )
     .orderBy(desc(persons.createdAt));
 }
 

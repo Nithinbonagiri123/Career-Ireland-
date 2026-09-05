@@ -45,10 +45,22 @@ export async function listCandidates(opts?: {
     .from(candidateProfiles)
     .innerJoin(persons, eq(persons.id, candidateProfiles.personId))
     .leftJoin(users, eq(users.id, candidateProfiles.assignedUserId))
+    // Filter draft, merged, and archived persons out of every active list —
+    // CSV exports, dashboards, matching feeds, search: everything downstream
+    // reads this and none of them should see half-filled onboarding drafts.
     .where(
       scopeCond
-        ? and(isNull(persons.mergedIntoPersonId), scopeCond)
-        : isNull(persons.mergedIntoPersonId),
+        ? and(
+            eq(persons.isDraft, false),
+            isNull(persons.mergedIntoPersonId),
+            isNull(persons.archivedAt),
+            scopeCond,
+          )
+        : and(
+            eq(persons.isDraft, false),
+            isNull(persons.mergedIntoPersonId),
+            isNull(persons.archivedAt),
+          ),
     )
     .orderBy(desc(candidateProfiles.activatedAt));
 

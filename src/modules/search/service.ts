@@ -50,7 +50,9 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult[]> {
     .leftJoin(candidateProfiles, eq(candidateProfiles.personId, persons.id))
     .where(
       and(
+        eq(persons.isDraft, false),
         isNull(persons.mergedIntoPersonId),
+        isNull(persons.archivedAt),
         or(
           ilike(persons.firstName, like),
           ilike(persons.lastName, like),
