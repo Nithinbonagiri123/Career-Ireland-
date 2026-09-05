@@ -6,9 +6,11 @@ on:
   push:
     branches: [main]
 
+# The verify job needs a real Postgres because two vitest suites hit the DB:
+#   - src/modules/immigration/task-generator.race.test.ts (concurrent race regression)
+#   - src/modules/interviews/conflict.test.ts (time-conflict guard)
+# Running them against a placeholder URL would silently skip real coverage.
 env:
-  # Placeholder values so `src/lib/env.ts` boots during typecheck/build.
-  # Real secrets live in Vercel; CI never touches production data.
   DATABASE_URL: postgres://ci:ci@localhost:5432/ci
   AUTH_SECRET: ci-placeholder-secret-must-be-at-least-32-chars-long
   AUTH_URL: http://localhost:3000
@@ -21,6 +23,23 @@ jobs:
   verify:
     name: Verify
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        # Health check so tests only run once Postgres is accepting connections.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -49,8 +68,27 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Apply migrations to CI Postgres
+        # The two DB-dependent vitest suites need the schema in place. This
+        # doubles as a "migrations are internally consistent" check.
+        run: pnpm db:migrate
+
+      - name: Seed E2E admin user
+        # Non-interactive, idempotent. task-generator.race.test.ts and
+        # interviews/conflict.test.ts read this row.
+        run: pnpm db:seed:e2e-admin
+
       - name: Test
         run: pnpm test
+
+      - name: Build (production)
+        # `next build` sets NODE_ENV=production, so env.ts's fail-closed prod
+        # validation fires. Provide the two required prod-only secrets that
+        # aren't in the top-level env: block.
+        env:
+          CRON_SECRET: ci-placeholder-cron-secret
+          EMAIL_CRED_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+        run: pnpm build
 
       - name: Verify all migrations are committed
         # Regenerate — if diff appears, schema drifted from migrations. Fail the build.

@@ -14,6 +14,7 @@
     "db:migrate": "tsx src/lib/db/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "db:seed:admin": "tsx scripts/seed-admin.ts",
+    "db:seed:e2e-admin": "tsx scripts/seed-e2e-admin.ts",
     "db:reset:password": "tsx scripts/reset-admin-password.ts",
     "db:seed:currencies": "tsx scripts/seed-currencies.ts",
     "test": "vitest run",
