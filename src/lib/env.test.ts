@@ -35,6 +35,10 @@ describe('production boot guards', () => {
     CRON_SECRET: 'y'.repeat(32),
     // 32 zero bytes, base64 encoded.
     EMAIL_CRED_ENC_KEY: Buffer.alloc(32).toString('base64'),
+    // Mail settings — required in production (the console mailer is refused).
+    MAIL_PROVIDER: 'resend',
+    MAIL_FROM: 'Career Ireland <no-reply@example.com>',
+    RESEND_API_KEY: 're_test_1234567890',
     NODE_ENV: 'production',
     LOG_LEVEL: 'info',
   };
@@ -112,5 +116,23 @@ describe('production boot guards', () => {
     vi.stubEnv('S3_ENDPOINT', 'http://localhost:9000');
     process.env.NEXT_PHASE = 'phase-production-build';
     await expect(importEnvFresh(10)).resolves.toBeDefined();
+  });
+
+  it('refuses to boot when MAIL_FROM is missing in production', async () => {
+    vi.stubEnv('MAIL_FROM', '');
+    await expect(importEnvFresh(11)).rejects.toThrow(/MAIL_FROM/);
+  });
+
+  it('refuses to boot when MAIL_PROVIDER=resend but RESEND_API_KEY is missing', async () => {
+    vi.stubEnv('RESEND_API_KEY', '');
+    await expect(importEnvFresh(12)).rejects.toThrow(/RESEND_API_KEY/);
+  });
+
+  it('refuses to boot when MAIL_PROVIDER=console in production', async () => {
+    vi.stubEnv('MAIL_PROVIDER', 'console');
+    // With console we don't need RESEND_API_KEY; clear it so the check doesn't
+    // trip that guard first.
+    vi.stubEnv('RESEND_API_KEY', '');
+    await expect(importEnvFresh(13)).rejects.toThrow(/MAIL_PROVIDER=console/i);
   });
 });

@@ -2,8 +2,24 @@
 
 import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
-import type { CreateCommunicationInput, CreateTaskInput, UpdateTaskStatusInput } from './schemas';
-import { createCommunication, createTask, updateTaskStatus } from './service';
+import type {
+  ArchiveCommunicationInput,
+  ArchiveTaskInput,
+  CreateCommunicationInput,
+  CreateTaskInput,
+  UpdateCommunicationInput,
+  UpdateTaskInput,
+  UpdateTaskStatusInput,
+} from './schemas';
+import {
+  archiveCommunication,
+  archiveTask,
+  createCommunication,
+  createTask,
+  updateCommunication,
+  updateTask,
+  updateTaskStatus,
+} from './service';
 
 const rev = () => {
   revalidatePath('/communications');
@@ -31,5 +47,25 @@ export async function updateTaskStatusAction(
       for (const p of extraRevalidatePaths) revalidatePath(p);
     }
   }
+  return r;
+}
+export async function updateTaskAction(input: UpdateTaskInput) {
+  const r = await toActionResult(() => updateTask(input));
+  if (r.ok) rev();
+  return r;
+}
+export async function archiveTaskAction(input: ArchiveTaskInput) {
+  const r = await toActionResult(() => archiveTask(input));
+  if (r.ok) rev();
+  return r;
+}
+export async function updateCommunicationAction(input: UpdateCommunicationInput) {
+  const r = await toActionResult(() => updateCommunication(input));
+  if (r.ok) rev();
+  return r;
+}
+export async function archiveCommunicationAction(input: ArchiveCommunicationInput) {
+  const r = await toActionResult(() => archiveCommunication(input));
+  if (r.ok) rev();
   return r;
 }

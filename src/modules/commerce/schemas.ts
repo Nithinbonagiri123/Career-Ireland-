@@ -46,8 +46,20 @@ export const RejectPaymentSchema = z.object({
   reason: z.string().min(3).max(500),
 });
 
+export const ArchiveEngagementSchema = z.object({
+  engagementId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
+export const UnarchiveEngagementSchema = z.object({
+  engagementId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
 export type CreateEngagementInput = z.infer<typeof CreateEngagementSchema>;
 export type UpdateEngagementStatusInput = z.infer<typeof UpdateEngagementStatusSchema>;
 export type RecordPaymentInput = z.infer<typeof RecordPaymentSchema>;
 export type VerifyPaymentInput = z.infer<typeof VerifyPaymentSchema>;
 export type RejectPaymentInput = z.infer<typeof RejectPaymentSchema>;
+export type ArchiveEngagementInput = z.infer<typeof ArchiveEngagementSchema>;
+export type UnarchiveEngagementInput = z.infer<typeof UnarchiveEngagementSchema>;

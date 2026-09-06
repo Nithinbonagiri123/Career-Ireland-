@@ -30,12 +30,46 @@ test('login page is publicly reachable', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
 });
 
-test('forgot page is publicly reachable and shows the admin contact', async ({ page }) => {
+test('forgot page is publicly reachable and shows the reset form', async ({ page }) => {
   const r = await page.goto('/login/forgot');
   expect(r?.status()).toBe(200);
   await expect(page.getByRole('heading', { name: /forgot your password/i })).toBeVisible();
-  // Contact address is rendered somewhere on the page.
-  await expect(page.getByText('@', { exact: false })).toBeVisible();
+  // Now a form, not a static contact card.
+  await expect(page.getByLabel(/email address/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /send reset link/i })).toBeVisible();
+});
+
+test('forgot form: submitting a valid email shows the check-your-inbox confirmation', async ({
+  page,
+}) => {
+  await page.goto('/login/forgot');
+  // Any well-formed email — the endpoint is enumeration-safe, so the response
+  // is identical regardless of whether the account exists.
+  await page.getByLabel(/email address/i).fill('nobody-real@example.test');
+  await page.getByRole('button', { name: /send reset link/i }).click();
+  await expect(page.getByText(/check your inbox/i)).toBeVisible({ timeout: 10_000 });
+  // Explicitly must NOT leak whether the email exists.
+  await expect(page.getByText(/no.*account.*found/i)).not.toBeVisible();
+});
+
+test('forgot form: rejects a malformed email client-side', async ({ page }) => {
+  await page.goto('/login/forgot');
+  await page.getByLabel(/email address/i).fill('not-an-email');
+  await page.getByRole('button', { name: /send reset link/i }).click();
+  await expect(page.getByText(/valid email/i)).toBeVisible();
+});
+
+test('/login/reset with a missing token renders the "not valid" state', async ({ page }) => {
+  const r = await page.goto('/login/reset');
+  expect(r?.status()).toBe(200);
+  await expect(page.getByText(/reset link is not valid/i)).toBeVisible();
+  await expect(page.getByRole('link', { name: /request a new reset link/i })).toBeVisible();
+});
+
+test('/login/reset with a bogus token renders the "not valid" state', async ({ page }) => {
+  const r = await page.goto('/login/reset?token=this-is-not-a-real-token-000000000000');
+  expect(r?.status()).toBe(200);
+  await expect(page.getByText(/reset link is not valid/i)).toBeVisible();
 });
 
 test('login with wrong password stays on /login and shows an error', async ({ page }) => {

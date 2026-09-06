@@ -22,6 +22,16 @@ const EnvSchema = z.object({
    * migrations and CI can boot without a real key.
    */
   EMAIL_CRED_ENC_KEY: z.string().optional(),
+  /**
+   * Transactional mail delivery. `console` (default) logs the message to stdout
+   * — perfect for local dev + CI, useless for real users. `resend` uses
+   * https://resend.com and requires RESEND_API_KEY. Production must not run
+   * on `console`.
+   */
+  MAIL_PROVIDER: z.enum(['console', 'resend']).default('console'),
+  RESEND_API_KEY: z.string().optional(),
+  /** Sender address, e.g. `Career Ireland <no-reply@yourdomain.ie>`. Required in production. */
+  MAIL_FROM: z.string().optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
@@ -44,8 +54,17 @@ if (env.NODE_ENV === 'production' && nextPhase !== 'phase-production-build') {
   const missing: string[] = [];
   if (!env.CRON_SECRET) missing.push('CRON_SECRET');
   if (!env.EMAIL_CRED_ENC_KEY) missing.push('EMAIL_CRED_ENC_KEY');
+  if (!env.MAIL_FROM) missing.push('MAIL_FROM');
+  if (env.MAIL_PROVIDER === 'resend' && !env.RESEND_API_KEY) missing.push('RESEND_API_KEY');
   if (missing.length > 0) {
     throw new Error(`Missing required production env vars: ${missing.join(', ')}`);
+  }
+  // Refuse to run the console mailer in production — silently swallowing
+  // password-reset emails would lock every user out of their account.
+  if (env.MAIL_PROVIDER === 'console') {
+    throw new Error(
+      'MAIL_PROVIDER=console is not allowed in production. Set MAIL_PROVIDER=resend + RESEND_API_KEY.',
+    );
   }
   // Also validate EMAIL_CRED_ENC_KEY shape (32 bytes base64) so we fail at boot,
   // not at first candidate-email-account read.

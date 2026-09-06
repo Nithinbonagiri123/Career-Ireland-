@@ -10,6 +10,7 @@ import {
   MailQuestion,
   PlaneTakeoff,
   Sparkles,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
@@ -19,7 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Notification } from '@/lib/db/schema/notifications';
 import { cn } from '@/lib/utils';
-import { markAllReadAction } from '@/modules/notifications/actions';
+import { markAllReadAction, markNotificationReadAction } from '@/modules/notifications/actions';
 
 const ICONS: Record<Notification['category'], LucideIcon> = {
   AD_EXPIRING: Sparkles,
@@ -32,6 +33,7 @@ const ICONS: Record<Notification['category'], LucideIcon> = {
 export function NotificationsList({ notifications }: { notifications: Notification[] }) {
   const [items, setItems] = useState(notifications);
   const [pending, startTransition] = useTransition();
+  const [dismissingId, setDismissingId] = useState<string | null>(null);
 
   const markAll = () => {
     startTransition(async () => {
@@ -39,6 +41,24 @@ export function NotificationsList({ notifications }: { notifications: Notificati
       if (r.ok) {
         setItems((prev) => prev.map((n) => (n.readAt ? n : { ...n, readAt: new Date() })));
         toast.success(`Marked ${r.data.updated} read`);
+      } else {
+        toast.error(r.error.message);
+      }
+    });
+  };
+
+  const dismissOne = (n: Notification, e: React.MouseEvent) => {
+    // Prevent the wrapping <Link> from firing when clicking the button.
+    e.preventDefault();
+    e.stopPropagation();
+    setDismissingId(n.id);
+    startTransition(async () => {
+      const r = await markNotificationReadAction({ notificationId: n.id });
+      setDismissingId(null);
+      if (r.ok) {
+        setItems((prev) =>
+          prev.map((it) => (it.id === n.id && !it.readAt ? { ...it, readAt: new Date() } : it)),
+        );
       } else {
         toast.error(r.error.message);
       }
@@ -71,8 +91,20 @@ export function NotificationsList({ notifications }: { notifications: Notificati
       <ul className="divide-y rounded-lg border bg-card">
         {items.map((n) => {
           const Icon = ICONS[n.category] ?? Bell;
+          const dismissBtn = !n.readAt && (
+            <button
+              type="button"
+              onClick={(e) => dismissOne(n, e)}
+              disabled={dismissingId === n.id}
+              className="ml-2 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100 disabled:opacity-50"
+              aria-label={`Dismiss "${n.title}"`}
+              title="Dismiss"
+            >
+              <X className="size-3.5" />
+            </button>
+          );
           const inner = (
-            <div className={cn('flex items-start gap-3 p-3', !n.readAt && 'bg-muted/30')}>
+            <div className={cn('group flex items-start gap-3 p-3', !n.readAt && 'bg-muted/30')}>
               <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
                 <Icon className="size-4 text-muted-foreground" />
               </div>
@@ -93,6 +125,7 @@ export function NotificationsList({ notifications }: { notifications: Notificati
                   {formatDistanceToNow(n.createdAt, { addSuffix: true })}
                 </p>
               </div>
+              {dismissBtn}
             </div>
           );
           return (

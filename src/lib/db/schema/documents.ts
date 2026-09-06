@@ -111,6 +111,14 @@ export const documentInstances = pgTable(
       .references(() => users.id),
     expiresOn: date('expires_on'),
     reviewNotes: text('review_notes'),
+    /**
+     * Soft-void: uploaded by mistake, or superseded. Voided documents are
+     * hidden from list pages, exports, and requirement fulfilment checks,
+     * but the row + S3 object remain (audit trail).
+     */
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidedByUserId: uuid('voided_by_user_id').references(() => users.id),
+    voidReason: text('void_reason'),
     createdAt,
     updatedAt,
   },

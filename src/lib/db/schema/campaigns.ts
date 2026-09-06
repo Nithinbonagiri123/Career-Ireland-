@@ -26,6 +26,8 @@ export const recruitmentCampaigns = pgTable(
     startedAt: timestamp('started_at', { withTimezone: true }),
     endedAt: timestamp('ended_at', { withTimezone: true }),
     notes: text('notes'),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    archivedByUserId: uuid('archived_by_user_id').references(() => users.id),
     createdAt,
     updatedAt,
   },

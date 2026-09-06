@@ -32,6 +32,18 @@ export const RestoreAvailabilitySchema = z.object({
   reason: z.string().min(3).max(500),
 });
 
+export const ArchivePlacementSchema = z.object({
+  placementId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
+export const UnarchivePlacementSchema = z.object({
+  placementId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
 export type CreatePlacementInput = z.infer<typeof CreatePlacementSchema>;
 export type UpdatePlacementStatusInput = z.infer<typeof UpdatePlacementStatusSchema>;
 export type RestoreAvailabilityInput = z.infer<typeof RestoreAvailabilitySchema>;
+export type ArchivePlacementInput = z.infer<typeof ArchivePlacementSchema>;
+export type UnarchivePlacementInput = z.infer<typeof UnarchivePlacementSchema>;

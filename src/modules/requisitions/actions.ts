@@ -3,18 +3,22 @@
 import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
 import type {
+  ArchiveRequisitionInput,
   AttachRequisitionQualificationInput,
   AttachRequisitionSkillInput,
   DetachRequisitionQualificationInput,
   DetachRequisitionSkillInput,
+  UnarchiveRequisitionInput,
   UpdateStatusInput,
   UpsertRequisitionInput,
 } from './schemas';
 import {
+  archiveRequisition,
   attachRequisitionQualification,
   attachRequisitionSkill,
   detachRequisitionQualification,
   detachRequisitionSkill,
+  unarchiveRequisition,
   updateRequisitionStatus,
   upsertRequisition,
 } from './service';
@@ -62,5 +66,23 @@ export async function detachRequisitionQualificationAction(
 ) {
   const r = await toActionResult(() => detachRequisitionQualification(input));
   if (r.ok) revalidatePath(`/requisitions/${input.jobRequisitionId}`);
+  return r;
+}
+
+export async function archiveRequisitionAction(input: ArchiveRequisitionInput) {
+  const r = await toActionResult(() => archiveRequisition(input));
+  if (r.ok) {
+    revalidatePath('/requisitions');
+    revalidatePath(`/requisitions/${input.requisitionId}`);
+  }
+  return r;
+}
+
+export async function unarchiveRequisitionAction(input: UnarchiveRequisitionInput) {
+  const r = await toActionResult(() => unarchiveRequisition(input));
+  if (r.ok) {
+    revalidatePath('/requisitions');
+    revalidatePath(`/requisitions/${input.requisitionId}`);
+  }
   return r;
 }

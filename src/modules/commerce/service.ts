@@ -1,7 +1,8 @@
+import { eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
-import type { Payment, ServiceEngagement } from '@/lib/db/schema/commerce';
+import { type Payment, type ServiceEngagement, serviceEngagements } from '@/lib/db/schema/commerce';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import {
   type EngagementListRow,
@@ -15,12 +16,16 @@ import {
   updatePayment,
 } from './repository';
 import {
+  type ArchiveEngagementInput,
+  ArchiveEngagementSchema,
   type CreateEngagementInput,
   CreateEngagementSchema,
   type RecordPaymentInput,
   RecordPaymentSchema,
   type RejectPaymentInput,
   RejectPaymentSchema,
+  type UnarchiveEngagementInput,
+  UnarchiveEngagementSchema,
   type UpdateEngagementStatusInput,
   UpdateEngagementStatusSchema,
   type VerifyPaymentInput,
@@ -227,6 +232,70 @@ export async function rejectPayment(input: RejectPaymentInput): Promise<Payment>
       action: 'REJECTED',
       before: { status: before.status },
       after: { status: after.status },
+      context: { reason: parsed.reason },
+    });
+    return after;
+  });
+}
+
+// ─── Engagement archive / unarchive ───────────────────────────────────────────
+
+export async function archiveEngagement(input: ArchiveEngagementInput): Promise<ServiceEngagement> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = ArchiveEngagementSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const before = await getEngagement(parsed.engagementId);
+    if (!before) throw new BusinessRuleError('ENGAGEMENT_NOT_FOUND', 'Engagement not found');
+    if (before.archivedAt) {
+      throw new BusinessRuleError('ALREADY_ARCHIVED', 'Engagement is already archived');
+    }
+    const [after] = await tx
+      .update(serviceEngagements)
+      .set({
+        archivedAt: new Date(),
+        archivedByUserId: session.user.id,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(serviceEngagements.id, parsed.engagementId))
+      .returning();
+    if (!after) throw new Error('archive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'service_engagement',
+      entityId: after.id,
+      action: 'ARCHIVED',
+      before: { archivedAt: null },
+      after: { archivedAt: after.archivedAt },
+      context: { reason: parsed.reason },
+    });
+    return after;
+  });
+}
+
+export async function unarchiveEngagement(
+  input: UnarchiveEngagementInput,
+): Promise<ServiceEngagement> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = UnarchiveEngagementSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const before = await getEngagement(parsed.engagementId);
+    if (!before) throw new BusinessRuleError('ENGAGEMENT_NOT_FOUND', 'Engagement not found');
+    if (!before.archivedAt) {
+      throw new BusinessRuleError('NOT_ARCHIVED', 'Engagement is not archived');
+    }
+    const [after] = await tx
+      .update(serviceEngagements)
+      .set({ archivedAt: null, archivedByUserId: null, updatedAt: sql`NOW()` })
+      .where(eq(serviceEngagements.id, parsed.engagementId))
+      .returning();
+    if (!after) throw new Error('unarchive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'service_engagement',
+      entityId: after.id,
+      action: 'UNARCHIVED',
+      before: { archivedAt: before.archivedAt },
+      after: { archivedAt: null },
       context: { reason: parsed.reason },
     });
     return after;

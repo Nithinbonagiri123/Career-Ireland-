@@ -1,7 +1,9 @@
-import { CalendarClock } from 'lucide-react';
+import { CalendarClock, Plus } from 'lucide-react';
+import Link from 'next/link';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ScopeFilter } from '@/components/scope-filter';
+import { buttonVariants } from '@/components/ui/button';
 import { requireRole } from '@/lib/auth/session';
 import { parseAssignmentScope } from '@/lib/scope';
 import { listUpcomingInterviews } from '@/modules/interviews/service';
@@ -26,8 +28,19 @@ export default async function InterviewsPage({
         <PageHeader
           icon={CalendarClock}
           title="Interviews"
-          description="Upcoming and recent interviews across every application. Click a row to open the application and log the outcome."
-          action={<ScopeFilter current={scope} />}
+          description="Upcoming and recent interviews across every application. Click a row to open the application and log the outcome. Interviews are always scheduled from an application — pick one to start."
+          action={
+            <div className="flex items-center gap-2">
+              <ScopeFilter current={scope} />
+              <Link
+                href="/applications"
+                className={buttonVariants({ variant: 'default', size: 'default' })}
+              >
+                <Plus className="mr-1.5 size-4" />
+                Schedule from an application
+              </Link>
+            </div>
+          }
         />
       </FadeUp>
       <FadeUp delay={0.05}>

@@ -39,6 +39,8 @@ export const serviceEngagements = pgTable(
       .notNull()
       .default('REQUESTED'),
     notes: text('notes'),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    archivedByUserId: uuid('archived_by_user_id').references(() => users.id),
     createdAt,
     updatedAt,
   },

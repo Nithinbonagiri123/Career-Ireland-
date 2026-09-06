@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, isNull } from 'drizzle-orm';
 import type { DbExecutor } from '@/lib/audit/withAudit';
 import { db } from '@/lib/db/client';
 import {
@@ -32,6 +32,7 @@ export async function listEngagements(): Promise<EngagementListRow[]> {
       eq(serviceCatalogItems.id, serviceEngagements.serviceCatalogItemId),
     )
     .leftJoin(persons, eq(persons.id, serviceEngagements.payerPersonId))
+    .where(isNull(serviceEngagements.archivedAt))
     .orderBy(desc(serviceEngagements.createdAt));
 
   // Beneficiary lookup in a separate query — small volumes, avoids self-join tangles.
@@ -108,6 +109,7 @@ export async function listPayments(): Promise<Array<Payment & { serviceName: str
       serviceCatalogItems,
       eq(serviceCatalogItems.id, serviceEngagements.serviceCatalogItemId),
     )
+    .where(isNull(serviceEngagements.archivedAt))
     .orderBy(desc(payments.createdAt));
   return rows.map((r) => ({ ...r.payment, serviceName: r.serviceName }));
 }

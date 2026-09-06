@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requirePortalCandidate, requireRole, requireSession } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -35,6 +35,8 @@ import {
   ReviewDocumentSchema,
   type UpsertRequirementRuleInput,
   UpsertRequirementRuleSchema,
+  type VoidDocumentInput,
+  VoidDocumentSchema,
 } from './schemas';
 
 function blankToNull(v: string | undefined | null): string | null {
@@ -440,7 +442,7 @@ export async function fetchPersonDocuments(personId: string): Promise<DocumentIn
   return db
     .select()
     .from(documentInstances)
-    .where(eq(documentInstances.ownerPersonId, personId))
+    .where(and(eq(documentInstances.ownerPersonId, personId), isNull(documentInstances.voidedAt)))
     .orderBy(desc(documentInstances.createdAt));
 }
 
@@ -454,7 +456,13 @@ export async function fetchPersonDocumentsByTypeCode(
     .select({ doc: documentInstances })
     .from(documentInstances)
     .innerJoin(documentTypes, eq(documentTypes.id, documentInstances.documentTypeId))
-    .where(and(eq(documentInstances.ownerPersonId, personId), eq(documentTypes.code, typeCode)))
+    .where(
+      and(
+        eq(documentInstances.ownerPersonId, personId),
+        eq(documentTypes.code, typeCode),
+        isNull(documentInstances.voidedAt),
+      ),
+    )
     .orderBy(desc(documentInstances.createdAt));
   return rows.map((r) => r.doc);
 }
@@ -594,6 +602,7 @@ export async function fetchAllDocumentsForStaff(): Promise<StaffDocumentRow[]> {
     .from(documentInstances)
     .innerJoin(documentTypes, eq(documentTypes.id, documentInstances.documentTypeId))
     .leftJoin(persons, eq(persons.id, documentInstances.ownerPersonId))
+    .where(isNull(documentInstances.voidedAt))
     .orderBy(desc(documentInstances.createdAt));
   return rows.map((r) => ({
     ...r.instance,
@@ -615,4 +624,56 @@ export async function fetchMyRequirementsAndDocuments() {
     fetchPersonDocuments(session.user.personId),
   ]);
   return { requirements: reqs, documents: docs };
+}
+
+// --------- Void (soft-delete) ---------
+
+/**
+ * Soft-void a document. Hidden from every list, export, and requirement
+ * fulfilment check, but the DB row + S3 object stay for the audit trail.
+ * Only ADMIN/STAFF can void. Re-uploading a corrected version via the
+ * normal upload flow bumps the version and leaves the voided row untouched.
+ */
+export async function voidDocument(input: VoidDocumentInput) {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = VoidDocumentSchema.parse(input);
+
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(documentInstances)
+      .where(eq(documentInstances.id, parsed.documentInstanceId))
+      .limit(1);
+    if (!before) throw new BusinessRuleError('NOT_FOUND', 'Document not found');
+    if (before.voidedAt) {
+      throw new BusinessRuleError('ALREADY_VOIDED', 'Document is already voided');
+    }
+
+    const [after] = await tx
+      .update(documentInstances)
+      .set({
+        voidedAt: new Date(),
+        voidedByUserId: session.user.id,
+        voidReason: parsed.reason,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(documentInstances.id, parsed.documentInstanceId))
+      .returning();
+    if (!after) throw new Error('void returned no row');
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'document_instance',
+      entityId: after.id,
+      action: 'VOIDED',
+      before: { voidedAt: null },
+      after: { voidedAt: after.voidedAt },
+      context: {
+        reason: parsed.reason,
+        originalFilename: after.originalFilename,
+      },
+    });
+
+    return after;
+  });
 }

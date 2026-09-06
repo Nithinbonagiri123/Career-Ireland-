@@ -60,6 +60,18 @@ export const DetachRequisitionQualificationSchema = z.object({
   qualificationId: z.string().uuid(),
 });
 
+// ─── Archive ──────────────────────────────────────────────────────────────────
+
+export const ArchiveRequisitionSchema = z.object({
+  requisitionId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
+export const UnarchiveRequisitionSchema = z.object({
+  requisitionId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
 export type UpsertRequisitionInput = z.infer<typeof UpsertRequisitionSchema>;
 export type UpdateStatusInput = z.infer<typeof UpdateStatusSchema>;
 export type AttachRequisitionSkillInput = z.infer<typeof AttachRequisitionSkillSchema>;
@@ -70,3 +82,5 @@ export type AttachRequisitionQualificationInput = z.infer<
 export type DetachRequisitionQualificationInput = z.infer<
   typeof DetachRequisitionQualificationSchema
 >;
+export type ArchiveRequisitionInput = z.infer<typeof ArchiveRequisitionSchema>;
+export type UnarchiveRequisitionInput = z.infer<typeof UnarchiveRequisitionSchema>;

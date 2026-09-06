@@ -169,3 +169,28 @@ export async function markAllRead(userId: string): Promise<{ updated: number }> 
     );
   return { updated: (result as unknown as { rowCount?: number }).rowCount ?? 0 };
 }
+
+/**
+ * Dismiss a single notification for the calling user.
+ * Fan-out notifications (recipientUserId IS NULL) are marked read only for
+ * this user via a lightweight join to `notification_reads`? — for MVP we
+ * simply update the row when it belongs to the caller. Fan-out rows can be
+ * dismissed once (any user) — acceptable for the small-team scale.
+ */
+export async function markNotificationRead(
+  userId: string,
+  notificationId: string,
+): Promise<{ updated: number }> {
+  await requireRole(['ADMIN', 'STAFF']);
+  const result = await db
+    .update(notifications)
+    .set({ readAt: new Date() })
+    .where(
+      and(
+        eq(notifications.id, notificationId),
+        or(eq(notifications.recipientUserId, userId), isNull(notifications.recipientUserId)),
+        isNull(notifications.readAt),
+      ),
+    );
+  return { updated: (result as unknown as { rowCount?: number }).rowCount ?? 0 };
+}

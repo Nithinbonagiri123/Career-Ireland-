@@ -8,6 +8,7 @@ import type {
   RegisterUploadInput,
   ReviewDocumentInput,
   UpsertRequirementRuleInput,
+  VoidDocumentInput,
 } from './schemas';
 import {
   addPersonSpecificRequirement,
@@ -17,6 +18,7 @@ import {
   registerUpload,
   reviewDocument,
   upsertRequirementRule,
+  voidDocument,
 } from './service';
 
 export async function registerUploadAction(input: RegisterUploadInput) {
@@ -67,4 +69,15 @@ export async function addPersonSpecificRequirementAction(input: AddRequirementFo
 /** Fetch a person's documents filtered by document-type code — used by the CV picker. */
 export async function listPersonDocumentsByTypeCodeAction(personId: string, typeCode: string) {
   return toActionResult(() => fetchPersonDocumentsByTypeCode(personId, typeCode));
+}
+
+export async function voidDocumentAction(input: VoidDocumentInput) {
+  const r = await toActionResult(() => voidDocument(input));
+  if (r.ok) {
+    revalidatePath('/documents');
+    // Fan-out revalidation isn't cheap but there are many places docs surface.
+    revalidatePath('/candidates');
+    revalidatePath('/portal/candidate/documents');
+  }
+  return r;
 }

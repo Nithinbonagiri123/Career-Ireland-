@@ -43,6 +43,8 @@ export const communicationLogs = pgTable(
     serviceEngagementId: uuid('service_engagement_id').references(() => serviceEngagements.id),
     immigrationCaseId: uuid('immigration_case_id').references(() => immigrationCases.id),
     followUpRequired: boolean('follow_up_required').notNull().default(false),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    archivedByUserId: uuid('archived_by_user_id').references(() => users.id),
     createdAt,
     updatedAt,
   },
@@ -80,6 +82,8 @@ export const tasks = pgTable(
     jobRequisitionId: uuid('job_requisition_id').references(() => jobRequisitions.id),
     serviceEngagementId: uuid('service_engagement_id').references(() => serviceEngagements.id),
     immigrationCaseId: uuid('immigration_case_id').references(() => immigrationCases.id),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    archivedByUserId: uuid('archived_by_user_id').references(() => users.id),
     createdAt,
     updatedAt,
   },
@@ -93,15 +97,23 @@ export const tasks = pgTable(
     // every task-parent entity. Two concurrent triggers on the same parent can
     // no longer both insert the same (parent, title) with an active status.
     // Repro: scripts/repro-task-generator-race.ts (immigration case).
+    // Extended to also exclude archived tasks — once a duplicate task is
+    // archived, staff can re-create the same title without collision.
     uniqueIndex('tasks_immigration_case_title_active_uidx')
       .on(t.immigrationCaseId, t.title)
-      .where(sql`${t.immigrationCaseId} IS NOT NULL AND ${t.status} IN ('OPEN', 'IN_PROGRESS')`),
+      .where(
+        sql`${t.immigrationCaseId} IS NOT NULL AND ${t.status} IN ('OPEN', 'IN_PROGRESS') AND ${t.archivedAt} IS NULL`,
+      ),
     uniqueIndex('tasks_requisition_title_active_uidx')
       .on(t.jobRequisitionId, t.title)
-      .where(sql`${t.jobRequisitionId} IS NOT NULL AND ${t.status} IN ('OPEN', 'IN_PROGRESS')`),
+      .where(
+        sql`${t.jobRequisitionId} IS NOT NULL AND ${t.status} IN ('OPEN', 'IN_PROGRESS') AND ${t.archivedAt} IS NULL`,
+      ),
     uniqueIndex('tasks_engagement_title_active_uidx')
       .on(t.serviceEngagementId, t.title)
-      .where(sql`${t.serviceEngagementId} IS NOT NULL AND ${t.status} IN ('OPEN', 'IN_PROGRESS')`),
+      .where(
+        sql`${t.serviceEngagementId} IS NOT NULL AND ${t.status} IN ('OPEN', 'IN_PROGRESS') AND ${t.archivedAt} IS NULL`,
+      ),
   ],
 );
 

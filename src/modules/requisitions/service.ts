@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -16,6 +16,8 @@ import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { type AssignmentScope, assignmentCondition } from '@/lib/scope';
 import { assertTransition, REQUISITION_TRANSITIONS } from '@/lib/state-machine';
 import {
+  type ArchiveRequisitionInput,
+  ArchiveRequisitionSchema,
   type AttachRequisitionQualificationInput,
   AttachRequisitionQualificationSchema,
   type AttachRequisitionSkillInput,
@@ -24,6 +26,8 @@ import {
   DetachRequisitionQualificationSchema,
   type DetachRequisitionSkillInput,
   DetachRequisitionSkillSchema,
+  type UnarchiveRequisitionInput,
+  UnarchiveRequisitionSchema,
   type UpdateStatusInput,
   UpdateStatusSchema,
   type UpsertRequisitionInput,
@@ -46,7 +50,7 @@ export async function fetchRequisitionsForEmployer(
     .select({ requisition: jobRequisitions, employerName: employers.legalName })
     .from(jobRequisitions)
     .innerJoin(employers, eq(employers.id, jobRequisitions.employerId))
-    .where(eq(jobRequisitions.employerId, employerId))
+    .where(and(eq(jobRequisitions.employerId, employerId), isNull(jobRequisitions.archivedAt)))
     .orderBy(desc(jobRequisitions.createdAt));
   return rows.map((r) => ({ ...r.requisition, employerName: r.employerName }));
 }
@@ -56,6 +60,11 @@ export async function fetchRequisitions(scope?: AssignmentScope): Promise<Requis
   const scopeCond = scope
     ? assignmentCondition(scope, jobRequisitions.assignedUserId, session.user.id)
     : undefined;
+  // Archived requisitions are hidden from the standard list. A dedicated
+  // "Show archived" filter can be added later.
+  const whereCond = scopeCond
+    ? and(isNull(jobRequisitions.archivedAt), scopeCond)
+    : isNull(jobRequisitions.archivedAt);
   const rows = await db
     .select({
       requisition: jobRequisitions,
@@ -63,7 +72,7 @@ export async function fetchRequisitions(scope?: AssignmentScope): Promise<Requis
     })
     .from(jobRequisitions)
     .innerJoin(employers, eq(employers.id, jobRequisitions.employerId))
-    .where(scopeCond)
+    .where(whereCond)
     .orderBy(desc(jobRequisitions.createdAt));
   return rows.map((r) => ({ ...r.requisition, employerName: r.employerName }));
 }
@@ -346,5 +355,75 @@ export async function detachRequisitionQualification(
       action: 'QUALIFICATION_DETACHED',
       before: { qualificationId: parsed.qualificationId },
     });
+  });
+}
+
+// ─── Archive / unarchive ──────────────────────────────────────────────────────
+
+async function findRequisition(tx: Parameters<typeof recordAudit>[0], id: string) {
+  const [row] = await tx.select().from(jobRequisitions).where(eq(jobRequisitions.id, id)).limit(1);
+  return row ?? null;
+}
+
+/** Soft-archive a requisition. Hidden from lists, matching feeds, and dashboards. */
+export async function archiveRequisition(input: ArchiveRequisitionInput): Promise<JobRequisition> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = ArchiveRequisitionSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const before = await findRequisition(tx, parsed.requisitionId);
+    if (!before) throw new BusinessRuleError('REQUISITION_NOT_FOUND', 'Requisition not found');
+    if (before.archivedAt) {
+      throw new BusinessRuleError('ALREADY_ARCHIVED', 'Requisition is already archived');
+    }
+    const [after] = await tx
+      .update(jobRequisitions)
+      .set({
+        archivedAt: new Date(),
+        archivedByUserId: session.user.id,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(jobRequisitions.id, parsed.requisitionId))
+      .returning();
+    if (!after) throw new Error('archive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'job_requisition',
+      entityId: after.id,
+      action: 'ARCHIVED',
+      before: { archivedAt: null },
+      after: { archivedAt: after.archivedAt },
+      context: { reason: parsed.reason },
+    });
+    return after;
+  });
+}
+
+export async function unarchiveRequisition(
+  input: UnarchiveRequisitionInput,
+): Promise<JobRequisition> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = UnarchiveRequisitionSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const before = await findRequisition(tx, parsed.requisitionId);
+    if (!before) throw new BusinessRuleError('REQUISITION_NOT_FOUND', 'Requisition not found');
+    if (!before.archivedAt) {
+      throw new BusinessRuleError('NOT_ARCHIVED', 'Requisition is not archived');
+    }
+    const [after] = await tx
+      .update(jobRequisitions)
+      .set({ archivedAt: null, archivedByUserId: null, updatedAt: sql`NOW()` })
+      .where(eq(jobRequisitions.id, parsed.requisitionId))
+      .returning();
+    if (!after) throw new Error('unarchive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'job_requisition',
+      entityId: after.id,
+      action: 'UNARCHIVED',
+      before: { archivedAt: before.archivedAt },
+      after: { archivedAt: null },
+      context: { reason: parsed.reason },
+    });
+    return after;
   });
 }

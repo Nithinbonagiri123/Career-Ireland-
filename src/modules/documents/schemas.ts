@@ -49,6 +49,12 @@ export const MaterializeRequirementsSchema = z.object({
   personId: z.string().uuid(),
 });
 
+export const VoidDocumentSchema = z.object({
+  documentInstanceId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+export type VoidDocumentInput = z.infer<typeof VoidDocumentSchema>;
+
 export type PresignUploadInput = z.infer<typeof PresignUploadSchema>;
 export type RegisterUploadInput = z.infer<typeof RegisterUploadSchema>;
 export type ReviewDocumentInput = z.infer<typeof ReviewDocumentSchema>;

@@ -3,16 +3,20 @@
 import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
 import type {
+  ArchiveEngagementInput,
   CreateEngagementInput,
   RecordPaymentInput,
   RejectPaymentInput,
+  UnarchiveEngagementInput,
   UpdateEngagementStatusInput,
   VerifyPaymentInput,
 } from './schemas';
 import {
+  archiveEngagement,
   createEngagement,
   recordPayment,
   rejectPayment,
+  unarchiveEngagement,
   updateEngagementStatus,
   verifyPayment,
 } from './service';
@@ -44,6 +48,16 @@ export async function verifyPaymentAction(input: VerifyPaymentInput) {
 }
 export async function rejectPaymentAction(input: RejectPaymentInput) {
   const r = await toActionResult(() => rejectPayment(input));
+  if (r.ok) revalidate();
+  return r;
+}
+export async function archiveEngagementAction(input: ArchiveEngagementInput) {
+  const r = await toActionResult(() => archiveEngagement(input));
+  if (r.ok) revalidate();
+  return r;
+}
+export async function unarchiveEngagementAction(input: UnarchiveEngagementInput) {
+  const r = await toActionResult(() => unarchiveEngagement(input));
   if (r.ok) revalidate();
   return r;
 }

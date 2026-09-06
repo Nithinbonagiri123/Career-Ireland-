@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -14,8 +14,12 @@ import { persons } from '@/lib/db/schema/persons';
 import { jobRequisitions } from '@/lib/db/schema/recruitment';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import {
+  type ArchiveCampaignInput,
+  ArchiveCampaignSchema,
   type CreateProspectInput,
   CreateProspectSchema,
+  type UnarchiveCampaignInput,
+  UnarchiveCampaignSchema,
   type UpdateProspectStatusInput,
   UpdateProspectStatusSchema,
   type UpsertAdInput,
@@ -41,6 +45,7 @@ export async function fetchCampaigns(): Promise<CampaignListRow[]> {
     })
     .from(recruitmentCampaigns)
     .leftJoin(jobRequisitions, eq(jobRequisitions.id, recruitmentCampaigns.jobRequisitionId))
+    .where(isNull(recruitmentCampaigns.archivedAt))
     .orderBy(desc(recruitmentCampaigns.createdAt));
   return rows.map((r) => ({ ...r.c, requisitionTitle: r.title }));
 }
@@ -305,6 +310,79 @@ export async function updateProspectStatus(
       before: { status: before.status },
       after: { status: after.status },
       context: parsed.notes ? { note: parsed.notes } : undefined,
+    });
+    return after;
+  });
+}
+
+// ─── Archive / unarchive ──────────────────────────────────────────────────────
+
+async function findCampaign(tx: Parameters<typeof recordAudit>[0], id: string) {
+  const [row] = await tx
+    .select()
+    .from(recruitmentCampaigns)
+    .where(eq(recruitmentCampaigns.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function archiveCampaign(input: ArchiveCampaignInput): Promise<RecruitmentCampaign> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = ArchiveCampaignSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const before = await findCampaign(tx, parsed.campaignId);
+    if (!before) throw new BusinessRuleError('CAMPAIGN_NOT_FOUND', 'Campaign not found');
+    if (before.archivedAt) {
+      throw new BusinessRuleError('ALREADY_ARCHIVED', 'Campaign is already archived');
+    }
+    const [after] = await tx
+      .update(recruitmentCampaigns)
+      .set({
+        archivedAt: new Date(),
+        archivedByUserId: session.user.id,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(recruitmentCampaigns.id, parsed.campaignId))
+      .returning();
+    if (!after) throw new Error('archive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'recruitment_campaign',
+      entityId: after.id,
+      action: 'ARCHIVED',
+      before: { archivedAt: null },
+      after: { archivedAt: after.archivedAt },
+      context: { reason: parsed.reason },
+    });
+    return after;
+  });
+}
+
+export async function unarchiveCampaign(
+  input: UnarchiveCampaignInput,
+): Promise<RecruitmentCampaign> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = UnarchiveCampaignSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const before = await findCampaign(tx, parsed.campaignId);
+    if (!before) throw new BusinessRuleError('CAMPAIGN_NOT_FOUND', 'Campaign not found');
+    if (!before.archivedAt) {
+      throw new BusinessRuleError('NOT_ARCHIVED', 'Campaign is not archived');
+    }
+    const [after] = await tx
+      .update(recruitmentCampaigns)
+      .set({ archivedAt: null, archivedByUserId: null, updatedAt: sql`NOW()` })
+      .where(eq(recruitmentCampaigns.id, parsed.campaignId))
+      .returning();
+    if (!after) throw new Error('unarchive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'recruitment_campaign',
+      entityId: after.id,
+      action: 'UNARCHIVED',
+      before: { archivedAt: before.archivedAt },
+      after: { archivedAt: null },
+      context: { reason: parsed.reason },
     });
     return after;
   });

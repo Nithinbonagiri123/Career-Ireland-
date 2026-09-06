@@ -311,3 +311,41 @@ export async function dismissMatch(matchId: string) {
     return { ok: true };
   });
 }
+
+/**
+ * Remove a shortlist entry — reverse of shortlistMatch. Deletes the
+ * shortlistEntries row and flips the underlying match back to REVIEWED so
+ * staff can decide again (rather than reappearing as fresh SUGGESTED).
+ */
+export async function removeFromShortlist(shortlistEntryId: string, reason?: string) {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  return db.transaction(async (tx) => {
+    const [entry] = await tx
+      .select()
+      .from(shortlistEntries)
+      .where(eq(shortlistEntries.id, shortlistEntryId))
+      .limit(1);
+    if (!entry) throw new BusinessRuleError('SHORTLIST_NOT_FOUND', 'Shortlist entry not found');
+
+    await tx.delete(shortlistEntries).where(eq(shortlistEntries.id, shortlistEntryId));
+
+    // If a candidate_match still exists, flip it out of the SHORTLISTED state.
+    if (entry.candidateMatchId) {
+      await tx
+        .update(candidateMatches)
+        .set({ status: 'REVIEWED', updatedAt: sql`NOW()` })
+        .where(eq(candidateMatches.id, entry.candidateMatchId));
+    }
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'shortlist_entry',
+      entityId: entry.id,
+      action: 'DELETED',
+      before: { jobRequisitionId: entry.jobRequisitionId, personId: entry.personId },
+      context: reason ? { reason } : undefined,
+    });
+
+    return { ok: true };
+  });
+}

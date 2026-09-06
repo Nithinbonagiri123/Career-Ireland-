@@ -41,7 +41,19 @@ export const UpdateProspectStatusSchema = z.object({
   notes: z.string().max(500).optional().or(z.literal('')),
 });
 
+export const ArchiveCampaignSchema = z.object({
+  campaignId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
+export const UnarchiveCampaignSchema = z.object({
+  campaignId: z.string().uuid(),
+  reason: z.string().min(3).max(500),
+});
+
 export type UpsertCampaignInput = z.infer<typeof UpsertCampaignSchema>;
 export type UpsertAdInput = z.infer<typeof UpsertAdSchema>;
 export type CreateProspectInput = z.infer<typeof CreateProspectSchema>;
 export type UpdateProspectStatusInput = z.infer<typeof UpdateProspectStatusSchema>;
+export type ArchiveCampaignInput = z.infer<typeof ArchiveCampaignSchema>;
+export type UnarchiveCampaignInput = z.infer<typeof UnarchiveCampaignSchema>;

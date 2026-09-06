@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -12,10 +12,14 @@ import {
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { assertTransition, PLACEMENT_TRANSITIONS } from '@/lib/state-machine';
 import {
+  type ArchivePlacementInput,
+  ArchivePlacementSchema,
   type CreatePlacementInput,
   CreatePlacementSchema,
   type RestoreAvailabilityInput,
   RestoreAvailabilitySchema,
+  type UnarchivePlacementInput,
+  UnarchivePlacementSchema,
   type UpdatePlacementStatusInput,
   UpdatePlacementStatusSchema,
 } from './schemas';
@@ -44,6 +48,7 @@ export async function fetchPlacements(): Promise<PlacementListRow[]> {
     .innerJoin(persons, eq(persons.id, placements.personId))
     .innerJoin(employers, eq(employers.id, placements.employerId))
     .innerJoin(jobRequisitions, eq(jobRequisitions.id, placements.jobRequisitionId))
+    .where(isNull(placements.archivedAt))
     .orderBy(desc(placements.createdAt));
   return rows.map((r) => ({
     ...r.placement,
@@ -278,5 +283,73 @@ export async function restoreCandidateAvailability(input: RestoreAvailabilityInp
     });
 
     return { ...profile, availabilityStatus: 'AVAILABLE' as const };
+  });
+}
+
+// ─── Archive / unarchive ──────────────────────────────────────────────────────
+
+async function findPlacement(tx: Parameters<typeof recordAudit>[0], id: string) {
+  const [row] = await tx.select().from(placements).where(eq(placements.id, id)).limit(1);
+  return row ?? null;
+}
+
+/** Soft-archive a placement. Hidden from lists. Requisition fill counts are NOT recomputed on archive. */
+export async function archivePlacement(input: ArchivePlacementInput): Promise<Placement> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = ArchivePlacementSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const before = await findPlacement(tx, parsed.placementId);
+    if (!before) throw new BusinessRuleError('PLACEMENT_NOT_FOUND', 'Placement not found');
+    if (before.archivedAt) {
+      throw new BusinessRuleError('ALREADY_ARCHIVED', 'Placement is already archived');
+    }
+    const [after] = await tx
+      .update(placements)
+      .set({
+        archivedAt: new Date(),
+        archivedByUserId: session.user.id,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(placements.id, parsed.placementId))
+      .returning();
+    if (!after) throw new Error('archive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'placement',
+      entityId: after.id,
+      action: 'ARCHIVED',
+      before: { archivedAt: null },
+      after: { archivedAt: after.archivedAt },
+      context: { reason: parsed.reason },
+    });
+    return after;
+  });
+}
+
+export async function unarchivePlacement(input: UnarchivePlacementInput): Promise<Placement> {
+  const session = await requireRole(['ADMIN', 'STAFF']);
+  const parsed = UnarchivePlacementSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const before = await findPlacement(tx, parsed.placementId);
+    if (!before) throw new BusinessRuleError('PLACEMENT_NOT_FOUND', 'Placement not found');
+    if (!before.archivedAt) {
+      throw new BusinessRuleError('NOT_ARCHIVED', 'Placement is not archived');
+    }
+    const [after] = await tx
+      .update(placements)
+      .set({ archivedAt: null, archivedByUserId: null, updatedAt: sql`NOW()` })
+      .where(eq(placements.id, parsed.placementId))
+      .returning();
+    if (!after) throw new Error('unarchive returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'placement',
+      entityId: after.id,
+      action: 'UNARCHIVED',
+      before: { archivedAt: before.archivedAt },
+      after: { archivedAt: null },
+      context: { reason: parsed.reason },
+    });
+    return after;
   });
 }
