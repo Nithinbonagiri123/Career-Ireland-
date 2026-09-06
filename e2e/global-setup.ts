@@ -56,9 +56,26 @@ async function ensureAdminUser() {
   return created.id;
 }
 
+async function ensureBaselineCurrencies() {
+  const { db } = await import('../src/lib/db/client');
+  const { currencies } = await import('../src/lib/db/schema/currencies');
+  const rows = [
+    { code: 'EUR', name: 'Euro', symbol: '€' },
+    { code: 'USD', name: 'US Dollar', symbol: '$' },
+    { code: 'GBP', name: 'Pound Sterling', symbol: '£' },
+  ];
+  for (const c of rows) {
+    await db.insert(currencies).values(c).onConflictDoNothing({ target: currencies.code });
+  }
+}
+
 export default async function globalSetup(config: FullConfig) {
   const baseURL =
     config.projects[0]?.use.baseURL ?? process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
+
+  console.log('▸ Seeding baseline currencies…');
+  await ensureBaselineCurrencies();
+  console.log('  ✓ EUR / USD / GBP');
 
   console.log('▸ Seeding E2E admin user…');
   await ensureAdminUser();

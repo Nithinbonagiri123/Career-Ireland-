@@ -25,6 +25,7 @@ import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { candidateProfiles } from '@/lib/db/schema/persons';
 import { listApplicationsForPerson } from '@/modules/applications/service';
+import { fetchLatestBillingLinksForPerson } from '@/modules/billing/read';
 import {
   listCandidateQualifications,
   listCandidateSkills,
@@ -43,6 +44,7 @@ import {
 } from './candidate-details-panel';
 import { DocumentsSection } from './documents-section';
 import { EmailAccountPanel } from './email-account-panel';
+import { JustCreatedCard } from './just-created-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,11 +71,19 @@ const AVAILABILITY_DOT = {
   PLACED: 'bg-sky-500',
 } as const;
 
-export default async function CandidateDetail({ params }: { params: Promise<{ id: string }> }) {
+export default async function CandidateDetail({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ just_created?: string }>;
+}) {
   const session = await requireRole(['ADMIN', 'STAFF']);
   const { id } = await params;
+  const { just_created } = await searchParams;
   const detail = await fetchPersonDetail(id);
   if (!detail) notFound();
+  const billingLinks = just_created === '1' ? await fetchLatestBillingLinksForPerson(id) : null;
   const [assignedRow] = await db
     .select({ assignedUserId: candidateProfiles.assignedUserId })
     .from(candidateProfiles)
@@ -105,6 +115,15 @@ export default async function CandidateDetail({ params }: { params: Promise<{ id
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+      {billingLinks && (billingLinks.invoiceNumber || billingLinks.receiptNumber) && (
+        <FadeUp>
+          <JustCreatedCard
+            personId={id}
+            invoiceNumber={billingLinks.invoiceNumber}
+            receiptNumber={billingLinks.receiptNumber}
+          />
+        </FadeUp>
+      )}
       <FadeUp>
         <PageHeader
           icon={User}

@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { invoices, receipts } from '@/lib/db/schema/billing';
@@ -45,6 +45,36 @@ export type ReceiptPrintable = {
   payment: typeof payments.$inferSelect;
   invoice: typeof invoices.$inferSelect | null;
 };
+
+/**
+ * Latest invoice + receipt numbers for a candidate, used by the "just created"
+ * success card on the candidate detail page. Both are optional — a person may
+ * have no billing history at all, in which case the card is not rendered.
+ */
+export async function fetchLatestBillingLinksForPerson(personId: string): Promise<{
+  invoiceNumber: string | null;
+  receiptNumber: string | null;
+}> {
+  await requireRole(['ADMIN', 'STAFF']);
+  const [invoiceRow, receiptRow] = await Promise.all([
+    db
+      .select({ number: invoices.number })
+      .from(invoices)
+      .where(eq(invoices.payerPersonId, personId))
+      .orderBy(desc(invoices.issuedAt))
+      .limit(1),
+    db
+      .select({ number: receipts.number })
+      .from(receipts)
+      .where(eq(receipts.payerPersonId, personId))
+      .orderBy(desc(receipts.issuedAt))
+      .limit(1),
+  ]);
+  return {
+    invoiceNumber: invoiceRow[0]?.number ?? null,
+    receiptNumber: receiptRow[0]?.number ?? null,
+  };
+}
 
 export async function fetchReceiptForPrint(number: string): Promise<ReceiptPrintable | null> {
   await requireRole(['ADMIN', 'STAFF']);

@@ -1,14 +1,15 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Smoke coverage for the new candidate-onboarding workflow. Full happy-path
- * (fill form + create + view invoice + view receipt) will land as a
- * follow-up once we have deterministic seeded currencies and a payment
- * catalog item — for now we prove:
- *  - the "Add candidate" button is on the list page
- *  - clicking it lands on /candidates/new?draft=<id>
- *  - the form renders all six sections
- *  - the sticky Create button is disabled until required fields are filled
+ * Coverage for the candidate-onboarding workflow:
+ *   - entry surface (button + section rendering + disabled Create button)
+ *   - full happy path (fill form → Create → success card → invoice → receipt)
+ *
+ * The happy path depends on:
+ *   - baseline currencies (EUR seeded by e2e/global-setup.ts)
+ *   - the CANDIDATE_ONBOARDING catalog item, auto-bootstrapped by finaliseDraft
+ * so the spec is self-contained apart from the admin session cookie the
+ * global setup writes to playwright/.auth/admin.json.
  */
 
 test('add-candidate button is visible on /candidates', async ({ page }) => {
@@ -48,4 +49,64 @@ test('sticky Create button is disabled until required fields are filled', async 
   // receivedAt already prefilled with today; currency defaults to EUR.
 
   await expect(create).toBeEnabled();
+});
+
+test('full happy path: fill form → Create → open invoice and receipt', async ({ page }) => {
+  // Unique surname per run so the candidate is easy to identify in the DB if a
+  // failed test leaves rows behind. finaliseDraft is idempotent-safe: each
+  // Playwright run starts a fresh draft, so re-running the spec creates a new
+  // person + invoice rather than colliding on a unique key.
+  const suffix = Date.now().toString(36).slice(-6);
+  const firstName = 'Priya';
+  const lastName = `E2E-${suffix}`;
+
+  await page.goto('/candidates/new');
+  await page.waitForURL(/\/candidates\/new\?draft=[0-9a-f-]+/i);
+
+  await page.getByLabel(/first name/i).fill(firstName);
+  await page.getByLabel(/last name/i).fill(lastName);
+  await page.getByLabel(/^amount/i).fill('750.00');
+  // Currency + received-on come prefilled (EUR, today).
+
+  // handleCreate() flushes any in-flight debounced save before finalising, so
+  // there's no need to wait for the "Saved" indicator — Create is the sync
+  // boundary that guarantees the personal patch reaches the DB first.
+  await page.getByRole('button', { name: /create candidate/i }).click();
+
+  // Redirect to /candidates/<id>?just_created=1 on success. The detail page
+  // streams its content through Suspense (loading.tsx renders a skeleton),
+  // so we wait for the streaming to finish by looking for the newly created
+  // candidate's name in the H1 rather than for the Sonner toast, which
+  // appears earlier and would match /candidate created/i falsely.
+  await page.waitForURL(/\/candidates\/[0-9a-f-]+\?just_created=1/i, { timeout: 15_000 });
+  await expect(
+    page.getByRole('heading', { name: new RegExp(`${firstName} ${lastName}`, 'i') }),
+  ).toBeVisible({ timeout: 15_000 });
+
+  // Success card renders "View invoice" + "View receipt" links.
+  const viewInvoice = page.getByRole('link', { name: /view invoice/i });
+  const viewReceipt = page.getByRole('link', { name: /view receipt/i });
+  await expect(viewInvoice).toBeVisible();
+  await expect(viewReceipt).toBeVisible();
+
+  // Follow the invoice link — the print page shows the invoice number in
+  // its header, and the header itself reads "Invoice".
+  await viewInvoice.click();
+  await page.waitForURL(/\/candidates\/[0-9a-f-]+\/invoices\/INV-\d{4}-\d{6}/i);
+  await expect(page.getByText(/^invoice$/i).first()).toBeVisible();
+  await expect(page.getByText(/INV-\d{4}-\d{6}/)).toBeVisible();
+  // Bill-to line shows the candidate we just created. The exact name also
+  // appears embedded in the line-description ("Candidate Onboarding —
+  // <name>"), so use exact-match to pin to the Bill-to <div>.
+  await expect(page.getByText(`${firstName} ${lastName}`, { exact: true })).toBeVisible();
+
+  // History back returns us to /candidates/<id>?just_created=1 with the
+  // success card still mounted — the invoice page's "Back to candidate" link
+  // strips the query string, so goBack() is the reliable path.
+  await page.goBack();
+  await page.waitForURL(/\/candidates\/[0-9a-f-]+\?just_created=1/i);
+  await page.getByRole('link', { name: /view receipt/i }).click();
+  await page.waitForURL(/\/candidates\/[0-9a-f-]+\/receipts\/RCT-\d{4}-\d{6}/i);
+  await expect(page.getByText(/^receipt$/i).first()).toBeVisible();
+  await expect(page.getByText(/RCT-\d{4}-\d{6}/)).toBeVisible();
 });
