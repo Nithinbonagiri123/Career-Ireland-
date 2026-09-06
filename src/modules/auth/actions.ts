@@ -1,9 +1,11 @@
 'use server';
 
+import { headers } from 'next/headers';
 import { AuthError } from 'next-auth';
 import { signIn, signOut } from '@/lib/auth/config';
 import { requireSession } from '@/lib/auth/session';
 import { fail, ok, toActionResult } from '@/lib/result';
+import { isLoginBlocked } from './login-throttle';
 import {
   type ChangePasswordInput,
   ChangePasswordSchema,
@@ -12,6 +14,25 @@ import {
 } from './schemas';
 import { changeOwnPassword } from './service';
 
+/**
+ * The rate-limit check in `authorize` (src/lib/auth/config.ts) is our last-
+ * resort defence that fires regardless of who calls signIn. This action-level
+ * pre-check exists purely for UX: when the caller is over the budget we want
+ * to say so plainly instead of surfacing the same "Invalid email or password"
+ * that a genuine typo produces. Internal CRM, bounded user set — the
+ * enumeration signal is negligible.
+ */
+async function readClientIpFromHeaders(): Promise<string | null> {
+  try {
+    const h = await headers();
+    const xff = h.get('x-forwarded-for');
+    if (xff) return xff.split(',')[0]?.trim() ?? null;
+    return h.get('x-real-ip');
+  } catch {
+    return null;
+  }
+}
+
 export async function loginAction(input: LoginInput) {
   const parsed = LoginSchema.safeParse(input);
   if (!parsed.success) {
@@ -19,6 +40,15 @@ export async function loginAction(input: LoginInput) {
       email: parsed.error.flatten().fieldErrors.email?.[0] ?? '',
       password: parsed.error.flatten().fieldErrors.password?.[0] ?? '',
     });
+  }
+
+  const email = parsed.data.email.trim().toLowerCase();
+  const ip = await readClientIpFromHeaders();
+  if (await isLoginBlocked(email, ip)) {
+    return fail(
+      'RATE_LIMITED',
+      'Too many failed attempts. Wait ~15 minutes and try again, or reset your password.',
+    );
   }
 
   try {

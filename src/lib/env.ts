@@ -34,6 +34,15 @@ const EnvSchema = z.object({
   MAIL_FROM: z.string().optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  /**
+   * Sentry DSN. Optional — Sentry init is a no-op when unset, so dev/CI don't
+   * need a project. In production, leaving this empty just means errors won't
+   * be captured (they still log via pino); set it once the Sentry project
+   * exists.
+   */
+  SENTRY_DSN: z.string().url().optional(),
+  /** Public DSN exposed to the browser build. Usually the same value as SENTRY_DSN. */
+  NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
