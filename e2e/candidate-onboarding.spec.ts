@@ -59,6 +59,7 @@ test('full happy path: fill form → Create → open invoice and receipt', async
   const suffix = Date.now().toString(36).slice(-6);
   const firstName = 'Priya';
   const lastName = `E2E-${suffix}`;
+  const cvFilename = `cv-${suffix}.pdf`;
 
   await page.goto('/candidates/new');
   await page.waitForURL(/\/candidates\/new\?draft=[0-9a-f-]+/i);
@@ -67,6 +68,31 @@ test('full happy path: fill form → Create → open invoice and receipt', async
   await page.getByLabel(/last name/i).fill(lastName);
   await page.getByLabel(/^amount/i).fill('750.00');
   // Currency + received-on come prefilled (EUR, today).
+
+  // Upload a document straight from the form. The DocumentUploader hides the
+  // real <input type="file"> for styling — we drive it via setInputFiles to
+  // bypass the label click that would open a native chooser. The CV doc type
+  // is seeded by e2e/global-setup.ts and is the only PERSON-applicable one,
+  // so the default select value is already correct.
+  //
+  // The upload step is gated on E2E_SKIP_UPLOAD so it can be turned off on
+  // laptops without Docker/MinIO running. CI's e2e job (ci.yml) leaves the
+  // var unset, so the upload path IS covered on every PR.
+  if (!process.env.E2E_SKIP_UPLOAD) {
+    const fakePdf = Buffer.concat([
+      Buffer.from('%PDF-1.4\n', 'ascii'),
+      Buffer.alloc(64, 0),
+      Buffer.from('\n%%EOF\n', 'ascii'),
+    ]);
+    await page.locator('input[type="file"]').setInputFiles({
+      name: cvFilename,
+      mimeType: 'application/pdf',
+      buffer: fakePdf,
+    });
+    // Wait for the presign + S3 PUT + register roundtrip to finish. The row
+    // appears in the "Attached" list once the state flips to `ok`.
+    await expect(page.getByText(cvFilename)).toBeVisible({ timeout: 15_000 });
+  }
 
   // handleCreate() flushes any in-flight debounced save before finalising, so
   // there's no need to wait for the "Saved" indicator — Create is the sync

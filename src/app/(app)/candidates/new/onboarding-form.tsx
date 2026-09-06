@@ -1,10 +1,19 @@
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, ArrowRight, CheckCircle2, Loader2, Trash2, User } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+  FileText,
+  Loader2,
+  Trash2,
+  User,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { DocumentUploader } from '@/components/document-uploader';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,6 +47,9 @@ type Draft = {
 
 type Currency = { code: string; symbol: string };
 
+type DocType = { id: string; name: string; code: string };
+type UploadedDoc = { id: string; filename: string; documentTypeId: string };
+
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 /**
@@ -55,7 +67,17 @@ function useDebounced<T extends (...args: never[]) => void>(fn: T, ms: number): 
   );
 }
 
-export function OnboardingForm({ draft, currencies }: { draft: Draft; currencies: Currency[] }) {
+export function OnboardingForm({
+  draft,
+  currencies,
+  docTypes,
+  existingDocuments,
+}: {
+  draft: Draft;
+  currencies: Currency[];
+  docTypes: DocType[];
+  existingDocuments: UploadedDoc[];
+}) {
   const router = useRouter();
 
   // Personal / contact section state.
@@ -121,6 +143,14 @@ export function OnboardingForm({ draft, currencies }: { draft: Draft; currencies
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [discardOpen, setDiscardOpen] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+
+  // Documents attached to this draft — seeded from what's already on the
+  // person row (browser refresh survives them) and appended to on each
+  // successful upload. The rows exist in the DB before finalise; once
+  // finaliseDraft flips the person's is_draft flag they become visible on
+  // the candidate detail page's Documents section automatically.
+  const [uploads, setUploads] = useState<UploadedDoc[]>(existingDocuments);
+  const [selectedDocTypeId, setSelectedDocTypeId] = useState<string>(docTypes[0]?.id ?? '');
 
   const canFinalise =
     personal.firstName.trim().length > 0 &&
@@ -273,11 +303,76 @@ export function OnboardingForm({ draft, currencies }: { draft: Draft; currencies
               Uploads attach to the draft candidate and stay with it after Create.
             </p>
           </CardHeader>
-          <CardContent>
-            <p className="rounded-md border border-dashed bg-muted/40 p-3 text-xs text-muted-foreground">
-              Document upload is wired to MinIO / S3 and works from the candidate detail page after
-              Create. For MVP, you can upload documents there.
-            </p>
+          <CardContent className="space-y-4">
+            {docTypes.length === 0 ? (
+              <p className="rounded-md border border-dashed bg-muted/40 p-3 text-xs text-muted-foreground">
+                No person-applicable document types are configured. Add some under Admin → Document
+                types and come back.
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="min-w-52 flex-1 space-y-1.5">
+                  <Label htmlFor="docType">Document type</Label>
+                  <select
+                    id="docType"
+                    className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                    value={selectedDocTypeId}
+                    onChange={(e) => setSelectedDocTypeId(e.currentTarget.value)}
+                  >
+                    {docTypes.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {/* `key` forces a fresh uploader after every successful upload
+                    so the button label resets from "Uploaded" back to "Upload
+                    file" and staff can add another doc without an extra click. */}
+                <DocumentUploader
+                  key={`${selectedDocTypeId}:${uploads.length}`}
+                  ownerType="PERSON"
+                  ownerId={draft.personId}
+                  documentTypeId={selectedDocTypeId}
+                  onUploaded={(doc) =>
+                    setUploads((prev) => [
+                      ...prev,
+                      {
+                        id: doc.id,
+                        filename: doc.originalFilename,
+                        documentTypeId: doc.documentTypeId,
+                      },
+                    ])
+                  }
+                />
+              </div>
+            )}
+
+            {uploads.length > 0 && (
+              <ul className="divide-y rounded-md border">
+                {uploads.map((u) => {
+                  const typeName =
+                    docTypes.find((t) => t.id === u.documentTypeId)?.name ?? 'Document';
+                  return (
+                    <li
+                      key={u.id}
+                      className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <FileText className="size-4 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{u.filename}</p>
+                          <p className="text-[11px] text-muted-foreground">{typeName}</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] uppercase tracking-wider text-emerald-600">
+                        Attached
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </CardContent>
         </Card>
       </FadeUp>

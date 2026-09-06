@@ -69,6 +69,24 @@ async function ensureBaselineCurrencies() {
   }
 }
 
+async function ensureBaselineDocumentTypes() {
+  const { db } = await import('../src/lib/db/client');
+  const { documentTypes } = await import('../src/lib/db/schema/reference');
+  // The onboarding-form doc uploader needs at least one active PERSON-scoped
+  // type so the select renders with a real option. CV is the least surprising
+  // default for a candidate-intake spec.
+  await db
+    .insert(documentTypes)
+    .values({
+      code: 'CV',
+      name: 'CV / Résumé',
+      appliesTo: 'PERSON',
+      hasExpiry: false,
+      isActive: true,
+    })
+    .onConflictDoNothing({ target: documentTypes.code });
+}
+
 export default async function globalSetup(config: FullConfig) {
   const baseURL =
     config.projects[0]?.use.baseURL ?? process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
@@ -76,6 +94,10 @@ export default async function globalSetup(config: FullConfig) {
   console.log('▸ Seeding baseline currencies…');
   await ensureBaselineCurrencies();
   console.log('  ✓ EUR / USD / GBP');
+
+  console.log('▸ Seeding baseline document types…');
+  await ensureBaselineDocumentTypes();
+  console.log('  ✓ CV / Résumé');
 
   console.log('▸ Seeding E2E admin user…');
   await ensureAdminUser();

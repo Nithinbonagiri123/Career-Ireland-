@@ -7,6 +7,8 @@ import { buttonVariants } from '@/components/ui/button';
 import { requireRole } from '@/lib/auth/session';
 import { createDraft, getDraft } from '@/modules/candidates/onboarding-service';
 import { fetchCurrencies } from '@/modules/currencies/service';
+import { fetchDocumentTypes } from '@/modules/document-types/service';
+import { fetchPersonDocuments } from '@/modules/documents/service';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Add candidate · Career Ireland' };
@@ -38,7 +40,15 @@ export default async function NewCandidatePage({
     redirect('/candidates/new');
   }
 
-  const currencies = await fetchCurrencies();
+  const [currencies, allDocTypes, existingDocuments] = await Promise.all([
+    fetchCurrencies(),
+    fetchDocumentTypes(),
+    fetchPersonDocuments(draft.id),
+  ]);
+  // Only person-applicable types are meaningful during candidate intake.
+  const personDocTypes = allDocTypes.filter(
+    (t) => t.isActive && (t.appliesTo === 'PERSON' || t.appliesTo === 'BOTH'),
+  );
 
   // Lazy import so the route stays a Server Component and Playwright can
   // navigate to it without a client bundle round-trip.
@@ -76,6 +86,12 @@ export default async function NewCandidatePage({
           notes: draft.notes ?? '',
         }}
         currencies={currencies.map((c) => ({ code: c.code, symbol: c.symbol }))}
+        docTypes={personDocTypes.map((t) => ({ id: t.id, name: t.name, code: t.code }))}
+        existingDocuments={existingDocuments.map((d) => ({
+          id: d.id,
+          filename: d.originalFilename,
+          documentTypeId: d.documentTypeId,
+        }))}
       />
     </div>
   );
