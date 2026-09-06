@@ -2,7 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
-import { ArrowRight, MoreHorizontal, Trophy } from 'lucide-react';
+import { Archive, ArrowRight, MoreHorizontal, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  archivePlacementAction,
   restoreCandidateAvailabilityAction,
   updatePlacementStatusAction,
 } from '@/modules/placements/actions';
@@ -35,6 +36,7 @@ const STATUS_VARIANT: Record<PlacementListRow['status'], 'default' | 'secondary'
 export function PlacementsTable({ placements }: { placements: PlacementListRow[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<PlacementListRow | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<PlacementListRow | null>(null);
   const [, startTransition] = useTransition();
 
   const setStatus = (p: PlacementListRow, next: PlacementListRow['status']) => {
@@ -60,6 +62,22 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
       if (r.ok) {
         toast.success(`${target.personName} is now available again`);
         setRestoreTarget(null);
+      } else {
+        toast.error(r.error.message);
+      }
+    });
+  };
+
+  const confirmArchive = (reason: string) => {
+    if (!archiveTarget) return;
+    const target = archiveTarget;
+    setBusy(target.id);
+    startTransition(async () => {
+      const r = await archivePlacementAction({ placementId: target.id, reason });
+      setBusy(null);
+      if (r.ok) {
+        toast.success(`Placement archived`);
+        setArchiveTarget(null);
       } else {
         toast.error(r.error.message);
       }
@@ -164,6 +182,10 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
               <DropdownMenuItem disabled={!isTerminal} onClick={() => setRestoreTarget(p)}>
                 Restore candidate to AVAILABLE…
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={() => setArchiveTarget(p)}>
+                <Archive className="mr-2 size-4" /> Archive placement…
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         );
@@ -195,6 +217,18 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
         placeholder="e.g. Placement fell through — candidate available again"
         confirmLabel="Restore"
         pending={busy === restoreTarget?.id}
+      />
+      <PromptDialog
+        open={archiveTarget !== null}
+        onCancel={() => setArchiveTarget(null)}
+        onConfirm={confirmArchive}
+        title={`Archive placement for ${archiveTarget?.personName ?? ''}?`}
+        description="Archived placements are hidden from lists. This does NOT change the candidate's availability — restore that separately if needed."
+        label="Reason (audited)"
+        placeholder="e.g. Duplicate entry, keying error"
+        confirmLabel="Archive"
+        confirmVariant="destructive"
+        pending={busy === archiveTarget?.id}
       />
     </>
   );

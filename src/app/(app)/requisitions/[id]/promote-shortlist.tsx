@@ -1,10 +1,11 @@
 'use client';
 
-import { ArrowRight, Users } from 'lucide-react';
+import { ArrowRight, UserMinus, Users } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { CvPicker } from '@/components/cv-picker';
 import { EmptyState } from '@/components/empty-state';
+import { PromptDialog } from '@/components/prompt-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,6 +18,7 @@ import {
 import type { DocumentInstance } from '@/lib/db/schema/documents';
 import { createApplicationAction } from '@/modules/applications/actions';
 import type { ShortlistPromotionCandidate } from '@/modules/applications/service';
+import { removeFromShortlistAction } from '@/modules/matching/actions';
 
 export function PromoteShortlistSection({
   requisitionId,
@@ -27,9 +29,26 @@ export function PromoteShortlistSection({
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [target, setTarget] = useState<ShortlistPromotionCandidate | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<ShortlistPromotionCandidate | null>(null);
   const [cv, setCv] = useState<DocumentInstance | null>(null);
   const [notes, setNotes] = useState('');
   const [, startTransition] = useTransition();
+
+  const confirmRemove = (reason: string) => {
+    if (!removeTarget) return;
+    const t = removeTarget;
+    setBusyId(t.shortlistEntryId);
+    startTransition(async () => {
+      const r = await removeFromShortlistAction(t.shortlistEntryId, requisitionId, reason);
+      setBusyId(null);
+      if (r.ok) {
+        toast.success(`${t.personName} removed from shortlist`);
+        setRemoveTarget(null);
+      } else {
+        toast.error(r.error.message);
+      }
+    });
+  };
 
   if (candidates.length === 0) {
     return (
@@ -83,20 +102,31 @@ export function PromoteShortlistSection({
               <p className="text-sm font-medium">{c.personName}</p>
               <p className="text-xs text-muted-foreground">{c.personEmail ?? '—'}</p>
             </div>
-            {c.alreadyApplied ? (
-              <Badge variant="outline" className="rounded-full text-[10px]">
-                Application exists
-              </Badge>
-            ) : (
+            <div className="flex items-center gap-2">
+              {c.alreadyApplied ? (
+                <Badge variant="outline" className="rounded-full text-[10px]">
+                  Application exists
+                </Badge>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busyId === c.shortlistEntryId}
+                  onClick={() => openPromote(c)}
+                >
+                  Promote to application <ArrowRight className="ml-1.5 size-3.5" />
+                </Button>
+              )}
               <Button
                 size="sm"
-                variant="outline"
+                variant="ghost"
                 disabled={busyId === c.shortlistEntryId}
-                onClick={() => openPromote(c)}
+                onClick={() => setRemoveTarget(c)}
+                title="Remove from shortlist"
               >
-                Promote to application <ArrowRight className="ml-1.5 size-3.5" />
+                <UserMinus className="size-3.5" />
               </Button>
-            )}
+            </div>
           </li>
         ))}
       </ul>
@@ -151,6 +181,18 @@ export function PromoteShortlistSection({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PromptDialog
+        open={removeTarget !== null}
+        onCancel={() => setRemoveTarget(null)}
+        onConfirm={confirmRemove}
+        title={`Remove ${removeTarget?.personName ?? ''} from shortlist?`}
+        description="The shortlist entry is deleted. The underlying match flips back to REVIEWED so you can re-shortlist or dismiss it. Auditable."
+        label="Reason (audited)"
+        placeholder="e.g. Wrong fit on second look, candidate withdrew"
+        confirmLabel="Remove"
+        confirmVariant="destructive"
+        pending={busyId === removeTarget?.shortlistEntryId}
+      />
     </>
   );
 }

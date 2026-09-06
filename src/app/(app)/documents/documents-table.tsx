@@ -2,7 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
-import { Check, Download, MoreHorizontal, X } from 'lucide-react';
+import { Ban, Check, Download, MoreHorizontal, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -18,7 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { reviewDocumentAction } from '@/modules/documents/actions';
+import { reviewDocumentAction, voidDocumentAction } from '@/modules/documents/actions';
 import type { StaffDocumentRow } from '@/modules/documents/service';
 
 const STATUS_VARIANT: Record<StaffDocumentRow['status'], 'default' | 'secondary' | 'outline'> = {
@@ -35,7 +35,24 @@ export function DocumentsTable({ documents }: { documents: StaffDocumentRow[] })
     docId: string;
     decision: 'ACCEPTED' | 'REJECTED';
   } | null>(null);
+  const [voidTarget, setVoidTarget] = useState<StaffDocumentRow | null>(null);
   const [, startTransition] = useTransition();
+
+  const confirmVoid = (reason: string) => {
+    if (!voidTarget) return;
+    const target = voidTarget;
+    setBusy(target.id);
+    startTransition(async () => {
+      const r = await voidDocumentAction({ documentInstanceId: target.id, reason });
+      setBusy(null);
+      if (r.ok) {
+        toast.success('Document voided');
+        setVoidTarget(null);
+      } else {
+        toast.error(r.error.message);
+      }
+    });
+  };
 
   const accept = (docId: string) => {
     // Accept doesn't require a reason. Fire directly.
@@ -155,34 +172,39 @@ export function DocumentsTable({ documents }: { documents: StaffDocumentRow[] })
             >
               <Download className="size-3.5" />
             </Link>
-            {canReview && (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Review"
-                      disabled={busy === doc.id}
-                    />
-                  }
-                >
-                  <MoreHorizontal className="size-4" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Review decision</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => accept(doc.id)}>
-                    <Check className="mr-2 size-4" /> Accept
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => setDecideTarget({ docId: doc.id, decision: 'REJECTED' })}
-                  >
-                    <X className="mr-2 size-4" /> Reject…
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Actions"
+                    disabled={busy === doc.id}
+                  />
+                }
+              >
+                <MoreHorizontal className="size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {canReview && (
+                  <>
+                    <DropdownMenuLabel>Review decision</DropdownMenuLabel>
+                    <DropdownMenuItem onClick={() => accept(doc.id)}>
+                      <Check className="mr-2 size-4" /> Accept
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setDecideTarget({ docId: doc.id, decision: 'REJECTED' })}
+                    >
+                      <X className="mr-2 size-4" /> Reject…
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem variant="destructive" onSelect={() => setVoidTarget(doc)}>
+                  <Ban className="mr-2 size-4" /> Void document…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         );
       },
@@ -208,6 +230,18 @@ export function DocumentsTable({ documents }: { documents: StaffDocumentRow[] })
         confirmLabel="Reject"
         confirmVariant="destructive"
         pending={decideTarget ? busy === decideTarget.docId : false}
+      />
+      <PromptDialog
+        open={voidTarget !== null}
+        onCancel={() => setVoidTarget(null)}
+        onConfirm={confirmVoid}
+        title={`Void "${voidTarget?.originalFilename ?? ''}"?`}
+        description="Voided documents disappear from lists, exports, and requirement fulfilment. The DB row + S3 object stay for audit."
+        label="Reason (audited)"
+        placeholder="e.g. Uploaded to wrong candidate / superseded by newer version"
+        confirmLabel="Void"
+        confirmVariant="destructive"
+        pending={busy === voidTarget?.id}
       />
     </>
   );

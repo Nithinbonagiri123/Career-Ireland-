@@ -31,7 +31,7 @@ export default async function TasksPage() {
         />
       </FadeUp>
       <FadeUp delay={0.05}>
-        <TasksTable tasks={tasks} />
+        <TasksTable tasks={tasks} staffUsers={users} />
       </FadeUp>
     </div>
   );
