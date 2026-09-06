@@ -214,8 +214,8 @@ export function CreateLeadDialog() {
           </div>
 
           {matches && matches.length > 0 && (
-            <div className="space-y-2 rounded-md border border-amber-300/60 bg-amber-50/50 dark:bg-amber-950/20 p-3">
-              <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
+            <div className="space-y-2 rounded-md border border-status-warning/40 bg-status-warning-soft  p-3">
+              <p className="text-xs font-medium text-status-warning ">
                 {matches.length} possible match{matches.length > 1 ? 'es' : ''} found. Reuse an
                 existing person instead of creating a duplicate?
               </p>

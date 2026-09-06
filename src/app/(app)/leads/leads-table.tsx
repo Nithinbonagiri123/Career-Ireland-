@@ -303,8 +303,8 @@ export function LeadsTable({ leads, currentUserId }: Props) {
               <div className="space-y-1">
                 <Label>Payment proof (optional)</Label>
                 {proofDocId ? (
-                  <div className="flex items-center gap-2 rounded-md border bg-emerald-500/5 px-3 py-2 text-xs">
-                    <CheckCircle2 className="size-3.5 text-emerald-600" />
+                  <div className="flex items-center gap-2 rounded-md border bg-status-success-soft px-3 py-2 text-xs">
+                    <CheckCircle2 className="size-3.5 text-status-success" />
                     <span className="truncate font-medium">{proofFilename ?? 'Uploaded'}</span>
                     <Button
                       type="button"

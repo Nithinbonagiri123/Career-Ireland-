@@ -95,7 +95,7 @@ export function CvPicker({
                     v{doc.version} · {formatDistanceToNow(doc.createdAt, { addSuffix: true })}
                   </span>
                 </span>
-                {value?.id === doc.id && <CheckCircle2 className="size-3.5 text-emerald-600" />}
+                {value?.id === doc.id && <CheckCircle2 className="size-3.5 text-status-success" />}
               </label>
             </li>
           ))}

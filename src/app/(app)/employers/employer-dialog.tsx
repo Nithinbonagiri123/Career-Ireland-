@@ -191,11 +191,11 @@ export function EmployerDialog({ trigger, initial }: Props) {
                 transition={{ duration: 0.18 }}
                 className="overflow-hidden"
               >
-                <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs">
+                <div className="rounded-md border border-status-warning/40 bg-status-warning-soft p-3 text-xs">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-status-warning" />
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium text-amber-800 dark:text-amber-300">
+                      <p className="font-medium text-status-warning ">
                         {similar.length} similar employer{similar.length === 1 ? '' : 's'} found —
                         is this a duplicate?
                       </p>

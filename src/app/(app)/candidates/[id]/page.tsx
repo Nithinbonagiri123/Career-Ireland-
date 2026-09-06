@@ -21,9 +21,11 @@ import { InvitePortalDialog } from '@/components/portal/invite-portal-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { StatusDot } from '@/components/ui/status-dot';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { candidateProfiles } from '@/lib/db/schema/persons';
+import { statusTone } from '@/lib/ui/status-tone';
 import { listApplicationsForPerson } from '@/modules/applications/service';
 import { fetchLatestBillingLinksForPerson } from '@/modules/billing/read';
 import {
@@ -63,12 +65,6 @@ const AVAILABILITY_LABEL = {
   AVAILABLE: 'Available',
   TEMPORARILY_UNAVAILABLE: 'Unavailable',
   PLACED: 'Placed',
-} as const;
-
-const AVAILABILITY_DOT = {
-  AVAILABLE: 'bg-emerald-500',
-  TEMPORARILY_UNAVAILABLE: 'bg-amber-500',
-  PLACED: 'bg-sky-500',
 } as const;
 
 export default async function CandidateDetail({
@@ -175,15 +171,16 @@ export default async function CandidateDetail({
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Availability</span>
                     <span className="inline-flex items-center gap-1.5 text-xs">
-                      <span
-                        className={`size-1.5 rounded-full ${AVAILABILITY_DOT[candidateProfile.availabilityStatus]}`}
-                      />
+                      <StatusDot tone={statusTone(candidateProfile.availabilityStatus)} />
                       {AVAILABILITY_LABEL[candidateProfile.availabilityStatus]}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Lifecycle</span>
-                    <Badge variant="secondary" className="rounded-full text-[10px]">
+                    <Badge
+                      variant={statusTone(candidateProfile.lifecycleStatus)}
+                      className="rounded-full text-[10px]"
+                    >
                       {candidateProfile.lifecycleStatus}
                     </Badge>
                   </div>

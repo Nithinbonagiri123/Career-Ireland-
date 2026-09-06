@@ -100,7 +100,7 @@ export function DocumentUploader({
         {state === 'uploading' ? (
           <Loader2 className="size-3.5 animate-spin" />
         ) : state === 'ok' ? (
-          <CheckCircle2 className="size-3.5 text-emerald-600" />
+          <CheckCircle2 className="size-3.5 text-status-success" />
         ) : state === 'error' ? (
           <XCircle className="size-3.5 text-destructive" />
         ) : (

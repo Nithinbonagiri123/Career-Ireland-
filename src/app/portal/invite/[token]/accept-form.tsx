@@ -66,7 +66,7 @@ export function AcceptInviteForm({ token, email }: { token: string; email: strin
   if (state === 'accepted') {
     return (
       <div className="space-y-4 text-center">
-        <div className="mx-auto flex size-10 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+        <div className="mx-auto flex size-10 items-center justify-center rounded-lg bg-status-success-soft text-status-success">
           <CheckCircle2 className="size-5" />
         </div>
         <div>
@@ -115,7 +115,7 @@ export function AcceptInviteForm({ token, email }: { token: string; email: strin
                   key={rule}
                   className={cn(
                     'flex items-center gap-1.5',
-                    ok ? 'text-emerald-600' : 'text-muted-foreground',
+                    ok ? 'text-status-success' : 'text-muted-foreground',
                   )}
                 >
                   {ok ? <Check className="size-3" /> : <X className="size-3" />}

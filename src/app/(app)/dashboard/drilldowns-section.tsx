@@ -198,9 +198,9 @@ export function DashboardDrilldownsSection({ data }: { data: DashboardDrilldowns
               <span
                 className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] ${
                   c.daysUntilExpiry <= 14
-                    ? 'bg-destructive/10 text-destructive'
+                    ? 'bg-status-danger-soft text-status-danger'
                     : c.daysUntilExpiry <= 30
-                      ? 'bg-amber-500/10 text-amber-700'
+                      ? 'bg-status-warning-soft text-status-warning'
                       : 'bg-muted text-muted-foreground'
                 }`}
               >

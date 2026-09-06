@@ -16,6 +16,21 @@ const badgeVariants = cva(
         outline: 'border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground',
         ghost: 'hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50',
         link: 'text-primary underline-offset-4 hover:underline',
+        /* Semantic status variants. Match the enum-to-status map:
+           success: DONE, PAID, ACCEPTED, ACTIVE, AVAILABLE
+           info:    IN_PROGRESS, PLACED, ISSUED, SHORTLISTED, PROVIDED
+           warning: TEMPORARILY_UNAVAILABLE, PARTIALLY_FILLED, DRAFT, PENDING
+           danger:  REJECTED, CANCELLED, VOIDED, FAILED
+           neutral: ARCHIVED, CLOSED, MERGED, unknown */
+        success:
+          'bg-status-success-soft text-status-success ring-1 ring-inset ring-status-success/20',
+        info: 'bg-status-info-soft text-status-info ring-1 ring-inset ring-status-info/20',
+        warning:
+          'bg-status-warning-soft text-status-warning ring-1 ring-inset ring-status-warning/20',
+        danger:
+          'bg-status-danger-soft text-status-danger ring-1 ring-inset ring-status-danger/20',
+        neutral:
+          'bg-status-neutral-soft text-status-neutral ring-1 ring-inset ring-status-neutral/20',
       },
     },
     defaultVariants: {

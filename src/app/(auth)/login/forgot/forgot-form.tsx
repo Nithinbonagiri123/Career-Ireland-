@@ -52,7 +52,7 @@ export function ForgotForm() {
   if (status === 'submitted') {
     return (
       <div className="space-y-4">
-        <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-3 text-xs text-emerald-800 dark:text-emerald-300">
+        <div className="flex items-start gap-2 rounded-md border border-status-success/30 bg-status-success-soft px-3 py-3 text-xs text-status-success ">
           <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
           <div className="space-y-1">
             <p className="font-medium">Check your inbox</p>

@@ -23,6 +23,27 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  /*
+   * Semantic status palette. Use these instead of raw Tailwind colors
+   * (bg-emerald-500, bg-amber-500, …) so dark mode + palette drift stays
+   * coherent. Each token has a solid base and a soft (subtle bg) variant.
+   *
+   *   success — positive terminal state (AVAILABLE, DONE, PAID, ACCEPTED)
+   *   info    — in-progress / neutral positive (IN_PROGRESS, PLACED, ISSUED, SHORTLISTED)
+   *   warning — needs attention, non-blocking (TEMPORARILY_UNAVAILABLE, PROVIDED, PARTIALLY_FILLED)
+   *   danger  — negative terminal / error (REJECTED, CANCELLED, VOIDED)
+   *   neutral — archived / draft / closed / merged
+   */
+  --color-status-success: var(--status-success);
+  --color-status-success-soft: var(--status-success-soft);
+  --color-status-info: var(--status-info);
+  --color-status-info-soft: var(--status-info-soft);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-soft: var(--status-warning-soft);
+  --color-status-danger: var(--status-danger);
+  --color-status-danger-soft: var(--status-danger-soft);
+  --color-status-neutral: var(--status-neutral);
+  --color-status-neutral-soft: var(--status-neutral-soft);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -77,6 +98,18 @@
   --chart-3: oklch(0.55 0.14 145);
   --chart-4: oklch(0.65 0.16 25);
   --chart-5: oklch(0.5 0.15 300);
+  /* Status palette — light mode. `_soft` variants are tinted backgrounds
+     designed to sit behind the solid base color (e.g. text or dot). */
+  --status-success: oklch(0.58 0.14 145);
+  --status-success-soft: oklch(0.93 0.05 145);
+  --status-info: oklch(0.55 0.13 240);
+  --status-info-soft: oklch(0.94 0.04 240);
+  --status-warning: oklch(0.66 0.15 70);
+  --status-warning-soft: oklch(0.95 0.05 70);
+  --status-danger: oklch(0.577 0.245 27.325);
+  --status-danger-soft: oklch(0.95 0.04 27);
+  --status-neutral: oklch(0.5 0.008 60);
+  --status-neutral-soft: oklch(0.94 0.006 60);
   --radius: 0.625rem;
   --sidebar: oklch(0.97 0.006 60);
   --sidebar-foreground: oklch(0.245 0.02 60);
@@ -112,6 +145,19 @@
   --chart-3: oklch(0.55 0.14 145);
   --chart-4: oklch(0.65 0.16 25);
   --chart-5: oklch(0.5 0.15 300);
+  /* Status palette — dark mode. Base values are brighter so they remain
+     legible on the dark canvas; `_soft` bg values use low chroma + low
+     lightness so the pill fill doesn't punch out on the surface. */
+  --status-success: oklch(0.75 0.16 145);
+  --status-success-soft: oklch(0.28 0.05 145);
+  --status-info: oklch(0.7 0.13 240);
+  --status-info-soft: oklch(0.28 0.04 240);
+  --status-warning: oklch(0.78 0.14 70);
+  --status-warning-soft: oklch(0.3 0.05 70);
+  --status-danger: oklch(0.704 0.191 22.216);
+  --status-danger-soft: oklch(0.3 0.05 22);
+  --status-neutral: oklch(0.7 0.014 60);
+  --status-neutral-soft: oklch(0.28 0.008 60);
   --sidebar: oklch(0.185 0.012 60);
   --sidebar-foreground: oklch(0.96 0.008 60);
   --sidebar-primary: oklch(0.72 0.14 55);

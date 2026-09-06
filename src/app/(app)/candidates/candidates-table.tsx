@@ -9,6 +9,8 @@ import { useCallback, useState } from 'react';
 import { DataTable } from '@/components/data-table/data-table';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
+import { StatusDot } from '@/components/ui/status-dot';
+import { statusTone } from '@/lib/ui/status-tone';
 import type { CandidateListRow } from '@/modules/candidates/repository';
 import { CandidatesBulkActionBar } from './bulk-action-bar';
 
@@ -18,12 +20,6 @@ const AVAILABILITY_LABEL: Record<CandidateListRow['availabilityStatus'], string>
   AVAILABLE: 'Available',
   TEMPORARILY_UNAVAILABLE: 'Unavailable',
   PLACED: 'Placed',
-};
-
-const AVAILABILITY_DOT: Record<CandidateListRow['availabilityStatus'], string> = {
-  AVAILABLE: 'bg-emerald-500',
-  TEMPORARILY_UNAVAILABLE: 'bg-amber-500',
-  PLACED: 'bg-sky-500',
 };
 
 const columns: ColumnDef<CandidateListRow>[] = [
@@ -53,9 +49,7 @@ const columns: ColumnDef<CandidateListRow>[] = [
     size: 130,
     cell: ({ row }) => (
       <span className="inline-flex items-center gap-1.5 text-xs">
-        <span
-          className={`size-1.5 rounded-full ${AVAILABILITY_DOT[row.original.availabilityStatus]}`}
-        />
+        <StatusDot tone={statusTone(row.original.availabilityStatus)} />
         {AVAILABILITY_LABEL[row.original.availabilityStatus]}
       </span>
     ),
@@ -65,10 +59,7 @@ const columns: ColumnDef<CandidateListRow>[] = [
     accessorKey: 'lifecycleStatus',
     size: 110,
     cell: ({ row }) => (
-      <Badge
-        variant={row.original.lifecycleStatus === 'ACTIVE' ? 'default' : 'outline'}
-        className="rounded-full"
-      >
+      <Badge variant={statusTone(row.original.lifecycleStatus)} className="rounded-full">
         {row.original.lifecycleStatus}
       </Badge>
     ),

@@ -79,7 +79,7 @@ export function OccupationsView({ categories, occupations }: Props) {
       cell: ({ row }) =>
         row.original.isActive ? (
           <span className="inline-flex items-center gap-1.5 text-xs">
-            <span className="size-1.5 rounded-full bg-emerald-500" /> Active
+            <span className="size-1.5 rounded-full bg-status-success" /> Active
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -137,7 +137,7 @@ export function OccupationsView({ categories, occupations }: Props) {
       cell: ({ row }) =>
         row.original.isActive ? (
           <span className="inline-flex items-center gap-1.5 text-xs">
-            <span className="size-1.5 rounded-full bg-emerald-500" /> Active
+            <span className="size-1.5 rounded-full bg-status-success" /> Active
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">

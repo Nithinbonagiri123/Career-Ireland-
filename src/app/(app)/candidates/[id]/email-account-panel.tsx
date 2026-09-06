@@ -228,7 +228,7 @@ function RevealButton({ personId }: { personId: string }) {
         </DialogHeader>
         {revealed ? (
           <div className="space-y-3">
-            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-xs">
+            <div className="rounded-md border border-status-warning/50 bg-status-warning-soft p-3 text-xs text-status-warning">
               This password will disappear when you close this dialog. This reveal is audited.
             </div>
             <div className="font-mono select-all break-all rounded-md border bg-muted px-3 py-2 text-sm">

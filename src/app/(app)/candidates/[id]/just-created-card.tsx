@@ -20,10 +20,10 @@ export function JustCreatedCard({
   receiptNumber: string | null;
 }) {
   return (
-    <Card className="mb-6 border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-500/5">
+    <Card className="mb-6 border-status-success/40 bg-status-success-soft">
       <CardContent className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-start gap-3">
-          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" />
+          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-status-success" />
           <div>
             <p className="text-sm font-semibold">Candidate created</p>
             <p className="text-xs text-muted-foreground">

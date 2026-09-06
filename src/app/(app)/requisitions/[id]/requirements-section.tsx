@@ -195,7 +195,7 @@ export function RequisitionSkillsSection({
                 className="inline-flex items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-xs"
               >
                 {r.isRequired ? (
-                  <Star className="size-3 text-amber-500" />
+                  <Star className="size-3 text-status-warning" />
                 ) : (
                   <StarOff className="size-3 text-muted-foreground" />
                 )}
@@ -366,7 +366,7 @@ export function RequisitionQualificationsSection({
                 className="inline-flex items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-xs"
               >
                 {r.isRequired ? (
-                  <Star className="size-3 text-amber-500" />
+                  <Star className="size-3 text-status-warning" />
                 ) : (
                   <StarOff className="size-3 text-muted-foreground" />
                 )}

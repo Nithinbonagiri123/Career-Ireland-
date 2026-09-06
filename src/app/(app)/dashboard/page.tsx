@@ -38,7 +38,7 @@ function TileCard({ tile }: { tile: Tile }) {
       <Card
         className={cn(
           'transition-all hover:shadow-md hover:-translate-y-px',
-          tile.emphasis === 'warn' && Number(tile.value) > 0 && 'border-amber-400/60',
+          tile.emphasis === 'warn' && Number(tile.value) > 0 && 'border-status-warning/60',
         )}
       >
         <CardHeader className="pb-2">
@@ -48,7 +48,7 @@ function TileCard({ tile }: { tile: Tile }) {
               className={cn(
                 'size-4',
                 tile.emphasis === 'warn' && Number(tile.value) > 0
-                  ? 'text-amber-500'
+                  ? 'text-status-warning'
                   : 'text-muted-foreground',
               )}
             />

@@ -35,7 +35,7 @@ function ReasonBreakdown({ reasons, total }: { reasons: MatchReasonSnapshot[]; t
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 {r.matched ? (
-                  <Check className="size-3.5 text-emerald-600" />
+                  <Check className="size-3.5 text-status-success" />
                 ) : (
                   <MinusCircle className="size-3.5 text-muted-foreground" />
                 )}
@@ -49,7 +49,7 @@ function ReasonBreakdown({ reasons, total }: { reasons: MatchReasonSnapshot[]; t
             </div>
             <span
               className={`shrink-0 font-mono text-xs ${
-                r.points > 0 ? 'text-emerald-600' : 'text-muted-foreground'
+                r.points > 0 ? 'text-status-success' : 'text-muted-foreground'
               }`}
             >
               {r.points > 0 ? `+${r.points}` : '·'}

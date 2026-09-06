@@ -365,7 +365,7 @@ export function OnboardingForm({
                           <p className="text-[11px] text-muted-foreground">{typeName}</p>
                         </div>
                       </div>
-                      <span className="text-[10px] uppercase tracking-wider text-emerald-600">
+                      <span className="text-[10px] uppercase tracking-wider text-status-success">
                         Attached
                       </span>
                     </li>
