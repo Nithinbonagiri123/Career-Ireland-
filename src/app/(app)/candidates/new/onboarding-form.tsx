@@ -1,15 +1,24 @@
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, ArrowRight, CheckCircle2, Loader2, User } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle2, Loader2, Trash2, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { FadeUp } from '@/components/motion/motion-primitives';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+  discardDraftAction,
   finaliseDraftAction,
   updateDraftPersonAction,
 } from '@/modules/candidates/onboarding-actions';
@@ -110,6 +119,8 @@ export function OnboardingForm({ draft, currencies }: { draft: Draft; currencies
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
 
   const canFinalise =
     personal.firstName.trim().length > 0 &&
@@ -138,6 +149,19 @@ export function OnboardingForm({ draft, currencies }: { draft: Draft; currencies
     }
     toast.success(`Candidate created — ${result.data.invoiceNumber}`);
     router.replace(`/candidates/${result.data.personId}?just_created=1`);
+    router.refresh();
+  }
+
+  async function handleDiscard() {
+    setDiscarding(true);
+    const result = await discardDraftAction(draft.personId);
+    setDiscarding(false);
+    if (!result.ok) {
+      toast.error(result.error.message);
+      return;
+    }
+    toast.success('Draft discarded');
+    router.replace('/candidates');
     router.refresh();
   }
 
@@ -360,12 +384,21 @@ export function OnboardingForm({ draft, currencies }: { draft: Draft; currencies
         )}
       </AnimatePresence>
 
-      {/* Sticky bottom-right Create button. */}
-      <div className="pointer-events-none fixed bottom-6 right-6 z-40">
+      {/* Sticky bottom action bar — Discard on the left, Create on the right. */}
+      <div className="pointer-events-none fixed bottom-6 right-6 z-40 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setDiscardOpen(true)}
+          disabled={submitting || discarding}
+          className="pointer-events-auto inline-flex h-11 items-center justify-center rounded-lg border border-input bg-background/95 px-4 text-sm font-medium text-muted-foreground shadow-lg shadow-foreground/5 backdrop-blur transition-all hover:text-destructive hover:border-destructive/40 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Trash2 className="mr-1.5 size-4" />
+          Discard draft
+        </button>
         <button
           type="button"
           onClick={handleCreate}
-          disabled={!canFinalise || submitting}
+          disabled={!canFinalise || submitting || discarding}
           className="pointer-events-auto inline-flex h-11 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-accent-foreground shadow-lg shadow-foreground/10 transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting ? (
@@ -381,6 +414,33 @@ export function OnboardingForm({ draft, currencies }: { draft: Draft; currencies
           )}
         </button>
       </div>
+
+      <Dialog
+        open={discardOpen}
+        onOpenChange={(next) => {
+          if (!discarding) setDiscardOpen(next);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Discard this draft?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            The draft candidate row is deleted — nothing is saved. The invoice and receipt have not
+            been generated yet, so this leaves no financial trail. Cancel if you'd rather leave the
+            draft in place and come back to it later.
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDiscardOpen(false)} disabled={discarding}>
+              Keep draft
+            </Button>
+            <Button variant="destructive" onClick={handleDiscard} disabled={discarding}>
+              {discarding && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Discard
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

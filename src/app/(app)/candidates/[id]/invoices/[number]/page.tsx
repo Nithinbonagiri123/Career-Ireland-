@@ -6,6 +6,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { requireRole } from '@/lib/auth/session';
 import { COMPANY_INFO } from '@/modules/billing/company-info';
 import { fetchInvoiceForPrint } from '@/modules/billing/read';
+import { VoidInvoiceControls } from './void-invoice-controls';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Invoice · Career Ireland' };
@@ -20,12 +21,14 @@ export default async function InvoicePrintPage({
 }: {
   params: Promise<{ id: string; number: string }>;
 }) {
-  await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireRole(['ADMIN', 'STAFF']);
   const { id, number } = await params;
   const data = await fetchInvoiceForPrint(number);
   if (!data || data.payer.id !== id) notFound();
 
   const { invoice, payer, catalogItem } = data;
+  const canVoid = session.user.role === 'ADMIN' && invoice.status === 'ISSUED';
+  const isVoided = invoice.status === 'VOIDED';
 
   return (
     <div className="min-h-screen bg-muted/40 print:bg-white">
@@ -36,10 +39,29 @@ export default async function InvoicePrintPage({
         >
           <ArrowLeft className="mr-1.5 size-4" /> Back to candidate
         </Link>
-        <PrintButton />
+        <div className="flex items-center gap-2">
+          {canVoid && (
+            <VoidInvoiceControls
+              invoiceId={invoice.id}
+              invoiceNumber={invoice.number}
+              personId={id}
+            />
+          )}
+          <PrintButton />
+        </div>
       </div>
 
-      <main className="mx-auto my-6 max-w-3xl bg-white p-10 shadow-sm print:my-0 print:max-w-none print:shadow-none">
+      <main className="relative mx-auto my-6 max-w-3xl bg-white p-10 shadow-sm print:my-0 print:max-w-none print:shadow-none">
+        {isVoided && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 flex items-center justify-center"
+          >
+            <span className="rotate-[-18deg] rounded-md border-8 border-destructive/50 px-8 py-3 text-6xl font-black uppercase tracking-widest text-destructive/50">
+              Voided
+            </span>
+          </div>
+        )}
         <header className="flex items-start justify-between border-b pb-6">
           <div>
             <div className="flex items-center gap-2">
@@ -70,7 +92,15 @@ export default async function InvoicePrintPage({
             <div className="mt-2 text-xs text-muted-foreground">
               Issued {format(invoice.issuedAt, 'dd MMM yyyy')}
             </div>
-            <div className="text-xs text-muted-foreground">Status: {invoice.status}</div>
+            <div
+              className={
+                isVoided
+                  ? 'mt-1 text-xs font-semibold uppercase tracking-widest text-destructive'
+                  : 'text-xs text-muted-foreground'
+              }
+            >
+              Status: {invoice.status}
+            </div>
           </div>
         </header>
 
@@ -132,8 +162,19 @@ export default async function InvoicePrintPage({
         </table>
 
         <footer className="mt-12 border-t pt-6 text-xs text-muted-foreground">
-          Thank you for choosing Career Ireland.
-          {COMPANY_INFO.contactEmail && ` Questions? Email ${COMPANY_INFO.contactEmail}.`}
+          {isVoided ? (
+            <>
+              <div className="font-semibold text-destructive">
+                Voided on {invoice.voidedAt ? format(invoice.voidedAt, 'dd MMM yyyy, HH:mm') : '—'}
+              </div>
+              {invoice.voidReason && <div className="mt-1">Reason: {invoice.voidReason}</div>}
+            </>
+          ) : (
+            <>
+              Thank you for choosing Career Ireland.
+              {COMPANY_INFO.contactEmail && ` Questions? Email ${COMPANY_INFO.contactEmail}.`}
+            </>
+          )}
         </footer>
       </main>
     </div>

@@ -55,12 +55,17 @@ Browser uploads use presigned URLs, which need CORS.
 
 - Click your bucket name → **Permissions** tab.
 - Scroll down to **Cross-origin resource sharing (CORS)** → click **Edit**.
-- Paste this exactly:
+- Paste this exactly — replace both origins with your actual Vercel URLs.
+  Both the production alias AND the `*.vercel.app` preview pattern are
+  needed so preview deployments can upload during PR review.
 
   ```json
   [
     {
-      "AllowedOrigins": ["*"],
+      "AllowedOrigins": [
+        "https://careerireland.ie",
+        "https://career-ireland.vercel.app"
+      ],
       "AllowedMethods": ["GET", "PUT", "POST", "HEAD"],
       "AllowedHeaders": ["*"],
       "ExposeHeaders": ["ETag"],
@@ -70,10 +75,16 @@ Browser uploads use presigned URLs, which need CORS.
   ```
 
 - Click **Save changes**.
-- Once you have your Vercel prod URL (e.g. `https://career-ireland.vercel.app`),
-  come back and replace `"*"` in `AllowedOrigins` with just that URL.
 
-> 🟢 **Verify:** the CORS section now shows the JSON you pasted.
+> ⚠️ **Do NOT use `"AllowedOrigins": ["*"]` in production.** A wildcard lets
+> any website in the world hit your presigned PUT URLs from the browser.
+> The URLs are still short-lived (5 min) and scoped to a specific object
+> key, but a wildcard removes the browser as a defence layer. Only widen
+> back to `"*"` temporarily if you're debugging a specific CORS issue and
+> narrow it again the moment you're done.
+
+> 🟢 **Verify:** the CORS section now shows the JSON you pasted, and the
+> allowed origins list contains ONLY your real domains (no `"*"`).
 
 ---
 

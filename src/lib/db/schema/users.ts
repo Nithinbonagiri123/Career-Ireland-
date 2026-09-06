@@ -118,6 +118,27 @@ export const passwordResetTokens = pgTable(
   ],
 );
 
+/**
+ * Rate-limiting ledger for the login endpoint. Every credential submission
+ * (successful or not) writes one row; the throttle checks failures per email
+ * and per IP inside a sliding window. Kept append-only for audit; a nightly
+ * cron can prune old rows outside the window if the table grows.
+ */
+export const loginAttempts = pgTable(
+  'login_attempts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: citext('email').notNull(),
+    ip: varchar('ip', { length: 64 }),
+    outcome: text('outcome', { enum: ['SUCCESS', 'FAILURE'] }).notNull(),
+    attemptedAt: timestamp('attempted_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('login_attempts_email_idx').on(t.email, t.attemptedAt),
+    index('login_attempts_ip_idx').on(t.ip, t.attemptedAt),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type UserRole = User['role'];
@@ -125,3 +146,5 @@ export type PortalInvitation = typeof portalInvitations.$inferSelect;
 export type NewPortalInvitation = typeof portalInvitations.$inferInsert;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+export type LoginAttempt = typeof loginAttempts.$inferSelect;
+export type NewLoginAttempt = typeof loginAttempts.$inferInsert;

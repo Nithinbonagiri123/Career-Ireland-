@@ -43,7 +43,14 @@ export async function listMatches(requisitionId: string): Promise<MatchListRow[]
     .from(candidateMatches)
     .innerJoin(persons, eq(persons.id, candidateMatches.personId))
     .leftJoin(candidateProfiles, eq(candidateProfiles.personId, candidateMatches.personId))
-    .where(eq(candidateMatches.jobRequisitionId, requisitionId))
+    .where(
+      and(
+        eq(candidateMatches.jobRequisitionId, requisitionId),
+        isNull(persons.archivedAt),
+        isNull(persons.mergedIntoPersonId),
+        eq(persons.isDraft, false),
+      ),
+    )
     .orderBy(desc(candidateMatches.score));
   return rows.map((r) => ({
     ...r.match,

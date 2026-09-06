@@ -99,3 +99,102 @@ jobs:
             git status --porcelain src/lib/db/migrations
             exit 1
           fi
+
+  # End-to-end tests run in a parallel job so a `verify` failure fails the PR
+  # fast without waiting for playwright. The e2e stack needs both Postgres
+  # (same as verify) and a MinIO S3-compatible endpoint so the upload flow can
+  # be exercised without real AWS credentials.
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+        # `mc ready` isn't installed in the minio image directly — probe the
+        # HTTP endpoint instead. `curl` is preinstalled in the runner image.
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # Point uploads at the MinIO service (path-style is required for MinIO).
+      S3_ENDPOINT: http://localhost:9000
+      S3_FORCE_PATH_STYLE: 'true'
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      # Playwright needs the app URL exposed to the browser context.
+      PLAYWRIGHT_BASE_URL: http://localhost:3000
+      CRON_SECRET: ci-placeholder-cron-secret
+      EMAIL_CRED_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Approve required build scripts
+        run: pnpm rebuild argon2
+
+      - name: Install Playwright browsers (chromium only)
+        # `--with-deps` pulls the shared libs Chromium needs on ubuntu runners.
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Apply migrations to CI Postgres
+        run: pnpm db:migrate
+
+      - name: Seed E2E admin user
+        run: pnpm db:seed:e2e-admin
+
+      - name: Create MinIO bucket for uploads
+        # AWS CLI is preinstalled on ubuntu runners. `mb` is idempotent for our
+        # purposes — a second run returns an error we swallow.
+        run: |
+          aws --endpoint-url http://localhost:9000 s3 mb s3://ci-e2e-documents || true
+          aws --endpoint-url http://localhost:9000 s3api put-bucket-cors \
+            --bucket ci-e2e-documents \
+            --cors-configuration '{"CORSRules":[{"AllowedOrigins":["*"],"AllowedMethods":["GET","PUT","POST","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"]}]}'
+
+      - name: Run Playwright
+        env:
+          S3_BUCKET_DOCUMENTS: ci-e2e-documents
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

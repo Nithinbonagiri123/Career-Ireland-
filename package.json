@@ -18,7 +18,8 @@
     "db:reset:password": "tsx scripts/reset-admin-password.ts",
     "db:seed:currencies": "tsx scripts/seed-currencies.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",

@@ -2,10 +2,18 @@ import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import type { UserRole } from '@/lib/db/schema/users';
 import { logger } from '@/lib/logger';
+import { isLoginBlocked, recordLoginAttempt } from '@/modules/auth/login-throttle';
 import { findUserById } from '@/modules/auth/repository';
 import { LoginSchema } from '@/modules/auth/schemas';
 import { verifyCredentials } from '@/modules/auth/service';
 import { authEdgeConfig } from './edge-config';
+
+function readClientIp(req: Request | undefined): string | null {
+  if (!req) return null;
+  const xff = req.headers.get('x-forwarded-for');
+  if (xff) return xff.split(',')[0]?.trim() ?? null;
+  return req.headers.get('x-real-ip');
+}
 
 /**
  * Full auth config (Node runtime). Reuses the edge-safe callbacks and adds:
@@ -26,15 +34,26 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         const parsed = LoginSchema.safeParse(credentials);
         if (!parsed.success) return null;
+        const email = parsed.data.email.trim().toLowerCase();
+        const ip = readClientIp(req as Request | undefined);
+
+        // Refuse further attempts once the sliding-window failure budget is
+        // exhausted for this email or this IP — before we spend argon2 CPU.
+        if (await isLoginBlocked(email, ip)) {
+          logger.warn({ email, ip }, 'login refused: rate-limited');
+          return null;
+        }
+
         try {
-          const user = await verifyCredentials(parsed.data.email, parsed.data.password);
-          if (!user) return null;
-          return user;
+          const user = await verifyCredentials(email, parsed.data.password);
+          void recordLoginAttempt(email, ip, user ? 'SUCCESS' : 'FAILURE');
+          return user ?? null;
         } catch (e) {
           logger.error({ err: e }, 'authorize threw');
+          void recordLoginAttempt(email, ip, 'FAILURE');
           return null;
         }
       },

@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -126,7 +126,14 @@ export async function listShortlistPromotionCandidates(
     })
     .from(shortlistEntries)
     .innerJoin(persons, eq(persons.id, shortlistEntries.personId))
-    .where(eq(shortlistEntries.jobRequisitionId, requisitionId));
+    .where(
+      and(
+        eq(shortlistEntries.jobRequisitionId, requisitionId),
+        isNull(persons.archivedAt),
+        isNull(persons.mergedIntoPersonId),
+        eq(persons.isDraft, false),
+      ),
+    );
 
   if (rows.length === 0) return [];
 

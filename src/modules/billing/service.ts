@@ -1,5 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
-import type { DbExecutor } from '@/lib/audit/withAudit';
+import { type DbExecutor, recordAudit } from '@/lib/audit/withAudit';
+import { requireRole } from '@/lib/auth/session';
+import { db } from '@/lib/db/client';
 import {
   documentSequences,
   type Invoice,
@@ -7,6 +9,7 @@ import {
   type Receipt,
   receipts,
 } from '@/lib/db/schema/billing';
+import { BusinessRuleError, ValidationError } from '@/lib/errors';
 
 /**
  * Allocate the next number for a (prefix, year) pair. Runs inside a caller-
@@ -120,6 +123,66 @@ export async function markInvoicePaid(tx: DbExecutor, invoiceId: string): Promis
     .update(invoices)
     .set({ status: 'PAID', updatedAt: sql`NOW()` })
     .where(and(eq(invoices.id, invoiceId), eq(invoices.status, 'ISSUED')));
+}
+
+/**
+ * Void an invoice. Restricted to ADMIN because voiding is destructive to the
+ * financial trail — staff who made a mistake must escalate. The invoice row
+ * is preserved (audit + accounting) but its status flips to VOIDED with a
+ * required reason. Voiding an already-VOIDED or PAID invoice throws — a paid
+ * invoice must be refunded (issue a credit note + reverse payment) rather
+ * than voided.
+ */
+export async function voidInvoice(invoiceId: string, reason: string): Promise<Invoice> {
+  const session = await requireRole(['ADMIN']);
+  const trimmed = reason.trim();
+  if (trimmed.length < 3) {
+    throw new ValidationError('A void reason of at least 3 characters is required.', {
+      reason: 'Provide a reason so the audit trail explains the void.',
+    });
+  }
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(invoices)
+      .where(eq(invoices.id, invoiceId))
+      .for('update')
+      .limit(1);
+    if (!before) throw new BusinessRuleError('INVOICE_NOT_FOUND', 'Invoice not found');
+    if (before.status === 'VOIDED') {
+      throw new BusinessRuleError('INVOICE_ALREADY_VOIDED', 'This invoice is already voided.');
+    }
+    if (before.status === 'PAID') {
+      throw new BusinessRuleError(
+        'INVOICE_ALREADY_PAID',
+        'A paid invoice cannot be voided. Refund the payment and issue a credit note instead.',
+      );
+    }
+
+    const [after] = await tx
+      .update(invoices)
+      .set({
+        status: 'VOIDED',
+        voidedAt: sql`NOW()`,
+        voidedByUserId: session.user.id,
+        voidReason: trimmed,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(invoices.id, invoiceId))
+      .returning();
+    if (!after) throw new Error('invoice update returned no row');
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'invoice',
+      entityId: after.id,
+      action: 'VOIDED',
+      before: { status: before.status },
+      after: { status: after.status, voidReason: after.voidReason },
+    });
+
+    return after;
+  });
 }
 
 /**
