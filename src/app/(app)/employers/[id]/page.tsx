@@ -1,5 +1,15 @@
 import { asc } from 'drizzle-orm';
-import { ArrowRight, Briefcase, Building2, Pencil, Plus, Send, User } from 'lucide-react';
+import {
+  ArrowRight,
+  Briefcase,
+  Building2,
+  Globe,
+  MapPin,
+  Pencil,
+  Plus,
+  Send,
+  User,
+} from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
@@ -13,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { occupations } from '@/lib/db/schema/occupations';
+import { statusTone } from '@/lib/ui/status-tone';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchEmployer, fetchEmployerContacts, fetchEmployers } from '@/modules/employers/service';
 import { fetchRequisitionsForEmployer } from '@/modules/requisitions/service';
@@ -21,16 +32,6 @@ import { EmployerDialog } from '../employer-dialog';
 import { ContactDialog } from './contact-dialog';
 
 export const dynamic = 'force-dynamic';
-
-const REQ_STATUS_VARIANT = {
-  DRAFT: 'outline',
-  OPEN: 'default',
-  IN_PROGRESS: 'default',
-  PARTIALLY_FILLED: 'secondary',
-  FILLED: 'outline',
-  CLOSED: 'outline',
-  CANCELLED: 'outline',
-} as const;
 
 export default async function EmployerDetail({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireRole(['ADMIN', 'STAFF']);
@@ -46,19 +47,50 @@ export default async function EmployerDetail({ params }: { params: Promise<{ id:
     db.select().from(occupations).orderBy(asc(occupations.name)),
   ]);
 
+  const location = [employer.city, employer.country].filter(Boolean).join(', ');
+
+  const metaStrip = (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+      <Badge variant={statusTone(employer.relationshipStatus)} className="rounded-full">
+        {employer.relationshipStatus.replace(/_/g, ' ')}
+      </Badge>
+      {employer.industry && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground">
+          <Briefcase className="size-3" aria-hidden />
+          {employer.industry}
+        </span>
+      )}
+      {location && (
+        <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <MapPin className="size-3" aria-hidden />
+          {location}
+        </span>
+      )}
+      {employer.website && (
+        <a
+          href={employer.website}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        >
+          <Globe className="size-3" aria-hidden />
+          {employer.website.replace(/^https?:\/\//, '')}
+        </a>
+      )}
+    </div>
+  );
+
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={Building2}
           title={employer.legalName}
-          description={
-            [employer.industry, employer.city, employer.country].filter(Boolean).join(' · ') ||
-            'Employer profile'
-          }
-          badge={employer.relationshipStatus.replace(/_/g, ' ')}
+          description={employer.tradingName ? `Trading as ${employer.tradingName}` : undefined}
+          breadcrumbs={[{ label: 'Employers', href: '/employers' }, { label: employer.legalName }]}
+          meta={metaStrip}
           action={
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               <AssignToMeButton
                 entity="employer"
                 id={employer.id}
@@ -180,7 +212,7 @@ export default async function EmployerDetail({ params }: { params: Promise<{ id:
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={REQ_STATUS_VARIANT[r.status]} className="rounded-full">
+                      <Badge variant={statusTone(r.status)} className="rounded-full">
                         {r.status.replace(/_/g, ' ')}
                       </Badge>
                       <Link

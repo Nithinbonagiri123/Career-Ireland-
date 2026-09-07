@@ -120,7 +120,11 @@ test('full happy path: fill form → Create → open invoice and receipt', async
   await viewInvoice.click();
   await page.waitForURL(/\/candidates\/[0-9a-f-]+\/invoices\/INV-\d{4}-\d{6}/i);
   await expect(page.getByText(/^invoice$/i).first()).toBeVisible();
-  await expect(page.getByText(/INV-\d{4}-\d{6}/)).toBeVisible();
+  // The success toast that fired on Create can persist ~4s and it also
+  // contains the invoice number ("Candidate created — INV-…"), so pin
+  // the assertion to the first match (the invoice header) rather than
+  // any random element that happens to contain the string.
+  await expect(page.getByText(/INV-\d{4}-\d{6}/).first()).toBeVisible();
   // Bill-to line shows the candidate we just created. The exact name also
   // appears embedded in the line-description ("Candidate Onboarding —
   // <name>"), so use exact-match to pin to the Bill-to <div>.
@@ -134,5 +138,5 @@ test('full happy path: fill form → Create → open invoice and receipt', async
   await page.getByRole('link', { name: /view receipt/i }).click();
   await page.waitForURL(/\/candidates\/[0-9a-f-]+\/receipts\/RCT-\d{4}-\d{6}/i);
   await expect(page.getByText(/^receipt$/i).first()).toBeVisible();
-  await expect(page.getByText(/RCT-\d{4}-\d{6}/)).toBeVisible();
+  await expect(page.getByText(/RCT-\d{4}-\d{6}/).first()).toBeVisible();
 });

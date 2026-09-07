@@ -9,22 +9,42 @@ import { cn } from '@/lib/utils';
 
 export function PageHeaderSkeleton({
   hasBadge = false,
+  hasBreadcrumbs = false,
+  hasMeta = false,
   actionWidth = 120,
 }: {
   hasBadge?: boolean;
+  hasBreadcrumbs?: boolean;
+  hasMeta?: boolean;
   actionWidth?: number;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-      <div className="min-w-0 space-y-2">
+    <div className="mb-6 flex flex-col gap-3">
+      {hasBreadcrumbs && (
         <div className="flex items-center gap-2">
-          <Skeleton className="size-5" />
-          {hasBadge && <Skeleton className="h-5 w-20 rounded-full" />}
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-3" />
+          <Skeleton className="h-3 w-24" />
         </div>
-        <Skeleton className="h-7 w-64" />
-        <Skeleton className="h-4 w-80" />
+      )}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 space-y-2">
+          <div className="flex items-center gap-2">
+            <Skeleton className="size-5" />
+            {hasBadge && <Skeleton className="h-5 w-20 rounded-full" />}
+          </div>
+          <Skeleton className="h-7 w-64" />
+          <Skeleton className="h-4 w-80" />
+          {hasMeta && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Skeleton className="h-5 w-24 rounded-full" />
+              <Skeleton className="h-5 w-20 rounded-full" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+          )}
+        </div>
+        <Skeleton className="h-9" style={{ width: actionWidth }} />
       </div>
-      <Skeleton className="h-9" style={{ width: actionWidth }} />
     </div>
   );
 }
@@ -166,6 +186,69 @@ export function DetailPageSkeleton({
       </div>
       <div className="mt-8">
         <TableSkeleton rows={bodyRows} />
+      </div>
+    </>
+  );
+}
+
+/**
+ * Tabbed-detail-page skeleton — a shorter, more accurate stand-in for
+ * pages that use the header + meta strip + tabs layout (e.g. the new
+ * candidate detail). Renders a placeholder tab bar with four tabs and
+ * a two-column body underneath.
+ */
+export function TabbedDetailPageSkeleton() {
+  return (
+    <>
+      <PageHeaderSkeleton hasBadge hasBreadcrumbs hasMeta actionWidth={200} />
+      <div className="flex items-center gap-6 border-b pb-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton
+            // biome-ignore lint/suspicious/noArrayIndexKey: skeleton tabs have no id
+            key={`tab-${i}`}
+            className="h-4 w-20"
+          />
+        ))}
+      </div>
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-1">
+          <CardHeader>
+            <Skeleton className="h-4 w-24" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows have no id
+                key={`dl-${i}`}
+                className="flex items-center justify-between"
+              >
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <div className="space-y-6 lg:col-span-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Card
+              // biome-ignore lint/suspicious/noArrayIndexKey: skeleton cards have no id
+              key={`sec-${i}`}
+            >
+              <CardHeader>
+                <Skeleton className="h-4 w-32" />
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {Array.from({ length: 3 }).map((_, j) => (
+                  <Skeleton
+                    // biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows have no id
+                    key={`sr-${i}-${j}`}
+                    className="h-4 w-full"
+                  />
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     </>
   );

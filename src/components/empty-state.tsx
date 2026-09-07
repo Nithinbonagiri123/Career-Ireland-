@@ -25,20 +25,25 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/30 px-6 py-12 text-center',
+        'flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-border/70 bg-muted/20 px-6 py-14 text-center',
         className,
       )}
     >
-      <div className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <Icon className="size-5" />
+      {/* Concentric ring around the icon reads like a real product empty
+          state (Linear/Vercel) instead of a "no items" placeholder. Both
+          rings sit on the muted token so the effect adapts to dark mode. */}
+      <div className="relative flex size-14 items-center justify-center rounded-full bg-muted/70 ring-8 ring-muted/30">
+        <Icon aria-hidden className="size-6 text-muted-foreground" />
       </div>
-      <div>
+      <div className="space-y-1.5">
         <p className="text-sm font-medium">{title}</p>
         {description && (
-          <p className="mt-1 max-w-sm text-xs text-muted-foreground">{description}</p>
+          <p className="mx-auto max-w-sm text-xs leading-relaxed text-muted-foreground">
+            {description}
+          </p>
         )}
       </div>
-      {action}
+      {action && <div className="mt-1">{action}</div>}
     </div>
   );
 }

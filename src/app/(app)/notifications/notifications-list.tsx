@@ -30,6 +30,26 @@ const ICONS: Record<Notification['category'], LucideIcon> = {
   FOLLOW_UP_DUE: AlertCircle,
 };
 
+/**
+ * Visual tone per notification category. Read against globals.css status
+ * tokens rather than raw Tailwind colours so light + dark stay coherent.
+ */
+const CATEGORY_TONE: Record<Notification['category'], 'warning' | 'danger' | 'info'> = {
+  AD_EXPIRING: 'warning',
+  IMMIGRATION_EXPIRING: 'warning',
+  TASK_OVERDUE: 'danger',
+  PAYMENT_PENDING: 'warning',
+  FOLLOW_UP_DUE: 'info',
+};
+
+const CATEGORY_LABEL: Record<Notification['category'], string> = {
+  AD_EXPIRING: 'Ad expiring',
+  IMMIGRATION_EXPIRING: 'Immigration expiring',
+  TASK_OVERDUE: 'Task overdue',
+  PAYMENT_PENDING: 'Payment pending',
+  FOLLOW_UP_DUE: 'Follow-up due',
+};
+
 export function NotificationsList({ notifications }: { notifications: Notification[] }) {
   const [items, setItems] = useState(notifications);
   const [pending, startTransition] = useTransition();
@@ -103,25 +123,48 @@ export function NotificationsList({ notifications }: { notifications: Notificati
               <X className="size-3.5" />
             </button>
           );
+          const tone = CATEGORY_TONE[n.category] ?? 'info';
           const inner = (
-            <div className={cn('group flex items-start gap-3 p-3', !n.readAt && 'bg-muted/30')}>
-              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
-                <Icon className="size-4 text-muted-foreground" />
+            <div
+              className={cn(
+                'group relative flex items-start gap-3 p-3 transition-colors',
+                !n.readAt && 'bg-muted/25',
+              )}
+            >
+              {/* Unread indicator strip on the leading edge — subtle but
+                  unmistakable at a glance. */}
+              {!n.readAt && (
+                <span
+                  aria-hidden
+                  className={cn(
+                    'absolute inset-y-2 left-0 w-0.5 rounded-full',
+                    tone === 'danger' && 'bg-status-danger',
+                    tone === 'warning' && 'bg-status-warning',
+                    tone === 'info' && 'bg-status-info',
+                  )}
+                />
+              )}
+              <div
+                className={cn(
+                  'mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full',
+                  tone === 'danger' && 'bg-status-danger-soft text-status-danger',
+                  tone === 'warning' && 'bg-status-warning-soft text-status-warning',
+                  tone === 'info' && 'bg-status-info-soft text-status-info',
+                )}
+              >
+                <Icon className="size-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="truncate text-sm font-medium">{n.title}</span>
-                  {!n.readAt && (
-                    <Badge variant="default" className="rounded-full text-[10px]">
-                      New
-                    </Badge>
-                  )}
+                  <Badge variant={tone} className="rounded-full">
+                    {CATEGORY_LABEL[n.category] ?? n.category.replace(/_/g, ' ')}
+                  </Badge>
                 </div>
                 {n.body && (
                   <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</p>
                 )}
-                <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {n.category.replace(/_/g, ' ')} ·{' '}
+                <p className="mt-1 text-[10px] text-muted-foreground">
                   {formatDistanceToNow(n.createdAt, { addSuffix: true })}
                 </p>
               </div>

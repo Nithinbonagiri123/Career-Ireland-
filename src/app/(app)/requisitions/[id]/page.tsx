@@ -1,4 +1,4 @@
-import { Briefcase } from 'lucide-react';
+import { Briefcase, Building2, MapPin, Users } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireRole } from '@/lib/auth/session';
+import { statusTone } from '@/lib/ui/status-tone';
 import {
   listApplicationsForRequisition,
   listShortlistPromotionCandidates,
@@ -25,6 +26,7 @@ import { MatchesSection } from './matches-section';
 import { PromoteShortlistSection } from './promote-shortlist';
 import { RequisitionQualificationsSection, RequisitionSkillsSection } from './requirements-section';
 import { RunMatchingButton } from './requisition-actions';
+import { RequisitionTabs } from './requisition-tabs';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,42 +54,37 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     fetchQualifications(),
   ]);
 
-  return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
-      <FadeUp>
-        <PageHeader
-          icon={Briefcase}
-          title={requisition.title}
-          description={
-            <>
-              <Link
-                href={`/employers/${requisition.employerId}`}
-                className="underline underline-offset-2"
-              >
-                {requisition.employerName}
-              </Link>
-              {' · '}
-              {requisition.positionsFilled} of {requisition.positionsRequired} filled ·{' '}
-              {requisition.employmentType.replace(/_/g, ' ')}
-              {requisition.location ? ` · ${requisition.location}` : ''}
-            </>
-          }
-          badge={requisition.status.replace(/_/g, ' ')}
-          action={
-            <div className="flex items-center gap-2">
-              <AssignToMeButton
-                entity="requisition"
-                id={id}
-                currentUserId={session.user.id}
-                currentAssignedUserId={requisition.assignedUserId}
-              />
-              <RunMatchingButton requisitionId={id} />
-            </div>
-          }
-        />
-      </FadeUp>
+  const metaStrip = (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+      <Badge variant={statusTone(requisition.status)} className="rounded-full">
+        {requisition.status.replace(/_/g, ' ')}
+      </Badge>
+      <Link
+        href={`/employers/${requisition.employerId}`}
+        className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <Building2 className="size-3" aria-hidden />
+        {requisition.employerName}
+      </Link>
+      <span className="inline-flex items-center gap-1 text-muted-foreground">
+        <Users className="size-3" aria-hidden />
+        {requisition.positionsFilled} of {requisition.positionsRequired} filled
+      </span>
+      <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground">
+        {requisition.employmentType.replace(/_/g, ' ')}
+      </span>
+      {requisition.location && (
+        <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <MapPin className="size-3" aria-hidden />
+          {requisition.location}
+        </span>
+      )}
+    </div>
+  );
 
-      <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+  const overviewTab = (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <FadeUp delay={0.03}>
           <RequisitionSkillsSection
             requisitionId={id}
@@ -103,63 +100,8 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
           />
         </FadeUp>
       </div>
-
-      <FadeUp delay={0.05} className="mb-8">
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Matches</CardTitle>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Score: occupation +40 · available +15 · active +5 · location +5 · required skills up
-                to +25 (proportional) · required qualifications up to +10. Click "Why?" on any row
-                for the breakdown. Bucket: ≥70 HIGH · 40–69 MEDIUM · else LOW.
-              </p>
-            </div>
-            <Badge variant="secondary" className="rounded-full">
-              {matches.length} total
-            </Badge>
-          </CardHeader>
-          <CardContent>
-            <MatchesSection requisitionId={id} matches={matches} />
-          </CardContent>
-        </Card>
-      </FadeUp>
-
-      <FadeUp delay={0.08} className="mb-8">
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Shortlist</CardTitle>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Promote a shortlisted candidate into a formal Job Application.
-              </p>
-            </div>
-            <Badge variant="secondary" className="rounded-full">
-              {shortlistPromotions.length} shortlisted
-            </Badge>
-          </CardHeader>
-          <CardContent>
-            <PromoteShortlistSection requisitionId={id} candidates={shortlistPromotions} />
-          </CardContent>
-        </Card>
-      </FadeUp>
-
-      <FadeUp delay={0.1}>
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-base">Applications</CardTitle>
-            <Badge variant="secondary" className="rounded-full">
-              {applications.length}
-            </Badge>
-          </CardHeader>
-          <CardContent>
-            <ApplicationsSection requisitionId={id} applications={applications} />
-          </CardContent>
-        </Card>
-      </FadeUp>
-
       {requisition.description && (
-        <FadeUp delay={0.15} className="mt-8">
+        <FadeUp delay={0.05}>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Description</CardTitle>
@@ -180,6 +122,92 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
           </Card>
         </FadeUp>
       )}
+    </div>
+  );
+
+  const matchesTab = (
+    <FadeUp>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Matches</CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Score: occupation +40 · available +15 · active +5 · location +5 · required skills up to
+            +25 (proportional) · required qualifications up to +10. Click "Why?" on any row for the
+            breakdown. Bucket: ≥70 HIGH · 40–69 MEDIUM · else LOW.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <MatchesSection requisitionId={id} matches={matches} />
+        </CardContent>
+      </Card>
+    </FadeUp>
+  );
+
+  const shortlistTab = (
+    <FadeUp>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Shortlist</CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Promote a shortlisted candidate into a formal Job Application.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <PromoteShortlistSection requisitionId={id} candidates={shortlistPromotions} />
+        </CardContent>
+      </Card>
+    </FadeUp>
+  );
+
+  const applicationsTab = (
+    <FadeUp>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Applications</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ApplicationsSection requisitionId={id} applications={applications} />
+        </CardContent>
+      </Card>
+    </FadeUp>
+  );
+
+  return (
+    <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
+      <FadeUp>
+        <PageHeader
+          icon={Briefcase}
+          title={requisition.title}
+          breadcrumbs={[
+            { label: 'Requisitions', href: '/requisitions' },
+            { label: requisition.title },
+          ]}
+          meta={metaStrip}
+          action={
+            <div className="flex items-center gap-2">
+              <AssignToMeButton
+                entity="requisition"
+                id={id}
+                currentUserId={session.user.id}
+                currentAssignedUserId={requisition.assignedUserId}
+              />
+              <RunMatchingButton requisitionId={id} />
+            </div>
+          }
+        />
+      </FadeUp>
+
+      <RequisitionTabs
+        overview={overviewTab}
+        matches={matchesTab}
+        shortlist={shortlistTab}
+        applications={applicationsTab}
+        counts={{
+          matches: matches.length,
+          shortlist: shortlistPromotions.length,
+          applications: applications.length,
+        }}
+      />
 
       <div className="mt-8 text-xs text-muted-foreground">
         <Link href="/placements" className={buttonVariants({ variant: 'outline', size: 'sm' })}>

@@ -75,7 +75,12 @@
  * Accent: warm amber (hue 55) — used for primary CTAs and status highlights.
  */
 :root {
-  --background: oklch(0.985 0.004 60);
+  /* Three-plane elevation:
+     canvas (0.972) → sidebar (0.985) → card/popover (1.0).
+     Delta between planes is small enough to keep the UI calm but
+     visible so cards feel intentional rather than merged with the
+     background. */
+  --background: oklch(0.972 0.004 60);
   --foreground: oklch(0.185 0.012 60);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.185 0.012 60);
@@ -111,12 +116,12 @@
   --status-neutral: oklch(0.5 0.008 60);
   --status-neutral-soft: oklch(0.94 0.006 60);
   --radius: 0.625rem;
-  --sidebar: oklch(0.97 0.006 60);
+  --sidebar: oklch(0.985 0.004 60);
   --sidebar-foreground: oklch(0.245 0.02 60);
   --sidebar-primary: oklch(0.245 0.02 60);
   --sidebar-primary-foreground: oklch(0.985 0.004 60);
-  --sidebar-accent: oklch(0.93 0.012 60);
-  --sidebar-accent-foreground: oklch(0.245 0.02 60);
+  --sidebar-accent: oklch(0.94 0.008 60);
+  --sidebar-accent-foreground: oklch(0.185 0.012 60);
   --sidebar-border: oklch(0.9 0.008 60);
   --sidebar-ring: oklch(0.72 0.14 55);
 }
