@@ -1,7 +1,19 @@
 import { z } from 'zod';
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from '@/lib/auth/password-policy';
 
-export const RoleSchema = z.enum(['ADMIN', 'STAFF']);
+/**
+ * Roles this UI is allowed to create or assign. Portal roles
+ * (CANDIDATE / EMPLOYER) are provisioned via portal invitations, not
+ * via the admin/users screen, so they're intentionally excluded here.
+ */
+export const RoleSchema = z.enum([
+  'ADMIN',
+  'STAFF',
+  'MANAGER',
+  'RECRUITER',
+  'DOCUMENT_SPECIALIST',
+  'FINANCE',
+]);
 
 export const CreateUserSchema = z.object({
   email: z.string().email('Enter a valid email').max(200),

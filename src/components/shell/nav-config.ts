@@ -92,6 +92,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'HR',
     items: [
       { label: 'My attendance', href: '/hr', icon: Clock },
+      { label: 'My team', href: '/hr/team', icon: Users },
       { label: 'HR admin', href: '/hr/admin', icon: Users2 },
     ],
   },

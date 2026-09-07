@@ -104,6 +104,54 @@ export type StaffDirectoryRow = {
   managerName: string | null;
 };
 
+/**
+ * Direct reports for a given manager, joined with each report's
+ * latest attendance session (open or closed). Used by /hr/team so
+ * managers can see who's clocked in right now, who's late, and who
+ * has missing clock-outs — but scoped to just their reports, not
+ * the whole team.
+ */
+export type TeamReportRow = {
+  userId: string;
+  userName: string;
+  userEmail: string;
+  latestSession: AttendanceSession | null;
+};
+
+export async function fetchDirectReports(managerUserId: string): Promise<TeamReportRow[]> {
+  // Everyone whose staff_profile.manager_user_id points at me.
+  const reportRows = await db
+    .select({
+      userId: users.id,
+      userName: users.fullName,
+      userEmail: users.email,
+    })
+    .from(staffProfiles)
+    .innerJoin(users, eq(users.id, staffProfiles.userId))
+    .where(eq(staffProfiles.managerUserId, managerUserId))
+    .orderBy(users.fullName);
+  if (reportRows.length === 0) return [];
+
+  // For each report, fetch their latest attendance session (open or
+  // most recent). One SQL per report is fine at team scale — a real
+  // manager has <30 direct reports.
+  const enriched = await Promise.all(
+    reportRows.map(async (r) => {
+      const [latest] = await db
+        .select()
+        .from(attendanceSessions)
+        .where(eq(attendanceSessions.userId, r.userId))
+        .orderBy(desc(attendanceSessions.clockInAt))
+        .limit(1);
+      return {
+        ...r,
+        latestSession: latest ?? null,
+      };
+    }),
+  );
+  return enriched;
+}
+
 export async function fetchStaffDirectory(): Promise<StaffDirectoryRow[]> {
   await requireRole(['ADMIN', 'STAFF']);
   // Alias join for manager. Drizzle needs an alias when joining the
@@ -339,6 +387,63 @@ export async function correctAttendance(input: CorrectAttendanceInput): Promise<
     });
 
     return after;
+  });
+}
+
+/**
+ * Sessions left open past this many hours are auto-closed by the
+ * nightly cron. 14h covers the longest reasonable single shift + a
+ * safety margin; staff who legitimately worked longer can have their
+ * row corrected by an admin the next day.
+ */
+export const ATTENDANCE_AUTO_CLOSE_HOURS = 14;
+
+/**
+ * Cron entry point — finds every open session whose clock-in was more
+ * than ATTENDANCE_AUTO_CLOSE_HOURS ago and closes it at
+ * `clockInAt + ATTENDANCE_AUTO_CLOSE_HOURS`. Each closure is audit-
+ * logged so the admin correction UI can find them later.
+ *
+ * The service is called by the cron endpoint only — no requireRole
+ * check here, exactly like cleanUpStaleDrafts. The endpoint verifies
+ * CRON_SECRET before invoking.
+ */
+export async function autoCloseStaleAttendance(): Promise<{ closed: number }> {
+  const cutoff = new Date(Date.now() - ATTENDANCE_AUTO_CLOSE_HOURS * 60 * 60 * 1000);
+  return db.transaction(async (tx) => {
+    const stale = await tx
+      .select({ id: attendanceSessions.id, clockInAt: attendanceSessions.clockInAt })
+      .from(attendanceSessions)
+      .where(and(isNull(attendanceSessions.clockOutAt), lt(attendanceSessions.clockInAt, cutoff)));
+    if (stale.length === 0) return { closed: 0 };
+
+    for (const row of stale) {
+      const clockOutAt = new Date(
+        row.clockInAt.getTime() + ATTENDANCE_AUTO_CLOSE_HOURS * 60 * 60 * 1000,
+      );
+      await tx
+        .update(attendanceSessions)
+        .set({
+          clockOutAt,
+          autoClosed: true,
+          updatedAt: sql`NOW()`,
+        })
+        .where(eq(attendanceSessions.id, row.id));
+      await recordAudit(tx, {
+        actorUserId: null,
+        entityType: 'attendance_session',
+        entityId: row.id,
+        action: 'STATUS_CHANGED',
+        before: { clockOutAt: null, autoClosed: false },
+        after: { clockOutAt: clockOutAt.toISOString(), autoClosed: true },
+        context: {
+          reason: `auto-closed after ${ATTENDANCE_AUTO_CLOSE_HOURS}h open`,
+          cron: 'attendance-auto-close',
+        },
+      });
+    }
+
+    return { closed: stale.length };
   });
 }
 

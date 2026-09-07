@@ -1,7 +1,7 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import type { DbExecutor } from '@/lib/audit/withAudit';
 import { db } from '@/lib/db/client';
-import { type User, users } from '@/lib/db/schema/users';
+import { type User, type UserRole, users } from '@/lib/db/schema/users';
 
 export type UserListRow = Pick<
   User,
@@ -23,7 +23,7 @@ export async function listUsers(): Promise<UserListRow[]> {
     .orderBy(desc(users.createdAt));
 }
 
-export async function updateUserRole(tx: DbExecutor, id: string, role: 'ADMIN' | 'STAFF') {
+export async function updateUserRole(tx: DbExecutor, id: string, role: UserRole) {
   const [row] = await tx
     .update(users)
     .set({ role, updatedAt: new Date(), sessionsInvalidatedAfter: new Date() })

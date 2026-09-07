@@ -31,7 +31,32 @@ export const users = pgTable(
     email: citext('email').notNull().unique(),
     passwordHash: text('password_hash').notNull(),
     fullName: varchar('full_name', { length: 200 }).notNull(),
-    role: text('role', { enum: ['ADMIN', 'STAFF', 'CANDIDATE', 'EMPLOYER'] })
+    /**
+     * Roles:
+     *   ADMIN                 — full internal CRM access + user management
+     *   STAFF                 — generic internal user; retained as a
+     *                           permissive default for existing rows
+     *   MANAGER               — internal user with team-scoped views
+     *                           (see /hr/team, and eventually assigned-
+     *                           candidate scoping)
+     *   RECRUITER             — internal user focused on recruitment
+     *   DOCUMENT_SPECIALIST   — internal user focused on candidate docs
+     *   FINANCE               — internal user with payment + invoice
+     *                           mutation rights (verify, void, refund)
+     *   CANDIDATE / EMPLOYER  — portal-only, scoped to a Person / Employer
+     */
+    role: text('role', {
+      enum: [
+        'ADMIN',
+        'STAFF',
+        'MANAGER',
+        'RECRUITER',
+        'DOCUMENT_SPECIALIST',
+        'FINANCE',
+        'CANDIDATE',
+        'EMPLOYER',
+      ],
+    })
       .notNull()
       .default('STAFF'),
     /** Set for role=CANDIDATE — the Person this portal user represents. FK added in a later migration to avoid cycles. */
@@ -47,12 +72,14 @@ export const users = pgTable(
     updatedAt,
   },
   (t) => [
-    check('users_role_check', sql`${t.role} IN ('ADMIN','STAFF','CANDIDATE','EMPLOYER')`),
+    check(
+      'users_role_check',
+      sql`${t.role} IN ('ADMIN','STAFF','MANAGER','RECRUITER','DOCUMENT_SPECIALIST','FINANCE','CANDIDATE','EMPLOYER')`,
+    ),
     check(
       'users_portal_scope_check',
       sql`(
-        (${t.role} = 'ADMIN' AND ${t.personId} IS NULL AND ${t.employerId} IS NULL) OR
-        (${t.role} = 'STAFF' AND ${t.personId} IS NULL AND ${t.employerId} IS NULL) OR
+        (${t.role} IN ('ADMIN','STAFF','MANAGER','RECRUITER','DOCUMENT_SPECIALIST','FINANCE') AND ${t.personId} IS NULL AND ${t.employerId} IS NULL) OR
         (${t.role} = 'CANDIDATE' AND ${t.personId} IS NOT NULL AND ${t.employerId} IS NULL) OR
         (${t.role} = 'EMPLOYER' AND ${t.employerId} IS NOT NULL AND ${t.personId} IS NULL)
       )`,

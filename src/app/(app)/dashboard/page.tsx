@@ -1,11 +1,13 @@
 import { format, formatDistanceToNow } from 'date-fns';
 import {
+  AlertCircle,
   Briefcase,
   Building2,
   CheckSquare,
   Clock,
   Coins,
   FileCheck2,
+  LogIn,
   PlaneTakeoff,
   Sparkles,
   Trophy,
@@ -19,6 +21,7 @@ import { fetchRecentActivity } from '@/modules/dashboard/activity';
 import { fetchDashboardDrilldowns } from '@/modules/dashboard/drilldowns';
 import { fetchDashboardPipelines } from '@/modules/dashboard/pipelines';
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
+import { fetchHrDashboard } from '@/modules/hr/service';
 import { ActivityFeed } from './activity-feed';
 import { AttentionCard } from './attention-card';
 import { DashboardDrilldownsSection } from './drilldowns-section';
@@ -29,11 +32,12 @@ export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   await requireRole(['ADMIN', 'STAFF']);
-  const [m, drilldowns, pipelines, activity] = await Promise.all([
+  const [m, drilldowns, pipelines, activity, hr] = await Promise.all([
     fetchDashboardMetrics(),
     fetchDashboardDrilldowns(),
     fetchDashboardPipelines(),
     fetchRecentActivity(10),
+    fetchHrDashboard(),
   ]);
 
   const today = new Date();
@@ -107,6 +111,52 @@ export default async function DashboardPage() {
               hint={`${m.ads.active} active · ${m.ads.expired} expired`}
               href="/campaigns"
               icon={Sparkles}
+              tone="warning"
+            />
+          </div>
+        </section>
+      </FadeUp>
+
+      {/* ─── HR strip ────────────────────────────────────────────── */}
+      <FadeUp delay={0.06}>
+        <section aria-label="HR" className="mb-8">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              People
+            </h2>
+            <span className="text-[11px] text-muted-foreground">
+              Attendance is server-side + audited.
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatChip
+              label="Clocked in now"
+              value={hr.currentlyClockedIn}
+              hint="Across the internal team"
+              href="/hr/admin"
+              icon={LogIn}
+            />
+            <StatChip
+              label="Sessions today"
+              value={hr.todayTotal}
+              hint="Since midnight"
+              href="/hr/admin"
+              icon={Clock}
+            />
+            <StatChip
+              label="Missing clock-outs"
+              value={hr.missingClockOuts}
+              hint="Open past yesterday"
+              href="/hr/admin"
+              icon={AlertCircle}
+              tone="warning"
+            />
+            <StatChip
+              label="Late today"
+              value={hr.lateToday}
+              hint="Clock-in after 09:15"
+              href="/hr/admin"
+              icon={Clock}
               tone="warning"
             />
           </div>

@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/candidate-drafts",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/attendance-auto-close",
+      "schedule": "0 2 * * *"
     }
   ]
 }

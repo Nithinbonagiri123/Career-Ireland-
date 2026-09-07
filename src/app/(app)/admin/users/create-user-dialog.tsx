@@ -106,8 +106,14 @@ export function CreateUserDialog() {
               className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
               {...register('role')}
             >
-              <option value="STAFF">STAFF — day-to-day CRM operations</option>
-              <option value="ADMIN">ADMIN — full access including user management</option>
+              <option value="STAFF">STAFF — generic internal user</option>
+              <option value="MANAGER">MANAGER — team lead (sees direct reports)</option>
+              <option value="RECRUITER">RECRUITER — recruitment focus</option>
+              <option value="DOCUMENT_SPECIALIST">
+                DOCUMENT SPECIALIST — candidate document review
+              </option>
+              <option value="FINANCE">FINANCE — payments + invoices</option>
+              <option value="ADMIN">ADMIN — full access + user management</option>
             </select>
           </div>
 

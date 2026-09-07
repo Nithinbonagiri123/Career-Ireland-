@@ -17,8 +17,31 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-/** Only staff roles are settable from this admin UI. Portal roles are set via invitations. */
-type StaffRole = 'ADMIN' | 'STAFF';
+/**
+ * Only internal roles are settable from this admin UI. Portal roles
+ * (CANDIDATE / EMPLOYER) are set via invitations. Order matters —
+ * ADMIN sits at the top of the menu since it's the elevated tier;
+ * the rest are alphabetical.
+ */
+type StaffRole = 'ADMIN' | 'STAFF' | 'MANAGER' | 'RECRUITER' | 'DOCUMENT_SPECIALIST' | 'FINANCE';
+
+const STAFF_ROLE_LABEL: Record<StaffRole, string> = {
+  ADMIN: 'ADMIN',
+  STAFF: 'STAFF',
+  MANAGER: 'MANAGER',
+  RECRUITER: 'RECRUITER',
+  DOCUMENT_SPECIALIST: 'DOC SPECIALIST',
+  FINANCE: 'FINANCE',
+};
+
+const ROLE_MENU_ORDER: StaffRole[] = [
+  'ADMIN',
+  'MANAGER',
+  'RECRUITER',
+  'FINANCE',
+  'DOCUMENT_SPECIALIST',
+  'STAFF',
+];
 
 import { changeUserRoleAction, setUserActiveAction } from '@/modules/users/actions';
 import type { UserListRow } from '@/modules/users/repository';
@@ -83,13 +106,13 @@ export function UsersTable({ users, currentUserId }: Props) {
     {
       header: 'Role',
       accessorKey: 'role',
-      size: 100,
+      size: 130,
       cell: ({ row }) => (
         <Badge
           variant={row.original.role === 'ADMIN' ? 'default' : 'secondary'}
           className="rounded-full"
         >
-          {row.original.role}
+          {STAFF_ROLE_LABEL[row.original.role as StaffRole] ?? row.original.role}
         </Badge>
       ),
     },
@@ -137,18 +160,15 @@ export function UsersTable({ users, currentUserId }: Props) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Change role</DropdownMenuLabel>
-              <DropdownMenuItem
-                disabled={isSelf || user.role === 'ADMIN'}
-                onClick={() => handleChangeRole(user, 'ADMIN')}
-              >
-                <UserCog className="mr-2 size-4" /> Make ADMIN
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isSelf || user.role === 'STAFF'}
-                onClick={() => handleChangeRole(user, 'STAFF')}
-              >
-                <UserCog className="mr-2 size-4" /> Make STAFF
-              </DropdownMenuItem>
+              {ROLE_MENU_ORDER.map((r) => (
+                <DropdownMenuItem
+                  key={r}
+                  disabled={isSelf || user.role === r}
+                  onClick={() => handleChangeRole(user, r)}
+                >
+                  <UserCog className="mr-2 size-4" /> Make {STAFF_ROLE_LABEL[r]}
+                </DropdownMenuItem>
+              ))}
               <DropdownMenuSeparator />
               {user.isActive ? (
                 <DropdownMenuItem disabled={isSelf} onClick={() => handleSetActive(user, false)}>

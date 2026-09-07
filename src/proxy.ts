@@ -6,6 +6,25 @@ const { auth } = NextAuth(authEdgeConfig);
 
 const PUBLIC_PREFIXES = ['/login', '/api/auth', '/api/health', '/api/cron', '/portal/invite'];
 
+/**
+ * All internal-user roles. Kept as a plain array (not imported from
+ * session.ts) because middleware runs in the edge runtime and cannot
+ * import Node-only server modules. Must be kept in sync with
+ * `INTERNAL_STAFF_ROLES` in `src/lib/auth/session.ts`.
+ *
+ * Any not-admin-not-portal role is "generic staff" from the middleware's
+ * point of view; per-mutation tightening (e.g. FINANCE-only payment
+ * ops) happens at the service layer.
+ */
+const INTERNAL_ROLES = new Set([
+  'ADMIN',
+  'STAFF',
+  'MANAGER',
+  'RECRUITER',
+  'DOCUMENT_SPECIALIST',
+  'FINANCE',
+]);
+
 /** Where each role's post-login landing page lives. */
 function homeForRole(role: string): string {
   if (role === 'CANDIDATE') return '/portal/candidate';
@@ -43,21 +62,23 @@ export default auth((req) => {
       return NextResponse.redirect(new URL(homeForRole(role), req.nextUrl));
     }
     // Staff users hitting a portal route: bounce to internal dashboard (they'd see nothing there).
-    if ((role === 'ADMIN' || role === 'STAFF') && isPortalPath) {
+    if (role && INTERNAL_ROLES.has(role) && isPortalPath) {
       return NextResponse.redirect(new URL('/dashboard', req.nextUrl));
     }
-    // STAFF hitting an admin-only route: bounce to dashboard. Every /admin page
-    // also enforces `requireRole(['ADMIN'])` server-side (which the error
-    // boundary catches as a 403), but the middleware short-circuit fails-closed
-    // earlier and avoids rendering an admin surface at all.
-    // /account/security is user-scoped (any role can change their own password)
-    // so it lives under the app group but is NOT gated here.
-    if (role === 'STAFF' && (path === '/admin' || path.startsWith('/admin/'))) {
+    // Any non-ADMIN internal user hitting an admin-only route: bounce
+    // to the internal dashboard. Every /admin page also enforces
+    // `requireRole(['ADMIN'])` server-side (defence-in-depth).
+    // /account/security is user-scoped so it's NOT gated here.
+    if (
+      role &&
+      INTERNAL_ROLES.has(role) &&
+      role !== 'ADMIN' &&
+      (path === '/admin' || path.startsWith('/admin/'))
+    ) {
       return NextResponse.redirect(new URL('/dashboard', req.nextUrl));
     }
-    // Same defence-in-depth for the HR admin surface — STAFF bounces
-    // here; every page also enforces requireRole(['ADMIN']) server-side.
-    if (role === 'STAFF' && path.startsWith('/hr/admin')) {
+    // Same defence-in-depth for /hr/admin.
+    if (role && INTERNAL_ROLES.has(role) && role !== 'ADMIN' && path.startsWith('/hr/admin')) {
       return NextResponse.redirect(new URL('/hr', req.nextUrl));
     }
     // Candidate accessing employer portal or vice versa.
