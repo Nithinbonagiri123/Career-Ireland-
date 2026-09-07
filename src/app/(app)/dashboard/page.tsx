@@ -21,23 +21,26 @@ import { fetchRecentActivity } from '@/modules/dashboard/activity';
 import { fetchDashboardDrilldowns } from '@/modules/dashboard/drilldowns';
 import { fetchDashboardPipelines } from '@/modules/dashboard/pipelines';
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
+import { fetchDashboardTrends } from '@/modules/dashboard/trends';
 import { fetchHrDashboard } from '@/modules/hr/service';
 import { ActivityFeed } from './activity-feed';
 import { AttentionCard } from './attention-card';
 import { DashboardDrilldownsSection } from './drilldowns-section';
 import { PipelineFunnel } from './pipeline-funnel';
 import { StatChip } from './stat-chip';
+import { TrendChart } from './trend-chart';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   await requireInternalStaff();
-  const [m, drilldowns, pipelines, activity, hr] = await Promise.all([
+  const [m, drilldowns, pipelines, activity, hr, trends] = await Promise.all([
     fetchDashboardMetrics(),
     fetchDashboardDrilldowns(),
     fetchDashboardPipelines(),
     fetchRecentActivity(10),
     fetchHrDashboard(),
+    fetchDashboardTrends(),
   ]);
 
   const today = new Date();
@@ -158,6 +161,43 @@ export default async function DashboardPage() {
               href="/hr/admin"
               icon={Clock}
               tone="warning"
+            />
+          </div>
+        </section>
+      </FadeUp>
+
+      {/* ─── Row · 30-day trends ─────────────────────────────────── */}
+      <FadeUp delay={0.07}>
+        <section aria-label="30-day trends" className="mb-8">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              30-day trends
+            </h2>
+            <span className="text-[11px] text-muted-foreground">
+              Real counts, second-half vs first-half of the window.
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <TrendChart
+              title="New leads"
+              iconEl={<UserPlus aria-hidden />}
+              data={trends.leads}
+              tone="info"
+              href="/leads"
+            />
+            <TrendChart
+              title="Applications"
+              iconEl={<FileCheck2 aria-hidden />}
+              data={trends.applications}
+              tone="success"
+              href="/applications"
+            />
+            <TrendChart
+              title="Placements"
+              iconEl={<Trophy aria-hidden />}
+              data={trends.placements}
+              tone="success"
+              href="/placements"
             />
           </div>
         </section>

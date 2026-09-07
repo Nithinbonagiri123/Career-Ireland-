@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from 'date-fns';
-import { CalendarClock, PlaneTakeoff, User } from 'lucide-react';
+import { Building2, CalendarClock, Fingerprint, PlaneTakeoff, User } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireInternalStaff } from '@/lib/auth/session';
+import { statusTone } from '@/lib/ui/status-tone';
 import { fetchTasksForImmigrationCase } from '@/modules/activities/service';
 import { fetchDocumentTypes } from '@/modules/document-types/service';
 import { fetchPersonDocuments } from '@/modules/documents/service';
@@ -18,19 +19,10 @@ import {
 } from '@/modules/immigration/service';
 import { ArchiveCaseButton } from './archive-button';
 import { CaseDocumentsSection } from './case-documents-section';
+import { CaseTabs } from './case-tabs';
 import { CaseTasksSection } from './tasks-section';
 
 export const dynamic = 'force-dynamic';
-
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'outline'> = {
-  OPEN: 'secondary',
-  DOCUMENTS_PENDING: 'outline',
-  SUBMITTED: 'default',
-  UNDER_AUTHORITY_REVIEW: 'default',
-  APPROVED: 'default',
-  REJECTED: 'outline',
-  CLOSED: 'outline',
-};
 
 export default async function ImmigrationCaseDetail({
   params,
@@ -51,98 +43,91 @@ export default async function ImmigrationCaseDetail({
       fetchTasksForImmigrationCase(id),
     ]);
 
-  return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
-      <FadeUp>
-        <PageHeader
-          icon={PlaneTakeoff}
-          title={`${c.caseType.replace(/_/g, ' ')} · ${c.beneficiaryName}`}
-          description={
-            <>
-              <Link
-                href={`/candidates/${c.beneficiaryPersonId}`}
-                className="underline underline-offset-2"
-              >
-                {c.beneficiaryName}
-              </Link>
-              {c.sponsorName && (
-                <>
-                  {' · sponsor: '}
-                  {c.sponsorEmployerId ? (
-                    <Link
-                      href={`/employers/${c.sponsorEmployerId}`}
-                      className="underline underline-offset-2"
-                    >
-                      {c.sponsorName}
-                    </Link>
-                  ) : (
-                    c.sponsorName
-                  )}
-                </>
-              )}
-              {c.authorityReference && <> · ref {c.authorityReference}</>}
-            </>
-          }
-          badge={c.status.replace(/_/g, ' ')}
-          action={
-            <div className="flex items-center gap-2">
-              <AssignToMeButton
-                entity="immigration_case"
-                id={id}
-                currentUserId={session.user.id}
-                currentAssignedUserId={c.assignedUserId}
-              />
-              <ArchiveCaseButton caseId={id} beneficiaryName={c.beneficiaryName} />
+  const humanType = c.caseType.replace(/_/g, ' ');
+
+  const metaStrip = (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+      <Badge variant={statusTone(c.status)} className="rounded-full">
+        {c.status.replace(/_/g, ' ')}
+      </Badge>
+      <Link
+        href={`/candidates/${c.beneficiaryPersonId}`}
+        className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <User className="size-3" aria-hidden />
+        {c.beneficiaryName}
+      </Link>
+      {c.sponsorName &&
+        (c.sponsorEmployerId ? (
+          <Link
+            href={`/employers/${c.sponsorEmployerId}`}
+            className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Building2 className="size-3" aria-hidden />
+            {c.sponsorName}
+          </Link>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <Building2 className="size-3" aria-hidden />
+            {c.sponsorName}
+          </span>
+        ))}
+      {c.authorityReference && (
+        <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <Fingerprint className="size-3" aria-hidden />
+          ref {c.authorityReference}
+        </span>
+      )}
+    </div>
+  );
+
+  const overviewTab = (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <FadeUp delay={0.05} className="lg:col-span-1 lg:sticky lg:top-4 lg:h-fit">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Case details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Status</span>
+              <Badge variant={statusTone(c.status)} className="rounded-full text-[10px]">
+                {c.status.replace(/_/g, ' ')}
+              </Badge>
             </div>
-          }
-        />
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Type</span>
+              <span>{humanType}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Submitted</span>
+              <span>{c.submittedAt ?? '—'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Decision</span>
+              <span>{c.decisionAt ?? '—'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Expires</span>
+              <span>{c.expiresOn ?? '—'}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Opened</span>
+              <span title={c.createdAt.toLocaleString()}>
+                {formatDistanceToNow(c.createdAt, { addSuffix: true })}
+              </span>
+            </div>
+            {c.notes && (
+              <div className="border-t pt-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Notes</p>
+                <p className="mt-1 whitespace-pre-wrap text-xs">{c.notes}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </FadeUp>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <FadeUp delay={0.05}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Case details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Status</span>
-                <Badge variant={STATUS_VARIANT[c.status] ?? 'secondary'} className="rounded-full">
-                  {c.status.replace(/_/g, ' ')}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Type</span>
-                <span>{c.caseType.replace(/_/g, ' ')}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Submitted</span>
-                <span>{c.submittedAt ?? '—'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Decision</span>
-                <span>{c.decisionAt ?? '—'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Expires</span>
-                <span>{c.expiresOn ?? '—'}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Opened</span>
-                <span title={c.createdAt.toLocaleString()}>
-                  {formatDistanceToNow(c.createdAt, { addSuffix: true })}
-                </span>
-              </div>
-              {c.notes && (
-                <div className="border-t pt-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Notes</p>
-                  <p className="mt-1 whitespace-pre-wrap text-xs">{c.notes}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </FadeUp>
-
+      <div className="space-y-6 lg:col-span-2">
         <FadeUp delay={0.1}>
           <Card>
             <CardHeader>
@@ -161,8 +146,7 @@ export default async function ImmigrationCaseDetail({
             </CardContent>
           </Card>
         </FadeUp>
-
-        <FadeUp delay={0.15}>
+        <FadeUp delay={0.12}>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -191,21 +175,62 @@ export default async function ImmigrationCaseDetail({
           </Card>
         </FadeUp>
       </div>
+    </div>
+  );
 
-      <FadeUp delay={0.2} className="mt-8">
-        <CaseTasksSection caseId={id} rows={caseTasks} />
-      </FadeUp>
+  const documentsTab = (
+    <FadeUp>
+      <CaseDocumentsSection
+        caseId={id}
+        beneficiaryPersonId={c.beneficiaryPersonId}
+        requirements={requirements}
+        attachedDocs={attachedDocs}
+        documentTypes={allDocumentTypes}
+        beneficiaryDocuments={beneficiaryDocuments}
+      />
+    </FadeUp>
+  );
 
-      <FadeUp delay={0.25} className="mt-6">
-        <CaseDocumentsSection
-          caseId={id}
-          beneficiaryPersonId={c.beneficiaryPersonId}
-          requirements={requirements}
-          attachedDocs={attachedDocs}
-          documentTypes={allDocumentTypes}
-          beneficiaryDocuments={beneficiaryDocuments}
+  const tasksTab = (
+    <FadeUp>
+      <CaseTasksSection caseId={id} rows={caseTasks} />
+    </FadeUp>
+  );
+
+  return (
+    <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+      <FadeUp>
+        <PageHeader
+          icon={PlaneTakeoff}
+          title={`${humanType} · ${c.beneficiaryName}`}
+          breadcrumbs={[
+            { label: 'Immigration', href: '/immigration' },
+            { label: c.beneficiaryName },
+          ]}
+          meta={metaStrip}
+          action={
+            <div className="flex items-center gap-2">
+              <AssignToMeButton
+                entity="immigration_case"
+                id={id}
+                currentUserId={session.user.id}
+                currentAssignedUserId={c.assignedUserId}
+              />
+              <ArchiveCaseButton caseId={id} beneficiaryName={c.beneficiaryName} />
+            </div>
+          }
         />
       </FadeUp>
+
+      <CaseTabs
+        overview={overviewTab}
+        documents={documentsTab}
+        tasks={tasksTab}
+        counts={{
+          documents: attachedDocs.length,
+          tasks: caseTasks.length,
+        }}
+      />
     </div>
   );
 }
