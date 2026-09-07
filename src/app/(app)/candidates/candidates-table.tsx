@@ -123,6 +123,9 @@ export function CandidatesTable({
         enableRowSelection
         onSelectionChange={handleSelectionChange}
         selectionResetKey={resetKey}
+        enableGlobalFilter
+        globalFilterPlaceholder="Search candidates…"
+        enableColumnVisibility
       />
       <CandidatesBulkActionBar
         selectedIds={selected.map((r) => r.personId)}

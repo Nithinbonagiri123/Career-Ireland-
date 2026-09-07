@@ -5,6 +5,7 @@ import {
   Briefcase,
   CheckSquare,
   Coins,
+  MapPin,
   MessagesSquare,
   PlaneTakeoff,
   Send,
@@ -44,6 +45,7 @@ import {
   QualificationsSection,
   SkillsSection,
 } from './candidate-details-panel';
+import { CandidateTabs } from './candidate-tabs';
 import { DocumentsSection } from './documents-section';
 import { EmailAccountPanel } from './email-account-panel';
 import { JustCreatedCard } from './just-created-card';
@@ -109,6 +111,192 @@ export default async function CandidateDetail({
     listApplicationsForPerson(id),
   ]);
 
+  const fullName = `${person.firstName} ${person.lastName}`;
+  const location = [person.currentCity, person.currentCountry].filter(Boolean).join(', ');
+
+  const metaStrip = (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+      {candidateProfile && (
+        <>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2 py-0.5">
+            <StatusDot tone={statusTone(candidateProfile.availabilityStatus)} />
+            {AVAILABILITY_LABEL[candidateProfile.availabilityStatus]}
+          </span>
+          <Badge variant={statusTone(candidateProfile.lifecycleStatus)} className="rounded-full">
+            {candidateProfile.lifecycleStatus}
+          </Badge>
+        </>
+      )}
+      {location && (
+        <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <MapPin className="size-3" aria-hidden />
+          {location}
+        </span>
+      )}
+      {person.mergedIntoPersonId && (
+        <Badge variant="neutral" className="rounded-full">
+          Merged
+        </Badge>
+      )}
+    </div>
+  );
+
+  const overviewTab = (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <FadeUp delay={0.05} className="lg:col-span-1 lg:sticky lg:top-4 lg:h-fit">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Profile</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {candidateProfile ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Availability</span>
+                  <span className="inline-flex items-center gap-1.5 text-xs">
+                    <StatusDot tone={statusTone(candidateProfile.availabilityStatus)} />
+                    {AVAILABILITY_LABEL[candidateProfile.availabilityStatus]}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Lifecycle</span>
+                  <Badge
+                    variant={statusTone(candidateProfile.lifecycleStatus)}
+                    className="rounded-full text-[10px]"
+                  >
+                    {candidateProfile.lifecycleStatus}
+                  </Badge>
+                </div>
+                {candidateProfile.preferredLocation && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Preferred location</span>
+                    <span className="text-xs">{candidateProfile.preferredLocation}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Activated</span>
+                  <span className="text-xs">
+                    {formatDistanceToNow(candidateProfile.activatedAt, { addSuffix: true })}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Not yet activated as a candidate. Convert a Lead to activate.
+              </p>
+            )}
+            <div className="space-y-2 border-t pt-3 text-xs text-muted-foreground">
+              <div>
+                <span className="uppercase tracking-wide">Nationality</span>{' '}
+                <span>{person.nationality ?? '—'}</span>
+              </div>
+              <div>
+                <span className="uppercase tracking-wide">DOB</span>{' '}
+                <span>{person.dateOfBirth ?? '—'}</span>
+              </div>
+              <div>
+                <span className="uppercase tracking-wide">Source</span>{' '}
+                <span>{person.source ?? 'DIRECT'}</span>
+              </div>
+            </div>
+            {person.notes && (
+              <div className="border-t pt-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Notes</p>
+                <p className="mt-1 whitespace-pre-wrap text-xs">{person.notes}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </FadeUp>
+
+      <div className="space-y-6 lg:col-span-2">
+        <FadeUp delay={0.1}>
+          <SkillsSection personId={id} rows={candidateSkillRows} allSkills={allSkills} />
+        </FadeUp>
+        <FadeUp delay={0.15}>
+          <QualificationsSection
+            personId={id}
+            rows={candidateQualRows}
+            allQualifications={allQualifications}
+          />
+        </FadeUp>
+        <FadeUp delay={0.2}>
+          <EmploymentHistorySection personId={id} rows={employmentRows} />
+        </FadeUp>
+      </div>
+    </div>
+  );
+
+  const applicationsTab = (
+    <FadeUp>
+      <ApplicationsPanel personId={id} rows={candidateApplications} />
+    </FadeUp>
+  );
+
+  const documentsTab = (
+    <FadeUp>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Documents</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DocumentsSection personId={id} requirements={requirements} documents={documents} />
+        </CardContent>
+      </Card>
+    </FadeUp>
+  );
+
+  const activityTab = (
+    <div className="space-y-6">
+      <FadeUp>
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-base">Activity timeline</CardTitle>
+            <Badge variant="secondary" className="rounded-full">
+              {timeline.length} entries
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            {timeline.length === 0 ? (
+              <EmptyState
+                title="No activity yet"
+                description="Leads, applications, placements, payments, communications, tasks, and immigration cases will appear here as they happen."
+              />
+            ) : (
+              <ol className="relative space-y-4 border-l border-border pl-6">
+                {timeline.map((item) => {
+                  const Icon = KIND_ICON[item.kind] ?? MessagesSquare;
+                  return (
+                    <li key={`${item.kind}-${item.id}`} className="relative">
+                      <span className="absolute -left-[30px] flex size-6 items-center justify-center rounded-full border bg-background">
+                        <Icon className="size-3 text-muted-foreground" />
+                      </span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{item.title}</p>
+                          <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>
+                        </div>
+                        <time
+                          className="whitespace-nowrap text-[10px] uppercase tracking-wide text-muted-foreground"
+                          title={item.at.toLocaleString()}
+                        >
+                          {formatDistanceToNow(item.at, { addSuffix: true })}
+                        </time>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </CardContent>
+        </Card>
+      </FadeUp>
+      <FadeUp delay={0.05}>
+        <EmailAccountPanel personId={id} account={emailAccount} />
+      </FadeUp>
+    </div>
+  );
+
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
       {billingLinks && (billingLinks.invoiceNumber || billingLinks.receiptNumber) && (
@@ -123,17 +311,11 @@ export default async function CandidateDetail({
       <FadeUp>
         <PageHeader
           icon={User}
-          title={`${person.firstName} ${person.lastName}`}
-          description={
-            <>
-              {person.email ?? person.phone ?? 'No contact recorded'}
-              {person.currentCity || person.currentCountry ? (
-                <> · {[person.currentCity, person.currentCountry].filter(Boolean).join(', ')}</>
-              ) : null}
-              {person.mergedIntoPersonId && <> · Merged</>}
-            </>
-          }
+          title={fullName}
+          description={person.email ?? person.phone ?? 'No contact recorded'}
           badge={candidateProfile ? 'CANDIDATE' : (person.source ?? 'PERSON')}
+          breadcrumbs={[{ label: 'Candidates', href: '/candidates' }, { label: fullName }]}
+          meta={metaStrip}
           action={
             <div className="flex items-center gap-2">
               {candidateProfile && (
@@ -147,7 +329,7 @@ export default async function CandidateDetail({
               <InvitePortalDialog
                 target={{ kind: 'CANDIDATE', personId: person.id }}
                 defaultEmail={person.email ?? undefined}
-                defaultFullName={`${person.firstName} ${person.lastName}`}
+                defaultFullName={fullName}
                 trigger={
                   <Button size="sm" variant="outline">
                     <Send className="mr-1.5 size-4" /> Invite to portal
@@ -159,154 +341,12 @@ export default async function CandidateDetail({
         />
       </FadeUp>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <FadeUp delay={0.05} className="lg:col-span-1">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Profile</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              {candidateProfile ? (
-                <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Availability</span>
-                    <span className="inline-flex items-center gap-1.5 text-xs">
-                      <StatusDot tone={statusTone(candidateProfile.availabilityStatus)} />
-                      {AVAILABILITY_LABEL[candidateProfile.availabilityStatus]}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Lifecycle</span>
-                    <Badge
-                      variant={statusTone(candidateProfile.lifecycleStatus)}
-                      className="rounded-full text-[10px]"
-                    >
-                      {candidateProfile.lifecycleStatus}
-                    </Badge>
-                  </div>
-                  {candidateProfile.preferredLocation && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Preferred location</span>
-                      <span className="text-xs">{candidateProfile.preferredLocation}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Activated</span>
-                    <span className="text-xs">
-                      {formatDistanceToNow(candidateProfile.activatedAt, { addSuffix: true })}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Not yet activated as a candidate. Convert a Lead to activate.
-                </p>
-              )}
-              <div className="border-t pt-3 space-y-2 text-xs text-muted-foreground">
-                <div>
-                  <span className="uppercase tracking-wide">Nationality</span>{' '}
-                  <span>{person.nationality ?? '—'}</span>
-                </div>
-                <div>
-                  <span className="uppercase tracking-wide">DOB</span>{' '}
-                  <span>{person.dateOfBirth ?? '—'}</span>
-                </div>
-                <div>
-                  <span className="uppercase tracking-wide">Source</span>{' '}
-                  <span>{person.source ?? 'DIRECT'}</span>
-                </div>
-              </div>
-              {person.notes && (
-                <div className="border-t pt-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Notes</p>
-                  <p className="mt-1 whitespace-pre-wrap text-xs">{person.notes}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </FadeUp>
-
-        <FadeUp delay={0.1} className="lg:col-span-2">
-          <Card>
-            <CardHeader className="flex-row items-center justify-between">
-              <CardTitle className="text-base">Activity timeline</CardTitle>
-              <Badge variant="secondary" className="rounded-full">
-                {timeline.length} entries
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              {timeline.length === 0 ? (
-                <EmptyState
-                  title="No activity yet"
-                  description="Leads, applications, placements, payments, communications, tasks, and immigration cases will appear here as they happen."
-                />
-              ) : (
-                <ol className="relative space-y-4 border-l border-border pl-6">
-                  {timeline.map((item) => {
-                    const Icon = KIND_ICON[item.kind] ?? MessagesSquare;
-                    return (
-                      <li key={`${item.kind}-${item.id}`} className="relative">
-                        <span className="absolute -left-[30px] flex size-6 items-center justify-center rounded-full border bg-background">
-                          <Icon className="size-3 text-muted-foreground" />
-                        </span>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">{item.title}</p>
-                            <p className="truncate text-xs text-muted-foreground">
-                              {item.subtitle}
-                            </p>
-                          </div>
-                          <time
-                            className="whitespace-nowrap text-[10px] uppercase tracking-wide text-muted-foreground"
-                            title={item.at.toLocaleString()}
-                          >
-                            {formatDistanceToNow(item.at, { addSuffix: true })}
-                          </time>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ol>
-              )}
-            </CardContent>
-          </Card>
-        </FadeUp>
-      </div>
-
-      <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <FadeUp delay={0.15}>
-          <SkillsSection personId={id} rows={candidateSkillRows} allSkills={allSkills} />
-        </FadeUp>
-        <FadeUp delay={0.2}>
-          <QualificationsSection
-            personId={id}
-            rows={candidateQualRows}
-            allQualifications={allQualifications}
-          />
-        </FadeUp>
-        <FadeUp delay={0.25}>
-          <EmploymentHistorySection personId={id} rows={employmentRows} />
-        </FadeUp>
-      </div>
-
-      <FadeUp delay={0.3} className="mt-6">
-        <ApplicationsPanel personId={id} rows={candidateApplications} />
-      </FadeUp>
-
-      <FadeUp delay={0.35} className="mt-6">
-        <EmailAccountPanel personId={id} account={emailAccount} />
-      </FadeUp>
-
-      <FadeUp delay={0.4} className="mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Documents</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <DocumentsSection personId={id} requirements={requirements} documents={documents} />
-          </CardContent>
-        </Card>
-      </FadeUp>
+      <CandidateTabs
+        overview={overviewTab}
+        applications={applicationsTab}
+        documents={documentsTab}
+        activity={activityTab}
+      />
     </div>
   );
 }

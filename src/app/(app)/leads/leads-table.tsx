@@ -268,6 +268,9 @@ export function LeadsTable({ leads, currentUserId }: Props) {
         data={leads}
         emptyTitle="No leads yet"
         emptyDescription="Every candidate starts as a Lead. Create the first one with the button above."
+        enableGlobalFilter
+        globalFilterPlaceholder="Search leads…"
+        enableColumnVisibility
       />
       <PromptDialog
         open={archiveTarget !== null}
