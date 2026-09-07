@@ -12,7 +12,12 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        'group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl',
+        // Cards gain a subtle hover response — ring warms, and a soft
+        // shadow lifts them off the canvas. Transition is fast enough
+        // (180 ms) to feel responsive but slow enough to read as
+        // intentional. Transform stays untouched so nested motion (tab
+        // panel transitions, StatChip counters) isn't disturbed.
+        'group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 transition-[box-shadow,--tw-ring-color] duration-200 hover:shadow-[0_1px_2px_-1px_oklch(0.185_0.012_60/0.08),0_8px_20px_-8px_oklch(0.185_0.012_60/0.08)] hover:ring-foreground/15 dark:hover:shadow-[0_1px_2px_-1px_oklch(0.09_0_0/0.4),0_8px_24px_-6px_oklch(0.09_0_0/0.5)] [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl',
         className,
       )}
       {...props}

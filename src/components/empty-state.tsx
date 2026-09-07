@@ -12,8 +12,12 @@ export type EmptyStateProps = {
 };
 
 /**
- * Reusable empty state for any list/table/dashboard tile.
- * Every module's list page should use this — never render a bare "No data" string.
+ * Reusable empty state. Icon medallion floats gently and two concentric
+ * rings breathe on a slow ~4s cycle so the room isn't dead — but the
+ * animation is pure CSS (keyframes in globals.css) so this stays a
+ * Server Component. That matters because callers pass `icon={LucideIcon}`
+ * from Server Components, and RSC can't serialize a component reference
+ * across a Server → Client boundary.
  */
 export function EmptyState({
   icon: Icon = Inbox,
@@ -29,11 +33,24 @@ export function EmptyState({
         className,
       )}
     >
-      {/* Concentric ring around the icon reads like a real product empty
-          state (Linear/Vercel) instead of a "no items" placeholder. Both
-          rings sit on the muted token so the effect adapts to dark mode. */}
-      <div className="relative flex size-14 items-center justify-center rounded-full bg-muted/70 ring-8 ring-muted/30">
-        <Icon aria-hidden className="size-6 text-muted-foreground" />
+      <div className="relative flex size-14 items-center justify-center">
+        {/* Outer breathing ring. */}
+        <span
+          aria-hidden
+          className="animate-breathe-slow absolute inset-[-14px] rounded-full bg-muted/30"
+        />
+        {/* Middle ring — offset delay so the two aren't in lock-step. */}
+        <span
+          aria-hidden
+          className="animate-breathe-slower absolute inset-[-6px] rounded-full bg-muted/50"
+        />
+        {/* Icon medallion floats up 2 px and back over 5 s. */}
+        <span
+          aria-hidden
+          className="animate-float-slow relative flex size-14 items-center justify-center rounded-full bg-muted/70"
+        >
+          <Icon aria-hidden className="size-6 text-muted-foreground" />
+        </span>
       </div>
       <div className="space-y-1.5">
         <p className="text-sm font-medium">{title}</p>
