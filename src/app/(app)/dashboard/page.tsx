@@ -1,9 +1,10 @@
-import type { LucideIcon } from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
 import {
   AlertCircle,
   Briefcase,
   Building2,
   CheckSquare,
+  Clock,
   Coins,
   PlaneTakeoff,
   Sparkles,
@@ -12,227 +13,218 @@ import {
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
-import { FadeUp, StaggerContainer, StaggerItem } from '@/components/motion/motion-primitives';
+import { FadeUp } from '@/components/motion/motion-primitives';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireRole } from '@/lib/auth/session';
-import { cn } from '@/lib/utils';
 import { fetchDashboardDrilldowns } from '@/modules/dashboard/drilldowns';
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
+import { AttentionCard } from './attention-card';
 import { DashboardDrilldownsSection } from './drilldowns-section';
+import { StatChip } from './stat-chip';
 
 export const dynamic = 'force-dynamic';
-
-type Tile = {
-  label: string;
-  value: number | string;
-  hint?: string;
-  href: string;
-  icon: LucideIcon;
-  emphasis?: 'default' | 'warn';
-};
-
-function TileCard({ tile }: { tile: Tile }) {
-  return (
-    <Link href={tile.href} className="block group">
-      <Card
-        className={cn(
-          'transition-all hover:shadow-md hover:-translate-y-px',
-          tile.emphasis === 'warn' && Number(tile.value) > 0 && 'border-status-warning/60',
-        )}
-      >
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardDescription className="text-xs">{tile.label}</CardDescription>
-            <tile.icon
-              className={cn(
-                'size-4',
-                tile.emphasis === 'warn' && Number(tile.value) > 0
-                  ? 'text-status-warning'
-                  : 'text-muted-foreground',
-              )}
-            />
-          </div>
-          <CardTitle className="text-3xl font-semibold tracking-tight">{tile.value}</CardTitle>
-        </CardHeader>
-        {tile.hint && (
-          <CardContent>
-            <p className="text-xs text-muted-foreground">{tile.hint}</p>
-          </CardContent>
-        )}
-      </Card>
-    </Link>
-  );
-}
 
 export default async function DashboardPage() {
   await requireRole(['ADMIN', 'STAFF']);
   const [m, drilldowns] = await Promise.all([fetchDashboardMetrics(), fetchDashboardDrilldowns()]);
 
-  const candidateTiles: Tile[] = [
-    {
-      label: 'Total candidates',
-      value: m.candidates.total,
-      hint: `${m.candidates.available} available · ${m.candidates.placed} placed`,
-      href: '/candidates',
-      icon: Users,
-    },
-    {
-      label: 'New leads (7d)',
-      value: m.leads.lastSevenDays,
-      hint: `${m.leads.total} open · ${m.leads.awaitingPayment} awaiting payment`,
-      href: '/leads',
-      icon: UserPlus,
-    },
-    {
-      label: 'Payments to verify',
-      value: m.payments.awaitingVerification,
-      hint: `${m.payments.verifiedLast30Days} verified last 30d`,
-      href: '/payments',
-      icon: Coins,
-      emphasis: 'warn',
-    },
-  ];
-
-  const recruitmentTiles: Tile[] = [
-    {
-      label: 'Employers',
-      value: m.employers.total,
-      hint: `${m.employers.active} active`,
-      href: '/employers',
-      icon: Building2,
-    },
-    {
-      label: 'Open requisitions',
-      value: m.requisitions.open + m.requisitions.inProgress,
-      hint: `${m.requisitions.totalPositionsOpen} positions open · ${m.requisitions.filledLast30Days} filled 30d`,
-      href: '/requisitions',
-      icon: Briefcase,
-    },
-    {
-      label: 'Active placements',
-      value: m.placements.activeConfirmed,
-      hint: `${m.placements.createdLast30Days} new last 30d`,
-      href: '/placements',
-      icon: Trophy,
-    },
-    {
-      label: 'Ads expiring (30d)',
-      value: m.ads.expiringWithin30Days,
-      hint: `${m.ads.active} active · ${m.ads.expired} expired`,
-      href: '/campaigns',
-      icon: Sparkles,
-      emphasis: 'warn',
-    },
-  ];
-
-  const immigrationTiles: Tile[] = [
-    {
-      label: 'Open immigration cases',
-      value: m.immigration.open,
-      hint: `${m.immigration.submitted} submitted`,
-      href: '/immigration',
-      icon: PlaneTakeoff,
-    },
-    {
-      label: 'Cases expiring (60d)',
-      value: m.immigration.expiringWithin60Days,
-      hint: 'Renewals to plan',
-      href: '/immigration',
-      icon: AlertCircle,
-      emphasis: 'warn',
-    },
-  ];
-
-  const activityTiles: Tile[] = [
-    {
-      label: 'Overdue tasks',
-      value: m.tasks.overdue,
-      hint: `${m.tasks.dueThisWeek} due this week · ${m.tasks.open} total open`,
-      href: '/tasks',
-      icon: CheckSquare,
-      emphasis: 'warn',
-    },
-  ];
+  const today = new Date();
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
-      <FadeUp className="mb-8 flex items-end justify-between gap-4">
+      <FadeUp className="mb-6 flex items-end justify-between gap-4">
         <div>
           <div className="mb-1 flex items-center gap-2">
             <Badge variant="secondary" className="rounded-full">
               Overview
             </Badge>
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              {format(today, 'EEEE, d MMM yyyy')}
+            </span>
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">Career Ireland — today</h1>
           <p className="text-sm text-muted-foreground">
-            Live metrics across every workspace. Click any tile to drill in.
+            Everything needing attention right now, followed by workspace totals.
           </p>
         </div>
       </FadeUp>
 
-      <div className="space-y-8">
-        <section>
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Candidate services
-          </h2>
-          <StaggerContainer className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {candidateTiles.map((t) => (
-              <StaggerItem key={t.label}>
-                <TileCard tile={t} />
-              </StaggerItem>
-            ))}
-          </StaggerContainer>
+      {/* Row 1 — Attention needed. Only the states staff actively work
+          through get a tone accent; empty states stay calm to keep the
+          dashboard readable when nothing is on fire. */}
+      <FadeUp delay={0.05}>
+        <section aria-label="Attention needed" className="mb-8">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Attention needed
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <AttentionCard
+              title="Overdue tasks"
+              count={m.tasks.overdue}
+              href="/tasks"
+              icon={CheckSquare}
+              tone="danger"
+              emptyLabel="Nothing overdue. Nice."
+            >
+              <ul className="space-y-1.5 text-xs">
+                {drilldowns.overdueTasks.slice(0, 3).map((t) => (
+                  <li key={t.id} className="flex items-baseline justify-between gap-2">
+                    <span className="truncate">{t.title}</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {t.dueAt ? formatDistanceToNow(t.dueAt, { addSuffix: true }) : 'no due date'}
+                    </span>
+                  </li>
+                ))}
+                {m.tasks.overdue > 3 && (
+                  <li className="pt-0.5 text-[10px] text-muted-foreground">
+                    +{m.tasks.overdue - 3} more
+                  </li>
+                )}
+              </ul>
+            </AttentionCard>
+            <AttentionCard
+              title="Payments to verify"
+              count={m.payments.awaitingVerification}
+              href="/payments"
+              icon={Coins}
+              tone="warning"
+              emptyLabel="No payments awaiting verification."
+            >
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p>
+                  <span className="font-medium text-foreground">
+                    {m.payments.awaitingVerification}
+                  </span>{' '}
+                  submitted, ready for staff review.
+                </p>
+                <p>{m.payments.verifiedLast30Days} verified in the last 30 days.</p>
+              </div>
+            </AttentionCard>
+            <AttentionCard
+              title="Cases expiring (60d)"
+              count={m.immigration.expiringWithin60Days}
+              href="/immigration"
+              icon={PlaneTakeoff}
+              tone="warning"
+              emptyLabel="No permit/visa expiries in the next 60 days."
+            >
+              <ul className="space-y-1.5 text-xs">
+                {drilldowns.expiringImmigrationCases.slice(0, 3).map((c) => (
+                  <li key={c.id} className="flex items-baseline justify-between gap-2">
+                    <span className="truncate">{c.beneficiaryName}</span>
+                    <span
+                      className={
+                        c.daysUntilExpiry <= 14
+                          ? 'shrink-0 text-[10px] text-status-danger'
+                          : 'shrink-0 text-[10px] text-muted-foreground'
+                      }
+                    >
+                      {c.daysUntilExpiry <= 0 ? 'expired' : `${c.daysUntilExpiry}d`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </AttentionCard>
+            <AttentionCard
+              title="Interviews this week"
+              count={drilldowns.interviewsThisWeek.length}
+              href="/interviews"
+              icon={Clock}
+              tone="info"
+              emptyLabel="Nothing on the interview calendar this week."
+            >
+              <ul className="space-y-1.5 text-xs">
+                {drilldowns.interviewsThisWeek.slice(0, 3).map((i) => (
+                  <li key={i.id} className="flex items-baseline justify-between gap-2">
+                    <span className="truncate">{i.candidateName}</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {format(i.scheduledAt, 'EEE HH:mm')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </AttentionCard>
+          </div>
         </section>
+      </FadeUp>
 
-        <section>
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Recruitment
-          </h2>
-          <StaggerContainer className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {recruitmentTiles.map((t) => (
-              <StaggerItem key={t.label}>
-                <TileCard tile={t} />
-              </StaggerItem>
-            ))}
-          </StaggerContainer>
+      {/* Row 2 — Workspace totals. Compact chip strip for scanning. */}
+      <FadeUp delay={0.1}>
+        <section aria-label="Workspace totals" className="mb-8">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Workspace totals
+            </h2>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            <StatChip
+              label="Candidates"
+              value={m.candidates.total}
+              hint={`${m.candidates.available} available`}
+              href="/candidates"
+              icon={Users}
+            />
+            <StatChip
+              label="New leads (7d)"
+              value={m.leads.lastSevenDays}
+              hint={`${m.leads.awaitingPayment} awaiting payment`}
+              href="/leads"
+              icon={UserPlus}
+            />
+            <StatChip
+              label="Employers"
+              value={m.employers.total}
+              hint={`${m.employers.active} active`}
+              href="/employers"
+              icon={Building2}
+            />
+            <StatChip
+              label="Open requisitions"
+              value={m.requisitions.open + m.requisitions.inProgress}
+              hint={`${m.requisitions.totalPositionsOpen} positions open`}
+              href="/requisitions"
+              icon={Briefcase}
+            />
+            <StatChip
+              label="Active placements"
+              value={m.placements.activeConfirmed}
+              hint={`${m.placements.createdLast30Days} new · 30d`}
+              href="/placements"
+              icon={Trophy}
+            />
+            <StatChip
+              label="Ads expiring (30d)"
+              value={m.ads.expiringWithin30Days}
+              hint={`${m.ads.active} active · ${m.ads.expired} expired`}
+              href="/campaigns"
+              icon={Sparkles}
+              tone="warning"
+            />
+          </div>
         </section>
+      </FadeUp>
 
-        <section>
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Immigration
-          </h2>
-          <StaggerContainer className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {immigrationTiles.map((t) => (
-              <StaggerItem key={t.label}>
-                <TileCard tile={t} />
-              </StaggerItem>
-            ))}
-          </StaggerContainer>
+      {/* Row 3 — Drilldowns. Keeps the existing rich section for
+          people who need to dig in past the top-of-page attention row. */}
+      <FadeUp delay={0.15}>
+        <section aria-label="Drill down" className="mb-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Drill down
+            </h2>
+            <Link
+              href="/tasks"
+              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              <AlertCircle className="size-3" />
+              Task inbox
+            </Link>
+          </div>
+          <DashboardDrilldownsSection data={drilldowns} />
         </section>
-
-        <section>
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Activities
-          </h2>
-          <StaggerContainer className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {activityTiles.map((t) => (
-              <StaggerItem key={t.label}>
-                <TileCard tile={t} />
-              </StaggerItem>
-            ))}
-          </StaggerContainer>
-        </section>
-
-        <section>
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Act on this now
-          </h2>
-          <FadeUp delay={0.05}>
-            <DashboardDrilldownsSection data={drilldowns} />
-          </FadeUp>
-        </section>
-      </div>
+      </FadeUp>
     </div>
   );
 }
