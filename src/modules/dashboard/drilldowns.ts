@@ -1,5 +1,5 @@
 import { and, asc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { tasks } from '@/lib/db/schema/activities';
 import { immigrationCases } from '@/lib/db/schema/immigration';
@@ -62,7 +62,7 @@ export type DashboardDrilldowns = {
  * Each list caps at ~6 rows and links out to the full list page for the rest.
  */
 export async function fetchDashboardDrilldowns(): Promise<DashboardDrilldowns> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
 
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());

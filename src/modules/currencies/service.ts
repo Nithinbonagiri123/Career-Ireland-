@@ -1,5 +1,5 @@
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import type { Currency } from '@/lib/db/schema/currencies';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
@@ -12,7 +12,7 @@ import {
 } from './schemas';
 
 export async function fetchCurrencies(): Promise<Currency[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return listCurrencies();
 }
 

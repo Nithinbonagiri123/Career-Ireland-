@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { buttonVariants } from '@/components/ui/button';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { createDraft, getDraft } from '@/modules/candidates/onboarding-service';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchDocumentTypes } from '@/modules/document-types/service';
@@ -26,7 +26,7 @@ export default async function NewCandidatePage({
 }: {
   searchParams: Promise<{ draft?: string }>;
 }) {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const { draft: draftId } = await searchParams;
 
   if (!draftId) {

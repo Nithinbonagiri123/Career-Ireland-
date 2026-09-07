@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { checkPasswordPolicy } from '@/lib/auth/password-policy';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { users } from '@/lib/db/schema/users';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
@@ -22,7 +22,7 @@ export async function fetchUsers(): Promise<UserListRow[]> {
 
 /** Lightweight staff-visible user list for dropdowns (task assignment, etc). No admin fields. */
 export async function fetchStaffUserOptions(): Promise<UserListRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return listUsers();
 }
 

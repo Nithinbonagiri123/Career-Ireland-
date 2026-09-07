@@ -3,14 +3,14 @@ import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireRole } from '@/lib/auth/session';
-import { statusTone } from '@/lib/ui/status-tone';
 import { fetchHrDashboard, fetchRecentAttendance, fetchStaffDirectory } from '@/modules/hr/service';
+import { listUsers } from '@/modules/users/repository';
 import { StatChip } from '../../dashboard/stat-chip';
 import { AttendanceTable } from './attendance-table';
+import { StaffDirectory } from './staff-directory';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'HR admin · Career Ireland' };
@@ -21,11 +21,16 @@ export const metadata = { title: 'HR admin · Career Ireland' };
  */
 export default async function HrAdminPage() {
   await requireRole(['ADMIN']);
-  const [dashboard, staff, recent] = await Promise.all([
+  const [dashboard, staff, recent, allUsers] = await Promise.all([
     fetchHrDashboard(),
     fetchStaffDirectory(),
     fetchRecentAttendance(50),
+    listUsers(),
   ]);
+  // Manager options — every internal user, portal roles excluded.
+  const managerOptions = allUsers
+    .filter((u) => u.role !== 'CANDIDATE' && u.role !== 'EMPLOYER' && u.isActive)
+    .map((u) => ({ id: u.id, fullName: u.fullName, email: u.email }));
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
@@ -97,27 +102,10 @@ export default async function HrAdminPage() {
               <EmptyState
                 icon={Users2}
                 title="No staff profiles yet"
-                description="Create a profile against any ADMIN or STAFF user. The profile records department, position, joining date, and reporting manager."
+                description="Create a profile against any internal user. The profile records department, position, joining date, and reporting manager."
               />
             ) : (
-              <ul className="divide-y rounded-md border">
-                {staff.map((s) => (
-                  <li key={s.profile.id} className="flex items-center justify-between px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{s.userName}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {s.userEmail}
-                        {s.profile.department ? ` · ${s.profile.department}` : ''}
-                        {s.profile.position ? ` · ${s.profile.position}` : ''}
-                        {s.managerName ? ` · reports to ${s.managerName}` : ''}
-                      </p>
-                    </div>
-                    <Badge variant={statusTone(s.profile.status)} className="rounded-full">
-                      {s.profile.status.replace(/_/g, ' ')}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
+              <StaffDirectory rows={staff} managers={managerOptions} />
             )}
           </CardContent>
         </Card>

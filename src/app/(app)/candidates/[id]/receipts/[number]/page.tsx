@@ -3,7 +3,7 @@ import { ArrowLeft, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { buttonVariants } from '@/components/ui/button';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { COMPANY_INFO } from '@/modules/billing/company-info';
 import { fetchReceiptForPrint } from '@/modules/billing/read';
 
@@ -15,7 +15,7 @@ export default async function ReceiptPrintPage({
 }: {
   params: Promise<{ id: string; number: string }>;
 }) {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const { id, number } = await params;
   const data = await fetchReceiptForPrint(number);
   if (!data || data.payer.id !== id) notFound();

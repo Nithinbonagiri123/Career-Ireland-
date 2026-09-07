@@ -1,5 +1,5 @@
 import { desc, eq } from 'drizzle-orm';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { auditEvents } from '@/lib/db/schema/audit_events';
 import { users } from '@/lib/db/schema/users';
@@ -34,7 +34,7 @@ const NOISY_ACTIONS = new Set([
 ]);
 
 export async function fetchRecentActivity(limit = 12): Promise<ActivityRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   // Pull a wider slice than we intend to show so the client filter can
   // still return `limit` rows after dropping noisy actions.
   const rows = await db

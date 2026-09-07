@@ -7,7 +7,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { fetchTasksForImmigrationCase } from '@/modules/activities/service';
 import { fetchDocumentTypes } from '@/modules/document-types/service';
 import { fetchPersonDocuments } from '@/modules/documents/service';
@@ -37,7 +37,7 @@ export default async function ImmigrationCaseDetail({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const { id } = await params;
   const c = await fetchCase(id);
   if (!c) notFound();

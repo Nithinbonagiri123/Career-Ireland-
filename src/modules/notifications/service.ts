@@ -1,5 +1,5 @@
 import { and, desc, eq, isNull, lte, or, sql } from 'drizzle-orm';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { todayInDublin } from '@/lib/dates';
 import { db } from '@/lib/db/client';
 import { tasks } from '@/lib/db/schema/activities';
@@ -133,7 +133,7 @@ export async function fetchMyRecentNotifications(
   userId: string,
   limit = 50,
 ): Promise<Notification[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return db
     .select()
     .from(notifications)
@@ -143,7 +143,7 @@ export async function fetchMyRecentNotifications(
 }
 
 export async function countMyUnread(userId: string): Promise<number> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [row] = await db
     .select({ n: sql<number>`COUNT(*)::int` })
     .from(notifications)
@@ -157,7 +157,7 @@ export async function countMyUnread(userId: string): Promise<number> {
 }
 
 export async function markAllRead(userId: string): Promise<{ updated: number }> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const result = await db
     .update(notifications)
     .set({ readAt: new Date() })
@@ -181,7 +181,7 @@ export async function markNotificationRead(
   userId: string,
   notificationId: string,
 ): Promise<{ updated: number }> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const result = await db
     .update(notifications)
     .set({ readAt: new Date() })

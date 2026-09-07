@@ -1,6 +1,6 @@
 import { and, eq, lte, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { currencies } from '@/lib/db/schema/currencies';
@@ -39,7 +39,7 @@ function blankToNull(v: string | null | undefined): string | null {
  * Returns just the ID so the client can start auto-saving into it.
  */
 export async function createDraft(): Promise<{ personId: string }> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   return db.transaction(async (tx) => {
     const [row] = await tx
       .insert(persons)
@@ -71,7 +71,7 @@ export async function createDraft(): Promise<{ personId: string }> {
  * in another tab).
  */
 export async function updateDraftPerson(input: UpdateDraftPersonInput): Promise<void> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const parsed = UpdateDraftPersonSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -87,7 +87,7 @@ export async function updateDraftPerson(input: UpdateDraftPersonInput): Promise<
   if (d.dateOfBirth !== undefined) patch.dateOfBirth = d.dateOfBirth ?? null;
   if (d.nationality !== undefined) patch.nationality = d.nationality ?? null;
   if (d.email !== undefined) {
-    const trimmed = d.email && d.email.trim() ? d.email.trim() : null;
+    const trimmed = d.email?.trim() ? d.email.trim() : null;
     patch.email = trimmed;
     patch.normalizedEmail = normaliseEmail(trimmed);
   }
@@ -114,7 +114,7 @@ export async function updateDraftPerson(input: UpdateDraftPersonInput): Promise<
  * the person row until finalise (the candidate profile doesn't exist yet).
  */
 export async function updateDraftNarrative(input: UpdateDraftNarrativeInput): Promise<void> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const parsed = UpdateDraftNarrativeSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -183,7 +183,7 @@ export type FinaliseResult = {
  * Any failure rolls back the whole thing.
  */
 export async function finaliseDraft(input: FinaliseDraftInput): Promise<FinaliseResult> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = FinaliseDraftSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -358,7 +358,7 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
  * Used by the "Discard draft" button and the nightly cleanup cron.
  */
 export async function discardDraft(personId: string): Promise<void> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   return db.transaction(async (tx) => {
     const [draft] = await tx
       .select()
@@ -417,7 +417,7 @@ export async function cleanUpStaleDrafts(): Promise<{ deleted: number }> {
 
 /** Read the current state of a draft to hydrate the form. */
 export async function getDraft(personId: string): Promise<Person | null> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [row] = await db
     .select()
     .from(persons)

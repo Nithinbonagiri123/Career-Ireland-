@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { toCsv } from '@/lib/csv';
 import { listCandidates } from '@/modules/candidates/repository';
 import { fetchPayments } from '@/modules/commerce/service';
@@ -23,7 +23,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ resource: string }> },
 ) {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const { resource } = await params;
 
   if (resource === 'candidates') {

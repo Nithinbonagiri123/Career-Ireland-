@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { eq, gt } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { checkPasswordPolicy } from '@/lib/auth/password-policy';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { type PortalInvitation, portalInvitations, users } from '@/lib/db/schema/users';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
@@ -103,7 +103,7 @@ async function createInvitation(args: {
 }
 
 export async function inviteCandidate(input: InviteCandidateInput): Promise<PortalInvitation> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = InviteCandidateSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -121,7 +121,7 @@ export async function inviteCandidate(input: InviteCandidateInput): Promise<Port
 }
 
 export async function inviteEmployer(input: InviteEmployerInput): Promise<PortalInvitation> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = InviteEmployerSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -241,7 +241,7 @@ export async function acceptInvitation(input: AcceptInvitationInput): Promise<{ 
 
 /** Recent invitations for the staff admin view. */
 export async function listRecentInvitations(): Promise<PortalInvitation[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return db
     .select()
     .from(portalInvitations)

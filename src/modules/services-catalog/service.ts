@@ -1,6 +1,6 @@
 import { asc, eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
   type ServiceCatalogItem,
@@ -23,12 +23,12 @@ function blankToNull(v: string | undefined): string | null {
 }
 
 export async function fetchServiceCatalog(): Promise<ServiceCatalogItem[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return db.select().from(serviceCatalogItems).orderBy(asc(serviceCatalogItems.name));
 }
 
 export async function fetchServicePackages(): Promise<ServicePackage[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return db.select().from(servicePackages).orderBy(asc(servicePackages.name));
 }
 

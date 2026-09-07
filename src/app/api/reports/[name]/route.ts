@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { toCsv } from '@/lib/csv';
 import {
   applicationFunnel,
@@ -19,7 +19,7 @@ function csvResponse(name: string, csv: string, days: number) {
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ name: string }> }) {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const { name } = await params;
   const url = new URL(request.url);
   const days = Number.parseInt(url.searchParams.get('days') ?? '90', 10);

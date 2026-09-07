@@ -1,5 +1,5 @@
 import { and, between, eq, gt, isNull, lte, ne, sql } from 'drizzle-orm';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { tasks } from '@/lib/db/schema/activities';
 import { advertisements } from '@/lib/db/schema/campaigns';
@@ -58,7 +58,7 @@ export type DashboardMetrics = {
 
 /** All metrics for the top-level dashboard in a single call. Fast at our scale. */
 export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -95,9 +95,9 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
     db
       .select({
         total: sql<number>`COUNT(*)::int`,
-        available: sql<number>`SUM(CASE WHEN ${candidateProfiles.availabilityStatus} = 'AVAILABLE' THEN 1 ELSE 0 END)::int`,
-        placed: sql<number>`SUM(CASE WHEN ${candidateProfiles.availabilityStatus} = 'PLACED' THEN 1 ELSE 0 END)::int`,
-        inactive: sql<number>`SUM(CASE WHEN ${candidateProfiles.lifecycleStatus} <> 'ACTIVE' THEN 1 ELSE 0 END)::int`,
+        available: sql<number>`COALESCE(SUM(CASE WHEN ${candidateProfiles.availabilityStatus} = 'AVAILABLE' THEN 1 ELSE 0 END), 0)::int`,
+        placed: sql<number>`COALESCE(SUM(CASE WHEN ${candidateProfiles.availabilityStatus} = 'PLACED' THEN 1 ELSE 0 END), 0)::int`,
+        inactive: sql<number>`COALESCE(SUM(CASE WHEN ${candidateProfiles.lifecycleStatus} <> 'ACTIVE' THEN 1 ELSE 0 END), 0)::int`,
       })
       .from(candidateProfiles)
       .innerJoin(persons, eq(persons.id, candidateProfiles.personId))
@@ -112,7 +112,7 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
     db
       .select({
         total: sql<number>`COUNT(*)::int`,
-        awaitingPayment: sql<number>`SUM(CASE WHEN ${leads.status} = 'AWAITING_PAYMENT' THEN 1 ELSE 0 END)::int`,
+        awaitingPayment: sql<number>`COALESCE(SUM(CASE WHEN ${leads.status} = 'AWAITING_PAYMENT' THEN 1 ELSE 0 END), 0)::int`,
       })
       .from(leads)
       .where(and(isNull(leads.archivedAt), ne(leads.status, 'CONVERTED')))
@@ -125,15 +125,15 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
     db
       .select({
         total: sql<number>`COUNT(*)::int`,
-        active: sql<number>`SUM(CASE WHEN ${employers.relationshipStatus} = 'ACTIVE' THEN 1 ELSE 0 END)::int`,
+        active: sql<number>`COALESCE(SUM(CASE WHEN ${employers.relationshipStatus} = 'ACTIVE' THEN 1 ELSE 0 END), 0)::int`,
       })
       .from(employers)
       .where(isNull(employers.archivedAt))
       .then((r) => r[0] ?? { total: 0, active: 0 }),
     db
       .select({
-        open: sql<number>`SUM(CASE WHEN ${jobRequisitions.status} = 'OPEN' THEN 1 ELSE 0 END)::int`,
-        inProgress: sql<number>`SUM(CASE WHEN ${jobRequisitions.status} IN ('IN_PROGRESS','PARTIALLY_FILLED') THEN 1 ELSE 0 END)::int`,
+        open: sql<number>`COALESCE(SUM(CASE WHEN ${jobRequisitions.status} = 'OPEN' THEN 1 ELSE 0 END), 0)::int`,
+        inProgress: sql<number>`COALESCE(SUM(CASE WHEN ${jobRequisitions.status} IN ('IN_PROGRESS','PARTIALLY_FILLED') THEN 1 ELSE 0 END), 0)::int`,
       })
       .from(jobRequisitions)
       .then((r) => r[0] ?? { open: 0, inProgress: 0 }),

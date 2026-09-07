@@ -3,7 +3,7 @@ import { ArrowLeft, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { buttonVariants } from '@/components/ui/button';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { COMPANY_INFO } from '@/modules/billing/company-info';
 import { fetchInvoiceForPrint } from '@/modules/billing/read';
 import { VoidInvoiceControls } from './void-invoice-controls';
@@ -21,7 +21,7 @@ export default async function InvoicePrintPage({
 }: {
   params: Promise<{ id: string; number: string }>;
 }) {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const { id, number } = await params;
   const data = await fetchInvoiceForPrint(number);
   if (!data || data.payer.id !== id) notFound();

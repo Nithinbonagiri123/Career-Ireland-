@@ -1,7 +1,7 @@
 import { MessagesSquare } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { fetchRecentCommunications } from '@/modules/activities/service';
 import { fetchEmployers } from '@/modules/employers/service';
 import { fetchPersons } from '@/modules/persons/service';
@@ -11,7 +11,7 @@ import { LogCommDialog } from './log-comm-dialog';
 export const dynamic = 'force-dynamic';
 
 export default async function CommunicationsPage() {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [comms, persons, employers] = await Promise.all([
     fetchRecentCommunications(100),
     fetchPersons(),

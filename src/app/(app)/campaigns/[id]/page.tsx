@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import {
   fetchAdsForCampaign,
   fetchCampaign,
@@ -30,7 +30,7 @@ const STATUS_VARIANT = {
 } as const;
 
 export default async function CampaignDetail({ params }: { params: Promise<{ id: string }> }) {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const { id } = await params;
   const campaign = await fetchCampaign(id);
   if (!campaign) notFound();

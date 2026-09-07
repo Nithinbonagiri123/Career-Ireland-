@@ -1,6 +1,6 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
   type CandidateQualification,
@@ -40,7 +40,7 @@ function blankToNull(v: string | undefined | null): string | null {
 export type CandidateSkillRow = CandidateSkill & { skillName: string };
 
 export async function listCandidateSkills(personId: string): Promise<CandidateSkillRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({ skill: candidateSkills, name: skills.name })
     .from(candidateSkills)
@@ -51,7 +51,7 @@ export async function listCandidateSkills(personId: string): Promise<CandidateSk
 }
 
 export async function addCandidateSkill(input: AddCandidateSkillInput): Promise<CandidateSkill> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = AddCandidateSkillSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -94,7 +94,7 @@ export async function addCandidateSkill(input: AddCandidateSkillInput): Promise<
 export async function updateCandidateSkill(
   input: UpdateCandidateSkillInput,
 ): Promise<CandidateSkill> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateCandidateSkillSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx
@@ -126,7 +126,7 @@ export async function updateCandidateSkill(
 }
 
 export async function removeCandidateSkill(input: RemoveCandidateSkillInput): Promise<void> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = RemoveCandidateSkillSchema.parse(input);
   await db.transaction(async (tx) => {
     const [before] = await tx
@@ -153,7 +153,7 @@ export type CandidateQualificationRow = CandidateQualification & { qualification
 export async function listCandidateQualifications(
   personId: string,
 ): Promise<CandidateQualificationRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({ q: candidateQualifications, name: qualifications.name })
     .from(candidateQualifications)
@@ -166,7 +166,7 @@ export async function listCandidateQualifications(
 export async function addCandidateQualification(
   input: AddCandidateQualificationInput,
 ): Promise<CandidateQualification> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = AddCandidateQualificationSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -218,7 +218,7 @@ export async function addCandidateQualification(
 export async function updateCandidateQualification(
   input: UpdateCandidateQualificationInput,
 ): Promise<CandidateQualification> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateCandidateQualificationSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx
@@ -252,7 +252,7 @@ export async function updateCandidateQualification(
 export async function removeCandidateQualification(
   input: RemoveCandidateQualificationInput,
 ): Promise<void> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = RemoveCandidateQualificationSchema.parse(input);
   await db.transaction(async (tx) => {
     const [before] = await tx
@@ -275,7 +275,7 @@ export async function removeCandidateQualification(
 // ─── Employment history ───────────────────────────────────────────────────────
 
 export async function listEmploymentHistory(personId: string): Promise<EmploymentHistory[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return db
     .select()
     .from(employmentHistory)
@@ -286,7 +286,7 @@ export async function listEmploymentHistory(personId: string): Promise<Employmen
 export async function upsertEmploymentHistory(
   input: UpsertEmploymentHistoryInput,
 ): Promise<EmploymentHistory> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpsertEmploymentHistorySchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -343,7 +343,7 @@ export async function upsertEmploymentHistory(
 }
 
 export async function removeEmploymentHistory(input: RemoveEmploymentHistoryInput): Promise<void> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = RemoveEmploymentHistorySchema.parse(input);
   await db.transaction(async (tx) => {
     const [before] = await tx

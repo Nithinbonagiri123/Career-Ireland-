@@ -1,5 +1,5 @@
 import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { immigrationCases } from '@/lib/db/schema/immigration';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
@@ -26,7 +26,7 @@ const PER_GROUP_LIMIT = 5;
  * ever becomes a hot path.
  */
 export async function globalSearch(rawQuery: string): Promise<SearchResult[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const q = rawQuery.trim();
   if (q.length < MIN_QUERY_LENGTH) return [];
 

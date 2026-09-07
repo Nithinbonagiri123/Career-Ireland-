@@ -1,6 +1,6 @@
 import { asc, eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { type Skill, skills } from '@/lib/db/schema/reference';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
@@ -12,7 +12,7 @@ import {
 } from './schemas';
 
 export async function fetchSkills(): Promise<Skill[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return db.select().from(skills).orderBy(asc(skills.name));
 }
 

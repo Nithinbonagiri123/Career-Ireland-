@@ -1,14 +1,14 @@
 import { AlertCircle, LayoutDashboard, PlaneTakeoff } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
 import { StatChip } from '../stat-chip';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ImmigrationDashboard() {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const m = await fetchDashboardMetrics();
 
   return (

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
   type CommunicationLog,
@@ -39,7 +39,7 @@ export type CommunicationRow = CommunicationLog & { staffName: string };
 export type TaskRow = Task & { assignedName: string };
 
 export async function fetchRecentCommunications(limit = 50): Promise<CommunicationRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({ c: communicationLogs, staffName: users.fullName })
     .from(communicationLogs)
@@ -51,7 +51,7 @@ export async function fetchRecentCommunications(limit = 50): Promise<Communicati
 }
 
 export async function fetchTasks(): Promise<TaskRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({ t: tasks, assignedName: users.fullName })
     .from(tasks)
@@ -62,7 +62,7 @@ export async function fetchTasks(): Promise<TaskRow[]> {
 }
 
 export async function fetchTasksForImmigrationCase(caseId: string): Promise<TaskRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({ t: tasks, assignedName: users.fullName })
     .from(tasks)
@@ -75,7 +75,7 @@ export async function fetchTasksForImmigrationCase(caseId: string): Promise<Task
 export async function createCommunication(
   input: CreateCommunicationInput,
 ): Promise<CommunicationLog> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = CreateCommunicationSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -150,7 +150,7 @@ export async function createCommunication(
 }
 
 export async function createTask(input: CreateTaskInput): Promise<Task> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = CreateTaskSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -192,7 +192,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
 }
 
 export async function updateTaskStatus(input: UpdateTaskStatusInput): Promise<Task> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateTaskStatusSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(tasks).where(eq(tasks.id, parsed.taskId)).limit(1);
@@ -223,7 +223,7 @@ export async function updateTaskStatus(input: UpdateTaskStatusInput): Promise<Ta
 // ─── Task update + archive ────────────────────────────────────────────────────
 
 export async function updateTask(input: UpdateTaskInput): Promise<Task> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateTaskSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(tasks).where(eq(tasks.id, parsed.taskId)).limit(1);
@@ -267,7 +267,7 @@ export async function updateTask(input: UpdateTaskInput): Promise<Task> {
 }
 
 export async function archiveTask(input: ArchiveTaskInput): Promise<Task> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = ArchiveTaskSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(tasks).where(eq(tasks.id, parsed.taskId)).limit(1);
@@ -303,7 +303,7 @@ export async function archiveTask(input: ArchiveTaskInput): Promise<Task> {
 export async function updateCommunication(
   input: UpdateCommunicationInput,
 ): Promise<CommunicationLog> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateCommunicationSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx
@@ -354,7 +354,7 @@ export async function updateCommunication(
 export async function archiveCommunication(
   input: ArchiveCommunicationInput,
 ): Promise<CommunicationLog> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = ArchiveCommunicationSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx

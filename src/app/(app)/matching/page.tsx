@@ -2,7 +2,7 @@ import { SearchCheck } from 'lucide-react';
 import Link from 'next/link';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { fetchRequisitions } from '@/modules/requisitions/service';
 import { WorkflowRequisitionList } from '../_workflow-list/requisition-list';
 
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Matching · Career Ireland' };
 
 export default async function MatchingPage() {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const requisitions = await fetchRequisitions();
 
   return (

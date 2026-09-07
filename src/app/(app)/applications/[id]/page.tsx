@@ -6,7 +6,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { fetchApplication } from '@/modules/applications/service';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { listInterviewsForApplication } from '@/modules/interviews/service';
@@ -39,7 +39,7 @@ const SOURCE_LABEL: Record<string, string> = {
 };
 
 export default async function ApplicationDetail({ params }: { params: Promise<{ id: string }> }) {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const { id } = await params;
   const app = await fetchApplication(id);
   if (!app) notFound();

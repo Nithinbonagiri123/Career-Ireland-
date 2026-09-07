@@ -2,7 +2,7 @@ import { Sparkles } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { fetchCampaigns } from '@/modules/campaigns/service';
 import { fetchRequisitions } from '@/modules/requisitions/service';
 import { CampaignDialog } from './campaign-dialog';
@@ -11,7 +11,7 @@ import { CampaignsTable } from './campaigns-table';
 export const dynamic = 'force-dynamic';
 
 export default async function CampaignsPage() {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [campaigns, requisitions] = await Promise.all([fetchCampaigns(), fetchRequisitions()]);
 
   return (

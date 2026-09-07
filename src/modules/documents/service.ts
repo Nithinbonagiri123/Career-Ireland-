@@ -1,6 +1,11 @@
 import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requirePortalCandidate, requireRole, requireSession } from '@/lib/auth/session';
+import {
+  requireInternalStaff,
+  requirePortalCandidate,
+  requireRole,
+  requireSession,
+} from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
   type CandidateDocumentRequirement,
@@ -243,7 +248,11 @@ export async function presignDocumentDownload(documentInstanceId: string) {
 // --------- Review flow ---------
 
 export async function reviewDocument(input: ReviewDocumentInput): Promise<DocumentInstance> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  // Document review is a substantive quality decision on candidate
+  // eligibility. Restricted to ADMIN + DOCUMENT_SPECIALIST so a
+  // recruiter accepting a doc as "looks fine" doesn't count as the
+  // official review the compliance trail depends on.
+  const session = await requireRole(['ADMIN', 'DOCUMENT_SPECIALIST']);
   const parsed = ReviewDocumentSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -310,7 +319,7 @@ export async function reviewDocument(input: ReviewDocumentInput): Promise<Docume
 export async function fetchRequirementRules(): Promise<
   Array<DocumentRequirementRule & { documentTypeCode: string; documentTypeName: string }>
 > {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({
       rule: documentRequirementRules,
@@ -476,7 +485,7 @@ export async function fetchPersonDocumentsByTypeCode(
 export async function materialiseRequirementsForPerson(
   input: MaterializeRequirementsInput,
 ): Promise<{ created: number }> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = MaterializeRequirementsSchema.parse(input);
 
   const [profile] = await db
@@ -545,7 +554,7 @@ export async function materialiseRequirementsForPerson(
 export async function addPersonSpecificRequirement(
   input: AddRequirementForPersonInput,
 ): Promise<CandidateDocumentRequirement> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = AddRequirementForPersonSchema.parse(input);
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -591,7 +600,7 @@ export type StaffDocumentRow = DocumentInstance & {
 };
 
 export async function fetchAllDocumentsForStaff(): Promise<StaffDocumentRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({
       instance: documentInstances,
@@ -631,11 +640,13 @@ export async function fetchMyRequirementsAndDocuments() {
 /**
  * Soft-void a document. Hidden from every list, export, and requirement
  * fulfilment check, but the DB row + S3 object stay for the audit trail.
- * Only ADMIN/STAFF can void. Re-uploading a corrected version via the
- * normal upload flow bumps the version and leaves the voided row untouched.
+ * ADMIN + DOCUMENT_SPECIALIST only — voiding hides evidence, so it
+ * matches the same authorisation tier as review. Re-uploading a
+ * corrected version via the normal upload flow bumps the version and
+ * leaves the voided row untouched.
  */
 export async function voidDocument(input: VoidDocumentInput) {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireRole(['ADMIN', 'DOCUMENT_SPECIALIST']);
   const parsed = VoidDocumentSchema.parse(input);
 
   return db.transaction(async (tx) => {

@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { type Payment, type ServiceEngagement, serviceEngagements } from '@/lib/db/schema/commerce';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
@@ -37,17 +37,17 @@ function blankToNull(v: string | undefined | null): string | null {
 }
 
 export async function fetchEngagements(): Promise<EngagementListRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return listEngagements();
 }
 
 export async function fetchPayments() {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return listPayments();
 }
 
 export async function createEngagement(input: CreateEngagementInput): Promise<ServiceEngagement> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = CreateEngagementSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -92,7 +92,7 @@ export async function createEngagement(input: CreateEngagementInput): Promise<Se
 export async function updateEngagementStatus(
   input: UpdateEngagementStatusInput,
 ): Promise<ServiceEngagement> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateEngagementStatusSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await getEngagement(parsed.engagementId);
@@ -113,7 +113,7 @@ export async function updateEngagementStatus(
 }
 
 export async function recordPayment(input: RecordPaymentInput): Promise<Payment> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = RecordPaymentSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -164,7 +164,11 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Payment>
 }
 
 export async function verifyPayment(input: VerifyPaymentInput): Promise<Payment> {
-  const session = await requireRole(['ADMIN']);
+  // Payment verification is the moment cash counts as received. Only
+  // ADMIN + FINANCE can flip PENDING → VERIFIED so anyone else on the
+  // internal team can't accidentally trip an audit-relevant financial
+  // state change.
+  const session = await requireRole(['ADMIN', 'FINANCE']);
   const parsed = VerifyPaymentSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await getPayment(parsed.paymentId);
@@ -210,7 +214,9 @@ export async function verifyPayment(input: VerifyPaymentInput): Promise<Payment>
 }
 
 export async function rejectPayment(input: RejectPaymentInput): Promise<Payment> {
-  const session = await requireRole(['ADMIN']);
+  // Same gating as verifyPayment — rejecting a payment is also a
+  // financial state change with audit consequences.
+  const session = await requireRole(['ADMIN', 'FINANCE']);
   const parsed = RejectPaymentSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await getPayment(parsed.paymentId);
@@ -241,7 +247,7 @@ export async function rejectPayment(input: RejectPaymentInput): Promise<Payment>
 // ─── Engagement archive / unarchive ───────────────────────────────────────────
 
 export async function archiveEngagement(input: ArchiveEngagementInput): Promise<ServiceEngagement> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = ArchiveEngagementSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await getEngagement(parsed.engagementId);
@@ -275,7 +281,7 @@ export async function archiveEngagement(input: ArchiveEngagementInput): Promise<
 export async function unarchiveEngagement(
   input: UnarchiveEngagementInput,
 ): Promise<ServiceEngagement> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UnarchiveEngagementSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await getEngagement(parsed.engagementId);

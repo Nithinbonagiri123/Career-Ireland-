@@ -102,7 +102,7 @@ export async function requestPasswordReset(input: {
     .where(eq(users.email, normalizedEmail))
     .limit(1);
 
-  if (!user || !user.isActive) {
+  if (!user?.isActive) {
     // No such account (or deactivated). Return success shape without doing
     // anything so responses are identical to the happy path.
     return { delivered: false };

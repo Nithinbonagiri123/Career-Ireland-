@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { todayInDublin } from '@/lib/dates';
 import { db } from '@/lib/db/client';
 import { type DocumentInstance, documentInstances } from '@/lib/db/schema/documents';
@@ -54,7 +54,7 @@ export type CaseListRow = ImmigrationCase & {
 };
 
 export async function fetchCase(id: string): Promise<CaseListRow | null> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [row] = await db
     .select({
       c: immigrationCases,
@@ -77,7 +77,7 @@ export async function fetchCase(id: string): Promise<CaseListRow | null> {
 }
 
 export async function fetchCases(scope?: AssignmentScope): Promise<CaseListRow[]> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const scopeCond = scope
     ? assignmentCondition(scope, immigrationCases.assignedUserId, session.user.id)
     : undefined;
@@ -105,7 +105,7 @@ export async function fetchCases(scope?: AssignmentScope): Promise<CaseListRow[]
 }
 
 export async function upsertCase(input: UpsertCaseInput): Promise<ImmigrationCase> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpsertCaseSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -196,7 +196,7 @@ export async function upsertCase(input: UpsertCaseInput): Promise<ImmigrationCas
 }
 
 export async function updateCaseStatus(input: UpdateCaseStatusInput): Promise<ImmigrationCase> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateCaseStatusSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx
@@ -262,7 +262,7 @@ export type CaseDocumentRequirementRow = ImmigrationCaseDocumentRequirement & {
 export async function listCaseDocumentRequirements(
   caseId: string,
 ): Promise<CaseDocumentRequirementRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({ req: immigrationCaseDocumentRequirements, type: documentTypes })
     .from(immigrationCaseDocumentRequirements)
@@ -283,7 +283,7 @@ export async function listCaseDocumentRequirements(
 export async function addCaseDocumentRequirement(
   input: AddCaseDocumentRequirementInput,
 ): Promise<ImmigrationCaseDocumentRequirement> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = AddCaseDocumentRequirementSchema.parse(input);
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -331,7 +331,7 @@ export async function addCaseDocumentRequirement(
 export async function updateCaseDocumentRequirement(
   input: UpdateCaseDocumentRequirementInput,
 ): Promise<ImmigrationCaseDocumentRequirement> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateCaseDocumentRequirementSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx
@@ -365,7 +365,7 @@ export async function updateCaseDocumentRequirement(
 export async function removeCaseDocumentRequirement(
   input: RemoveCaseDocumentRequirementInput,
 ): Promise<void> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = RemoveCaseDocumentRequirementSchema.parse(input);
   await db.transaction(async (tx) => {
     const [before] = await tx
@@ -398,7 +398,7 @@ export type CaseDocumentRow = ImmigrationCaseDocument & {
 };
 
 export async function listCaseDocuments(caseId: string): Promise<CaseDocumentRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({
       link: immigrationCaseDocuments,
@@ -424,7 +424,7 @@ export async function listCaseDocuments(caseId: string): Promise<CaseDocumentRow
 export async function attachDocumentToCase(
   input: AttachCaseDocumentInput,
 ): Promise<ImmigrationCaseDocument> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = AttachCaseDocumentSchema.parse(input);
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -479,7 +479,7 @@ export async function attachDocumentToCase(
 }
 
 export async function detachDocumentFromCase(input: DetachCaseDocumentInput): Promise<void> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = DetachCaseDocumentSchema.parse(input);
   await db.transaction(async (tx) => {
     const [before] = await tx
@@ -529,7 +529,7 @@ export async function detachDocumentFromCase(input: DetachCaseDocumentInput): Pr
 
 /** Soft-archive an immigration case. List queries filter archived rows out; the record is untouched. */
 export async function archiveCase(input: ArchiveCaseInput): Promise<ImmigrationCase> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = ArchiveCaseSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx
@@ -562,7 +562,7 @@ export async function archiveCase(input: ArchiveCaseInput): Promise<ImmigrationC
 
 /** Restore a previously archived immigration case back to the active list. */
 export async function unarchiveCase(input: UnarchiveCaseInput): Promise<ImmigrationCase> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UnarchiveCaseSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx

@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { statusTone } from '@/lib/ui/status-tone';
 import {
   listApplicationsForRequisition,
@@ -31,7 +31,7 @@ import { RequisitionTabs } from './requisition-tabs';
 export const dynamic = 'force-dynamic';
 
 export default async function RequisitionDetail({ params }: { params: Promise<{ id: string }> }) {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const { id } = await params;
   const requisition = await fetchRequisition(id);
   if (!requisition) notFound();

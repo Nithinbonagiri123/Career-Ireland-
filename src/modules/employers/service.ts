@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
   type Employer,
@@ -26,7 +26,7 @@ function blankToNull(v: string | undefined | null): string | null {
 }
 
 export async function fetchEmployers(scope?: AssignmentScope): Promise<Employer[]> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const scopeCond = scope
     ? assignmentCondition(scope, employers.assignedUserId, session.user.id)
     : undefined;
@@ -38,7 +38,7 @@ export async function fetchEmployers(scope?: AssignmentScope): Promise<Employer[
 }
 
 export async function fetchEmployer(id: string): Promise<Employer | null> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [row] = await db.select().from(employers).where(eq(employers.id, id)).limit(1);
   return row ?? null;
 }
@@ -77,7 +77,7 @@ export async function findSimilarEmployers(input: {
   tradingName?: string;
   website?: string;
 }): Promise<SimilarEmployer[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const legalNorm = input.legalName?.trim().toLowerCase();
   const tradingNorm = input.tradingName?.trim().toLowerCase();
   const domain = extractDomain(input.website);
@@ -153,7 +153,7 @@ export async function findSimilarEmployers(input: {
 }
 
 export async function fetchEmployerContacts(employerId: string): Promise<EmployerContact[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return db
     .select()
     .from(employerContacts)
@@ -162,7 +162,7 @@ export async function fetchEmployerContacts(employerId: string): Promise<Employe
 }
 
 export async function upsertEmployer(input: UpsertEmployerInput): Promise<Employer> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpsertEmployerSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -220,7 +220,7 @@ export async function upsertEmployer(input: UpsertEmployerInput): Promise<Employ
 }
 
 export async function upsertEmployerContact(input: UpsertContactInput): Promise<EmployerContact> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpsertContactSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -287,7 +287,7 @@ export async function upsertEmployerContact(input: UpsertContactInput): Promise<
 
 /** Soft-archive an employer. List queries filter archived rows out; the record itself is untouched. */
 export async function archiveEmployer(input: ArchiveEmployerInput): Promise<Employer> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = ArchiveEmployerSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx
@@ -320,7 +320,7 @@ export async function archiveEmployer(input: ArchiveEmployerInput): Promise<Empl
 
 /** Restore a previously archived employer back to the active list. */
 export async function unarchiveEmployer(input: UnarchiveEmployerInput): Promise<Employer> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UnarchiveEmployerSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx

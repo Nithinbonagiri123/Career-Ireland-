@@ -1,7 +1,7 @@
 import { inArray, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { candidateProfiles } from '@/lib/db/schema/persons';
 import { ValidationError } from '@/lib/errors';
@@ -24,7 +24,7 @@ export type LifecycleStatus = z.infer<typeof LifecycleStatusSchema>;
 export async function bulkAssignCandidates(
   input: BulkAssignCandidatesInput,
 ): Promise<{ changed: number }> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = BulkAssignCandidatesSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -76,7 +76,7 @@ export async function bulkAssignCandidates(
 export async function bulkUpdateCandidateLifecycle(
   input: BulkUpdateLifecycleInput,
 ): Promise<{ changed: number }> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = BulkUpdateLifecycleSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(

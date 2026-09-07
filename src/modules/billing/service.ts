@@ -134,7 +134,10 @@ export async function markInvoicePaid(tx: DbExecutor, invoiceId: string): Promis
  * than voided.
  */
 export async function voidInvoice(invoiceId: string, reason: string): Promise<Invoice> {
-  const session = await requireRole(['ADMIN']);
+  // Voiding is destructive to the financial trail. ADMIN + FINANCE
+  // only; staff who made a mistake must escalate rather than fix in
+  // place. Audit trail still records the reason.
+  const session = await requireRole(['ADMIN', 'FINANCE']);
   const trimmed = reason.trim();
   if (trimmed.length < 3) {
     throw new ValidationError('A void reason of at least 3 characters is required.', {

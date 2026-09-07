@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { immigrationCases } from '@/lib/db/schema/immigration';
 import { leads } from '@/lib/db/schema/leads';
@@ -70,7 +70,7 @@ export async function assignEntity(input: {
   id: string;
   userId: string | null;
 }): Promise<{ before: string | null; after: string | null } | null> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const target = TARGETS[input.entity];
   if (!target) throw new BusinessRuleError('BAD_ENTITY', `Unknown entity: ${input.entity}`);
 

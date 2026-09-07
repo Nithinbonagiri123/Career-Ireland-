@@ -1,5 +1,5 @@
 import { and, eq, gt, isNull, ne, sql } from 'drizzle-orm';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { immigrationCases } from '@/lib/db/schema/immigration';
 import { leads } from '@/lib/db/schema/leads';
@@ -28,7 +28,7 @@ export type DashboardPipelines = {
 };
 
 export async function fetchDashboardPipelines(): Promise<DashboardPipelines> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
 
   const [
     leadOpen,

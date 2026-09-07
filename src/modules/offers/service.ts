@@ -1,6 +1,6 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { type Offer, offers } from '@/lib/db/schema/interviews_offers';
 import { jobApplications } from '@/lib/db/schema/recruitment';
@@ -23,7 +23,7 @@ function blankToNull(v: string | undefined | null): string | null {
 }
 
 export async function listOffersForApplication(jobApplicationId: string): Promise<Offer[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return db
     .select()
     .from(offers)
@@ -32,7 +32,7 @@ export async function listOffersForApplication(jobApplicationId: string): Promis
 }
 
 export async function createOffer(input: CreateOfferInput): Promise<Offer> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = CreateOfferSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -75,7 +75,7 @@ export async function createOffer(input: CreateOfferInput): Promise<Offer> {
 }
 
 export async function updateOffer(input: UpdateOfferInput): Promise<Offer> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateOfferSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(offers).where(eq(offers.id, parsed.id)).limit(1);
@@ -119,7 +119,7 @@ export async function updateOffer(input: UpdateOfferInput): Promise<Offer> {
  * to move the associated application to ACCEPTED (which itself triggers auto-placement).
  */
 export async function updateOfferStatus(input: UpdateOfferStatusInput): Promise<Offer> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateOfferStatusSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(offers).where(eq(offers.id, parsed.id)).limit(1);
@@ -178,7 +178,7 @@ export async function updateOfferStatus(input: UpdateOfferStatusInput): Promise<
 }
 
 export async function removeOffer(input: RemoveOfferInput): Promise<void> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = RemoveOfferSchema.parse(input);
   await db.transaction(async (tx) => {
     const [before] = await tx.select().from(offers).where(eq(offers.id, parsed.id)).limit(1);

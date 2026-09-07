@@ -1,5 +1,5 @@
 import { desc, eq } from 'drizzle-orm';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { invoices, receipts } from '@/lib/db/schema/billing';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
@@ -19,7 +19,7 @@ export type InvoicePrintable = {
 };
 
 export async function fetchInvoiceForPrint(number: string): Promise<InvoicePrintable | null> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [row] = await db
     .select({
       invoice: invoices,
@@ -55,7 +55,7 @@ export async function fetchLatestBillingLinksForPerson(personId: string): Promis
   invoiceNumber: string | null;
   receiptNumber: string | null;
 }> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [invoiceRow, receiptRow] = await Promise.all([
     db
       .select({ number: invoices.number })
@@ -77,7 +77,7 @@ export async function fetchLatestBillingLinksForPerson(personId: string): Promis
 }
 
 export async function fetchReceiptForPrint(number: string): Promise<ReceiptPrintable | null> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [row] = await db
     .select({
       receipt: receipts,

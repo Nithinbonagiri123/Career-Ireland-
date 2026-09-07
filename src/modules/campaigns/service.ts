@@ -1,6 +1,6 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
   type Advertisement,
@@ -37,7 +37,7 @@ export type CampaignListRow = RecruitmentCampaign & {
 };
 
 export async function fetchCampaigns(): Promise<CampaignListRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({
       c: recruitmentCampaigns,
@@ -51,7 +51,7 @@ export async function fetchCampaigns(): Promise<CampaignListRow[]> {
 }
 
 export async function upsertCampaign(input: UpsertCampaignInput): Promise<RecruitmentCampaign> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpsertCampaignSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -118,7 +118,7 @@ export async function upsertCampaign(input: UpsertCampaignInput): Promise<Recrui
 }
 
 export async function fetchCampaign(id: string): Promise<CampaignListRow | null> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [row] = await db
     .select({ c: recruitmentCampaigns, title: jobRequisitions.title })
     .from(recruitmentCampaigns)
@@ -129,7 +129,7 @@ export async function fetchCampaign(id: string): Promise<CampaignListRow | null>
 }
 
 export async function fetchAdsForCampaign(campaignId: string): Promise<Advertisement[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return db
     .select()
     .from(advertisements)
@@ -138,7 +138,7 @@ export async function fetchAdsForCampaign(campaignId: string): Promise<Advertise
 }
 
 export async function upsertAdvertisement(input: UpsertAdInput): Promise<Advertisement> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpsertAdSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -216,7 +216,7 @@ export type ProspectListRow = RecruitmentProspect & {
 };
 
 export async function fetchProspectsForAd(adId: string): Promise<ProspectListRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({
       p: recruitmentProspects,
@@ -239,7 +239,7 @@ export async function fetchProspectsForAd(adId: string): Promise<ProspectListRow
 }
 
 export async function createProspect(input: CreateProspectInput): Promise<RecruitmentProspect> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = CreateProspectSchema.parse(input);
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -281,7 +281,7 @@ export async function createProspect(input: CreateProspectInput): Promise<Recrui
 export async function updateProspectStatus(
   input: UpdateProspectStatusInput,
 ): Promise<RecruitmentProspect> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateProspectStatusSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx
@@ -327,7 +327,7 @@ async function findCampaign(tx: Parameters<typeof recordAudit>[0], id: string) {
 }
 
 export async function archiveCampaign(input: ArchiveCampaignInput): Promise<RecruitmentCampaign> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = ArchiveCampaignSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await findCampaign(tx, parsed.campaignId);
@@ -361,7 +361,7 @@ export async function archiveCampaign(input: ArchiveCampaignInput): Promise<Recr
 export async function unarchiveCampaign(
   input: UnarchiveCampaignInput,
 ): Promise<RecruitmentCampaign> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UnarchiveCampaignSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await findCampaign(tx, parsed.campaignId);

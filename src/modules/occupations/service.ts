@@ -1,5 +1,5 @@
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import type { Occupation, OccupationCategory } from '@/lib/db/schema/occupations';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
@@ -24,12 +24,12 @@ import {
 } from './schemas';
 
 export async function fetchCategories(): Promise<CategoryWithCount[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return listCategoriesWithCounts();
 }
 
 export async function fetchOccupations() {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return listOccupations();
 }
 

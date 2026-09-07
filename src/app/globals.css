@@ -67,6 +67,34 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* Custom animations for ambient motion. Kept in the theme block so
+     Tailwind picks them up as `animate-breathe-slow` / `animate-float-slow`
+     utilities; the keyframes themselves are declared below. */
+  --animate-breathe-slow: breathe-slow 4.2s ease-in-out infinite;
+  --animate-breathe-slower: breathe-slow 3.6s ease-in-out infinite 0.4s;
+  --animate-float-slow: float-slow 5s ease-in-out infinite;
+}
+
+@keyframes breathe-slow {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 0.85;
+  }
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
 }
 
 /*
@@ -75,13 +103,12 @@
  * Accent: warm amber (hue 55) — used for primary CTAs and status highlights.
  */
 :root {
-  /* Three-plane elevation:
-     canvas (0.965) → sidebar (0.985) → card/popover (1.0).
-     Delta between planes is small enough to keep the UI calm but
-     visible so cards feel intentional rather than merged with the
-     background. Canvas is chroma 0.006 so it reads warm rather than
-     cold-white — helps the aurora wash breathe against it. */
-  --background: oklch(0.965 0.006 60);
+  /* Three-plane elevation, tuned for a no-pattern canvas:
+     canvas (0.955) → sidebar (0.98) → card/popover (1.0).
+     A wider delta than earlier iterations because there is no pattern
+     doing the visual work — the card floating above the canvas is the
+     entire depth cue, so it needs to be visible without shadows. */
+  --background: oklch(0.955 0.008 60);
   --foreground: oklch(0.185 0.012 60);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.185 0.012 60);
@@ -117,7 +144,7 @@
   --status-neutral: oklch(0.5 0.008 60);
   --status-neutral-soft: oklch(0.94 0.006 60);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0.004 60);
+  --sidebar: oklch(0.98 0.006 60);
   --sidebar-foreground: oklch(0.245 0.02 60);
   --sidebar-primary: oklch(0.245 0.02 60);
   --sidebar-primary-foreground: oklch(0.985 0.004 60);

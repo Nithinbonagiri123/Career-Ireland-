@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { auditEvents } from '@/lib/db/schema/audit_events';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
@@ -29,7 +29,7 @@ export type PlacementRow = {
 };
 
 export async function placementsInPeriod(days: number): Promise<PlacementRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const rows = await db
     .select({
@@ -76,7 +76,7 @@ export type RevenueRow = {
 };
 
 export async function revenueByCurrencyAndService(days: number): Promise<RevenueRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const rows = await db
     .select({
@@ -124,7 +124,7 @@ export type RecruiterActivityRow = {
  * interviews, and placements. Zero-activity users are excluded.
  */
 export async function recruiterActivity(days: number): Promise<RecruiterActivityRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
   const rows = await db
@@ -209,7 +209,7 @@ export type RequisitionPerformanceRow = {
  * fill rate, and age. Includes only requisitions created in the window.
  */
 export async function requisitionPerformance(days: number): Promise<RequisitionPerformanceRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const now = Date.now();
 
@@ -276,7 +276,7 @@ const APPLICATION_STAGES = [
  * relative to the total APPLIED count (drop-off rate at each stage).
  */
 export async function applicationFunnel(days: number): Promise<ApplicationFunnelRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
   const rows = await db
@@ -307,7 +307,7 @@ export type CandidatePipelineRow = {
 };
 
 export async function candidatePipeline(): Promise<CandidatePipelineRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({
       status: sql<string>`${placements.status}::text`,

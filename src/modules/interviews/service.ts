@@ -1,6 +1,6 @@
 import { and, asc, eq, gte, isNull, lte, or, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { type Interview, interviews } from '@/lib/db/schema/interviews_offers';
 import { persons } from '@/lib/db/schema/persons';
@@ -25,7 +25,7 @@ function blankToNull(v: string | undefined | null): string | null {
 }
 
 export async function listInterviewsForApplication(jobApplicationId: string): Promise<Interview[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return db
     .select()
     .from(interviews)
@@ -52,7 +52,7 @@ export async function listUpcomingInterviews(opts?: {
   fromDate?: Date;
   toDate?: Date;
 }): Promise<UpcomingInterview[]> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const scope = opts?.scope ?? 'all';
 
   const now = new Date();
@@ -113,7 +113,7 @@ export async function listUpcomingInterviews(opts?: {
 }
 
 export async function scheduleInterview(input: ScheduleInterviewInput): Promise<Interview> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = ScheduleInterviewSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -168,7 +168,7 @@ export async function scheduleInterview(input: ScheduleInterviewInput): Promise<
 }
 
 export async function updateInterview(input: UpdateInterviewInput): Promise<Interview> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateInterviewSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx
@@ -206,7 +206,7 @@ export async function updateInterview(input: UpdateInterviewInput): Promise<Inte
 }
 
 export async function rescheduleInterview(input: RescheduleInterviewInput): Promise<Interview> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = RescheduleInterviewSchema.parse(input);
   const scheduledAt = new Date(parsed.scheduledAt);
   if (Number.isNaN(scheduledAt.getTime())) {
@@ -257,7 +257,7 @@ export async function rescheduleInterview(input: RescheduleInterviewInput): Prom
 }
 
 export async function removeInterview(input: RemoveInterviewInput): Promise<void> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = RemoveInterviewSchema.parse(input);
   await db.transaction(async (tx) => {
     const [before] = await tx

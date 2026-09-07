@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
   employers,
@@ -45,7 +45,7 @@ export type RequisitionListRow = JobRequisition & {
 export async function fetchRequisitionsForEmployer(
   employerId: string,
 ): Promise<RequisitionListRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({ requisition: jobRequisitions, employerName: employers.legalName })
     .from(jobRequisitions)
@@ -56,7 +56,7 @@ export async function fetchRequisitionsForEmployer(
 }
 
 export async function fetchRequisitions(scope?: AssignmentScope): Promise<RequisitionListRow[]> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const scopeCond = scope
     ? assignmentCondition(scope, jobRequisitions.assignedUserId, session.user.id)
     : undefined;
@@ -78,7 +78,7 @@ export async function fetchRequisitions(scope?: AssignmentScope): Promise<Requis
 }
 
 export async function fetchRequisition(id: string): Promise<RequisitionListRow | null> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [row] = await db
     .select({
       requisition: jobRequisitions,
@@ -92,7 +92,7 @@ export async function fetchRequisition(id: string): Promise<RequisitionListRow |
 }
 
 export async function upsertRequisition(input: UpsertRequisitionInput): Promise<JobRequisition> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpsertRequisitionSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -161,7 +161,7 @@ export async function upsertRequisition(input: UpsertRequisitionInput): Promise<
 }
 
 export async function updateRequisitionStatus(input: UpdateStatusInput): Promise<JobRequisition> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateStatusSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx
@@ -195,7 +195,7 @@ export async function updateRequisitionStatus(input: UpdateStatusInput): Promise
 export type RequisitionSkillRow = RequisitionSkill & { skillName: string };
 
 export async function listRequisitionSkills(requisitionId: string): Promise<RequisitionSkillRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({ rs: requisitionSkills, name: skills.name })
     .from(requisitionSkills)
@@ -208,7 +208,7 @@ export async function listRequisitionSkills(requisitionId: string): Promise<Requ
 export async function attachRequisitionSkill(
   input: AttachRequisitionSkillInput,
 ): Promise<RequisitionSkill> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = AttachRequisitionSkillSchema.parse(input);
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -253,7 +253,7 @@ export async function attachRequisitionSkill(
 }
 
 export async function detachRequisitionSkill(input: DetachRequisitionSkillInput): Promise<void> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = DetachRequisitionSkillSchema.parse(input);
   await db.transaction(async (tx) => {
     await tx
@@ -281,7 +281,7 @@ export type RequisitionQualificationRow = RequisitionQualification & { qualifica
 export async function listRequisitionQualifications(
   requisitionId: string,
 ): Promise<RequisitionQualificationRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({ rq: requisitionQualifications, name: qualifications.name })
     .from(requisitionQualifications)
@@ -294,7 +294,7 @@ export async function listRequisitionQualifications(
 export async function attachRequisitionQualification(
   input: AttachRequisitionQualificationInput,
 ): Promise<RequisitionQualification> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = AttachRequisitionQualificationSchema.parse(input);
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -337,7 +337,7 @@ export async function attachRequisitionQualification(
 export async function detachRequisitionQualification(
   input: DetachRequisitionQualificationInput,
 ): Promise<void> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = DetachRequisitionQualificationSchema.parse(input);
   await db.transaction(async (tx) => {
     await tx
@@ -367,7 +367,7 @@ async function findRequisition(tx: Parameters<typeof recordAudit>[0], id: string
 
 /** Soft-archive a requisition. Hidden from lists, matching feeds, and dashboards. */
 export async function archiveRequisition(input: ArchiveRequisitionInput): Promise<JobRequisition> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = ArchiveRequisitionSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await findRequisition(tx, parsed.requisitionId);
@@ -401,7 +401,7 @@ export async function archiveRequisition(input: ArchiveRequisitionInput): Promis
 export async function unarchiveRequisition(
   input: UnarchiveRequisitionInput,
 ): Promise<JobRequisition> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UnarchiveRequisitionSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await findRequisition(tx, parsed.requisitionId);

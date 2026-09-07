@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { type Lead, leads } from '@/lib/db/schema/leads';
 import { candidateProfiles } from '@/lib/db/schema/persons';
@@ -27,17 +27,17 @@ function blankToNull(v: string | undefined | null): string | null {
 }
 
 export async function fetchLeads(scope?: AssignmentScope): Promise<LeadListRow[]> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   return listLeads({ scope: scope ?? 'all', currentUserId: session.user.id });
 }
 
 export async function fetchLead(id: string): Promise<Lead | null> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return getLead(id);
 }
 
 export async function createLead(input: CreateLeadInput): Promise<Lead> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = CreateLeadSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -97,7 +97,7 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
 }
 
 export async function updateLeadStatus(input: UpdateLeadStatusInput): Promise<Lead> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateLeadStatusSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await getLead(parsed.leadId);
@@ -135,7 +135,7 @@ export async function updateLeadStatus(input: UpdateLeadStatusInput): Promise<Le
  * (idempotent — merged/returning persons don't get duplicate profiles).
  */
 export async function convertLead(input: ConvertLeadInput) {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = ConvertLeadSchema.parse(input);
 
   return db.transaction(async (tx) => {
@@ -209,7 +209,7 @@ export async function convertLead(input: ConvertLeadInput) {
 
 /** Soft-archive a lead. List queries filter archived rows out; the record itself is untouched. */
 export async function archiveLead(input: ArchiveLeadInput): Promise<Lead> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = ArchiveLeadSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await getLead(parsed.leadId);
@@ -238,7 +238,7 @@ export async function archiveLead(input: ArchiveLeadInput): Promise<Lead> {
 
 /** Restore a previously archived lead back to the active list. */
 export async function unarchiveLead(input: UnarchiveLeadInput): Promise<Lead> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UnarchiveLeadSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await getLead(parsed.leadId);

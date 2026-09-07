@@ -1,14 +1,14 @@
 import { FileText } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { fetchAllDocumentsForStaff } from '@/modules/documents/service';
 import { DocumentsTable } from './documents-table';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DocumentsPage() {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const documents = await fetchAllDocumentsForStaff();
 
   return (

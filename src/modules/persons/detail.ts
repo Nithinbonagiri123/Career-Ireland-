@@ -1,5 +1,5 @@
 import { eq, or } from 'drizzle-orm';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { communicationLogs, tasks } from '@/lib/db/schema/activities';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
@@ -38,7 +38,7 @@ export type PersonDetail = {
 };
 
 export async function fetchPersonDetail(id: string): Promise<PersonDetail | null> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
 
   const [person] = await db.select().from(persons).where(eq(persons.id, id)).limit(1);
   if (!person) return null;

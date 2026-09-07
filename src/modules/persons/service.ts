@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { type Person, persons } from '@/lib/db/schema/persons';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
@@ -32,7 +32,7 @@ function blankToNull<T extends string | undefined>(v: T): string | null {
 }
 
 export async function fetchPersons(): Promise<Person[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return listActivePersons();
 }
 
@@ -42,18 +42,18 @@ export async function fetchMergedPersons() {
 }
 
 export async function fetchPerson(id: string): Promise<Person | null> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   return getPerson(id);
 }
 
 export async function checkSimilarPersons(input: FindSimilarInput): Promise<SimilarMatch[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const parsed = FindSimilarSchema.parse(input);
   return findSimilarPersons(parsed);
 }
 
 export async function createPerson(input: CreatePersonInput): Promise<Person> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = CreatePersonSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -137,7 +137,7 @@ export async function mergePersons(input: MergePersonsInput): Promise<Person> {
 
 /** Soft-archive a person. List queries filter archived rows out; the record itself is untouched. */
 export async function archivePerson(input: ArchivePersonInput): Promise<Person> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = ArchivePersonSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await getPerson(parsed.personId);
@@ -173,7 +173,7 @@ export async function archivePerson(input: ArchivePersonInput): Promise<Person> 
 
 /** Restore a previously archived person back to the active list. */
 export async function unarchivePerson(input: UnarchivePersonInput): Promise<Person> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UnarchivePersonSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await getPerson(parsed.personId);

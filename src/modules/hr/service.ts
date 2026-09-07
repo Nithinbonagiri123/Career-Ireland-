@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole, requireSession } from '@/lib/auth/session';
+import { requireInternalStaff, requireRole, requireSession } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
   type AttendanceSession,
@@ -66,7 +66,7 @@ export type AttendanceRow = {
 };
 
 export async function fetchTodayAttendance(): Promise<AttendanceRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
   const rows = await db
@@ -83,7 +83,7 @@ export async function fetchTodayAttendance(): Promise<AttendanceRow[]> {
 }
 
 export async function fetchRecentAttendance(limit = 50): Promise<AttendanceRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({
       session: attendanceSessions,
@@ -153,7 +153,7 @@ export async function fetchDirectReports(managerUserId: string): Promise<TeamRep
 }
 
 export async function fetchStaffDirectory(): Promise<StaffDirectoryRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   // Alias join for manager. Drizzle needs an alias when joining the
   // same table twice — use raw SQL for the manager LEFT JOIN.
   const rows = await db
@@ -178,7 +178,7 @@ export type HrDashboard = {
 };
 
 export async function fetchHrDashboard(): Promise<HrDashboard> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
   const yesterday = new Date();

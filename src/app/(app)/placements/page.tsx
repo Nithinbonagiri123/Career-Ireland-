@@ -2,14 +2,14 @@ import { Trophy } from 'lucide-react';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { fetchPlacements } from '@/modules/placements/service';
 import { PlacementsTable } from './placements-table';
 
 export const dynamic = 'force-dynamic';
 
 export default async function PlacementsPage() {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const placements = await fetchPlacements();
 
   return (

@@ -4,7 +4,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ScopeFilter } from '@/components/scope-filter';
 import { Button } from '@/components/ui/button';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { parseAssignmentScope } from '@/lib/scope';
 import { fetchEmployers } from '@/modules/employers/service';
 import { fetchCases } from '@/modules/immigration/service';
@@ -19,7 +19,7 @@ export default async function ImmigrationPage({
 }: {
   searchParams: Promise<{ assigned?: string }>;
 }) {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const { assigned } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const [cases, persons, employers] = await Promise.all([

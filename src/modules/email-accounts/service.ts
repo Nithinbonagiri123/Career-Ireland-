@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { open, seal } from '@/lib/crypto/secret-box';
 import { db } from '@/lib/db/client';
 import { type CandidateEmailAccount, candidateEmailAccounts } from '@/lib/db/schema/email_accounts';
@@ -31,7 +31,7 @@ function toView(row: CandidateEmailAccount): EmailAccountView {
 export async function getEmailAccountForCandidate(
   personId: string,
 ): Promise<EmailAccountView | null> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [row] = await db
     .select()
     .from(candidateEmailAccounts)
@@ -43,7 +43,7 @@ export async function getEmailAccountForCandidate(
 export async function upsertEmailAccount(
   input: UpsertEmailAccountInput,
 ): Promise<EmailAccountView> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpsertEmailAccountSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -120,7 +120,7 @@ export async function upsertEmailAccount(
  * with the caller-supplied reason — this is HIGH-sensitivity access.
  */
 export async function revealPassword(input: RevealPasswordInput): Promise<string> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = RevealPasswordSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -157,7 +157,7 @@ export async function revealPassword(input: RevealPasswordInput): Promise<string
 }
 
 export async function removeEmailAccount(input: RemoveEmailAccountInput): Promise<void> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = RemoveEmailAccountSchema.parse(input);
   await db.transaction(async (tx) => {
     const [before] = await tx

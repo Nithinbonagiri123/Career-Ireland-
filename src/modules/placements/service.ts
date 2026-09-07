@@ -1,6 +1,6 @@
 import { and, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import {
@@ -35,7 +35,7 @@ export type PlacementListRow = Placement & {
 };
 
 export async function fetchPlacements(): Promise<PlacementListRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({
       placement: placements,
@@ -59,7 +59,7 @@ export async function fetchPlacements(): Promise<PlacementListRow[]> {
 }
 
 export async function createPlacement(input: CreatePlacementInput): Promise<Placement> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = CreatePlacementSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -204,7 +204,7 @@ async function recomputeRequisitionFillCount(
 }
 
 export async function updatePlacementStatus(input: UpdatePlacementStatusInput): Promise<Placement> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdatePlacementStatusSchema.parse(input);
 
   return db.transaction(async (tx) => {
@@ -255,7 +255,7 @@ export async function updatePlacementStatus(input: UpdatePlacementStatusInput): 
  * when a candidate is available again — never automatic).
  */
 export async function restoreCandidateAvailability(input: RestoreAvailabilityInput) {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = RestoreAvailabilitySchema.parse(input);
 
   return db.transaction(async (tx) => {
@@ -295,7 +295,7 @@ async function findPlacement(tx: Parameters<typeof recordAudit>[0], id: string) 
 
 /** Soft-archive a placement. Hidden from lists. Requisition fill counts are NOT recomputed on archive. */
 export async function archivePlacement(input: ArchivePlacementInput): Promise<Placement> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = ArchivePlacementSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await findPlacement(tx, parsed.placementId);
@@ -327,7 +327,7 @@ export async function archivePlacement(input: ArchivePlacementInput): Promise<Pl
 }
 
 export async function unarchivePlacement(input: UnarchivePlacementInput): Promise<Placement> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UnarchivePlacementSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await findPlacement(tx, parsed.placementId);

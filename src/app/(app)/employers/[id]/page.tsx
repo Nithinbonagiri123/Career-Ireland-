@@ -20,7 +20,7 @@ import { InvitePortalDialog } from '@/components/portal/invite-portal-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { occupations } from '@/lib/db/schema/occupations';
 import { statusTone } from '@/lib/ui/status-tone';
@@ -34,7 +34,7 @@ import { ContactDialog } from './contact-dialog';
 export const dynamic = 'force-dynamic';
 
 export default async function EmployerDetail({ params }: { params: Promise<{ id: string }> }) {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const { id } = await params;
   const employer = await fetchEmployer(id);
   if (!employer) notFound();

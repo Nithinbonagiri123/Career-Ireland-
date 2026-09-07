@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { Badge } from '@/components/ui/badge';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { fetchRecentActivity } from '@/modules/dashboard/activity';
 import { fetchDashboardDrilldowns } from '@/modules/dashboard/drilldowns';
 import { fetchDashboardPipelines } from '@/modules/dashboard/pipelines';
@@ -31,7 +31,7 @@ import { StatChip } from './stat-chip';
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [m, drilldowns, pipelines, activity, hr] = await Promise.all([
     fetchDashboardMetrics(),
     fetchDashboardDrilldowns(),

@@ -3,7 +3,7 @@ import { CsvExportButton } from '@/components/csv-export-button';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ScopeFilter } from '@/components/scope-filter';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { parseAssignmentScope } from '@/lib/scope';
 import { fetchLeads } from '@/modules/leads/service';
 import { CreateLeadDialog } from './create-lead-dialog';
@@ -16,7 +16,7 @@ export default async function LeadsPage({
 }: {
   searchParams: Promise<{ assigned?: string }>;
 }) {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const { assigned } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const leads = await fetchLeads(scope);

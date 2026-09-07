@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { candidateQualifications, candidateSkills } from '@/lib/db/schema/candidate_details';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
@@ -31,7 +31,7 @@ export type MatchListRow = CandidateMatch & {
 };
 
 export async function listMatches(requisitionId: string): Promise<MatchListRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({
       match: candidateMatches,
@@ -65,7 +65,7 @@ export async function listMatches(requisitionId: string): Promise<MatchListRow[]
  * upsert matches (existing scores + reasons refreshed, new ones inserted), audit the run.
  */
 export async function runAssistedMatching(requisitionId: string): Promise<{ upserted: number }> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const [requisition] = await db
     .select()
     .from(jobRequisitions)
@@ -240,7 +240,7 @@ export async function runAssistedMatching(requisitionId: string): Promise<{ upse
 }
 
 export async function shortlistMatch(matchId: string) {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   return db.transaction(async (tx) => {
     const [m] = await tx
       .select()
@@ -297,7 +297,7 @@ export async function shortlistMatch(matchId: string) {
 }
 
 export async function dismissMatch(matchId: string) {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   return db.transaction(async (tx) => {
     const [m] = await tx
       .select()
@@ -325,7 +325,7 @@ export async function dismissMatch(matchId: string) {
  * staff can decide again (rather than reappearing as fresh SUGGESTED).
  */
 export async function removeFromShortlist(shortlistEntryId: string, reason?: string) {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   return db.transaction(async (tx) => {
     const [entry] = await tx
       .select()

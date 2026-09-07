@@ -2,7 +2,7 @@ import { Coins } from 'lucide-react';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { fetchEngagements, fetchPayments } from '@/modules/commerce/service';
 import { PaymentsTable } from './payments-table';
 import { RecordPaymentDialog } from './record-payment-dialog';
@@ -10,7 +10,7 @@ import { RecordPaymentDialog } from './record-payment-dialog';
 export const dynamic = 'force-dynamic';
 
 export default async function PaymentsPage() {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const [payments, engagements] = await Promise.all([fetchPayments(), fetchEngagements()]);
 
   return (

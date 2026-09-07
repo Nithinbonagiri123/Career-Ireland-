@@ -5,7 +5,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ScopeFilter } from '@/components/scope-filter';
 import { Button } from '@/components/ui/button';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { occupations } from '@/lib/db/schema/occupations';
 import { parseAssignmentScope } from '@/lib/scope';
@@ -22,7 +22,7 @@ export default async function RequisitionsPage({
 }: {
   searchParams: Promise<{ assigned?: string }>;
 }) {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const { assigned } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const [requisitions, employers, currencies, occupationList] = await Promise.all([

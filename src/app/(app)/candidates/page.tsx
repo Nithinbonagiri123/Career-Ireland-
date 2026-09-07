@@ -5,7 +5,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ScopeFilter } from '@/components/scope-filter';
 import { buttonVariants } from '@/components/ui/button';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { parseAssignmentScope } from '@/lib/scope';
 import { fetchCandidates } from '@/modules/candidates/service';
 import { fetchStaffUserOptions } from '@/modules/users/service';
@@ -18,7 +18,7 @@ export default async function CandidatesPage({
 }: {
   searchParams: Promise<{ assigned?: string }>;
 }) {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const { assigned } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const [candidates, staffUsers] = await Promise.all([

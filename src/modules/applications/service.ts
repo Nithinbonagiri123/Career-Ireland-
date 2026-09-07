@@ -1,6 +1,6 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { documentInstances } from '@/lib/db/schema/documents';
 import { persons } from '@/lib/db/schema/persons';
@@ -44,7 +44,7 @@ export type ApplicationDetail = JobApplication & {
 };
 
 export async function fetchApplication(id: string): Promise<ApplicationDetail | null> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [row] = await db
     .select({
       app: jobApplications,
@@ -83,7 +83,7 @@ export async function fetchApplication(id: string): Promise<ApplicationDetail | 
 export async function listApplicationsForRequisition(
   requisitionId: string,
 ): Promise<ApplicationListRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({
       app: jobApplications,
@@ -115,7 +115,7 @@ export type ShortlistPromotionCandidate = {
 export async function listShortlistPromotionCandidates(
   requisitionId: string,
 ): Promise<ShortlistPromotionCandidate[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({
       shortlistEntryId: shortlistEntries.id,
@@ -153,7 +153,7 @@ export async function listShortlistPromotionCandidates(
 }
 
 export async function createApplication(input: CreateApplicationInput): Promise<JobApplication> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = CreateApplicationSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -215,7 +215,7 @@ export async function createApplication(input: CreateApplicationInput): Promise<
 export async function createExternalApplication(
   input: CreateExternalApplicationInput,
 ): Promise<JobApplication> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = CreateExternalApplicationSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -292,7 +292,7 @@ export type CandidateApplicationRow = JobApplication & {
 export async function listApplicationsForPerson(
   personId: string,
 ): Promise<CandidateApplicationRow[]> {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const rows = await db
     .select({
       app: jobApplications,
@@ -313,7 +313,7 @@ export async function listApplicationsForPerson(
 export async function updateApplicationStatus(
   input: UpdateApplicationStatusInput,
 ): Promise<JobApplication> {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const parsed = UpdateApplicationStatusSchema.parse(input);
 
   return db.transaction(async (tx) => {

@@ -23,7 +23,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusDot } from '@/components/ui/status-dot';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { candidateProfiles } from '@/lib/db/schema/persons';
 import { statusTone } from '@/lib/ui/status-tone';
@@ -76,7 +76,7 @@ export default async function CandidateDetail({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ just_created?: string }>;
 }) {
-  const session = await requireRole(['ADMIN', 'STAFF']);
+  const session = await requireInternalStaff();
   const { id } = await params;
   const { just_created } = await searchParams;
   const detail = await fetchPersonDetail(id);

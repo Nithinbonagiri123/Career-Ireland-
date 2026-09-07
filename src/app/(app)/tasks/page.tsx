@@ -1,7 +1,7 @@
 import { CheckSquare } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireRole } from '@/lib/auth/session';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { fetchTasks } from '@/modules/activities/service';
 import { fetchEmployers } from '@/modules/employers/service';
 import { fetchPersons } from '@/modules/persons/service';
@@ -12,7 +12,7 @@ import { TasksTable } from './tasks-table';
 export const dynamic = 'force-dynamic';
 
 export default async function TasksPage() {
-  await requireRole(['ADMIN', 'STAFF']);
+  await requireInternalStaff();
   const [tasks, users, persons, employers] = await Promise.all([
     fetchTasks(),
     fetchStaffUserOptions(),
