@@ -55,6 +55,11 @@ export default auth((req) => {
     if (role === 'STAFF' && (path === '/admin' || path.startsWith('/admin/'))) {
       return NextResponse.redirect(new URL('/dashboard', req.nextUrl));
     }
+    // Same defence-in-depth for the HR admin surface — STAFF bounces
+    // here; every page also enforces requireRole(['ADMIN']) server-side.
+    if (role === 'STAFF' && path.startsWith('/hr/admin')) {
+      return NextResponse.redirect(new URL('/hr', req.nextUrl));
+    }
     // Candidate accessing employer portal or vice versa.
     if (role === 'CANDIDATE' && path.startsWith('/portal/employer')) {
       return NextResponse.redirect(new URL('/portal/candidate', req.nextUrl));

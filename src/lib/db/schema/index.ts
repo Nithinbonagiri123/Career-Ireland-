@@ -8,6 +8,7 @@ export * from './commerce';
 export * from './currencies';
 export * from './documents';
 export * from './email_accounts';
+export * from './hr';
 export * from './immigration';
 export * from './interviews_offers';
 export * from './leads';

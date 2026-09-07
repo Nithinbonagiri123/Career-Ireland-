@@ -7,6 +7,7 @@ import {
   CalendarClock,
   CheckSquare,
   ClipboardList,
+  Clock,
   Coins,
   FileText,
   GitMerge,
@@ -27,6 +28,7 @@ import {
   UserCog,
   UserPlus,
   Users,
+  Users2,
 } from 'lucide-react';
 
 export type NavItem = {
@@ -84,6 +86,13 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Tasks', href: '/tasks', icon: CheckSquare },
       { label: 'Notifications', href: '/notifications', icon: Bell },
       { label: 'Reports', href: '/reports', icon: BarChart3 },
+    ],
+  },
+  {
+    label: 'HR',
+    items: [
+      { label: 'My attendance', href: '/hr', icon: Clock },
+      { label: 'HR admin', href: '/hr/admin', icon: Users2 },
     ],
   },
   {

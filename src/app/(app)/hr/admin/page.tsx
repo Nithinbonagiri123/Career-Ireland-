@@ -1,0 +1,140 @@
+import { AlertCircle, ArrowLeft, Clock, LogIn, Users2 } from 'lucide-react';
+import Link from 'next/link';
+import { EmptyState } from '@/components/empty-state';
+import { FadeUp } from '@/components/motion/motion-primitives';
+import { PageHeader } from '@/components/page-header';
+import { Badge } from '@/components/ui/badge';
+import { buttonVariants } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { requireRole } from '@/lib/auth/session';
+import { statusTone } from '@/lib/ui/status-tone';
+import { fetchHrDashboard, fetchRecentAttendance, fetchStaffDirectory } from '@/modules/hr/service';
+import { StatChip } from '../../dashboard/stat-chip';
+import { AttendanceTable } from './attendance-table';
+
+export const dynamic = 'force-dynamic';
+export const metadata = { title: 'HR admin · Career Ireland' };
+
+/**
+ * Admin HR view — dashboard tiles, staff directory, recent attendance
+ * with row-level corrections. ADMIN only.
+ */
+export default async function HrAdminPage() {
+  await requireRole(['ADMIN']);
+  const [dashboard, staff, recent] = await Promise.all([
+    fetchHrDashboard(),
+    fetchStaffDirectory(),
+    fetchRecentAttendance(50),
+  ]);
+
+  return (
+    <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
+      <FadeUp>
+        <PageHeader
+          icon={Users2}
+          title="HR admin"
+          description="Attendance, corrections, and staff directory."
+          breadcrumbs={[{ label: 'HR', href: '/hr' }, { label: 'Admin' }]}
+          action={
+            <Link href="/hr" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+              <ArrowLeft className="mr-1.5 size-4" />
+              Back to my attendance
+            </Link>
+          }
+        />
+      </FadeUp>
+
+      {/* Dashboard tiles */}
+      <FadeUp delay={0.05}>
+        <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <StatChip
+            label="Clocked in now"
+            value={dashboard.currentlyClockedIn}
+            hint="Across the whole team"
+            href="/hr/admin"
+            icon={LogIn}
+          />
+          <StatChip
+            label="Sessions today"
+            value={dashboard.todayTotal}
+            hint="Started since midnight"
+            href="/hr/admin"
+            icon={Clock}
+          />
+          <StatChip
+            label="Missing clock-outs"
+            value={dashboard.missingClockOuts}
+            hint="Left open past yesterday"
+            href="/hr/admin"
+            icon={AlertCircle}
+            tone="warning"
+          />
+          <StatChip
+            label="Late today"
+            value={dashboard.lateToday}
+            hint="Clock-in after 09:15"
+            href="/hr/admin"
+            icon={Clock}
+            tone="warning"
+          />
+        </div>
+      </FadeUp>
+
+      {/* Staff directory */}
+      <FadeUp delay={0.08} className="mb-8">
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Staff directory</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Every ADMIN or STAFF user. Add HR fields (department, position, joining date,
+                manager) to see them here.
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {staff.length === 0 ? (
+              <EmptyState
+                icon={Users2}
+                title="No staff profiles yet"
+                description="Create a profile against any ADMIN or STAFF user. The profile records department, position, joining date, and reporting manager."
+              />
+            ) : (
+              <ul className="divide-y rounded-md border">
+                {staff.map((s) => (
+                  <li key={s.profile.id} className="flex items-center justify-between px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{s.userName}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {s.userEmail}
+                        {s.profile.department ? ` · ${s.profile.department}` : ''}
+                        {s.profile.position ? ` · ${s.profile.position}` : ''}
+                        {s.managerName ? ` · reports to ${s.managerName}` : ''}
+                      </p>
+                    </div>
+                    <Badge variant={statusTone(s.profile.status)} className="rounded-full">
+                      {s.profile.status.replace(/_/g, ' ')}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </FadeUp>
+
+      {/* Recent attendance with corrections */}
+      <FadeUp delay={0.1}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Recent attendance
+          </h2>
+          <span className="text-[11px] text-muted-foreground">
+            Server-side timestamps. Corrections audited.
+          </span>
+        </div>
+        <AttendanceTable rows={recent} />
+      </FadeUp>
+    </div>
+  );
+}
