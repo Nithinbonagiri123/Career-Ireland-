@@ -76,11 +76,12 @@
  */
 :root {
   /* Three-plane elevation:
-     canvas (0.972) → sidebar (0.985) → card/popover (1.0).
+     canvas (0.965) → sidebar (0.985) → card/popover (1.0).
      Delta between planes is small enough to keep the UI calm but
      visible so cards feel intentional rather than merged with the
-     background. */
-  --background: oklch(0.972 0.004 60);
+     background. Canvas is chroma 0.006 so it reads warm rather than
+     cold-white — helps the aurora wash breathe against it. */
+  --background: oklch(0.965 0.006 60);
   --foreground: oklch(0.185 0.012 60);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.185 0.012 60);
