@@ -1,58 +1,160 @@
 import { format, formatDistanceToNow } from 'date-fns';
 import {
-  AlertCircle,
   Briefcase,
   Building2,
   CheckSquare,
   Clock,
   Coins,
+  FileCheck2,
   PlaneTakeoff,
   Sparkles,
   Trophy,
   UserPlus,
   Users,
 } from 'lucide-react';
-import Link from 'next/link';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { Badge } from '@/components/ui/badge';
 import { requireRole } from '@/lib/auth/session';
+import { fetchRecentActivity } from '@/modules/dashboard/activity';
 import { fetchDashboardDrilldowns } from '@/modules/dashboard/drilldowns';
+import { fetchDashboardPipelines } from '@/modules/dashboard/pipelines';
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
+import { ActivityFeed } from './activity-feed';
 import { AttentionCard } from './attention-card';
 import { DashboardDrilldownsSection } from './drilldowns-section';
+import { PipelineFunnel } from './pipeline-funnel';
 import { StatChip } from './stat-chip';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   await requireRole(['ADMIN', 'STAFF']);
-  const [m, drilldowns] = await Promise.all([fetchDashboardMetrics(), fetchDashboardDrilldowns()]);
+  const [m, drilldowns, pipelines, activity] = await Promise.all([
+    fetchDashboardMetrics(),
+    fetchDashboardDrilldowns(),
+    fetchDashboardPipelines(),
+    fetchRecentActivity(10),
+  ]);
 
   const today = new Date();
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
-      <FadeUp className="mb-6 flex items-end justify-between gap-4">
-        <div>
-          <div className="mb-1 flex items-center gap-2">
-            <Badge variant="secondary" className="rounded-full">
-              Overview
-            </Badge>
-            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              {format(today, 'EEEE, d MMM yyyy')}
-            </span>
+      {/* ─── Header ─────────────────────────────────────────────── */}
+      <FadeUp className="mb-8">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <div className="mb-1.5 flex items-center gap-2">
+              <Badge variant="secondary" className="rounded-full">
+                Overview
+              </Badge>
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                {format(today, 'EEEE, d MMM yyyy')}
+              </span>
+            </div>
+            <h1 className="text-[28px] font-semibold leading-tight tracking-tight">
+              Career Ireland — today
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              What is happening, what needs attention, and what to do next.
+            </p>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">Career Ireland — today</h1>
-          <p className="text-sm text-muted-foreground">
-            Everything needing attention right now, followed by workspace totals.
-          </p>
         </div>
       </FadeUp>
 
-      {/* Row 1 — Attention needed. Only the states staff actively work
-          through get a tone accent; empty states stay calm to keep the
-          dashboard readable when nothing is on fire. */}
-      <FadeUp delay={0.05}>
+      {/* ─── Row 1 · KPI strip ───────────────────────────────────── */}
+      <FadeUp delay={0.04}>
+        <section aria-label="Workspace totals" className="mb-8">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            <StatChip
+              label="Candidates"
+              value={m.candidates.total}
+              hint={`${m.candidates.available} available`}
+              href="/candidates"
+              icon={Users}
+            />
+            <StatChip
+              label="New leads (7d)"
+              value={m.leads.lastSevenDays}
+              hint={`${m.leads.awaitingPayment} awaiting payment`}
+              href="/leads"
+              icon={UserPlus}
+            />
+            <StatChip
+              label="Employers"
+              value={m.employers.total}
+              hint={`${m.employers.active} active`}
+              href="/employers"
+              icon={Building2}
+            />
+            <StatChip
+              label="Open requisitions"
+              value={m.requisitions.open + m.requisitions.inProgress}
+              hint={`${m.requisitions.totalPositionsOpen} positions open`}
+              href="/requisitions"
+              icon={Briefcase}
+            />
+            <StatChip
+              label="Active placements"
+              value={m.placements.activeConfirmed}
+              hint={`${m.placements.createdLast30Days} new · 30d`}
+              href="/placements"
+              icon={Trophy}
+            />
+            <StatChip
+              label="Ads expiring (30d)"
+              value={m.ads.expiringWithin30Days}
+              hint={`${m.ads.active} active · ${m.ads.expired} expired`}
+              href="/campaigns"
+              icon={Sparkles}
+              tone="warning"
+            />
+          </div>
+        </section>
+      </FadeUp>
+
+      {/* ─── Row 2 · Operational pipelines ───────────────────────── */}
+      <FadeUp delay={0.08}>
+        <section aria-label="Operational pipelines" className="mb-8">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Operational pipelines
+            </h2>
+            <span className="text-[11px] text-muted-foreground">
+              Real-time counts from the domain tables.
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            <PipelineFunnel
+              title="Candidate journey"
+              href="/candidates"
+              icon={UserPlus}
+              stages={pipelines.candidate}
+            />
+            <PipelineFunnel
+              title="Application funnel"
+              href="/applications"
+              icon={FileCheck2}
+              stages={pipelines.application}
+            />
+            <PipelineFunnel
+              title="Requisition pipeline"
+              href="/requisitions"
+              icon={Briefcase}
+              stages={pipelines.requisition}
+            />
+            <PipelineFunnel
+              title="Immigration cases"
+              href="/immigration"
+              icon={PlaneTakeoff}
+              stages={pipelines.immigration}
+            />
+          </div>
+        </section>
+      </FadeUp>
+
+      {/* ─── Row 3 · Attention needed ────────────────────────────── */}
+      <FadeUp delay={0.12}>
         <section aria-label="Attention needed" className="mb-8">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -150,79 +252,28 @@ export default async function DashboardPage() {
         </section>
       </FadeUp>
 
-      {/* Row 2 — Workspace totals. Compact chip strip for scanning. */}
-      <FadeUp delay={0.1}>
-        <section aria-label="Workspace totals" className="mb-8">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Workspace totals
-            </h2>
+      {/* ─── Row 4 · Drill-down + Activity feed ──────────────────── */}
+      <FadeUp delay={0.16}>
+        <section aria-label="Drill down + activity" className="mb-4">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            <div className="xl:col-span-2">
+              <div className="mb-3">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Drill down
+                </h2>
+              </div>
+              <DashboardDrilldownsSection data={drilldowns} />
+            </div>
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Recent activity
+                </h2>
+                <span className="text-[11px] text-muted-foreground">audit-backed</span>
+              </div>
+              <ActivityFeed rows={activity} />
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-            <StatChip
-              label="Candidates"
-              value={m.candidates.total}
-              hint={`${m.candidates.available} available`}
-              href="/candidates"
-              icon={Users}
-            />
-            <StatChip
-              label="New leads (7d)"
-              value={m.leads.lastSevenDays}
-              hint={`${m.leads.awaitingPayment} awaiting payment`}
-              href="/leads"
-              icon={UserPlus}
-            />
-            <StatChip
-              label="Employers"
-              value={m.employers.total}
-              hint={`${m.employers.active} active`}
-              href="/employers"
-              icon={Building2}
-            />
-            <StatChip
-              label="Open requisitions"
-              value={m.requisitions.open + m.requisitions.inProgress}
-              hint={`${m.requisitions.totalPositionsOpen} positions open`}
-              href="/requisitions"
-              icon={Briefcase}
-            />
-            <StatChip
-              label="Active placements"
-              value={m.placements.activeConfirmed}
-              hint={`${m.placements.createdLast30Days} new · 30d`}
-              href="/placements"
-              icon={Trophy}
-            />
-            <StatChip
-              label="Ads expiring (30d)"
-              value={m.ads.expiringWithin30Days}
-              hint={`${m.ads.active} active · ${m.ads.expired} expired`}
-              href="/campaigns"
-              icon={Sparkles}
-              tone="warning"
-            />
-          </div>
-        </section>
-      </FadeUp>
-
-      {/* Row 3 — Drilldowns. Keeps the existing rich section for
-          people who need to dig in past the top-of-page attention row. */}
-      <FadeUp delay={0.15}>
-        <section aria-label="Drill down" className="mb-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Drill down
-            </h2>
-            <Link
-              href="/tasks"
-              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-            >
-              <AlertCircle className="size-3" />
-              Task inbox
-            </Link>
-          </div>
-          <DashboardDrilldownsSection data={drilldowns} />
         </section>
       </FadeUp>
     </div>

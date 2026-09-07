@@ -1,29 +1,18 @@
 'use client';
 
 import { Tabs as TabsPrimitive } from '@base-ui/react/tabs';
+import { motion } from 'framer-motion';
 import type { ComponentPropsWithoutRef } from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * Tabs primitive using base-ui's Tabs. Same accessibility guarantees as
+ * Tabs primitive backed by base-ui — same accessibility guarantees as
  * the other base-ui-backed primitives (Dialog, Dropdown). The active
- * indicator is a real element (`TabsPrimitive.Indicator`) that base-ui
- * animates positionally, so we don't need framer-motion here.
- *
- * Convention:
- *   <Tabs defaultValue="overview">
- *     <TabsList>
- *       <TabsTrigger value="overview">Overview</TabsTrigger>
- *       ...
- *     </TabsList>
- *     <TabsContent value="overview">...</TabsContent>
- *   </Tabs>
+ * underline indicator is a real element that base-ui positions +
+ * animates automatically. Panels rise + fade on mount via framer-motion.
  */
 
-export function Tabs({
-  className,
-  ...props
-}: ComponentPropsWithoutRef<typeof TabsPrimitive.Root>) {
+export function Tabs({ className, ...props }: ComponentPropsWithoutRef<typeof TabsPrimitive.Root>) {
   return <TabsPrimitive.Root className={cn('flex flex-col gap-4', className)} {...props} />;
 }
 
@@ -63,7 +52,7 @@ export function TabsTrigger({
       className={cn(
         'relative inline-flex h-9 items-center gap-1.5 rounded-t-md px-3 text-sm text-muted-foreground transition-colors',
         'hover:text-foreground',
-        'data-[selected]:text-foreground data-[selected]:font-medium',
+        'data-[selected]:font-medium data-[selected]:text-foreground',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
         className,
       )}
@@ -74,15 +63,24 @@ export function TabsTrigger({
 
 export function TabsContent({
   className,
+  children,
   ...props
 }: ComponentPropsWithoutRef<typeof TabsPrimitive.Panel>) {
+  // Motion sits INSIDE the Panel — placing it on `render` swallowed the
+  // panel's children (previous iteration). Panels rise 8px + fade with
+  // the emphasised easing curve so tab switches feel intentional.
   return (
     <TabsPrimitive.Panel
-      className={cn(
-        'outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
-        className,
-      )}
+      className={cn('outline-none focus-visible:ring-2 focus-visible:ring-ring/40', className)}
       {...props}
-    />
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.26, ease: [0.32, 0.72, 0, 1] }}
+      >
+        {children}
+      </motion.div>
+    </TabsPrimitive.Panel>
   );
 }
