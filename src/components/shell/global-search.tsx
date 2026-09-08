@@ -1,11 +1,22 @@
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { Briefcase, Building2, Loader2, PlaneTakeoff, Search, User, UserCheck } from 'lucide-react';
+import {
+  Briefcase,
+  Building2,
+  Clock,
+  Loader2,
+  PlaneTakeoff,
+  Search,
+  User,
+  UserCheck,
+  X,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import type { SearchResult, SearchResultKind } from '@/modules/search/service';
 
 const KIND_ICON: Record<SearchResultKind, typeof Search> = {
@@ -32,6 +43,24 @@ const GROUP_ORDER: SearchResultKind[] = [
   'person',
 ];
 
+/**
+ * Kind filter chips. `all` is the default and passes every result
+ * through; the others narrow to a single kind. Number keys 1-5 cycle
+ * through them from within the input so the palette stays keyboard-
+ * first.
+ */
+const KIND_CHIPS: Array<{ kind: SearchResultKind | 'all'; label: string; hotkey?: string }> = [
+  { kind: 'all', label: 'All' },
+  { kind: 'candidate', label: 'Candidates', hotkey: '1' },
+  { kind: 'employer', label: 'Employers', hotkey: '2' },
+  { kind: 'requisition', label: 'Requisitions', hotkey: '3' },
+  { kind: 'immigration', label: 'Cases', hotkey: '4' },
+  { kind: 'person', label: 'People', hotkey: '5' },
+];
+
+const RECENTS_STORAGE_KEY = 'global-search-recent-v1';
+const RECENTS_MAX = 8;
+
 function groupResults(
   results: SearchResult[],
 ): Array<{ kind: SearchResultKind; items: SearchResult[] }> {
@@ -47,6 +76,27 @@ function groupResults(
   }));
 }
 
+function readRecents(): SearchResult[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(RECENTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as SearchResult[];
+    return Array.isArray(parsed) ? parsed.slice(0, RECENTS_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRecents(items: SearchResult[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(RECENTS_STORAGE_KEY, JSON.stringify(items.slice(0, RECENTS_MAX)));
+  } catch {
+    /* quota / private mode — silently ignore */
+  }
+}
+
 /** Global command palette: opens on ⌘K / Ctrl+K, escape to close, arrow keys + Enter to navigate. */
 export function GlobalSearch() {
   const router = useRouter();
@@ -55,15 +105,33 @@ export function GlobalSearch() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [kindFilter, setKindFilter] = useState<SearchResultKind | 'all'>('all');
+  const [recents, setRecents] = useState<SearchResult[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const flatResults = useMemo(() => {
-    const grouped = groupResults(results);
-    return grouped.flatMap((g) => g.items);
-  }, [results]);
+  // Filter results by the current kind chip. Applied before flattening
+  // so keyboard navigation only ever moves through visible rows.
+  const filteredResults = useMemo(
+    () => (kindFilter === 'all' ? results : results.filter((r) => r.kind === kindFilter)),
+    [results, kindFilter],
+  );
 
-  const grouped = useMemo(() => groupResults(results), [results]);
+  const flatResults = useMemo(() => {
+    const grouped = groupResults(filteredResults);
+    return grouped.flatMap((g) => g.items);
+  }, [filteredResults]);
+
+  const grouped = useMemo(() => groupResults(filteredResults), [filteredResults]);
+
+  const filteredRecents = useMemo(
+    () => (kindFilter === 'all' ? recents : recents.filter((r) => r.kind === kindFilter)),
+    [recents, kindFilter],
+  );
+
+  // The list the user is actually navigating right now — either the
+  // recent items (empty query) or the live results.
+  const activeList = query.trim().length < 2 ? filteredRecents : flatResults;
 
   // Cmd/Ctrl + K to toggle
   useEffect(() => {
@@ -81,10 +149,13 @@ export function GlobalSearch() {
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
-  // Focus + reset when opening
+  // Focus + reset when opening. Recent items get pulled fresh so a
+  // different tab's writes are picked up.
   useEffect(() => {
     if (open) {
       setActiveIndex(0);
+      setKindFilter('all');
+      setRecents(readRecents());
       requestAnimationFrame(() => inputRef.current?.focus());
     } else {
       setQuery('');
@@ -92,7 +163,7 @@ export function GlobalSearch() {
     }
   }, [open]);
 
-  // Debounced fetch
+  // Debounced fetch — unchanged from the previous iteration.
   useEffect(() => {
     if (!open) return;
     const q = query.trim();
@@ -131,21 +202,44 @@ export function GlobalSearch() {
 
   const go = useCallback(
     (r: SearchResult) => {
+      // Push to the top of recents (dedupe by kind+id) and persist.
+      setRecents((prev) => {
+        const filtered = prev.filter((p) => !(p.kind === r.kind && p.id === r.id));
+        const next = [r, ...filtered].slice(0, RECENTS_MAX);
+        writeRecents(next);
+        return next;
+      });
       setOpen(false);
       router.push(r.href);
     },
     [router],
   );
 
+  const clearRecents = () => {
+    writeRecents([]);
+    setRecents([]);
+  };
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Number keys 1-5 pick a kind filter when the input is empty; when
+    // the user is actively typing a query, digits are just characters.
+    if (query.length === 0 && /^[1-5]$/.test(e.key)) {
+      const chip = KIND_CHIPS.find((c) => c.hotkey === e.key);
+      if (chip) {
+        e.preventDefault();
+        setKindFilter(chip.kind);
+        setActiveIndex(0);
+        return;
+      }
+    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, Math.max(0, flatResults.length - 1)));
+      setActiveIndex((i) => Math.min(i + 1, Math.max(0, activeList.length - 1)));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActiveIndex((i) => Math.max(0, i - 1));
     } else if (e.key === 'Enter') {
-      const item = flatResults[activeIndex];
+      const item = activeList[activeIndex];
       if (item) {
         e.preventDefault();
         go(item);
@@ -207,14 +301,100 @@ export function GlobalSearch() {
                 <Loader2 className="absolute right-4 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
               )}
             </div>
+
+            {/* Filter chips row. Number keys 1-5 pick a chip when the
+                input is empty; the chips also click. */}
+            <div className="flex flex-wrap items-center gap-1.5 border-b bg-muted/10 px-3 py-2">
+              {KIND_CHIPS.map((chip) => {
+                const selected = kindFilter === chip.kind;
+                return (
+                  <button
+                    key={chip.kind}
+                    type="button"
+                    onClick={() => {
+                      setKindFilter(chip.kind);
+                      setActiveIndex(0);
+                      inputRef.current?.focus();
+                    }}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors',
+                      selected
+                        ? 'border-foreground/40 bg-foreground/10 text-foreground'
+                        : 'border-border text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {chip.label}
+                    {chip.hotkey && (
+                      <kbd className="rounded border bg-background/80 px-1 font-mono text-[9px] text-muted-foreground">
+                        {chip.hotkey}
+                      </kbd>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
             <div className="max-h-[60vh] overflow-y-auto">
               {query.trim().length < 2 ? (
+                filteredRecents.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-xs text-muted-foreground">
+                    {recents.length === 0
+                      ? 'Type at least 2 characters to search.'
+                      : 'No recent items in this filter.'}
+                  </p>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between px-4 pb-1 pt-3">
+                      <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        <Clock className="size-3" aria-hidden />
+                        Recent
+                      </p>
+                      <button
+                        type="button"
+                        onClick={clearRecents}
+                        className="text-[10px] text-muted-foreground hover:text-foreground"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <ul className="pb-1">
+                      {filteredRecents.map((item, idx) => {
+                        const active = idx === activeIndex;
+                        const Icon = KIND_ICON[item.kind];
+                        return (
+                          <li key={`recent-${item.kind}-${item.id}`}>
+                            <button
+                              type="button"
+                              onMouseEnter={() => setActiveIndex(idx)}
+                              onClick={() => go(item)}
+                              className={cn(
+                                'flex w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors',
+                                active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/40',
+                              )}
+                            >
+                              <Icon className="size-4 shrink-0 text-muted-foreground" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-medium">{item.title}</span>
+                                {item.subtitle && (
+                                  <span className="block truncate text-[11px] text-muted-foreground">
+                                    {item.subtitle}
+                                  </span>
+                                )}
+                              </span>
+                              <Badge variant="outline" className="rounded-full text-[10px]">
+                                {KIND_LABEL[item.kind].replace(/s$/, '')}
+                              </Badge>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )
+              ) : !loading && filteredResults.length === 0 ? (
                 <p className="px-4 py-8 text-center text-xs text-muted-foreground">
-                  Type at least 2 characters to search.
-                </p>
-              ) : !loading && results.length === 0 ? (
-                <p className="px-4 py-8 text-center text-xs text-muted-foreground">
-                  No results for "{query.trim()}".
+                  No results for "{query.trim()}"
+                  {kindFilter !== 'all' && ` in ${KIND_LABEL[kindFilter as SearchResultKind]}`}.
                 </p>
               ) : (
                 grouped.map((g) => (
@@ -233,9 +413,10 @@ export function GlobalSearch() {
                               type="button"
                               onMouseEnter={() => setActiveIndex(flatIndex)}
                               onClick={() => go(item)}
-                              className={`flex w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors ${
-                                active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/40'
-                              }`}
+                              className={cn(
+                                'flex w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors',
+                                active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/40',
+                              )}
                             >
                               <Icon className="size-4 shrink-0 text-muted-foreground" />
                               <span className="min-w-0 flex-1">
@@ -263,9 +444,18 @@ export function GlobalSearch() {
                 <kbd className="rounded border bg-background px-1">↑</kbd>{' '}
                 <kbd className="rounded border bg-background px-1">↓</kbd> navigate ·{' '}
                 <kbd className="rounded border bg-background px-1">Enter</kbd> open ·{' '}
+                <kbd className="rounded border bg-background px-1">1</kbd>–
+                <kbd className="rounded border bg-background px-1">5</kbd> filter ·{' '}
                 <kbd className="rounded border bg-background px-1">Esc</kbd> close
               </span>
-              <span>Cross-entity search</span>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="Close"
+                className="rounded p-0.5 hover:bg-muted"
+              >
+                <X className="size-3" />
+              </button>
             </div>
           </motion.div>
         )}
