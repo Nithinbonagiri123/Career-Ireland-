@@ -49,6 +49,10 @@ export default async function EmployerDetail({ params }: { params: Promise<{ id:
 
   const location = [employer.city, employer.country].filter(Boolean).join(', ');
 
+  const totalRequired = requisitions.reduce((sum, r) => sum + r.positionsRequired, 0);
+  const totalFilled = requisitions.reduce((sum, r) => sum + r.positionsFilled, 0);
+  const openReqs = requisitions.filter((r) => r.status !== 'CLOSED').length;
+
   const metaStrip = (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
       <Badge variant={statusTone(employer.relationshipStatus)} className="rounded-full">
@@ -76,6 +80,14 @@ export default async function EmployerDetail({ params }: { params: Promise<{ id:
           <Globe className="size-3" aria-hidden />
           {employer.website.replace(/^https?:\/\//, '')}
         </a>
+      )}
+      {requisitions.length > 0 && (
+        <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <Briefcase className="size-3" aria-hidden />
+          <span className="tabular-nums">
+            {openReqs} open · {totalFilled}/{totalRequired} filled
+          </span>
+        </span>
       )}
     </div>
   );
@@ -201,29 +213,61 @@ export default async function EmployerDetail({ params }: { params: Promise<{ id:
               />
             ) : (
               <ul className="divide-y">
-                {requisitions.map((r) => (
-                  <li key={r.id} className="flex items-center justify-between py-3">
-                    <div>
-                      <p className="text-sm font-medium">{r.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {r.positionsFilled} / {r.positionsRequired} filled ·{' '}
-                        {r.employmentType.replace(/_/g, ' ')}
-                        {r.location ? ` · ${r.location}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={statusTone(r.status)} className="rounded-full">
-                        {r.status.replace(/_/g, ' ')}
-                      </Badge>
-                      <Link
-                        href={`/requisitions/${r.id}`}
-                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                      >
-                        Open <ArrowRight className="ml-1.5 size-3.5" />
-                      </Link>
-                    </div>
-                  </li>
-                ))}
+                {requisitions.map((r) => {
+                  const pct =
+                    r.positionsRequired > 0
+                      ? Math.min(100, Math.round((r.positionsFilled / r.positionsRequired) * 100))
+                      : 0;
+                  return (
+                    <li key={r.id} className="flex items-center justify-between gap-4 py-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{r.title}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          <span className="tabular-nums">
+                            {r.positionsFilled} / {r.positionsRequired} filled
+                          </span>{' '}
+                          · {r.employmentType.replace(/_/g, ' ')}
+                          {r.location ? ` · ${r.location}` : ''}
+                        </p>
+                        <span
+                          className="mt-1.5 block h-1 w-full max-w-[220px] overflow-hidden rounded-full bg-muted"
+                          role="progressbar"
+                          aria-valuenow={pct}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label={`${pct}% of positions filled`}
+                        >
+                          <span
+                            className="block h-full bg-foreground/70"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={statusTone(r.status)} className="rounded-full">
+                          {r.status.replace(/_/g, ' ')}
+                        </Badge>
+                        <RequisitionDialog
+                          employers={employersAll}
+                          currencies={currencies}
+                          occupations={occupationList}
+                          initial={r}
+                          trigger={
+                            <Button variant="ghost" size="icon" aria-label={`Edit ${r.title}`}>
+                              <Pencil className="size-3.5" />
+                            </Button>
+                          }
+                        />
+                        <Link
+                          href={`/requisitions/${r.id}`}
+                          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                        >
+                          Open <ArrowRight className="ml-1.5 size-3.5" />
+                        </Link>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </CardContent>

@@ -1,11 +1,11 @@
-import { Briefcase, Building2, MapPin, Users } from 'lucide-react';
+import { Briefcase, Building2, MapPin, Pencil, Users } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
-import { buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { statusTone } from '@/lib/ui/status-tone';
@@ -13,7 +13,10 @@ import {
   listApplicationsForRequisition,
   listShortlistPromotionCandidates,
 } from '@/modules/applications/service';
+import { fetchCurrencies } from '@/modules/currencies/service';
+import { fetchEmployers } from '@/modules/employers/service';
 import { listMatches } from '@/modules/matching/service';
+import { fetchOccupations } from '@/modules/occupations/service';
 import { fetchQualifications } from '@/modules/qualifications/service';
 import {
   fetchRequisition,
@@ -21,6 +24,7 @@ import {
   listRequisitionSkills,
 } from '@/modules/requisitions/service';
 import { fetchSkills } from '@/modules/skills/service';
+import { RequisitionDialog } from '../requisition-dialog';
 import { ApplicationsSection } from './applications-section';
 import { MatchesSection } from './matches-section';
 import { PromoteShortlistSection } from './promote-shortlist';
@@ -44,6 +48,9 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     requisitionQualRows,
     allSkills,
     allQualifications,
+    employers,
+    currencies,
+    occupationList,
   ] = await Promise.all([
     listMatches(id),
     listApplicationsForRequisition(id),
@@ -52,7 +59,20 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     listRequisitionQualifications(id),
     fetchSkills(),
     fetchQualifications(),
+    fetchEmployers(),
+    fetchCurrencies(),
+    fetchOccupations(),
   ]);
+
+  const fillPct = Math.min(
+    100,
+    Math.max(
+      0,
+      requisition.positionsRequired > 0
+        ? Math.round((requisition.positionsFilled / requisition.positionsRequired) * 100)
+        : 0,
+    ),
+  );
 
   const metaStrip = (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
@@ -66,9 +86,24 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
         <Building2 className="size-3" aria-hidden />
         {requisition.employerName}
       </Link>
-      <span className="inline-flex items-center gap-1 text-muted-foreground">
+      <span className="inline-flex items-center gap-2 text-muted-foreground">
         <Users className="size-3" aria-hidden />
-        {requisition.positionsFilled} of {requisition.positionsRequired} filled
+        <span className="tabular-nums">
+          {requisition.positionsFilled} of {requisition.positionsRequired} filled
+        </span>
+        <span
+          className="relative h-1.5 w-16 overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-valuenow={fillPct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${fillPct}% of positions filled`}
+        >
+          <span
+            className="absolute inset-y-0 left-0 bg-foreground/70"
+            style={{ width: `${fillPct}%` }}
+          />
+        </span>
       </span>
       <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground">
         {requisition.employmentType.replace(/_/g, ' ')}
@@ -191,6 +226,17 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
                 currentUserId={session.user.id}
                 currentAssignedUserId={requisition.assignedUserId}
               />
+              <RequisitionDialog
+                employers={employers}
+                occupations={occupationList}
+                currencies={currencies}
+                initial={requisition}
+                trigger={
+                  <Button size="sm" variant="outline">
+                    <Pencil className="mr-1.5 size-4" /> Edit
+                  </Button>
+                }
+              />
               <RunMatchingButton requisitionId={id} />
             </div>
           }
@@ -208,12 +254,6 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
           applications: applications.length,
         }}
       />
-
-      <div className="mt-8 text-xs text-muted-foreground">
-        <Link href="/placements" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-          View placements
-        </Link>
-      </div>
     </div>
   );
 }
