@@ -69,6 +69,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Shortlists', href: '/shortlists', icon: ListChecks },
       { label: 'Interviews', href: '/interviews', icon: CalendarClock },
       { label: 'Campaigns', href: '/campaigns', icon: Sparkles },
+      { label: 'Prospects', href: '/prospects', icon: UserPlus },
       { label: 'Placements', href: '/placements', icon: Trophy },
     ],
   },

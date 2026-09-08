@@ -41,6 +41,19 @@ export const UpdateProspectStatusSchema = z.object({
   notes: z.string().max(500).optional().or(z.literal('')),
 });
 
+export const ConvertProspectSchema = z.object({
+  prospectId: z.string().uuid(),
+  notes: z.string().max(500).optional().or(z.literal('')),
+});
+
+/** Cross-campaign prospect list filter. All fields optional. */
+export const ListProspectsSchema = z.object({
+  status: ProspectStatusSchema.optional(),
+  campaignId: z.string().uuid().optional(),
+  country: z.string().min(1).max(80).optional(),
+  q: z.string().min(1).max(120).optional(),
+});
+
 export const ArchiveCampaignSchema = z.object({
   campaignId: z.string().uuid(),
   reason: z.string().min(3).max(500),
@@ -55,5 +68,7 @@ export type UpsertCampaignInput = z.infer<typeof UpsertCampaignSchema>;
 export type UpsertAdInput = z.infer<typeof UpsertAdSchema>;
 export type CreateProspectInput = z.infer<typeof CreateProspectSchema>;
 export type UpdateProspectStatusInput = z.infer<typeof UpdateProspectStatusSchema>;
+export type ConvertProspectInput = z.infer<typeof ConvertProspectSchema>;
+export type ListProspectsInput = z.infer<typeof ListProspectsSchema>;
 export type ArchiveCampaignInput = z.infer<typeof ArchiveCampaignSchema>;
 export type UnarchiveCampaignInput = z.infer<typeof UnarchiveCampaignSchema>;

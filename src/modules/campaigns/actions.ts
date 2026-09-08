@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
 import type {
   ArchiveCampaignInput,
+  ConvertProspectInput,
   CreateProspectInput,
   UnarchiveCampaignInput,
   UpdateProspectStatusInput,
@@ -12,6 +13,7 @@ import type {
 } from './schemas';
 import {
   archiveCampaign,
+  convertProspectToCandidate,
   createProspect,
   unarchiveCampaign,
   updateProspectStatus,
@@ -41,7 +43,19 @@ export async function createProspectAction(input: CreateProspectInput) {
 }
 export async function updateProspectStatusAction(input: UpdateProspectStatusInput) {
   const r = await toActionResult(() => updateProspectStatus(input));
-  if (r.ok) rev();
+  if (r.ok) {
+    rev();
+    revalidatePath('/prospects');
+  }
+  return r;
+}
+export async function convertProspectToCandidateAction(input: ConvertProspectInput) {
+  const r = await toActionResult(() => convertProspectToCandidate(input));
+  if (r.ok) {
+    rev();
+    revalidatePath('/prospects');
+    revalidatePath('/candidates');
+  }
   return r;
 }
 export async function archiveCampaignAction(input: ArchiveCampaignInput) {

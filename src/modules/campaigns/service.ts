@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -10,14 +10,18 @@ import {
   recruitmentCampaigns,
   recruitmentProspects,
 } from '@/lib/db/schema/campaigns';
-import { persons } from '@/lib/db/schema/persons';
+import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import { jobRequisitions } from '@/lib/db/schema/recruitment';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import {
   type ArchiveCampaignInput,
   ArchiveCampaignSchema,
+  type ConvertProspectInput,
+  ConvertProspectSchema,
   type CreateProspectInput,
   CreateProspectSchema,
+  type ListProspectsInput,
+  ListProspectsSchema,
   type UnarchiveCampaignInput,
   UnarchiveCampaignSchema,
   type UpdateProspectStatusInput,
@@ -312,6 +316,196 @@ export async function updateProspectStatus(
       context: parsed.notes ? { note: parsed.notes } : undefined,
     });
     return after;
+  });
+}
+
+// ─── Cross-campaign prospect list ─────────────────────────────────────────────
+
+export type ProspectRow = RecruitmentProspect & {
+  personName: string;
+  personEmail: string | null;
+  advertisementCountry: string;
+  advertisementPlatform: string | null;
+  campaignId: string;
+  campaignName: string;
+  hasCandidateProfile: boolean;
+};
+
+/**
+ * Cross-campaign prospect list. Callers pass through `searchParams` after
+ * validating with ListProspectsSchema. Unknown filters silently no-op —
+ * the schema will have already stripped them.
+ *
+ * Ordering: newest first. Prospects only surface a person's `firstName +
+ * lastName` today; email search is exact-substring against the person's
+ * stored email.
+ */
+export async function fetchProspects(input: ListProspectsInput = {}): Promise<ProspectRow[]> {
+  await requireInternalStaff();
+  const parsed = ListProspectsSchema.parse(input);
+  const like = parsed.q ? `%${parsed.q.trim()}%` : null;
+
+  const conditions = [
+    parsed.status ? eq(recruitmentProspects.status, parsed.status) : undefined,
+    parsed.campaignId ? eq(advertisements.campaignId, parsed.campaignId) : undefined,
+    parsed.country ? eq(advertisements.country, parsed.country) : undefined,
+    like
+      ? or(
+          ilike(persons.firstName, like),
+          ilike(persons.lastName, like),
+          ilike(persons.normalizedEmail, like),
+        )
+      : undefined,
+  ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+
+  const rows = await db
+    .select({
+      p: recruitmentProspects,
+      firstName: persons.firstName,
+      lastName: persons.lastName,
+      email: persons.email,
+      country: advertisements.country,
+      platform: advertisements.platform,
+      campaignId: recruitmentCampaigns.id,
+      campaignName: recruitmentCampaigns.name,
+      candidateProfileId: candidateProfiles.id,
+    })
+    .from(recruitmentProspects)
+    .innerJoin(persons, eq(persons.id, recruitmentProspects.personId))
+    .innerJoin(advertisements, eq(advertisements.id, recruitmentProspects.advertisementId))
+    .innerJoin(recruitmentCampaigns, eq(recruitmentCampaigns.id, advertisements.campaignId))
+    .leftJoin(candidateProfiles, eq(candidateProfiles.personId, persons.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(recruitmentProspects.createdAt))
+    .limit(200);
+
+  return rows.map((r) => ({
+    ...r.p,
+    personName: `${r.firstName} ${r.lastName}`,
+    personEmail: r.email,
+    advertisementCountry: r.country,
+    advertisementPlatform: r.platform,
+    campaignId: r.campaignId,
+    campaignName: r.campaignName,
+    hasCandidateProfile: r.candidateProfileId !== null,
+  }));
+}
+
+/** Distinct advertisement countries. Powers the country filter dropdown. */
+export async function fetchProspectCountries(): Promise<string[]> {
+  await requireInternalStaff();
+  const rows = await db
+    .selectDistinct({ country: advertisements.country })
+    .from(advertisements)
+    .orderBy(advertisements.country);
+  return rows.map((r) => r.country);
+}
+
+/**
+ * One-shot conversion: prospect → candidate. If the underlying person
+ * already has a candidate_profile (they were converted via some other
+ * flow — leads, direct add), we reuse it rather than erroring; the
+ * prospect just flips to CONVERTED_TO_CANDIDATE.
+ *
+ * Guards:
+ *   - Prospect must exist and not already be CONVERTED_TO_CANDIDATE
+ *   - Person must not be a draft (unfinalised onboarding)
+ * Audit: emits STATUS_CHANGED on prospect + CREATED on candidate_profile
+ * when we actually create one.
+ */
+export async function convertProspectToCandidate(
+  input: ConvertProspectInput,
+): Promise<{ prospect: RecruitmentProspect; candidateProfileId: string; created: boolean }> {
+  const session = await requireInternalStaff();
+  const parsed = ConvertProspectSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(recruitmentProspects)
+      .where(eq(recruitmentProspects.id, parsed.prospectId))
+      .limit(1);
+    if (!before) throw new BusinessRuleError('PROSPECT_NOT_FOUND', 'Prospect not found');
+    if (before.status === 'CONVERTED_TO_CANDIDATE') {
+      throw new BusinessRuleError(
+        'PROSPECT_ALREADY_CONVERTED',
+        'Prospect is already converted to a candidate',
+      );
+    }
+
+    const [person] = await tx
+      .select({ id: persons.id, isDraft: persons.isDraft })
+      .from(persons)
+      .where(eq(persons.id, before.personId))
+      .limit(1);
+    if (!person) throw new BusinessRuleError('PERSON_NOT_FOUND', 'Person not found');
+    if (person.isDraft) {
+      throw new BusinessRuleError(
+        'PERSON_IS_DRAFT',
+        'This person is still a draft — finalise onboarding first',
+      );
+    }
+
+    const [existingProfile] = await tx
+      .select({ id: candidateProfiles.id })
+      .from(candidateProfiles)
+      .where(eq(candidateProfiles.personId, before.personId))
+      .limit(1);
+
+    let candidateProfileId: string;
+    let created = false;
+    if (existingProfile) {
+      candidateProfileId = existingProfile.id;
+    } else {
+      const [profile] = await tx
+        .insert(candidateProfiles)
+        .values({
+          personId: before.personId,
+          lifecycleStatus: 'ACTIVE',
+          availabilityStatus: 'AVAILABLE',
+          assignedUserId: session.user.id,
+        })
+        .returning({ id: candidateProfiles.id });
+      if (!profile) throw new Error('candidate_profiles insert returned no row');
+      candidateProfileId = profile.id;
+      created = true;
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'candidate_profile',
+        entityId: profile.id,
+        action: 'CREATED',
+        after: { personId: before.personId, via: 'prospect_conversion' },
+        context: { prospectId: before.id },
+      });
+    }
+
+    const [after] = await tx
+      .update(recruitmentProspects)
+      .set({
+        status: 'CONVERTED_TO_CANDIDATE',
+        screenedByUserId: session.user.id,
+        notes: parsed.notes ? parsed.notes : before.notes,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(recruitmentProspects.id, before.id))
+      .returning();
+    if (!after) throw new Error('prospect conversion update returned no row');
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'recruitment_prospect',
+      entityId: after.id,
+      action: 'STATUS_CHANGED',
+      before: { status: before.status },
+      after: { status: after.status },
+      context: {
+        via: 'convert_to_candidate',
+        candidateProfileId,
+        profileCreated: created,
+        ...(parsed.notes ? { note: parsed.notes } : {}),
+      },
+    });
+
+    return { prospect: after, candidateProfileId, created };
   });
 }
 
