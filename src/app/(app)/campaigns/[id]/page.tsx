@@ -1,4 +1,5 @@
-import { Pencil, Plus, Sparkles } from 'lucide-react';
+import { Briefcase, CalendarClock, Pencil, Plus, Sparkles } from 'lucide-react';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
@@ -7,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireInternalStaff } from '@/lib/auth/session';
+import { statusTone } from '@/lib/ui/status-tone';
 import {
   fetchAdsForCampaign,
   fetchCampaign,
@@ -20,15 +22,6 @@ import { ProspectIntakeDialog } from './prospect-dialog';
 
 export const dynamic = 'force-dynamic';
 
-const STATUS_VARIANT = {
-  DRAFT: 'outline',
-  ACTIVE: 'default',
-  COMPLETED: 'outline',
-  CANCELLED: 'outline',
-  EXPIRED: 'outline',
-  CLOSED: 'outline',
-} as const;
-
 export default async function CampaignDetail({ params }: { params: Promise<{ id: string }> }) {
   await requireInternalStaff();
   const { id } = await params;
@@ -39,6 +32,33 @@ export default async function CampaignDetail({ params }: { params: Promise<{ id:
   const adProspects = await Promise.all(
     ads.map(async (ad) => ({ ad, prospects: await fetchProspectsForAd(ad.id) })),
   );
+  const totalProspects = adProspects.reduce((sum, r) => sum + r.prospects.length, 0);
+
+  const metaStrip = (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+      <Badge variant={statusTone(campaign.status)} className="rounded-full">
+        {campaign.status.replace(/_/g, ' ')}
+      </Badge>
+      {campaign.jobRequisitionId && campaign.requisitionTitle ? (
+        <Link
+          href={`/requisitions/${campaign.jobRequisitionId}`}
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <Briefcase className="size-3" aria-hidden />
+          {campaign.requisitionTitle}
+        </Link>
+      ) : (
+        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground">
+          <Briefcase className="size-3" aria-hidden />
+          Standalone — talent pool
+        </span>
+      )}
+      <span className="inline-flex items-center gap-1 text-muted-foreground">
+        <CalendarClock className="size-3" aria-hidden />
+        {ads.length} ads · {totalProspects} prospects
+      </span>
+    </div>
+  );
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
@@ -46,12 +66,8 @@ export default async function CampaignDetail({ params }: { params: Promise<{ id:
         <PageHeader
           icon={Sparkles}
           title={campaign.name}
-          description={
-            campaign.requisitionTitle
-              ? `Linked to requisition: ${campaign.requisitionTitle}`
-              : 'Standalone campaign — talent pool building'
-          }
-          badge={campaign.status}
+          breadcrumbs={[{ label: 'Campaigns', href: '/campaigns' }, { label: campaign.name }]}
+          meta={metaStrip}
           action={
             <div className="flex gap-2">
               <CampaignEditWrapper campaign={campaign} />
@@ -92,7 +108,7 @@ export default async function CampaignDetail({ params }: { params: Promise<{ id:
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={STATUS_VARIANT[ad.status]} className="rounded-full">
+                    <Badge variant={statusTone(ad.status)} className="rounded-full">
                       {ad.status}
                     </Badge>
                     <Badge variant="secondary" className="rounded-full text-[10px]">
