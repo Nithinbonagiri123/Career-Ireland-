@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Career Ireland CRM',
-  description: 'Internal CRM for Career Ireland',
+  title: 'Ireland Career Gateway CRM',
+  description: 'Internal CRM for Ireland Career Gateway',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

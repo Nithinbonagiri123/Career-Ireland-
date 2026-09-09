@@ -1,6 +1,7 @@
 'use client';
 
 import { LogOut, User as UserIcon } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTransition } from 'react';
@@ -53,11 +54,16 @@ export function PortalShell({
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-30 flex h-14 items-center gap-6 border-b bg-background/80 px-4 backdrop-blur-md md:px-8">
         <div className="flex items-center gap-2">
-          <div className="flex size-7 items-center justify-center rounded-md bg-accent text-accent-foreground text-xs font-semibold">
-            CI
-          </div>
+          <Image
+            src="/logo-mark.png"
+            alt=""
+            width={620}
+            height={600}
+            priority
+            className="size-8 object-contain"
+          />
           <div className="text-sm font-semibold tracking-tight">
-            Career Ireland <span className="text-muted-foreground">·</span>{' '}
+            Ireland Career Gateway <span className="text-muted-foreground">·</span>{' '}
             <span className="text-muted-foreground">{workspaceLabel}</span>
           </div>
         </div>

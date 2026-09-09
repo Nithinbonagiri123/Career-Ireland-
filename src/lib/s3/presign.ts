@@ -3,17 +3,12 @@ import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { DOCUMENTS_BUCKET, IS_LOCAL_S3, s3 } from './client';
 
-/** MIME allowlist for candidate/employer uploads. Extend cautiously. */
-export const ALLOWED_UPLOAD_MIME = new Set([
-  'application/pdf',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
-  'application/msword', // legacy .doc
-]);
-
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+// Re-export upload constants from the leaf module so existing callers
+// (documents/service.ts, tests) keep working. Client-safe modules
+// (documents/schemas.ts) should import from '@/lib/s3/limits' directly
+// so they don't drag the AWS SDK + env validation into the client
+// bundle when a client component pulls in the schema.
+export { ALLOWED_UPLOAD_MIME, MAX_UPLOAD_BYTES } from './limits';
 
 /** Deterministic key layout: {yyyy}/{mm}/{ownerType}/{ownerId}/{documentTypeId}/{uuid}-{filename} */
 export function buildObjectKey(args: {

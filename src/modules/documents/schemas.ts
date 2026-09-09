@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MAX_UPLOAD_BYTES } from '@/lib/s3/presign';
+import { MAX_UPLOAD_BYTES } from '@/lib/s3/limits';
 
 export const OwnerTypeSchema = z.enum(['PERSON', 'EMPLOYER']);
 

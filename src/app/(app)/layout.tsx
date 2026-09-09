@@ -1,4 +1,5 @@
 import { AppSidebar } from '@/components/shell/app-sidebar';
+import { ScrollShell } from '@/components/shell/scroll-shell';
 import { TopBar } from '@/components/shell/top-bar';
 import { requireSession } from '@/lib/auth/session';
 import { countMyUnread } from '@/modules/notifications/service';
@@ -17,17 +18,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           Attio / Stripe / Linear all use a plain warm canvas + strong
           card contrast to feel premium; anything else fights the
           typography. The canvas colour comes from the deepened
-          --background token defined in globals.css, and the subtle
-          top-only vignette below adds depth without competing with
-          content sitting on it.
+          --background token in globals.css, and the subtle top-only
+          vignette lives inside ScrollShell.
         */}
-        <main className="relative flex-1 overflow-y-auto">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 z-0 h-64 bg-[radial-gradient(ellipse_100%_100%_at_50%_0%,oklch(0.94_0.012_60/0.6),transparent)] dark:bg-[radial-gradient(ellipse_100%_100%_at_50%_0%,oklch(0.24_0.014_60/0.35),transparent)]"
-          />
-          <div className="relative z-10">{children}</div>
-        </main>
+        <ScrollShell>{children}</ScrollShell>
       </div>
     </div>
   );

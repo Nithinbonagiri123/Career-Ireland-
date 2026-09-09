@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { ArrowLeft, Printer } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { buttonVariants } from '@/components/ui/button';
@@ -8,7 +9,7 @@ import { COMPANY_INFO } from '@/modules/billing/company-info';
 import { fetchReceiptForPrint } from '@/modules/billing/read';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Receipt · Career Ireland' };
+export const metadata = { title: 'Receipt · Ireland Career Gateway' };
 
 export default async function ReceiptPrintPage({
   params,
@@ -36,10 +37,15 @@ export default async function ReceiptPrintPage({
 
       <main className="mx-auto my-6 max-w-3xl bg-white p-10 shadow-sm print:my-0 print:max-w-none print:shadow-none">
         <header className="flex items-start justify-between border-b pb-6">
-          <div className="flex items-center gap-2">
-            <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground text-sm font-semibold">
-              {COMPANY_INFO.logoText}
-            </div>
+          <div className="flex items-start gap-3">
+            <Image
+              src="/logo.png"
+              alt={COMPANY_INFO.legalName}
+              width={848}
+              height={1200}
+              priority
+              className="h-20 w-auto object-contain"
+            />
             <div>
               <div className="text-sm font-semibold">{COMPANY_INFO.legalName}</div>
               {COMPANY_INFO.addressLines.map((line) => (

@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { ArrowLeft, Printer } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { buttonVariants } from '@/components/ui/button';
@@ -9,7 +10,7 @@ import { fetchInvoiceForPrint } from '@/modules/billing/read';
 import { VoidInvoiceControls } from './void-invoice-controls';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Invoice · Career Ireland' };
+export const metadata = { title: 'Invoice · Ireland Career Gateway' };
 
 /**
  * Print-friendly invoice page. `⌘P` gives a clean 1-page PDF via the
@@ -64,10 +65,15 @@ export default async function InvoicePrintPage({
         )}
         <header className="flex items-start justify-between border-b pb-6">
           <div>
-            <div className="flex items-center gap-2">
-              <div className="flex size-9 items-center justify-center rounded-md bg-accent text-accent-foreground text-sm font-semibold">
-                {COMPANY_INFO.logoText}
-              </div>
+            <div className="flex items-start gap-3">
+              <Image
+                src="/logo.png"
+                alt={COMPANY_INFO.legalName}
+                width={848}
+                height={1200}
+                priority
+                className="h-20 w-auto object-contain"
+              />
               <div>
                 <div className="text-sm font-semibold">{COMPANY_INFO.legalName}</div>
                 {COMPANY_INFO.addressLines.map((line) => (

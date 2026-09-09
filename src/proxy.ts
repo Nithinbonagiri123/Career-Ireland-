@@ -94,5 +94,12 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.svg$).*)'],
+  // Skip auth on Next.js internals and every static file extension we
+  // may serve from /public. If we don't exclude them, the image
+  // optimizer's server-to-server refetch of /logo.png etc. gets
+  // 307'd to /login (no cookies on the internal fetch) and the
+  // optimizer then rejects the HTML response as "not a valid image".
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|webp|gif|ico|avif|txt|xml|json|woff2?|ttf|eot)$).*)',
+  ],
 };
