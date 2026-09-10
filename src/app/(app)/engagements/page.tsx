@@ -26,7 +26,7 @@ export default async function EngagementsPage() {
         <PageHeader
           icon={Coins}
           title="Service engagements"
-          description="Commercial orders for Career Ireland services. Create an engagement first, then record payments against it."
+          description="Commercial orders for Ireland Career Gateway services. Create an engagement first, then record payments against it."
           action={
             <CreateEngagementDialog services={services} currencies={currencies} persons={persons} />
           }

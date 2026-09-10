@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, useLayoutEffect, useRef } from 'react';
 
 /**
  * The workspace content scroll container.
@@ -12,21 +12,24 @@ import { type ReactNode, useEffect, useRef } from 'react';
  * navigations by default. Next.js's built-in scroll-to-top behaviour
  * only touches `window.scrollTo`, not internal scroll containers.
  *
- * Also exposes the visual chrome (subtle vignette) that used to live
- * inline in the layout — pulled in here so the whole scroll surface is
- * one component.
+ * The parent `(app)/layout.tsx` pins the shell to `h-screen` +
+ * `overflow-hidden` so this `<main>` has a bounded height and its
+ * `overflow-y-auto` actually kicks in. Otherwise the whole window
+ * scrolls and the sidebar visibly rides up with the page on nav.
+ *
+ * `useLayoutEffect` (not `useEffect`) is important: the reset needs
+ * to happen BEFORE the browser paints the new page, otherwise the
+ * user briefly sees the new content at the old scroll position
+ * before it snaps to top.
  */
 export function ScrollShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const ref = useRef<HTMLElement>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — reset on pathname change only
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    // `instant` matches the browser's default cross-page nav feel; a
-    // smooth scroll would look janky when the content is already
-    // rendering fresh at the same time.
     el.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [pathname]);
 

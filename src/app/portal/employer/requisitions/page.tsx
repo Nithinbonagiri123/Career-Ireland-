@@ -30,14 +30,14 @@ export default async function EmployerRequisitionsPage() {
       <FadeUp>
         <h1 className="mb-4 text-xl font-semibold tracking-tight">Your requisitions</h1>
         <p className="mb-6 text-sm text-muted-foreground">
-          Career Ireland manages your open requisitions. To add a new one or make changes, contact
-          your account manager.
+          Ireland Career Gateway manages your open requisitions. To add a new one or make changes,
+          contact your account manager.
         </p>
         {requisitions.length === 0 ? (
           <EmptyState
             icon={Briefcase}
             title="No requisitions yet"
-            description="Your requisitions will appear here once Career Ireland records them."
+            description="Your requisitions will appear here once Ireland Career Gateway records them."
           />
         ) : (
           <ul className="space-y-3">

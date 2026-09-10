@@ -19,7 +19,7 @@ export default async function UsersAdminPage() {
           icon={UserCog}
           badge="Admin"
           title="Users"
-          description="Career Ireland staff accounts. Role changes and deactivations immediately invalidate the affected user's session."
+          description="Ireland Career Gateway staff accounts. Role changes and deactivations immediately invalidate the affected user's session."
           action={<CreateUserDialog />}
         />
       </FadeUp>

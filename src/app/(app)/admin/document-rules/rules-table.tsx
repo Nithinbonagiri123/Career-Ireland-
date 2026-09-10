@@ -86,7 +86,7 @@ export function RulesTable({ rules }: { rules: Row[] }) {
       columns={columns}
       data={rules}
       emptyTitle="No requirement rules yet"
-      emptyDescription="Rules tell Career Ireland which documents a candidate needs based on their occupation, package, or globally."
+      emptyDescription="Rules tell Ireland Career Gateway which documents a candidate needs based on their occupation, package, or globally."
     />
   );
 }

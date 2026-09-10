@@ -13,7 +13,8 @@
       "!public",
       "!playwright-report",
       "!test-results",
-      "!playwright/.auth"
+      "!playwright/.auth",
+      "!screenshots"
     ]
   },
   "formatter": {

@@ -1,5 +1,5 @@
 /**
- * Timezone-aware date helpers. Career Ireland operates in the Europe/Dublin
+ * Timezone-aware date helpers. Ireland Career Gateway operates in the Europe/Dublin
  * timezone (UTC+0 winter, UTC+1 IST summer). The Vercel/Node runtime is UTC,
  * so any `new Date().toISOString().slice(0, 10)` produces a UTC date that can
  * be one calendar day ahead of what an Irish user considers "today" near

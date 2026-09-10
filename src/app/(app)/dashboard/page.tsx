@@ -60,7 +60,7 @@ export default async function DashboardPage() {
               </span>
             </div>
             <h1 className="text-[28px] font-semibold leading-tight tracking-tight">
-              Career Ireland — today
+              Ireland Career Gateway — today
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               What is happening, what needs attention, and what to do next.

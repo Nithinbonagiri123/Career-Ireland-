@@ -21,7 +21,7 @@ export default async function CandidateApplicationsPage() {
           <EmptyState
             icon={Briefcase}
             title="No applications yet"
-            description="When Career Ireland submits you for a role, it'll appear here with the current status."
+            description="When Ireland Career Gateway submits you for a role, it'll appear here with the current status."
           />
         ) : (
           <ul className="space-y-3">

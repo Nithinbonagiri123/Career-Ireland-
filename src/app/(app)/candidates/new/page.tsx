@@ -11,7 +11,7 @@ import { fetchDocumentTypes } from '@/modules/document-types/service';
 import { fetchPersonDocuments } from '@/modules/documents/service';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Add candidate · Career Ireland' };
+export const metadata = { title: 'Add candidate · Ireland Career Gateway' };
 
 /**
  * Landing screen for the "Add candidate" workflow.

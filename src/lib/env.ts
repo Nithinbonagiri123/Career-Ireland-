@@ -30,7 +30,7 @@ const EnvSchema = z.object({
    */
   MAIL_PROVIDER: z.enum(['console', 'resend']).default('console'),
   RESEND_API_KEY: z.string().optional(),
-  /** Sender address, e.g. `Career Ireland <no-reply@yourdomain.ie>`. Required in production. */
+  /** Sender address, e.g. `Ireland Career Gateway <no-reply@yourdomain.ie>`. Required in production. */
   MAIL_FROM: z.string().optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),

@@ -28,8 +28,8 @@ export default async function EmployerProfilePage() {
               value={[employer.city, employer.country].filter(Boolean).join(', ') || '—'}
             />
             <div className="border-t pt-3 text-xs text-muted-foreground">
-              To update any of this information, contact Career Ireland — they'll edit it and the
-              changes will appear here.
+              To update any of this information, contact Ireland Career Gateway — they'll edit it
+              and the changes will appear here.
             </div>
           </CardContent>
         </Card>

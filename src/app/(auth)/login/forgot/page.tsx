@@ -2,7 +2,7 @@ import { Mail } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { ForgotForm } from './forgot-form';
 
-export const metadata = { title: 'Forgot password · Career Ireland' };
+export const metadata = { title: 'Forgot password · Ireland Career Gateway' };
 
 export default function ForgotPasswordPage() {
   return (

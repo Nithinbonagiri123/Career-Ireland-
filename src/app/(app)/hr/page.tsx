@@ -17,7 +17,7 @@ import {
 import { ClockPanel } from './clock-panel';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'HR · Career Ireland' };
+export const metadata = { title: 'HR · Ireland Career Gateway' };
 
 /**
  * Self-service HR — every staff user sees their own attendance +

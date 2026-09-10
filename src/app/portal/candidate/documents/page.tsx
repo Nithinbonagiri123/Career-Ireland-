@@ -31,8 +31,8 @@ export default async function MyDocumentsPage() {
       <FadeUp className="mb-6">
         <h1 className="text-xl font-semibold tracking-tight">Your documents</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Upload the documents Career Ireland needs. Staff will review each upload; you'll see the
-          status here.
+          Upload the documents Ireland Career Gateway needs. Staff will review each upload; you'll
+          see the status here.
         </p>
       </FadeUp>
 
@@ -49,7 +49,7 @@ export default async function MyDocumentsPage() {
               <EmptyState
                 icon={FileText}
                 title="No document requirements yet"
-                description="Career Ireland hasn't set requirements for your profile yet. Check back later."
+                description="Ireland Career Gateway hasn't set requirements for your profile yet. Check back later."
               />
             ) : (
               <ul className="divide-y">
@@ -95,7 +95,7 @@ export default async function MyDocumentsPage() {
               <EmptyState
                 icon={FileText}
                 title="Nothing uploaded yet"
-                description="Files you upload will appear here for you and Career Ireland to reference."
+                description="Files you upload will appear here for you and Ireland Career Gateway to reference."
               />
             ) : (
               <ul className="divide-y">

@@ -7,7 +7,7 @@ import { fetchRequisitions } from '@/modules/requisitions/service';
 import { WorkflowRequisitionList } from '../_workflow-list/requisition-list';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Shortlists · Career Ireland' };
+export const metadata = { title: 'Shortlists · Ireland Career Gateway' };
 
 export default async function ShortlistsPage() {
   await requireInternalStaff();

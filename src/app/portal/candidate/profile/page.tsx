@@ -69,8 +69,8 @@ export default async function CandidateProfilePage() {
               </>
             )}
             <div className="border-t pt-3 text-xs text-muted-foreground">
-              To update anything on this profile, contact Career Ireland — they'll edit and the
-              changes will appear here.
+              To update anything on this profile, contact Ireland Career Gateway — they'll edit and
+              the changes will appear here.
             </div>
           </CardContent>
         </Card>

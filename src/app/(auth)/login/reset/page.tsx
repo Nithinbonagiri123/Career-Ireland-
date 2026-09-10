@@ -4,7 +4,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { verifyResetToken } from '@/modules/auth/reset';
 import { ResetForm } from './reset-form';
 
-export const metadata = { title: 'Reset password · Career Ireland' };
+export const metadata = { title: 'Reset password · Ireland Career Gateway' };
 export const dynamic = 'force-dynamic';
 
 export default async function ResetPasswordPage({

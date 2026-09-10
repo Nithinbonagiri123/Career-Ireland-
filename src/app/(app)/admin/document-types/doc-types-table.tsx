@@ -122,7 +122,7 @@ export function DocTypesTable({ types }: { types: DocumentType[] }) {
         columns={columns}
         data={types}
         emptyTitle="No document types yet"
-        emptyDescription="Configure the document types Career Ireland collects (Passport, CV, Driver Licence, etc)."
+        emptyDescription="Configure the document types Ireland Career Gateway collects (Passport, CV, Driver Licence, etc)."
       />
     </div>
   );

@@ -222,7 +222,7 @@ export function ApplicationsPanel({
             </Badge>
           </CardTitle>
           <p className="mt-1 text-xs text-muted-foreground">
-            Both internal (Career Ireland requisitions) and external (IrishJobs, Indeed,
+            Both internal (Ireland Career Gateway requisitions) and external (IrishJobs, Indeed,
             JobsIreland).
           </p>
         </div>

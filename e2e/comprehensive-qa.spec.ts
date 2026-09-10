@@ -81,9 +81,11 @@ for (const path of ALL_ROUTES) {
       `unhandled page errors on ${path}`,
     ).toEqual([]);
 
-    const meaningful = consoleErrors.filter(
-      (e) => !/favicon|extension|net::ERR_|hydration/i.test(e),
-    );
+    // Note: we deliberately do NOT filter out "hydration" errors — a
+    // hydration mismatch is a real regression signal (attribute merge
+    // order, non-deterministic props, SSR/CSR divergence) and must
+    // fail the sweep.
+    const meaningful = consoleErrors.filter((e) => !/favicon|extension|net::ERR_/i.test(e));
     expect(meaningful, `console errors on ${path}`).toEqual([]);
   });
 }

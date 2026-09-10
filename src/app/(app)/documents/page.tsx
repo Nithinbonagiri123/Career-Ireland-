@@ -17,7 +17,7 @@ export default async function DocumentsPage() {
         <PageHeader
           icon={FileText}
           title="Documents"
-          description="Every document uploaded to Career Ireland. Review, accept, or reject. Files live in S3; only metadata + review decisions are stored here."
+          description="Every document uploaded to Ireland Career Gateway. Review, accept, or reject. Files live in S3; only metadata + review decisions are stored here."
         />
       </FadeUp>
       <FadeUp delay={0.05}>

@@ -32,7 +32,7 @@ export default async function CandidatesPage({
         <PageHeader
           icon={Users}
           title="Candidates"
-          description="Career Ireland's active talent pool. Shared across Candidate Services and Recruitment — each person is a single record. Click any row for the full timeline."
+          description="Ireland Career Gateway's active talent pool. Shared across Candidate Services and Recruitment — each person is a single record. Click any row for the full timeline."
           action={
             <div className="flex items-center gap-2">
               <ScopeFilter current={scope} />

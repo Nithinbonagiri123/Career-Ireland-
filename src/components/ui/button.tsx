@@ -47,10 +47,18 @@ function Button({
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
   return (
+    // `data-slot="button"` is placed AFTER `...props` so it always wins.
+    // Otherwise base-ui's render-prop pattern (e.g.
+    // `<DialogTrigger render={<Button>}>`) can inject its own
+    // `data-slot="dialog-trigger"` via prop-forwarding — and that
+    // resolves inconsistently between SSR and hydration in React 19,
+    // producing a hydration mismatch warning. Our own CSS keys off
+    // `data-slot="button"`; nothing in the app selects on
+    // `dialog-trigger`, so pinning it here is safe.
     <ButtonPrimitive
-      data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
+      data-slot="button"
     />
   );
 }

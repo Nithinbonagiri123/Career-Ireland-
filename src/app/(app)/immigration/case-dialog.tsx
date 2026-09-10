@@ -90,7 +90,7 @@ export function CaseDialog({ trigger, persons, employers, initial }: Props) {
           <DialogTitle>{isEdit ? 'Edit immigration case' : 'Open immigration case'}</DialogTitle>
           <DialogDescription>
             Permit, Visa, and Visa Extension cases share this form. A case does not need to link to
-            a Career Ireland placement — independent employer-driven cases are supported.
+            a Ireland Career Gateway placement — independent employer-driven cases are supported.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>

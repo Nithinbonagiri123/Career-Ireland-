@@ -67,7 +67,7 @@ export default async function CandidateOverview() {
         </h1>
         <p className="text-sm text-muted-foreground">
           Your applications, placements, and payments — always up to date. Edits happen in the
-          Career Ireland office; changes appear here automatically.
+          Ireland Career Gateway office; changes appear here automatically.
         </p>
       </FadeUp>
 

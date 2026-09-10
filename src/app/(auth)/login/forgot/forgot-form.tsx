@@ -75,8 +75,8 @@ export function ForgotForm() {
   return (
     <form onSubmit={onSubmit} className="space-y-4" noValidate>
       <p className="text-sm text-muted-foreground">
-        Enter the email address on your Career Ireland account and we'll send you a link to reset
-        your password.
+        Enter the email address on your Ireland Career Gateway account and we'll send you a link to
+        reset your password.
       </p>
 
       <div className="space-y-1.5">

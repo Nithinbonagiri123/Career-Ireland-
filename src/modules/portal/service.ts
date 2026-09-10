@@ -183,7 +183,7 @@ export async function acceptInvitation(input: AcceptInvitationInput): Promise<{ 
     if (existingUser) {
       throw new BusinessRuleError(
         'USER_EMAIL_EXISTS',
-        'A user account with that email was created after this invitation. Contact Career Ireland.',
+        'A user account with that email was created after this invitation. Contact Ireland Career Gateway.',
       );
     }
 

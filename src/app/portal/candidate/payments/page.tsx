@@ -21,7 +21,7 @@ export default async function CandidatePaymentsPage() {
           <EmptyState
             icon={Coins}
             title="No payments recorded yet"
-            description="Payments you make for Career Ireland services will appear here."
+            description="Payments you make for Ireland Career Gateway services will appear here."
           />
         ) : (
           <ul className="space-y-3">

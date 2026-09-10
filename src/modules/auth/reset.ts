@@ -125,18 +125,18 @@ export async function requestPasswordReset(input: {
   // retry rather than checking a nonexistent inbox.
   await getMailer().send({
     to: user.email,
-    subject: 'Reset your Career Ireland password',
+    subject: 'Reset your Ireland Career Gateway password',
     text: [
       `Hello ${user.fullName || 'there'},`,
       '',
-      'A password reset was requested for your Career Ireland account.',
+      'A password reset was requested for your Ireland Career Gateway account.',
       'Click the link below to set a new password. This link expires in 1 hour and can be used only once.',
       '',
       buildResetUrl(token),
       '',
       "If you didn't request this, you can safely ignore this email — your password won't change.",
       '',
-      '— Career Ireland',
+      '— Ireland Career Gateway',
     ].join('\n'),
   });
 

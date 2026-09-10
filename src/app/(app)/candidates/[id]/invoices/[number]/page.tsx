@@ -177,7 +177,7 @@ export default async function InvoicePrintPage({
             </>
           ) : (
             <>
-              Thank you for choosing Career Ireland.
+              Thank you for choosing Ireland Career Gateway.
               {COMPANY_INFO.contactEmail && ` Questions? Email ${COMPANY_INFO.contactEmail}.`}
             </>
           )}

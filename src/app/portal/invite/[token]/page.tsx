@@ -24,7 +24,7 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
             <CardDescription>
               {invalid
                 ? 'This invitation is not valid'
-                : `Welcome to Career Ireland — activate your ${invitation?.userType === 'CANDIDATE' ? 'candidate' : 'employer'} portal`}
+                : `Welcome to Ireland Career Gateway — activate your ${invitation?.userType === 'CANDIDATE' ? 'candidate' : 'employer'} portal`}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -35,8 +35,8 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ t
                   {!invitation
                     ? 'Invitation link not found.'
                     : invitation.acceptedAt
-                      ? 'This invitation was already used. If you forgot your password, ask Career Ireland staff to reset it.'
-                      : 'This invitation has expired. Ask Career Ireland staff for a new link.'}
+                      ? 'This invitation was already used. If you forgot your password, ask Ireland Career Gateway staff to reset it.'
+                      : 'This invitation has expired. Ask Ireland Career Gateway staff for a new link.'}
                 </span>
               </div>
             ) : (

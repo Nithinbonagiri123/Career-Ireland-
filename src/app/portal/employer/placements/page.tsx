@@ -29,7 +29,7 @@ export default async function EmployerPlacementsPage() {
           <EmptyState
             icon={Trophy}
             title="No placements yet"
-            description="Candidates Career Ireland places with your company will appear here."
+            description="Candidates Ireland Career Gateway places with your company will appear here."
           />
         ) : (
           <ul className="space-y-3">

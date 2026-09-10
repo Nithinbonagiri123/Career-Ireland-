@@ -9,7 +9,7 @@ import { serviceCatalogItems, servicePackages } from './services';
 import { users } from './users';
 
 /**
- * A service "order" — the commercial engagement between Career Ireland and a payer
+ * A service "order" — the commercial engagement between Ireland Career Gateway and a payer
  * (either a Person, e.g. candidate paying for job search, OR an Employer, e.g. paying
  * for a permit for their placed candidate). Beneficiary is optional (a permit's
  * beneficiary is the candidate, even when the employer pays).

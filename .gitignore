@@ -43,3 +43,6 @@ next-env.d.ts
 /playwright/.auth/
 /playwright-report/
 /test-results/
+
+# Local visual QA output — not committed
+screenshots/

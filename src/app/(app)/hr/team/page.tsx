@@ -12,7 +12,7 @@ import { requireSession } from '@/lib/auth/session';
 import { fetchDirectReports } from '@/modules/hr/service';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'My team · HR · Career Ireland' };
+export const metadata = { title: 'My team · HR · Ireland Career Gateway' };
 
 /**
  * Manager team view — shows every user whose staff_profile.manager_user_id

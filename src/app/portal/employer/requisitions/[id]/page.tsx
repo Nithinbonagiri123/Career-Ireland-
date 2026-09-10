@@ -52,7 +52,7 @@ export default async function EmployerRequisitionDetail({
               <EmptyState
                 icon={Users}
                 title="No candidates on the shortlist yet"
-                description="Career Ireland will present shortlisted candidates here as they source and screen them."
+                description="Ireland Career Gateway will present shortlisted candidates here as they source and screen them."
               />
             ) : (
               <ul className="divide-y">

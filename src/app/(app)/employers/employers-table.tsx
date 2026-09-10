@@ -135,7 +135,7 @@ export function EmployersTable({ employers }: { employers: Employer[] }) {
         columns={columns}
         data={employers}
         emptyTitle="No employers yet"
-        emptyDescription="Add the companies Career Ireland recruits for."
+        emptyDescription="Add the companies Ireland Career Gateway recruits for."
       />
       <PromptDialog
         open={archiveTarget !== null}

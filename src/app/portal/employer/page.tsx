@@ -58,7 +58,7 @@ export default async function EmployerOverview() {
           {self?.legalName ?? 'Your company'}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Requisitions, shortlists, and placements Career Ireland is running for you.
+          Requisitions, shortlists, and placements Ireland Career Gateway is running for you.
         </p>
       </FadeUp>
 

@@ -27,7 +27,7 @@ export default async function SkillsAdminPage() {
           data={skills}
           entityLabel="Skill"
           emptyTitle="No skills yet"
-          emptyDescription="Add the skills relevant to Career Ireland's placements (e.g. Forklift Certified, MIG Welding)."
+          emptyDescription="Add the skills relevant to Ireland Career Gateway's placements (e.g. Forklift Certified, MIG Welding)."
           upsertAction={upsertSkillAction}
           setActiveAction={setSkillActiveAction}
         />

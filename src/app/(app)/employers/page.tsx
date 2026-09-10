@@ -28,7 +28,7 @@ export default async function EmployersPage({
         <PageHeader
           icon={Building2}
           title="Employers"
-          description="Irish employers Career Ireland recruits for. Each employer has multiple contacts and can raise multiple Job Requisitions."
+          description="Irish employers Ireland Career Gateway recruits for. Each employer has multiple contacts and can raise multiple Job Requisitions."
           action={
             <div className="flex items-center gap-2">
               <ScopeFilter current={scope} />

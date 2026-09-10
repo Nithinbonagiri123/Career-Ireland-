@@ -13,7 +13,7 @@ import { AttendanceTable } from './attendance-table';
 import { StaffDirectory } from './staff-directory';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'HR admin · Career Ireland' };
+export const metadata = { title: 'HR admin · Ireland Career Gateway' };
 
 /**
  * Admin HR view — dashboard tiles, staff directory, recent attendance
