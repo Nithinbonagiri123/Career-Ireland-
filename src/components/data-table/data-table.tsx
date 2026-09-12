@@ -3,9 +3,11 @@
 import {
   type ColumnDef,
   type ColumnFiltersState,
+  type FilterFn,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
+  type Row,
   type RowSelectionState,
   useReactTable,
   type VisibilityState,
@@ -121,6 +123,30 @@ export function DataTable<TData, TValue>({
     return [selectCol, ...columns];
   }, [enableRowSelection, columns]);
 
+  // Custom global filter. TanStack's default coerces every cell value to
+  // string, which is disastrous for Date columns — `String(new Date())`
+  // resolves to something like `"… (Irish Standard Time)"`, and every
+  // row ends up matching queries like "an" (via "Standard") or "ir"
+  // (via "Irish"). Also for status enum columns the raw value is often
+  // noisy uppercase text unrelated to what the user sees in the cell.
+  //
+  // Instead: only match against string / number cell values, ignoring
+  // Date, boolean, and object cells. This matches user intent — search
+  // as if you were reading the table with your eyes.
+  const globalFilterFn = useMemo<FilterFn<TData>>(
+    () => (row: Row<TData>, columnId: string, filterValue: unknown) => {
+      const value = row.getValue(columnId);
+      if (value == null) return false;
+      if (value instanceof Date) return false;
+      if (typeof value === 'boolean') return false;
+      if (typeof value === 'object') return false;
+      const haystack = String(value).toLowerCase();
+      const needle = String(filterValue ?? '').toLowerCase();
+      return needle.length === 0 || haystack.includes(needle);
+    },
+    [],
+  );
+
   const table = useReactTable({
     data,
     columns: columnsWithSelect,
@@ -135,6 +161,7 @@ export function DataTable<TData, TValue>({
     onColumnFiltersChange: enableGlobalFilter ? setColumnFilters : undefined,
     onColumnVisibilityChange: enableColumnVisibility ? setColumnVisibility : undefined,
     enableRowSelection,
+    globalFilterFn,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel:
       enableGlobalFilter || columnFilters.length > 0 ? getFilteredRowModel() : undefined,
