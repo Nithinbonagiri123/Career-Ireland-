@@ -5,6 +5,7 @@ import { communicationLogs, tasks } from '@/lib/db/schema/activities';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { immigrationCases } from '@/lib/db/schema/immigration';
 import { leads } from '@/lib/db/schema/leads';
+import { occupations } from '@/lib/db/schema/occupations';
 import type { CandidateProfile, Person } from '@/lib/db/schema/persons';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import {
@@ -31,9 +32,14 @@ export type PersonTimelineItem =
   | { kind: 'payment'; id: string; at: Date; title: string; subtitle: string }
   | { kind: 'immigration'; id: string; at: Date; title: string; subtitle: string };
 
+/** Candidate profile plus denormalised joins that the detail view needs. */
+export type CandidateProfileWithJoins = CandidateProfile & {
+  primaryOccupationName: string | null;
+};
+
 export type PersonDetail = {
   person: Person;
-  candidateProfile: CandidateProfile | null;
+  candidateProfile: CandidateProfileWithJoins | null;
   timeline: PersonTimelineItem[];
 };
 
@@ -43,11 +49,15 @@ export async function fetchPersonDetail(id: string): Promise<PersonDetail | null
   const [person] = await db.select().from(persons).where(eq(persons.id, id)).limit(1);
   if (!person) return null;
 
-  const [profile] = await db
-    .select()
+  const [profileRow] = await db
+    .select({ profile: candidateProfiles, occupationName: occupations.name })
     .from(candidateProfiles)
+    .leftJoin(occupations, eq(occupations.id, candidateProfiles.primaryOccupationId))
     .where(eq(candidateProfiles.personId, id))
     .limit(1);
+  const profile: CandidateProfileWithJoins | undefined = profileRow
+    ? { ...profileRow.profile, primaryOccupationName: profileRow.occupationName }
+    : undefined;
 
   const [
     leadRows,

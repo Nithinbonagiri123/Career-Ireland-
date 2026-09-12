@@ -125,6 +125,12 @@ export default async function CandidateDetail({
           <Badge variant={statusTone(candidateProfile.lifecycleStatus)} className="rounded-full">
             {candidateProfile.lifecycleStatus}
           </Badge>
+          {candidateProfile.primaryOccupationName && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground">
+              <Briefcase className="size-3" aria-hidden />
+              {candidateProfile.primaryOccupationName}
+            </span>
+          )}
         </>
       )}
       {location && (
@@ -166,6 +172,14 @@ export default async function CandidateDetail({
                   >
                     {candidateProfile.lifecycleStatus}
                   </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Primary occupation</span>
+                  <span className="text-xs">
+                    {candidateProfile.primaryOccupationName ?? (
+                      <span className="text-muted-foreground">Not set</span>
+                    )}
+                  </span>
                 </div>
                 {candidateProfile.preferredLocation && (
                   <div className="flex items-center justify-between">
