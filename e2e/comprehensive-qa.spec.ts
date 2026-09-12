@@ -112,9 +112,10 @@ test('sidebar navigation: main content scroll resets on route change', async ({ 
   const before = await main.evaluate((el) => el.scrollTop);
   expect(before, 'main should be scrolled down before navigation').toBeGreaterThan(100);
 
-  // Click a sidebar item — /leads is under Candidate Services.
-  await page.getByRole('link', { name: /^Leads$/ }).click();
-  await expect(page).toHaveURL(/\/leads/);
+  // Click a sidebar item — HR Board is in the Main workspace nav
+  // (which is where the ADMIN test user lands by default).
+  await page.getByRole('link', { name: /^HR Board$/ }).click();
+  await expect(page).toHaveURL(/\/hr\/admin/);
 
   const after = await page.locator('main').evaluate((el) => el.scrollTop);
   expect(after, 'main should scroll back to top after sidebar navigation').toBe(0);
@@ -130,11 +131,11 @@ test('sidebar: clicking a bottom item keeps that item visible in the sidebar vie
   // Scroll the sidebar's own container to the bottom.
   await sidebarNav.evaluate((el) => el.scrollTo(0, el.scrollHeight));
 
-  // Click a link that is expected to sit near the bottom (Audit Log is
-  // the last item in the Admin section).
-  const auditLink = page.getByRole('link', { name: /Audit Log/i });
-  await auditLink.click();
-  await expect(page).toHaveURL(/\/admin\/audit/);
+  // Click a link near the bottom of the Main workspace sidebar (Accounts
+  // is the last item in the Business section).
+  const accountsLink = page.getByRole('link', { name: /^Accounts$/ });
+  await accountsLink.click();
+  await expect(page).toHaveURL(/\/payments/);
 
   // The active nav item should be within the sidebar's own scroll box.
   const active = page.locator('aside nav [data-nav-active="true"]');

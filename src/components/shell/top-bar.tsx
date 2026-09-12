@@ -43,9 +43,15 @@ function initialsFromName(name: string): string {
 export function TopBar({
   user,
   unreadNotifications = 0,
+  workspace,
+  reachable,
+  visibleModules,
 }: {
   user: TopBarUser;
   unreadNotifications?: number;
+  workspace: import('@/lib/auth/permissions').Business;
+  reachable: import('@/lib/auth/permissions').Business[];
+  visibleModules: Set<string>;
 }) {
   const router = useRouter();
   const [signingOut, startSignOut] = useTransition();
@@ -61,7 +67,7 @@ export function TopBar({
         </SheetTrigger>
         <SheetContent side="left" className="w-72 p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <AppSidebar />
+          <AppSidebar workspace={workspace} reachable={reachable} visibleModules={visibleModules} />
         </SheetContent>
       </Sheet>
 
