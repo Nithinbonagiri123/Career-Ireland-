@@ -9,6 +9,7 @@ import { createDraft, getDraft } from '@/modules/candidates/onboarding-service';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchDocumentTypes } from '@/modules/document-types/service';
 import { fetchPersonDocuments } from '@/modules/documents/service';
+import { fetchOccupations } from '@/modules/occupations/service';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Add candidate · Ireland Career Gateway' };
@@ -40,10 +41,11 @@ export default async function NewCandidatePage({
     redirect('/candidates/new');
   }
 
-  const [currencies, allDocTypes, existingDocuments] = await Promise.all([
+  const [currencies, allDocTypes, existingDocuments, occupations] = await Promise.all([
     fetchCurrencies(),
     fetchDocumentTypes(),
     fetchPersonDocuments(draft.id),
+    fetchOccupations(),
   ]);
   // Only person-applicable types are meaningful during candidate intake.
   const personDocTypes = allDocTypes.filter(
@@ -87,6 +89,7 @@ export default async function NewCandidatePage({
         }}
         currencies={currencies.map((c) => ({ code: c.code, symbol: c.symbol }))}
         docTypes={personDocTypes.map((t) => ({ id: t.id, name: t.name, code: t.code }))}
+        occupations={occupations.filter((o) => o.isActive).map((o) => ({ id: o.id, name: o.name }))}
         existingDocuments={existingDocuments.map((d) => ({
           id: d.id,
           filename: d.originalFilename,

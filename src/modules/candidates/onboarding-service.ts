@@ -1,4 +1,4 @@
-import { and, eq, lte, sql } from 'drizzle-orm';
+import { and, eq, isNull, lte, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -100,13 +100,69 @@ export async function updateDraftPerson(input: UpdateDraftPersonInput): Promise<
   if (d.source !== undefined) patch.source = d.source;
   if (d.notes !== undefined) patch.notes = d.notes ?? null;
 
-  if (Object.keys(patch).length === 0) return;
-  patch.updatedAt = sql`NOW()`;
+  // Pre-check email / phone against the persons_normalized_* unique
+  // indexes. If they'd collide, strip them from the patch, save the
+  // rest, and throw ValidationError with per-field messages. Without
+  // this, the whole patch (name, city, DOB, everything) rolls back on
+  // every keystroke while the user is typing a duplicate email — and
+  // the draft's firstName/lastName never make it to the DB, so
+  // finaliseDraft later trips "First and last name are required".
+  const fieldErrors: Record<string, string> = {};
+  const nEmail = patch.normalizedEmail as string | null | undefined;
+  if (nEmail) {
+    const [existing] = await db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(
+        and(
+          eq(persons.normalizedEmail, nEmail),
+          eq(persons.isDraft, false),
+          isNull(persons.mergedIntoPersonId),
+          isNull(persons.archivedAt),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      fieldErrors.email =
+        'Another person already has this email — search for the duplicate before creating a new candidate.';
+      delete patch.email;
+      delete patch.normalizedEmail;
+    }
+  }
+  const nPhone = patch.normalizedPhone as string | null | undefined;
+  if (nPhone) {
+    const [existing] = await db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(
+        and(
+          eq(persons.normalizedPhone, nPhone),
+          eq(persons.isDraft, false),
+          isNull(persons.mergedIntoPersonId),
+          isNull(persons.archivedAt),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      fieldErrors.phone =
+        'Another person already has this phone — search for the duplicate before creating a new candidate.';
+      delete patch.phone;
+      delete patch.normalizedPhone;
+    }
+  }
 
-  await db
-    .update(persons)
-    .set(patch)
-    .where(and(eq(persons.id, d.personId), eq(persons.isDraft, true)));
+  const keys = Object.keys(patch);
+  if (keys.length > 0) {
+    patch.updatedAt = sql`NOW()`;
+    await db
+      .update(persons)
+      .set(patch)
+      .where(and(eq(persons.id, d.personId), eq(persons.isDraft, true)));
+  }
+
+  if (Object.keys(fieldErrors).length > 0) {
+    throw new ValidationError('Draft partially saved — some fields collide', fieldErrors);
+  }
 }
 
 /**
@@ -241,6 +297,7 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
       .values({
         personId: draft.id,
         profileSummary: blankToNull(draft.notes),
+        primaryOccupationId: blankToNull(d.primaryOccupationId),
         // coverLetter is captured but doesn't have a first-class column —
         // stored in profileSummary if provided, else preserved from notes.
         lifecycleStatus: 'ACTIVE',

@@ -70,5 +70,13 @@ export const FinaliseDraftSchema = z.object({
   payment: OnboardingPaymentSchema,
   /** Optional cover letter — stored on candidate profile if provided. */
   coverLetter: z.string().trim().max(10_000).optional().or(z.literal('')),
+  /**
+   * Primary occupation this candidate is entering the pool as
+   * (Plumber, Electrician, etc.). Set on candidate_profiles at finalise;
+   * used later by the Matching algorithm to score candidates against
+   * requisitions. Optional — can be added on the candidate detail page
+   * after onboarding if not known at intake time.
+   */
+  primaryOccupationId: z.string().uuid().optional().or(z.literal('')),
 });
 export type FinaliseDraftInput = z.infer<typeof FinaliseDraftSchema>;

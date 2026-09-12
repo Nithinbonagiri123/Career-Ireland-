@@ -71,11 +71,13 @@ export function OnboardingForm({
   draft,
   currencies,
   docTypes,
+  occupations,
   existingDocuments,
 }: {
   draft: Draft;
   currencies: Currency[];
   docTypes: DocType[];
+  occupations: Array<{ id: string; name: string }>;
   existingDocuments: UploadedDoc[];
 }) {
   const router = useRouter();
@@ -94,6 +96,10 @@ export function OnboardingForm({
   });
 
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  // Declared here (before savePersonal) so the auto-save callback can
+  // populate field-level errors — the useState declaration further down
+  // that also sets this state is left in place for cross-section use.
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const savePersonal = useCallback(
     async (patch: typeof personal) => {
@@ -114,9 +120,21 @@ export function OnboardingForm({
       });
       if (result.ok) {
         setSaveState('saved');
+        // Clear any lingering personal-field errors on success.
+        setFieldErrors((prev) => {
+          const next = { ...prev };
+          for (const k of ['firstName', 'lastName', 'email', 'phone']) delete next[k];
+          return next;
+        });
         setTimeout(() => setSaveState('idle'), 1200);
       } else {
         setSaveState('error');
+        // Surface field-level errors from the server (e.g. duplicate
+        // email/phone) inline under the offending input, not just a
+        // generic "Save failed" label.
+        if (result.error.fields) {
+          setFieldErrors((prev) => ({ ...prev, ...result.error.fields }));
+        }
       }
     },
     [draft.personId],
@@ -138,9 +156,14 @@ export function OnboardingForm({
   });
 
   const [coverLetter, setCoverLetter] = useState('');
+  // The candidate's primary occupation (Plumber, Electrician, etc.) —
+  // set on candidate_profiles at finalise. Not auto-saved because there's
+  // no candidate profile yet during draft; picked once at intake, and
+  // editable on the candidate detail page afterwards. Empty string
+  // means "not chosen" (a valid state; you can add it later).
+  const [primaryOccupationId, setPrimaryOccupationId] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [discardOpen, setDiscardOpen] = useState(false);
   const [discarding, setDiscarding] = useState(false);
 
@@ -169,6 +192,7 @@ export function OnboardingForm({
       personId: draft.personId,
       payment,
       coverLetter,
+      primaryOccupationId: primaryOccupationId || undefined,
     });
     setSubmitting(false);
     if (!result.ok) {
@@ -259,6 +283,27 @@ export function OnboardingForm({
               value={personal.currentCountry}
               onChange={(v) => setPersonal((p) => ({ ...p, currentCountry: v }))}
             />
+            <div className="md:col-span-2 space-y-1.5">
+              <Label htmlFor="primaryOccupation">
+                Primary occupation
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  Used by the matching algorithm to score this candidate against requisitions.
+                </span>
+              </Label>
+              <select
+                id="primaryOccupation"
+                value={primaryOccupationId}
+                onChange={(e) => setPrimaryOccupationId(e.currentTarget.value)}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+              >
+                <option value="">— none / choose later —</option>
+                {occupations.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="md:col-span-2 space-y-1.5">
               <Label htmlFor="notes">Notes / profile summary</Label>
               <textarea
