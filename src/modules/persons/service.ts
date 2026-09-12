@@ -117,7 +117,31 @@ export async function mergePersons(input: MergePersonsInput): Promise<Person> {
       );
     }
 
-    await mergePersonRecords(tx, parsed.loserPersonId, parsed.survivorPersonId);
+    try {
+      await mergePersonRecords(tx, parsed.loserPersonId, parsed.survivorPersonId);
+    } catch (err) {
+      // Surface pg unique-violation as a business error so the dialog
+      // gets a real message instead of the generic "Something went
+      // wrong" fallback in toActionResult. Any other db error keeps
+      // rolling up unchanged.
+      const code =
+        typeof err === 'object' && err !== null && 'code' in err
+          ? (err as { code?: string }).code
+          : undefined;
+      const constraint =
+        typeof err === 'object' && err !== null && 'constraint_name' in err
+          ? (err as { constraint_name?: string }).constraint_name
+          : undefined;
+      if (code === '23505') {
+        throw new BusinessRuleError(
+          'MERGE_CONFLICT',
+          constraint
+            ? `Cannot merge — both persons have overlapping data (${constraint}). Reconcile the conflicting rows first.`
+            : 'Cannot merge — both persons hold data that would collide on a unique index. Reconcile the conflicting rows first.',
+        );
+      }
+      throw err;
+    }
 
     await recordAudit(tx, {
       actorUserId: session.user.id,
