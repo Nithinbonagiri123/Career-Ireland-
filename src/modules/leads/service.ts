@@ -1,6 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
+import type { DateRange } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import { type Lead, leads } from '@/lib/db/schema/leads';
 import { candidateProfiles } from '@/lib/db/schema/persons';
@@ -26,9 +27,16 @@ function blankToNull(v: string | undefined | null): string | null {
   return v && v.trim().length > 0 ? v : null;
 }
 
-export async function fetchLeads(scope?: AssignmentScope): Promise<LeadListRow[]> {
+export async function fetchLeads(
+  scope?: AssignmentScope,
+  createdRange?: DateRange,
+): Promise<LeadListRow[]> {
   const session = await requireInternalStaff();
-  return listLeads({ scope: scope ?? 'all', currentUserId: session.user.id });
+  return listLeads({
+    scope: scope ?? 'all',
+    currentUserId: session.user.id,
+    createdRange,
+  });
 }
 
 export async function fetchLead(id: string): Promise<Lead | null> {

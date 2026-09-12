@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import {
   requireInternalStaff,
@@ -6,6 +6,7 @@ import {
   requireRole,
   requireSession,
 } from '@/lib/auth/session';
+import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import {
   type CandidateDocumentRequirement,
@@ -599,8 +600,15 @@ export type StaffDocumentRow = DocumentInstance & {
   documentTypeName: string;
 };
 
-export async function fetchAllDocumentsForStaff(): Promise<StaffDocumentRow[]> {
+export async function fetchAllDocumentsForStaff(
+  createdRange?: DateRange,
+): Promise<StaffDocumentRow[]> {
   await requireInternalStaff();
+  const createdCond = createdRange
+    ? dateRangeWhere(documentInstances.createdAt, createdRange)
+    : undefined;
+  const whereConds: SQL[] = [isNull(documentInstances.voidedAt)];
+  if (createdCond) whereConds.push(createdCond);
   const rows = await db
     .select({
       instance: documentInstances,
@@ -611,7 +619,7 @@ export async function fetchAllDocumentsForStaff(): Promise<StaffDocumentRow[]> {
     .from(documentInstances)
     .innerJoin(documentTypes, eq(documentTypes.id, documentInstances.documentTypeId))
     .leftJoin(persons, eq(persons.id, documentInstances.ownerPersonId))
-    .where(isNull(documentInstances.voidedAt))
+    .where(and(...whereConds))
     .orderBy(desc(documentInstances.createdAt));
   return rows.map((r) => ({
     ...r.instance,

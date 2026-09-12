@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
+import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import {
   employers,
@@ -55,16 +56,22 @@ export async function fetchRequisitionsForEmployer(
   return rows.map((r) => ({ ...r.requisition, employerName: r.employerName }));
 }
 
-export async function fetchRequisitions(scope?: AssignmentScope): Promise<RequisitionListRow[]> {
+export async function fetchRequisitions(
+  scope?: AssignmentScope,
+  createdRange?: DateRange,
+): Promise<RequisitionListRow[]> {
   const session = await requireInternalStaff();
   const scopeCond = scope
     ? assignmentCondition(scope, jobRequisitions.assignedUserId, session.user.id)
     : undefined;
+  const createdCond = createdRange
+    ? dateRangeWhere(jobRequisitions.createdAt, createdRange)
+    : undefined;
   // Archived requisitions are hidden from the standard list. A dedicated
   // "Show archived" filter can be added later.
-  const whereCond = scopeCond
-    ? and(isNull(jobRequisitions.archivedAt), scopeCond)
-    : isNull(jobRequisitions.archivedAt);
+  const whereConds: SQL[] = [isNull(jobRequisitions.archivedAt)];
+  if (scopeCond) whereConds.push(scopeCond);
+  if (createdCond) whereConds.push(createdCond);
   const rows = await db
     .select({
       requisition: jobRequisitions,
@@ -72,7 +79,7 @@ export async function fetchRequisitions(scope?: AssignmentScope): Promise<Requis
     })
     .from(jobRequisitions)
     .innerJoin(employers, eq(employers.id, jobRequisitions.employerId))
-    .where(whereCond)
+    .where(and(...whereConds))
     .orderBy(desc(jobRequisitions.createdAt));
   return rows.map((r) => ({ ...r.requisition, employerName: r.employerName }));
 }

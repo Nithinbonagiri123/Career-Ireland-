@@ -1,6 +1,7 @@
-import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, isNull, or, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
+import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import {
   type Advertisement,
@@ -40,8 +41,13 @@ export type CampaignListRow = RecruitmentCampaign & {
   requisitionTitle: string | null;
 };
 
-export async function fetchCampaigns(): Promise<CampaignListRow[]> {
+export async function fetchCampaigns(createdRange?: DateRange): Promise<CampaignListRow[]> {
   await requireInternalStaff();
+  const createdCond = createdRange
+    ? dateRangeWhere(recruitmentCampaigns.createdAt, createdRange)
+    : undefined;
+  const whereConds: SQL[] = [isNull(recruitmentCampaigns.archivedAt)];
+  if (createdCond) whereConds.push(createdCond);
   const rows = await db
     .select({
       c: recruitmentCampaigns,
@@ -49,7 +55,7 @@ export async function fetchCampaigns(): Promise<CampaignListRow[]> {
     })
     .from(recruitmentCampaigns)
     .leftJoin(jobRequisitions, eq(jobRequisitions.id, recruitmentCampaigns.jobRequisitionId))
-    .where(isNull(recruitmentCampaigns.archivedAt))
+    .where(and(...whereConds))
     .orderBy(desc(recruitmentCampaigns.createdAt));
   return rows.map((r) => ({ ...r.c, requisitionTitle: r.title }));
 }
@@ -340,7 +346,10 @@ export type ProspectRow = RecruitmentProspect & {
  * lastName` today; email search is exact-substring against the person's
  * stored email.
  */
-export async function fetchProspects(input: ListProspectsInput = {}): Promise<ProspectRow[]> {
+export async function fetchProspects(
+  input: ListProspectsInput = {},
+  createdRange?: DateRange,
+): Promise<ProspectRow[]> {
   await requireInternalStaff();
   const parsed = ListProspectsSchema.parse(input);
   const like = parsed.q ? `%${parsed.q.trim()}%` : null;
@@ -356,6 +365,7 @@ export async function fetchProspects(input: ListProspectsInput = {}): Promise<Pr
           ilike(persons.normalizedEmail, like),
         )
       : undefined,
+    createdRange ? dateRangeWhere(recruitmentProspects.createdAt, createdRange) : undefined,
   ].filter((c): c is NonNullable<typeof c> => c !== undefined);
 
   const rows = await db

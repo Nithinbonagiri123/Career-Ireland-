@@ -1,7 +1,9 @@
 import { Coins } from 'lucide-react';
+import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { requireInternalStaff } from '@/lib/auth/session';
+import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchEngagements } from '@/modules/commerce/service';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchPersons } from '@/modules/persons/service';
@@ -11,10 +13,16 @@ import { EngagementsTable } from './engagements-table';
 
 export const dynamic = 'force-dynamic';
 
-export default async function EngagementsPage() {
+export default async function EngagementsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ created?: string; from?: string; to?: string }>;
+}) {
   await requireInternalStaff();
+  const { created, from, to } = await searchParams;
+  const createdRange = parseDateRangeParams({ created, from, to });
   const [engagements, services, currencies, persons] = await Promise.all([
-    fetchEngagements(),
+    fetchEngagements(createdRange),
     fetchServiceCatalog(),
     fetchCurrencies(),
     fetchPersons(),
@@ -28,7 +36,14 @@ export default async function EngagementsPage() {
           title="Service engagements"
           description="Commercial orders for Ireland Career Gateway services. Create an engagement first, then record payments against it."
           action={
-            <CreateEngagementDialog services={services} currencies={currencies} persons={persons} />
+            <div className="flex flex-wrap items-center gap-2">
+              <DateRangeFilter />
+              <CreateEngagementDialog
+                services={services}
+                currencies={currencies}
+                persons={persons}
+              />
+            </div>
           }
         />
       </FadeUp>

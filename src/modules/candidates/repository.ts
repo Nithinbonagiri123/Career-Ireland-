@@ -1,4 +1,5 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, type SQL } from 'drizzle-orm';
+import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import { users } from '@/lib/db/schema/users';
@@ -14,6 +15,7 @@ export type CandidateListRow = {
   lifecycleStatus: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
   availabilityStatus: 'AVAILABLE' | 'TEMPORARILY_UNAVAILABLE' | 'PLACED';
   activatedAt: Date;
+  createdAt: Date;
   assignedUserId: string | null;
   assignedUserName: string | null;
 };
@@ -21,11 +23,23 @@ export type CandidateListRow = {
 export async function listCandidates(opts?: {
   scope?: AssignmentScope;
   currentUserId?: string;
+  createdRange?: DateRange;
 }): Promise<CandidateListRow[]> {
   const scopeCond =
     opts?.scope && opts.currentUserId
       ? assignmentCondition(opts.scope, candidateProfiles.assignedUserId, opts.currentUserId)
       : undefined;
+  const createdCond = opts?.createdRange
+    ? dateRangeWhere(candidateProfiles.createdAt, opts.createdRange)
+    : undefined;
+
+  const whereConds: SQL[] = [
+    eq(persons.isDraft, false),
+    isNull(persons.mergedIntoPersonId),
+    isNull(persons.archivedAt),
+  ];
+  if (scopeCond) whereConds.push(scopeCond);
+  if (createdCond) whereConds.push(createdCond);
 
   const rows = await db
     .select({
@@ -39,6 +53,7 @@ export async function listCandidates(opts?: {
       lifecycleStatus: candidateProfiles.lifecycleStatus,
       availabilityStatus: candidateProfiles.availabilityStatus,
       activatedAt: candidateProfiles.activatedAt,
+      createdAt: candidateProfiles.createdAt,
       assignedUserId: candidateProfiles.assignedUserId,
       assignedUserName: users.fullName,
     })
@@ -48,20 +63,7 @@ export async function listCandidates(opts?: {
     // Filter draft, merged, and archived persons out of every active list —
     // CSV exports, dashboards, matching feeds, search: everything downstream
     // reads this and none of them should see half-filled onboarding drafts.
-    .where(
-      scopeCond
-        ? and(
-            eq(persons.isDraft, false),
-            isNull(persons.mergedIntoPersonId),
-            isNull(persons.archivedAt),
-            scopeCond,
-          )
-        : and(
-            eq(persons.isDraft, false),
-            isNull(persons.mergedIntoPersonId),
-            isNull(persons.archivedAt),
-          ),
-    )
+    .where(and(...whereConds))
     .orderBy(desc(candidateProfiles.activatedAt));
 
   return rows.map((r) => ({
@@ -74,6 +76,7 @@ export async function listCandidates(opts?: {
     lifecycleStatus: r.lifecycleStatus,
     availabilityStatus: r.availabilityStatus,
     activatedAt: r.activatedAt,
+    createdAt: r.createdAt,
     assignedUserId: r.assignedUserId,
     assignedUserName: r.assignedUserName,
   }));

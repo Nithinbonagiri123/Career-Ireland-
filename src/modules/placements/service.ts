@@ -1,6 +1,7 @@
-import { and, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
+import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import {
@@ -34,8 +35,11 @@ export type PlacementListRow = Placement & {
   requisitionTitle: string;
 };
 
-export async function fetchPlacements(): Promise<PlacementListRow[]> {
+export async function fetchPlacements(createdRange?: DateRange): Promise<PlacementListRow[]> {
   await requireInternalStaff();
+  const createdCond = createdRange ? dateRangeWhere(placements.createdAt, createdRange) : undefined;
+  const whereConds: SQL[] = [isNull(placements.archivedAt)];
+  if (createdCond) whereConds.push(createdCond);
   const rows = await db
     .select({
       placement: placements,
@@ -48,7 +52,7 @@ export async function fetchPlacements(): Promise<PlacementListRow[]> {
     .innerJoin(persons, eq(persons.id, placements.personId))
     .innerJoin(employers, eq(employers.id, placements.employerId))
     .innerJoin(jobRequisitions, eq(jobRequisitions.id, placements.jobRequisitionId))
-    .where(isNull(placements.archivedAt))
+    .where(and(...whereConds))
     .orderBy(desc(placements.createdAt));
   return rows.map((r) => ({
     ...r.placement,

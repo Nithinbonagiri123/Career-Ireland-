@@ -84,6 +84,16 @@ const columns: ColumnDef<CandidateListRow>[] = [
       </span>
     ),
   },
+  {
+    header: 'Created',
+    accessorKey: 'createdAt',
+    size: 140,
+    cell: ({ row }) => (
+      <span className="text-xs text-muted-foreground" title={row.original.createdAt.toISOString()}>
+        {formatDistanceToNow(row.original.createdAt, { addSuffix: true })}
+      </span>
+    ),
+  },
 ];
 
 export function CandidatesTable({

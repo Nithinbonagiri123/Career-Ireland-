@@ -1,5 +1,6 @@
-import { and, desc, eq, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, lte, or, type SQL, sql } from 'drizzle-orm';
 import { requireInternalStaff } from '@/lib/auth/session';
+import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { todayInDublin } from '@/lib/dates';
 import { db } from '@/lib/db/client';
 import { tasks } from '@/lib/db/schema/activities';
@@ -132,12 +133,23 @@ export async function runNotificationScan(): Promise<{ created: number }> {
 export async function fetchMyRecentNotifications(
   userId: string,
   limit = 50,
+  createdRange?: DateRange,
 ): Promise<Notification[]> {
   await requireInternalStaff();
+  const createdCond = createdRange
+    ? dateRangeWhere(notifications.createdAt, createdRange)
+    : undefined;
+  const conds: SQL[] = [];
+  const recipientCond = or(
+    eq(notifications.recipientUserId, userId),
+    isNull(notifications.recipientUserId),
+  );
+  if (recipientCond) conds.push(recipientCond);
+  if (createdCond) conds.push(createdCond);
   return db
     .select()
     .from(notifications)
-    .where(or(eq(notifications.recipientUserId, userId), isNull(notifications.recipientUserId)))
+    .where(and(...conds))
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
 }

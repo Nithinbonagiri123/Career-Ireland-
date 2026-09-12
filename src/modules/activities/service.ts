@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
+import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import {
   type CommunicationLog,
@@ -38,25 +39,36 @@ function blankToUndef(v: string | undefined | null): string | undefined {
 export type CommunicationRow = CommunicationLog & { staffName: string };
 export type TaskRow = Task & { assignedName: string };
 
-export async function fetchRecentCommunications(limit = 50): Promise<CommunicationRow[]> {
+export async function fetchRecentCommunications(
+  limit = 50,
+  createdRange?: DateRange,
+): Promise<CommunicationRow[]> {
   await requireInternalStaff();
+  const createdCond = createdRange
+    ? dateRangeWhere(communicationLogs.createdAt, createdRange)
+    : undefined;
+  const whereConds: SQL[] = [isNull(communicationLogs.archivedAt)];
+  if (createdCond) whereConds.push(createdCond);
   const rows = await db
     .select({ c: communicationLogs, staffName: users.fullName })
     .from(communicationLogs)
     .innerJoin(users, eq(users.id, communicationLogs.staffUserId))
-    .where(isNull(communicationLogs.archivedAt))
+    .where(and(...whereConds))
     .orderBy(desc(communicationLogs.occurredAt))
     .limit(limit);
   return rows.map((r) => ({ ...r.c, staffName: r.staffName }));
 }
 
-export async function fetchTasks(): Promise<TaskRow[]> {
+export async function fetchTasks(createdRange?: DateRange): Promise<TaskRow[]> {
   await requireInternalStaff();
+  const createdCond = createdRange ? dateRangeWhere(tasks.createdAt, createdRange) : undefined;
+  const whereConds: SQL[] = [isNull(tasks.archivedAt)];
+  if (createdCond) whereConds.push(createdCond);
   const rows = await db
     .select({ t: tasks, assignedName: users.fullName })
     .from(tasks)
     .innerJoin(users, eq(users.id, tasks.assignedUserId))
-    .where(isNull(tasks.archivedAt))
+    .where(and(...whereConds))
     .orderBy(asc(tasks.status), asc(tasks.dueAt), desc(tasks.createdAt));
   return rows.map((r) => ({ ...r.t, assignedName: r.assignedName }));
 }

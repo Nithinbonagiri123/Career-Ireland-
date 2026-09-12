@@ -1,6 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff, requireRole } from '@/lib/auth/session';
+import type { DateRange } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import { type Payment, type ServiceEngagement, serviceEngagements } from '@/lib/db/schema/commerce';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
@@ -36,14 +37,14 @@ function blankToNull(v: string | undefined | null): string | null {
   return v && v.trim().length > 0 ? v : null;
 }
 
-export async function fetchEngagements(): Promise<EngagementListRow[]> {
+export async function fetchEngagements(createdRange?: DateRange): Promise<EngagementListRow[]> {
   await requireInternalStaff();
-  return listEngagements();
+  return listEngagements(createdRange);
 }
 
-export async function fetchPayments() {
+export async function fetchPayments(createdRange?: DateRange) {
   await requireInternalStaff();
-  return listPayments();
+  return listPayments(createdRange);
 }
 
 export async function createEngagement(input: CreateEngagementInput): Promise<ServiceEngagement> {

@@ -136,6 +136,19 @@ export function TasksTable({ tasks, staffUsers }: { tasks: TaskRow[]; staffUsers
         ),
       },
       {
+        header: 'Created',
+        accessorKey: 'createdAt',
+        size: 130,
+        cell: ({ row }) => (
+          <span
+            className="text-xs text-muted-foreground"
+            title={row.original.createdAt.toISOString()}
+          >
+            {formatDistanceToNow(row.original.createdAt, { addSuffix: true })}
+          </span>
+        ),
+      },
+      {
         header: '',
         id: 'actions',
         size: 220,

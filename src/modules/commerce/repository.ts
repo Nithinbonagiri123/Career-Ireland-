@@ -1,5 +1,6 @@
-import { desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, type SQL } from 'drizzle-orm';
 import type { DbExecutor } from '@/lib/audit/withAudit';
+import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import {
   type NewPayment,
@@ -18,7 +19,12 @@ export type EngagementListRow = ServiceEngagement & {
   beneficiaryName: string | null;
 };
 
-export async function listEngagements(): Promise<EngagementListRow[]> {
+export async function listEngagements(createdRange?: DateRange): Promise<EngagementListRow[]> {
+  const createdCond = createdRange
+    ? dateRangeWhere(serviceEngagements.createdAt, createdRange)
+    : undefined;
+  const whereConds: SQL[] = [isNull(serviceEngagements.archivedAt)];
+  if (createdCond) whereConds.push(createdCond);
   const rows = await db
     .select({
       engagement: serviceEngagements,
@@ -32,7 +38,7 @@ export async function listEngagements(): Promise<EngagementListRow[]> {
       eq(serviceCatalogItems.id, serviceEngagements.serviceCatalogItemId),
     )
     .leftJoin(persons, eq(persons.id, serviceEngagements.payerPersonId))
-    .where(isNull(serviceEngagements.archivedAt))
+    .where(and(...whereConds))
     .orderBy(desc(serviceEngagements.createdAt));
 
   // Beneficiary lookup in a separate query — small volumes, avoids self-join tangles.
@@ -97,7 +103,12 @@ export async function updateEngagement(
   return row;
 }
 
-export async function listPayments(): Promise<Array<Payment & { serviceName: string }>> {
+export async function listPayments(
+  createdRange?: DateRange,
+): Promise<Array<Payment & { serviceName: string }>> {
+  const createdCond = createdRange ? dateRangeWhere(payments.createdAt, createdRange) : undefined;
+  const whereConds: SQL[] = [isNull(serviceEngagements.archivedAt)];
+  if (createdCond) whereConds.push(createdCond);
   const rows = await db
     .select({
       payment: payments,
@@ -109,7 +120,7 @@ export async function listPayments(): Promise<Array<Payment & { serviceName: str
       serviceCatalogItems,
       eq(serviceCatalogItems.id, serviceEngagements.serviceCatalogItemId),
     )
-    .where(isNull(serviceEngagements.archivedAt))
+    .where(and(...whereConds))
     .orderBy(desc(payments.createdAt));
   return rows.map((r) => ({ ...r.payment, serviceName: r.serviceName }));
 }

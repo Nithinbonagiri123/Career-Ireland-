@@ -1,5 +1,6 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, type SQL } from 'drizzle-orm';
 import type { DbExecutor } from '@/lib/audit/withAudit';
+import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import { type Lead, leads, type NewLead } from '@/lib/db/schema/leads';
 import { persons } from '@/lib/db/schema/persons';
@@ -22,11 +23,19 @@ export type LeadListRow = {
 export async function listLeads(opts?: {
   scope?: AssignmentScope;
   currentUserId?: string;
+  createdRange?: DateRange;
 }): Promise<LeadListRow[]> {
   const scopeCond =
     opts?.scope && opts.currentUserId
       ? assignmentCondition(opts.scope, leads.assignedUserId, opts.currentUserId)
       : undefined;
+  const createdCond = opts?.createdRange
+    ? dateRangeWhere(leads.createdAt, opts.createdRange)
+    : undefined;
+
+  const whereConds: SQL[] = [isNull(leads.archivedAt)];
+  if (scopeCond) whereConds.push(scopeCond);
+  if (createdCond) whereConds.push(createdCond);
 
   return db
     .select({
@@ -46,7 +55,7 @@ export async function listLeads(opts?: {
     .from(leads)
     .innerJoin(persons, eq(persons.id, leads.personId))
     .leftJoin(users, eq(users.id, leads.assignedUserId))
-    .where(scopeCond ? and(isNull(leads.archivedAt), scopeCond) : isNull(leads.archivedAt))
+    .where(and(...whereConds))
     .orderBy(desc(leads.createdAt))
     .then((rows) =>
       rows.map((r) => ({

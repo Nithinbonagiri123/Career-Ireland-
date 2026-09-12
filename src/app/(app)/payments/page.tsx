@@ -1,17 +1,28 @@
 import { Coins } from 'lucide-react';
 import { CsvExportButton } from '@/components/csv-export-button';
+import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { requireInternalStaff } from '@/lib/auth/session';
+import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchEngagements, fetchPayments } from '@/modules/commerce/service';
 import { PaymentsTable } from './payments-table';
 import { RecordPaymentDialog } from './record-payment-dialog';
 
 export const dynamic = 'force-dynamic';
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ created?: string; from?: string; to?: string }>;
+}) {
   const session = await requireInternalStaff();
-  const [payments, engagements] = await Promise.all([fetchPayments(), fetchEngagements()]);
+  const { created, from, to } = await searchParams;
+  const createdRange = parseDateRangeParams({ created, from, to });
+  const [payments, engagements] = await Promise.all([
+    fetchPayments(createdRange),
+    fetchEngagements(),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
@@ -21,7 +32,8 @@ export default async function PaymentsPage() {
           title="Payments"
           description="Record incoming payments and verify proof. Only ADMIN can verify or reject."
           action={
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <DateRangeFilter />
               <CsvExportButton href="/api/export/payments" />
               <RecordPaymentDialog engagements={engagements} />
             </div>

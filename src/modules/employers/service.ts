@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, or, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
+import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import {
   type Employer,
@@ -25,15 +26,22 @@ function blankToNull(v: string | undefined | null): string | null {
   return v && v.trim().length > 0 ? v : null;
 }
 
-export async function fetchEmployers(scope?: AssignmentScope): Promise<Employer[]> {
+export async function fetchEmployers(
+  scope?: AssignmentScope,
+  createdRange?: DateRange,
+): Promise<Employer[]> {
   const session = await requireInternalStaff();
   const scopeCond = scope
     ? assignmentCondition(scope, employers.assignedUserId, session.user.id)
     : undefined;
+  const createdCond = createdRange ? dateRangeWhere(employers.createdAt, createdRange) : undefined;
+  const whereConds: SQL[] = [isNull(employers.archivedAt)];
+  if (scopeCond) whereConds.push(scopeCond);
+  if (createdCond) whereConds.push(createdCond);
   return db
     .select()
     .from(employers)
-    .where(scopeCond ? and(isNull(employers.archivedAt), scopeCond) : isNull(employers.archivedAt))
+    .where(and(...whereConds))
     .orderBy(desc(employers.createdAt));
 }
 
