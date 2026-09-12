@@ -1,7 +1,11 @@
+import { eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
-import type { UserRole } from '@/lib/db/schema/users';
+import { db } from '@/lib/db/client';
+import { userPermissions } from '@/lib/db/schema/permissions';
+import { type UserRole, users } from '@/lib/db/schema/users';
 import { AuthorizationError } from '../errors';
 import { auth } from './config';
+import { type Business, encodeKey, hasPermission, type Verb } from './permissions';
 
 export type Session = {
   user: {
@@ -92,4 +96,100 @@ export async function requirePortalEmployer(): Promise<Session & { user: { emplo
     throw new AuthorizationError();
   }
   return s as Session & { user: { employerId: string } };
+}
+
+// ─── Fine-grained permission checks ───────────────────────────────────────
+
+/**
+ * Snapshot of a user's permission state. Loaded on demand by
+ * `requirePermission` so pages that don't gate anything don't pay the
+ * extra query.
+ */
+type PermissionSnapshot = {
+  userId: string;
+  isOwner: boolean;
+  granted: Set<string>;
+};
+
+/**
+ * Load the user's owner flag + granted permissions in a single trip.
+ * Not memoised — every call goes to the DB. Callers are expected to
+ * check permissions once per page, not per component; if we ever see
+ * this in a hot loop, we can add a per-request cache via React
+ * `cache()` here without touching call sites.
+ */
+async function loadPermissions(userId: string): Promise<PermissionSnapshot> {
+  const [userRow] = await db
+    .select({ isOwner: users.isOwner })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!userRow) throw new AuthorizationError();
+
+  if (userRow.isOwner) {
+    // Owner bypasses everything — no need to load the grants table.
+    return { userId, isOwner: true, granted: new Set() };
+  }
+
+  const rows = await db
+    .select({
+      business: userPermissions.business,
+      module: userPermissions.module,
+      verb: userPermissions.verb,
+    })
+    .from(userPermissions)
+    .where(eq(userPermissions.userId, userId));
+
+  const granted = new Set(
+    rows.map((r) => encodeKey(r.business as Business, r.module, r.verb as Verb)),
+  );
+  return { userId, isOwner: false, granted };
+}
+
+/**
+ * Assert the current user has `verb` on `(business, module)`. Owner
+ * bypasses. Portal users always fail (they don't have granted
+ * permissions in this table and are not the owner).
+ *
+ * Throws `AuthorizationError` on failure; the calling page/action
+ * bubbles that up as a 403.
+ */
+export async function requirePermission(
+  business: Business,
+  module: string,
+  verb: Verb,
+): Promise<Session> {
+  const s = await requireSession();
+  const snap = await loadPermissions(s.user.id);
+  if (snap.isOwner) return s;
+  if (!hasPermission(snap.granted, business, module, verb)) {
+    throw new AuthorizationError();
+  }
+  return s;
+}
+
+/**
+ * Non-throwing variant — returns a boolean. Useful for conditional UI
+ * (e.g. "show the Delete button only if the user can delete").
+ */
+export async function checkPermission(
+  business: Business,
+  module: string,
+  verb: Verb,
+): Promise<boolean> {
+  const s = await getSession();
+  if (!s) return false;
+  const snap = await loadPermissions(s.user.id);
+  if (snap.isOwner) return true;
+  return hasPermission(snap.granted, business, module, verb);
+}
+
+/**
+ * Fetch the user's full permission snapshot — useful for building the
+ * sidebar nav server-side (filter modules the user can view).
+ */
+export async function loadCurrentUserPermissions(): Promise<PermissionSnapshot | null> {
+  const s = await getSession();
+  if (!s) return null;
+  return loadPermissions(s.user.id);
 }

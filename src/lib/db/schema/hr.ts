@@ -118,3 +118,52 @@ export const attendanceSessions = pgTable(
 
 export type AttendanceSession = typeof attendanceSessions.$inferSelect;
 export type NewAttendanceSession = typeof attendanceSessions.$inferInsert;
+
+/**
+ * Break session — one row per break taken during an attendance session.
+ *
+ * Multiple breaks per shift are supported (some jobs have several
+ * split breaks). `break_ended_at` stays NULL while the break is in
+ * progress. The partial unique index ensures at most one open break
+ * per attendance session — an attempt to start a second while one is
+ * open fails with a UNIQUE violation, which the service maps to
+ * BusinessRuleError('ALREADY_ON_BREAK').
+ *
+ * `duration_minutes` is stored (rather than computed at query time) so
+ * we can index/sort on it cheaply for reporting. It's set by the
+ * service on end-break; if a break is left open past the auto-close
+ * threshold, the cron closes it with a zero duration and a
+ * `correctionReason` so an ADMIN can fix it.
+ *
+ * Deleted on cascade with the parent attendance session — if a
+ * session is corrected/removed, its breaks go with it.
+ */
+export const attendanceBreakSessions = pgTable(
+  'attendance_break_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    attendanceSessionId: uuid('attendance_session_id')
+      .notNull()
+      .references((): AnyPgColumn => attendanceSessions.id, { onDelete: 'cascade' }),
+    breakStartedAt: timestamp('break_started_at', { withTimezone: true }).notNull().defaultNow(),
+    breakEndedAt: timestamp('break_ended_at', { withTimezone: true }),
+    /** Populated on end-break so reports can aggregate without arithmetic. */
+    durationMinutes: text('duration_minutes'),
+    autoClosed: boolean('auto_closed').notNull().default(false),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    uniqueIndex('attendance_break_sessions_one_open_per_session')
+      .on(t.attendanceSessionId)
+      .where(sql`${t.breakEndedAt} IS NULL`),
+    index('attendance_break_sessions_session_idx').on(t.attendanceSessionId),
+    check(
+      'attendance_break_sessions_end_after_start',
+      sql`${t.breakEndedAt} IS NULL OR ${t.breakEndedAt} > ${t.breakStartedAt}`,
+    ),
+  ],
+);
+
+export type AttendanceBreakSession = typeof attendanceBreakSessions.$inferSelect;
+export type NewAttendanceBreakSession = typeof attendanceBreakSessions.$inferInsert;

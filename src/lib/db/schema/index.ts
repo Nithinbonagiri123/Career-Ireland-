@@ -14,6 +14,7 @@ export * from './interviews_offers';
 export * from './leads';
 export * from './notifications';
 export * from './occupations';
+export * from './permissions';
 export * from './persons';
 export * from './recruitment';
 export * from './reference';

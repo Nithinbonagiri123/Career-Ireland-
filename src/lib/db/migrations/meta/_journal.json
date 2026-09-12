@@ -169,6 +169,13 @@
       "when": 1788817684796,
       "tag": "0023_overjoyed_callisto",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789241405858,
+      "tag": "0024_volatile_deadpool",
+      "breakpoints": true
     }
   ]
 }

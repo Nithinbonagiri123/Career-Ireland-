@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -64,6 +65,22 @@ export const users = pgTable(
     /** Set for role=EMPLOYER — the Employer this portal user represents. */
     employerId: uuid('employer_id'),
     isActive: boolean('is_active').notNull().default(true),
+    /**
+     * Business owner flag. The owner bypasses every permission check
+     * — they always have every verb on every module. Exactly one user
+     * can be owner at a time (partial unique index below). Set via
+     * `pnpm tsx scripts/set-owner.ts <email>` — there is deliberately
+     * no in-app UI, since transferring ownership needs a human
+     * decision on the DB side.
+     */
+    isOwner: boolean('is_owner').notNull().default(false),
+    /**
+     * Which workspace this user was last using — informs the landing
+     * page after login. Values: 'main' | 'candidate_services' |
+     * 'recruitment' | 'immigration'. Free-form text so adding a new
+     * workspace is a code-only change.
+     */
+    currentWorkspace: text('current_workspace'),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     sessionsInvalidatedAfter: timestamp('sessions_invalidated_after', { withTimezone: true })
       .notNull()
@@ -84,6 +101,8 @@ export const users = pgTable(
         (${t.role} = 'EMPLOYER' AND ${t.employerId} IS NOT NULL AND ${t.personId} IS NULL)
       )`,
     ),
+    // At most one owner in the whole DB.
+    uniqueIndex('users_single_owner').on(t.isOwner).where(sql`${t.isOwner} = true`),
   ],
 );
 
