@@ -3,6 +3,7 @@ import { requireInternalStaff } from '@/lib/auth/session';
 import { toCsv } from '@/lib/csv';
 import { listCandidates } from '@/modules/candidates/repository';
 import { fetchPayments } from '@/modules/commerce/service';
+import { fetchDashboardRevenue } from '@/modules/dashboard/revenue';
 import { fetchEmployers } from '@/modules/employers/service';
 import { fetchCases } from '@/modules/immigration/service';
 import { fetchLeads } from '@/modules/leads/service';
@@ -19,10 +20,7 @@ function csvResponse(csv: string, filename: string) {
   });
 }
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ resource: string }> },
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ resource: string }> }) {
   await requireInternalStaff();
   const { resource } = await params;
 
@@ -163,5 +161,59 @@ export async function GET(
     );
   }
 
+  if (resource === 'revenue-services') {
+    // Same URL contract as the dashboard section — `from`/`to` are the
+    // ISO date strings the DateRangeFilter writes. If omitted, the
+    // aggregator defaults to MTD, matching what the user sees on-page.
+    const url = new URL(request.url);
+    const range = readRevenueRange(url);
+    const data = await fetchDashboardRevenue(range);
+    const rows = data.services.map((r) => ({
+      service: r.serviceName,
+      code: r.serviceCode,
+      stream: STREAM_LABELS[r.source],
+      currency: r.currencyCode,
+      payments: r.count,
+      total: r.total.toFixed(2),
+    }));
+    const from = data.range.from.toISOString().slice(0, 10);
+    const to = data.range.to.toISOString().slice(0, 10);
+    return csvResponse(
+      toCsv(rows, [
+        { key: 'service', header: 'Service' },
+        { key: 'code', header: 'Code' },
+        { key: 'stream', header: 'Stream' },
+        { key: 'currency', header: 'Currency' },
+        { key: 'payments', header: 'Payments' },
+        { key: 'total', header: 'Total' },
+      ]),
+      `revenue-services_${from}_${to}.csv`,
+    );
+  }
+
   return NextResponse.json({ ok: false, error: 'unknown resource' }, { status: 404 });
+}
+
+const STREAM_LABELS = {
+  candidate_services: 'Candidate services',
+  placements: 'Placements',
+  immigration: 'Immigration',
+} as const;
+
+/**
+ * Parse the shared `from`/`to` query params into Dates. Anything malformed
+ * is silently dropped so callers hit the MTD default in the aggregator.
+ */
+function readRevenueRange(url: URL): { from?: Date; to?: Date } {
+  const raw = { from: url.searchParams.get('from'), to: url.searchParams.get('to') };
+  const out: { from?: Date; to?: Date } = {};
+  if (raw.from && /^\d{4}-\d{2}-\d{2}$/.test(raw.from)) {
+    const d = new Date(`${raw.from}T00:00:00.000Z`);
+    if (!Number.isNaN(d.getTime())) out.from = d;
+  }
+  if (raw.to && /^\d{4}-\d{2}-\d{2}$/.test(raw.to)) {
+    const d = new Date(`${raw.to}T23:59:59.999Z`);
+    if (!Number.isNaN(d.getTime())) out.to = d;
+  }
+  return out;
 }

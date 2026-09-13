@@ -16,10 +16,12 @@ import {
 } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { Badge } from '@/components/ui/badge';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
+import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchRecentActivity } from '@/modules/dashboard/activity';
 import { fetchDashboardDrilldowns } from '@/modules/dashboard/drilldowns';
 import { fetchDashboardPipelines } from '@/modules/dashboard/pipelines';
+import { fetchDashboardRevenue } from '@/modules/dashboard/revenue';
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
 import { fetchDashboardTrends } from '@/modules/dashboard/trends';
 import { fetchHrDashboard } from '@/modules/hr/service';
@@ -27,20 +29,28 @@ import { ActivityFeed } from './activity-feed';
 import { AttentionCard } from './attention-card';
 import { DashboardDrilldownsSection } from './drilldowns-section';
 import { PipelineFunnel } from './pipeline-funnel';
+import { RevenueSection } from './revenue-section';
 import { StatChip } from './stat-chip';
 import { TrendChart } from './trend-chart';
 
 export const dynamic = 'force-dynamic';
 
-export default async function DashboardPage() {
-  await requireInternalStaff();
-  const [m, drilldowns, pipelines, activity, hr, trends] = await Promise.all([
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ created?: string; from?: string; to?: string }>;
+}) {
+  await requirePermission('main', 'overview', 'view');
+  const { created, from, to } = await searchParams;
+  const range = parseDateRangeParams({ created, from, to });
+  const [m, drilldowns, pipelines, activity, hr, trends, revenue] = await Promise.all([
     fetchDashboardMetrics(),
     fetchDashboardDrilldowns(),
     fetchDashboardPipelines(),
     fetchRecentActivity(10),
     fetchHrDashboard(),
     fetchDashboardTrends(),
+    fetchDashboardRevenue({ from: range.from, to: range.to }),
   ]);
 
   const today = new Date();
@@ -118,6 +128,11 @@ export default async function DashboardPage() {
             />
           </div>
         </section>
+      </FadeUp>
+
+      {/* ─── Revenue ─────────────────────────────────────────────── */}
+      <FadeUp delay={0.05}>
+        <RevenueSection data={revenue} />
       </FadeUp>
 
       {/* ─── HR strip ────────────────────────────────────────────── */}
