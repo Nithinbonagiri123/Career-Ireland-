@@ -228,6 +228,63 @@ export const USER_SCOPED_ITEMS: NavItem[] = [
 ];
 
 /**
+ * Reverse mapping: URL → owning workspace, derived from the nav-config
+ * above so it stays in sync automatically when items move.
+ *
+ * The workspace switcher (cookie / DB) picks the *default* workspace,
+ * but if the user directly navigates to a workspace-scoped URL (bookmark,
+ * shared link) the sidebar should follow the URL — that's what
+ * `workspaceFromPathname` enables.
+ *
+ * Routes not in any workspace nav (e.g. `/tasks`, `/reports`) are
+ * cross-cutting and belong to `main`. Returns `null` for non-app paths
+ * so callers can fall through to the existing cookie/DB precedence.
+ *
+ * When two workspaces claim the same URL (e.g. `/payments` is under
+ * Main → Accounts *and* Candidate Services → Payments), the first
+ * workspace declared in `WORKSPACES` wins. `main` is declared first, so
+ * shared URLs bias to main — this matches the pre-redesign behaviour.
+ */
+const HREF_TO_WORKSPACE = new Map<string, Business>();
+for (const cfg of Object.values(WORKSPACES)) {
+  for (const section of cfg.sections) {
+    for (const item of section.items) {
+      if (!HREF_TO_WORKSPACE.has(item.href)) HREF_TO_WORKSPACE.set(item.href, cfg.key);
+    }
+  }
+  if (!HREF_TO_WORKSPACE.has(cfg.landingPath)) HREF_TO_WORKSPACE.set(cfg.landingPath, cfg.key);
+}
+
+export function workspaceFromPathname(pathname: string): Business | null {
+  if (!pathname.startsWith('/')) return null;
+  // Longest prefix match — a route like `/candidates/new` should match
+  // `/candidates`, and `/admin/users` should match `/admin`.
+  let best: { href: string; workspace: Business } | null = null;
+  for (const [href, workspace] of HREF_TO_WORKSPACE) {
+    if (pathname === href || pathname.startsWith(`${href}/`)) {
+      if (!best || href.length > best.href.length) best = { href, workspace };
+    }
+  }
+  if (best) return best.workspace;
+  // Everything under /admin, /hr, /tasks, /reports, /notifications,
+  // /communications — cross-cutting → main workspace.
+  if (
+    pathname === '/dashboard' ||
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/hr') ||
+    pathname === '/tasks' ||
+    pathname === '/reports' ||
+    pathname === '/notifications' ||
+    pathname === '/communications' ||
+    pathname === '/shortlists' ||
+    pathname === '/account/security'
+  ) {
+    return 'main';
+  }
+  return null;
+}
+
+/**
  * Routes that aren't in the primary sidebar but are still valid URLs.
  * Kept here as a source of truth so search / bookmarks keep working;
  * add them back into a workspace if the product needs them surfaced.

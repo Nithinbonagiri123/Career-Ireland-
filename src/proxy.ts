@@ -90,7 +90,14 @@ export default auth((req) => {
     }
   }
 
-  return NextResponse.next();
+  // Pass the pathname through as a request header so server components
+  // (the app layout in particular) can derive the current workspace
+  // from the URL. Next.js doesn't expose `URL.pathname` to RSCs without
+  // this hop — we keep the header name namespaced to avoid clashing
+  // with framework internals.
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set('x-icg-pathname', path);
+  return NextResponse.next({ request: { headers: requestHeaders } });
 });
 
 export const config = {

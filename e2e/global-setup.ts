@@ -115,8 +115,11 @@ export default async function globalSetup(config: FullConfig) {
   // Exact 'Login' — the SSO buttons on the page also match 'Sign in'.
   await page.getByRole('button', { name: 'Login', exact: true }).click();
 
-  // Wait for post-login redirect (dashboard or app root).
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 });
+  // Wait for post-login redirect (dashboard or app root). Timeout is
+  // generous because the dashboard fetches from a remote Neon DB and
+  // its first cold render can take double-digit seconds; 45s buys us
+  // enough headroom for CI + local without masking a real hang.
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 45_000 });
 
   await context.storageState({ path: 'playwright/.auth/admin.json' });
   console.log('  ✓ session saved to playwright/.auth/admin.json');

@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
+import { workspaceFromPathname } from '@/components/shell/nav-config';
 import { BUSINESSES, type Business, reachableBusinesses } from '@/lib/auth/permissions';
 import { getSession, loadCurrentUserPermissions } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -10,6 +11,10 @@ import { users } from '@/lib/db/schema/users';
  * for every render so the sidebar can filter to the right sections.
  *
  * Order of precedence:
+ *   0. Current URL (via `x-icg-pathname` header set by the proxy) —
+ *      lets a direct-URL landing on a workspace-scoped page bring the
+ *      sidebar with it. Fixes the "bookmark /dashboard/immigration and
+ *      the sidebar still shows Main" bug.
  *   1. `icg_workspace` cookie (set by the business switcher click)
  *   2. `users.current_workspace` column (last-used, persisted)
  *   3. Owner → 'main'
@@ -17,8 +22,8 @@ import { users } from '@/lib/db/schema/users';
  *   5. 'main' as a last-resort fallback
  *
  * If the resolved workspace is not one the user has access to, we fall
- * through to the next tier — a cookie left over from a previous grant
- * shouldn't survive a permission revoke.
+ * through to the next tier — a URL or cookie referencing a workspace
+ * the user can't reach shouldn't override a permission decision.
  */
 export const WORKSPACE_COOKIE = 'icg_workspace';
 
@@ -51,6 +56,18 @@ export async function resolveCurrentWorkspace(): Promise<{
   // caller renders a "no access" state instead of a sidebar.
   if (reachable.length === 0) {
     return { current: 'main', reachable: [], isOwner: false };
+  }
+
+  // 0. URL — proxy stashes the pathname on the request; RSCs read it
+  // via `headers()`. Falls through silently if the header is missing
+  // (e.g. running in tests that bypass the proxy).
+  const requestHeaders = await headers();
+  const pathname = requestHeaders.get('x-icg-pathname');
+  if (pathname) {
+    const fromUrl = workspaceFromPathname(pathname);
+    if (fromUrl && reachable.includes(fromUrl)) {
+      return { current: fromUrl, reachable, isOwner: snap.isOwner };
+    }
   }
 
   // 1. Cookie
