@@ -2,7 +2,7 @@ import { Coins } from 'lucide-react';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchEngagements } from '@/modules/commerce/service';
 import { fetchCurrencies } from '@/modules/currencies/service';
@@ -18,7 +18,7 @@ export default async function EngagementsPage({
 }: {
   searchParams: Promise<{ created?: string; from?: string; to?: string }>;
 }) {
-  await requireInternalStaff();
+  await requirePermission('candidate_services', 'engagements', 'view');
   const { created, from, to } = await searchParams;
   const createdRange = parseDateRangeParams({ created, from, to });
   const [engagements, services, currencies, persons] = await Promise.all([

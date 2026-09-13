@@ -3,7 +3,7 @@ import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchCampaigns } from '@/modules/campaigns/service';
 import { fetchRequisitions } from '@/modules/requisitions/service';
@@ -17,7 +17,7 @@ export default async function CampaignsPage({
 }: {
   searchParams: Promise<{ created?: string; from?: string; to?: string }>;
 }) {
-  await requireInternalStaff();
+  await requirePermission('recruitment', 'campaigns', 'view');
   const { created, from, to } = await searchParams;
   const createdRange = parseDateRangeParams({ created, from, to });
   const [campaigns, requisitions] = await Promise.all([

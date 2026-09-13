@@ -2,7 +2,7 @@ import { ClipboardList } from 'lucide-react';
 import Link from 'next/link';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { fetchRequisitions } from '@/modules/requisitions/service';
 import { WorkflowRequisitionList } from '../_workflow-list/requisition-list';
 
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Applications · Ireland Career Gateway' };
 
 export default async function ApplicationsPage() {
-  await requireInternalStaff();
+  await requirePermission('candidate_services', 'applications', 'view');
   const requisitions = await fetchRequisitions();
 
   return (

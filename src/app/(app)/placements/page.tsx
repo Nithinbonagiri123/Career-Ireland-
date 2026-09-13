@@ -3,7 +3,7 @@ import { CsvExportButton } from '@/components/csv-export-button';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchPlacements } from '@/modules/placements/service';
 import { PlacementsTable } from './placements-table';
@@ -15,7 +15,7 @@ export default async function PlacementsPage({
 }: {
   searchParams: Promise<{ created?: string; from?: string; to?: string }>;
 }) {
-  await requireInternalStaff();
+  await requirePermission('recruitment', 'placements', 'view');
   const { created, from, to } = await searchParams;
   const createdRange = parseDateRangeParams({ created, from, to });
   const placements = await fetchPlacements(createdRange);

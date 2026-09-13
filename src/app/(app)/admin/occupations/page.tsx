@@ -1,14 +1,14 @@
 import { Tags } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireRole } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { fetchCategories, fetchOccupations } from '@/modules/occupations/service';
 import { OccupationsView } from './occupations-view';
 
 export const dynamic = 'force-dynamic';
 
 export default async function OccupationsAdminPage() {
-  await requireRole(['ADMIN']);
+  await requirePermission('main', 'admin', 'view');
   const [categories, occupations] = await Promise.all([fetchCategories(), fetchOccupations()]);
 
   return (

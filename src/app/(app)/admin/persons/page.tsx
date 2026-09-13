@@ -2,7 +2,7 @@ import { GitMerge, UsersRound } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { requireRole } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { fetchMergedPersons, fetchPersons } from '@/modules/persons/service';
 import { MergePersonsDialog } from './merge-dialog';
 import { ActivePersonsTable, MergedPersonsTable } from './persons-tables';
@@ -10,7 +10,7 @@ import { ActivePersonsTable, MergedPersonsTable } from './persons-tables';
 export const dynamic = 'force-dynamic';
 
 export default async function PersonsAdminPage() {
-  await requireRole(['ADMIN']);
+  await requirePermission('main', 'admin', 'view');
   const [active, merged] = await Promise.all([fetchPersons(), fetchMergedPersons()]);
 
   return (

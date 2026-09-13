@@ -1,14 +1,14 @@
 import { Briefcase, Building2, LayoutDashboard, ListChecks, Sparkles, Trophy } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
 import { StatChip } from '../stat-chip';
 
 export const dynamic = 'force-dynamic';
 
 export default async function RecruitmentDashboard() {
-  await requireInternalStaff();
+  await requirePermission('recruitment', 'dashboard', 'view');
   const m = await fetchDashboardMetrics();
 
   return (

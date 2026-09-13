@@ -1,7 +1,7 @@
 import { UserCog } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireRole } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { fetchUsers } from '@/modules/users/service';
 import { CreateUserDialog } from './create-user-dialog';
 import { UsersTable } from './users-table';
@@ -9,7 +9,7 @@ import { UsersTable } from './users-table';
 export const dynamic = 'force-dynamic';
 
 export default async function UsersAdminPage() {
-  const session = await requireRole(['ADMIN']);
+  const session = await requirePermission('main', 'admin', 'view');
   const users = await fetchUsers();
 
   return (

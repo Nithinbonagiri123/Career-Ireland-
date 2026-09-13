@@ -5,7 +5,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ScopeFilter } from '@/components/scope-filter';
 import { Button } from '@/components/ui/button';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { parseAssignmentScope } from '@/lib/scope';
 import { fetchEmployers } from '@/modules/employers/service';
@@ -19,7 +19,7 @@ export default async function EmployersPage({
 }: {
   searchParams: Promise<{ assigned?: string; created?: string; from?: string; to?: string }>;
 }) {
-  await requireInternalStaff();
+  await requirePermission('recruitment', 'employers', 'view');
   const { assigned, created, from, to } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const createdRange = parseDateRangeParams({ created, from, to });

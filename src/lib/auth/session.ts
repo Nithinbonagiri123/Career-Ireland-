@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
+import { cache } from 'react';
 import { db } from '@/lib/db/client';
 import { userPermissions } from '@/lib/db/schema/permissions';
 import { type UserRole, users } from '@/lib/db/schema/users';
@@ -113,12 +114,19 @@ type PermissionSnapshot = {
 
 /**
  * Load the user's owner flag + granted permissions in a single trip.
- * Not memoised — every call goes to the DB. Callers are expected to
- * check permissions once per page, not per component; if we ever see
- * this in a hot loop, we can add a per-request cache via React
- * `cache()` here without touching call sites.
+ *
+ * Wrapped in React `cache()` so multiple `requirePermission` /
+ * `checkPermission` / `loadCurrentUserPermissions` calls inside the
+ * same server render share ONE round-trip (two SQL queries) instead
+ * of firing per-fetch. Cache is scoped per React request — no
+ * cross-request bleed.
+ *
+ * Before caching, a dashboard render triggered 12–14 queries
+ * (users + user_permissions per gated fetch); with `cache()` it's 2
+ * total for a non-owner and 1 for an owner. Big win on Neon where
+ * every round-trip is ~150ms transatlantic.
  */
-async function loadPermissions(userId: string): Promise<PermissionSnapshot> {
+const loadPermissions = cache(async (userId: string): Promise<PermissionSnapshot> => {
   const [userRow] = await db
     .select({ isOwner: users.isOwner })
     .from(users)
@@ -144,7 +152,7 @@ async function loadPermissions(userId: string): Promise<PermissionSnapshot> {
     rows.map((r) => encodeKey(r.business as Business, r.module, r.verb as Verb)),
   );
   return { userId, isOwner: false, granted };
-}
+});
 
 /**
  * Assert the current user has `verb` on `(business, module)`. Owner
@@ -182,6 +190,24 @@ export async function checkPermission(
   const snap = await loadPermissions(s.user.id);
   if (snap.isOwner) return true;
   return hasPermission(snap.granted, business, module, verb);
+}
+
+/**
+ * Pass any of a set of triples. Useful for pages that logically belong
+ * to two workspaces (e.g. `/payments` is both
+ * `candidate_services.payments` and `main.accounts`). The user gets
+ * through if ANY of the listed grants is satisfied.
+ */
+export async function requireAnyPermission(
+  triples: Array<{ business: Business; module: string; verb: Verb }>,
+): Promise<Session> {
+  const s = await requireSession();
+  const snap = await loadPermissions(s.user.id);
+  if (snap.isOwner) return s;
+  for (const t of triples) {
+    if (hasPermission(snap.granted, t.business, t.module, t.verb)) return s;
+  }
+  throw new AuthorizationError();
 }
 
 /**

@@ -2,7 +2,7 @@ import { FileText } from 'lucide-react';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchAllDocumentsForStaff } from '@/modules/documents/service';
 import { DocumentsTable } from './documents-table';
@@ -14,7 +14,7 @@ export default async function DocumentsPage({
 }: {
   searchParams: Promise<{ created?: string; from?: string; to?: string }>;
 }) {
-  await requireInternalStaff();
+  await requirePermission('candidate_services', 'documents', 'view');
   const { created, from, to } = await searchParams;
   const createdRange = parseDateRangeParams({ created, from, to });
   const documents = await fetchAllDocumentsForStaff(createdRange);

@@ -2,7 +2,8 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
-import { MoreHorizontal, UserCog, UserX } from 'lucide-react';
+import { KeyRound, MoreHorizontal, UserCog, UserX } from 'lucide-react';
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -159,6 +160,10 @@ export function UsersTable({ users, currentUserId }: Props) {
               <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem render={<Link href={`/admin/users/${user.id}/permissions`} />}>
+                <KeyRound className="mr-2 size-4" /> Permissions
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuLabel>Change role</DropdownMenuLabel>
               {ROLE_MENU_ORDER.map((r) => (
                 <DropdownMenuItem

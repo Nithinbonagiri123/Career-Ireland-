@@ -15,7 +15,7 @@ import Link from 'next/link';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { requireRole } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,7 +111,7 @@ const SECTIONS: Array<{
 ];
 
 export default async function AdminHubPage() {
-  await requireRole(['ADMIN']);
+  await requirePermission('main', 'admin', 'view');
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">

@@ -2,7 +2,7 @@ import { GraduationCap } from 'lucide-react';
 import { SimpleRefTable } from '@/components/admin/simple-ref-table';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireRole } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import {
   setQualificationActiveAction,
   upsertQualificationAction,
@@ -12,7 +12,7 @@ import { fetchQualifications } from '@/modules/qualifications/service';
 export const dynamic = 'force-dynamic';
 
 export default async function QualificationsAdminPage() {
-  await requireRole(['ADMIN']);
+  await requirePermission('main', 'admin', 'view');
   const qualifications = await fetchQualifications();
 
   return (

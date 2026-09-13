@@ -1,14 +1,14 @@
 import { ScrollText } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireRole } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { fetchDocumentTypes } from '@/modules/document-types/service';
 import { DocTypesTable } from './doc-types-table';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DocumentTypesAdminPage() {
-  await requireRole(['ADMIN']);
+  await requirePermission('main', 'admin', 'view');
   const types = await fetchDocumentTypes();
 
   return (

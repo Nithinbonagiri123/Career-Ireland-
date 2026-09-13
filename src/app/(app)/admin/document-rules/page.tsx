@@ -3,7 +3,7 @@ import { Plus, ScrollText } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import { requireRole } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { occupations } from '@/lib/db/schema/occupations';
 import { fetchDocumentTypes } from '@/modules/document-types/service';
@@ -15,7 +15,7 @@ import { RulesTable } from './rules-table';
 export const dynamic = 'force-dynamic';
 
 export default async function DocumentRulesPage() {
-  await requireRole(['ADMIN']);
+  await requirePermission('main', 'admin', 'view');
   const [rules, docTypes, occs, packages] = await Promise.all([
     fetchRequirementRules(),
     fetchDocumentTypes(),

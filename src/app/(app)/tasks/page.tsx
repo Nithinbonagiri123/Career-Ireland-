@@ -2,7 +2,7 @@ import { CheckSquare } from 'lucide-react';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchTasks } from '@/modules/activities/service';
 import { fetchEmployers } from '@/modules/employers/service';
@@ -18,7 +18,7 @@ export default async function TasksPage({
 }: {
   searchParams: Promise<{ created?: string; from?: string; to?: string }>;
 }) {
-  await requireInternalStaff();
+  await requirePermission('immigration', 'activities', 'view');
   const { created, from, to } = await searchParams;
   const createdRange = parseDateRangeParams({ created, from, to });
   const [tasks, users, persons, employers] = await Promise.all([

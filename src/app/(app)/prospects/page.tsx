@@ -2,7 +2,7 @@ import { Sparkles } from 'lucide-react';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { ProspectStatusSchema } from '@/modules/campaigns/schemas';
 import {
@@ -30,7 +30,7 @@ export default async function ProspectsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  await requireInternalStaff();
+  await requirePermission('recruitment', 'prospects', 'view');
   const sp = await searchParams;
 
   const statusParsed = ProspectStatusSchema.safeParse(sp.status);

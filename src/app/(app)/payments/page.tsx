@@ -3,7 +3,7 @@ import { CsvExportButton } from '@/components/csv-export-button';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requireAnyPermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchEngagements, fetchPayments } from '@/modules/commerce/service';
 import { PaymentsTable } from './payments-table';
@@ -16,7 +16,12 @@ export default async function PaymentsPage({
 }: {
   searchParams: Promise<{ created?: string; from?: string; to?: string }>;
 }) {
-  const session = await requireInternalStaff();
+  // Payments is dual-workspace: candidate_services.payments AND
+  // main.accounts both lead here. Either grant lets you in.
+  const session = await requireAnyPermission([
+    { business: 'candidate_services', module: 'payments', verb: 'view' },
+    { business: 'main', module: 'accounts', verb: 'view' },
+  ]);
   const { created, from, to } = await searchParams;
   const createdRange = parseDateRangeParams({ created, from, to });
   const [payments, engagements] = await Promise.all([

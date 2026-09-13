@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import {
   applicationFunnel,
   placementsInPeriod,
@@ -30,7 +30,7 @@ export default async function ReportsPage({
 }: {
   searchParams: Promise<{ days?: string }>;
 }) {
-  await requireInternalStaff();
+  await requirePermission('main', 'overview', 'view');
   const { days: daysParam } = await searchParams;
   const days = parseDays(daysParam);
   const [placementRows, revenueRows, recruiterRows, requisitionPerfRows, funnelRows] =

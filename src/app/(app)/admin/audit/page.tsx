@@ -1,12 +1,14 @@
 import { ShieldCheck } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { Badge } from '@/components/ui/badge';
+import { requirePermission } from '@/lib/auth/session';
 import { fetchAuditEvents } from '@/modules/audit/service';
 import { AuditTable } from './audit-table';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AuditLogPage() {
+  await requirePermission('main', 'admin', 'view');
   const { items, nextCursor } = await fetchAuditEvents({ limit: 50 });
 
   return (

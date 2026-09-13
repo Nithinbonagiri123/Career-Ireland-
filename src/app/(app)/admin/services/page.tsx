@@ -1,7 +1,7 @@
 import { Package } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requireRole } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchServiceCatalog, fetchServicePackages } from '@/modules/services-catalog/service';
 import { ServicesView } from './services-view';
@@ -9,7 +9,7 @@ import { ServicesView } from './services-view';
 export const dynamic = 'force-dynamic';
 
 export default async function ServicesAdminPage() {
-  await requireRole(['ADMIN']);
+  await requirePermission('main', 'admin', 'view');
   const [services, packages, currencies] = await Promise.all([
     fetchServiceCatalog(),
     fetchServicePackages(),

@@ -2,7 +2,7 @@ import { Globe, Plus } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import { requireRole } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { CurrenciesTable } from './currencies-table';
 import { CurrencyDialog } from './currency-dialog';
@@ -10,7 +10,7 @@ import { CurrencyDialog } from './currency-dialog';
 export const dynamic = 'force-dynamic';
 
 export default async function CurrenciesAdminPage() {
-  await requireRole(['ADMIN']);
+  await requirePermission('main', 'admin', 'view');
   const currencies = await fetchCurrencies();
 
   return (
