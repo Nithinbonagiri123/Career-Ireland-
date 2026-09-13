@@ -4,7 +4,14 @@ import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { toActionResult } from '@/lib/result';
 import type { CorrectAttendanceInput, UpsertStaffProfileInput } from './schemas';
-import { clockIn, clockOut, correctAttendance, upsertStaffProfile } from './service';
+import {
+  clockIn,
+  clockOut,
+  correctAttendance,
+  endBreak,
+  startBreak,
+  upsertStaffProfile,
+} from './service';
 
 /**
  * Attendance actions. Timestamps come from the server (`NOW()` inside
@@ -32,6 +39,18 @@ export async function clockInAction() {
 export async function clockOutAction() {
   const ip = await readCallerIp();
   const r = await toActionResult(() => clockOut(ip));
+  if (r.ok) revalidatePath('/hr');
+  return r;
+}
+
+export async function startBreakAction() {
+  const r = await toActionResult(() => startBreak());
+  if (r.ok) revalidatePath('/hr');
+  return r;
+}
+
+export async function endBreakAction() {
+  const r = await toActionResult(() => endBreak());
   if (r.ok) revalidatePath('/hr');
   return r;
 }

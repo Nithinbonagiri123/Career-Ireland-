@@ -62,6 +62,7 @@ export default async function HrTeamPage() {
                 {reports.map((r) => {
                   const s = r.latestSession;
                   const isActive = s !== null && s.clockOutAt === null;
+                  const isOnBreak = isActive && r.openBreak !== null;
                   const isStale =
                     isActive &&
                     s !== null &&
@@ -74,7 +75,13 @@ export default async function HrTeamPage() {
                       <div className="flex min-w-0 items-center gap-3">
                         <StatusDot
                           tone={
-                            isStale ? 'danger' : isActive ? 'success' : s ? 'neutral' : 'neutral'
+                            isStale
+                              ? 'danger'
+                              : isOnBreak
+                                ? 'warning'
+                                : isActive
+                                  ? 'success'
+                                  : 'neutral'
                           }
                         />
                         <div className="min-w-0">
@@ -89,14 +96,26 @@ export default async function HrTeamPage() {
                           <span>No attendance yet</span>
                         ) : isActive ? (
                           <>
-                            <div>
-                              Since{' '}
-                              <span className="font-medium text-foreground">
-                                {format(s.clockInAt, 'HH:mm')}
+                            <div className="flex items-center justify-end gap-1.5">
+                              {isOnBreak && (
+                                <Badge
+                                  variant="warning"
+                                  className="rounded-full text-[9px] uppercase"
+                                >
+                                  On break
+                                </Badge>
+                              )}
+                              <span>
+                                Since{' '}
+                                <span className="font-medium text-foreground">
+                                  {format(s.clockInAt, 'HH:mm')}
+                                </span>
                               </span>
                             </div>
                             <div className="text-[10px] uppercase tracking-wider">
-                              {formatDistanceToNowStrict(s.clockInAt)}
+                              {isOnBreak && r.openBreak
+                                ? `Break started ${formatDistanceToNowStrict(r.openBreak.breakStartedAt)} ago`
+                                : formatDistanceToNowStrict(s.clockInAt)}
                               {isStale && (
                                 <Badge variant="danger" className="ml-1.5 rounded-full text-[9px]">
                                   Missing clock-out

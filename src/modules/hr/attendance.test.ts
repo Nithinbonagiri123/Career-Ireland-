@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/lib/db/client';
-import { attendanceSessions } from '@/lib/db/schema/hr';
+import { attendanceBreakSessions, attendanceSessions } from '@/lib/db/schema/hr';
 import { users } from '@/lib/db/schema/users';
 import { hashPassword } from '@/modules/auth/service';
 
@@ -83,6 +83,66 @@ describe('attendance_sessions constraints', () => {
         .update(attendanceSessions)
         .set({ clockOutAt: row.clockInAt })
         .where(eq(attendanceSessions.id, row.id)),
+    ).rejects.toThrow();
+  });
+});
+
+describe('attendance_break_sessions constraints', () => {
+  it('allows a single open break for an attendance session', async () => {
+    const [session] = await db.insert(attendanceSessions).values({ userId }).returning();
+    if (!session) throw new Error('session insert returned no row');
+    const [br] = await db
+      .insert(attendanceBreakSessions)
+      .values({ attendanceSessionId: session.id })
+      .returning();
+    if (!br) throw new Error('break insert returned no row');
+    expect(br.breakEndedAt).toBeNull();
+  });
+
+  it('refuses a second open break while one is already open on the same session', async () => {
+    const [session] = await db.insert(attendanceSessions).values({ userId }).returning();
+    if (!session) throw new Error('session insert returned no row');
+    await db.insert(attendanceBreakSessions).values({ attendanceSessionId: session.id });
+    await expect(
+      db.insert(attendanceBreakSessions).values({ attendanceSessionId: session.id }),
+    ).rejects.toThrow();
+  });
+
+  it('permits a new open break after the previous is ended', async () => {
+    const [session] = await db.insert(attendanceSessions).values({ userId }).returning();
+    if (!session) throw new Error('session insert returned no row');
+    const [first] = await db
+      .insert(attendanceBreakSessions)
+      .values({ attendanceSessionId: session.id })
+      .returning();
+    if (!first) throw new Error('first break insert returned no row');
+    // Space out so the CHECK (end > start) is satisfied.
+    await new Promise((r) => setTimeout(r, 50));
+    await db
+      .update(attendanceBreakSessions)
+      .set({ breakEndedAt: new Date() })
+      .where(eq(attendanceBreakSessions.id, first.id));
+    const [second] = await db
+      .insert(attendanceBreakSessions)
+      .values({ attendanceSessionId: session.id })
+      .returning();
+    if (!second) throw new Error('second break insert returned no row');
+    expect(second.id).not.toBe(first.id);
+  });
+
+  it('refuses a break end earlier than or equal to break start', async () => {
+    const [session] = await db.insert(attendanceSessions).values({ userId }).returning();
+    if (!session) throw new Error('session insert returned no row');
+    const [br] = await db
+      .insert(attendanceBreakSessions)
+      .values({ attendanceSessionId: session.id })
+      .returning();
+    if (!br) throw new Error('break insert returned no row');
+    await expect(
+      db
+        .update(attendanceBreakSessions)
+        .set({ breakEndedAt: br.breakStartedAt })
+        .where(eq(attendanceBreakSessions.id, br.id)),
     ).rejects.toThrow();
   });
 });

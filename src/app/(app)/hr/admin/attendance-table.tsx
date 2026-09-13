@@ -34,23 +34,28 @@ export function AttendanceTable({ rows }: { rows: AttendanceRow[] }) {
               <th className="px-4 py-2 font-medium">Date</th>
               <th className="px-4 py-2 font-medium">Clock-in</th>
               <th className="px-4 py-2 font-medium">Clock-out</th>
-              <th className="px-4 py-2 font-medium">Duration</th>
+              <th className="px-4 py-2 font-medium">Break</th>
+              <th className="px-4 py-2 font-medium">Net worked</th>
               <th className="px-4 py-2" />
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => {
               const active = !r.session.clockOutAt;
-              const durationMs = r.session.clockOutAt
+              const grossMs = r.session.clockOutAt
                 ? r.session.clockOutAt.getTime() - r.session.clockInAt.getTime()
                 : 0;
-              const hours = Math.floor(durationMs / 3_600_000);
-              const minutes = Math.floor((durationMs % 3_600_000) / 60_000);
+              const breakMs = r.breaks.reduce((acc, b) => {
+                if (!b.breakEndedAt) return acc;
+                return acc + Math.max(0, b.breakEndedAt.getTime() - b.breakStartedAt.getTime());
+              }, 0);
+              const netMs = Math.max(0, grossMs - breakMs);
+              const openBreak = r.breaks.find((b) => !b.breakEndedAt) ?? null;
               return (
                 <tr key={r.session.id} className="border-b last:border-b-0 hover:bg-muted/20">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <StatusDot tone={active ? 'success' : 'neutral'} />
+                      <StatusDot tone={openBreak ? 'warning' : active ? 'success' : 'neutral'} />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{r.userName}</p>
                         <p className="truncate text-[11px] text-muted-foreground">{r.userEmail}</p>
@@ -66,16 +71,32 @@ export function AttendanceTable({ rows }: { rows: AttendanceRow[] }) {
                   <td className="px-4 py-3 text-xs tabular-nums">
                     {r.session.clockOutAt ? (
                       format(r.session.clockOutAt, 'HH:mm')
+                    ) : openBreak ? (
+                      <Badge variant="warning" className="rounded-full text-[10px]">
+                        On break
+                      </Badge>
                     ) : (
                       <Badge variant="info" className="rounded-full text-[10px]">
                         Active
                       </Badge>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-xs tabular-nums text-muted-foreground">
+                    {r.breaks.length === 0 ? (
+                      <span className="text-muted-foreground/60">—</span>
+                    ) : (
+                      <>
+                        {formatDuration(breakMs)}
+                        <span className="ml-1 text-[10px] text-muted-foreground/70">
+                          ×{r.breaks.length}
+                        </span>
+                      </>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-xs tabular-nums">
                     {active
                       ? formatDistanceToNowStrict(r.session.clockInAt)
-                      : `${hours}h ${minutes}m`}
+                      : formatDuration(netMs)}
                     {r.session.autoClosed && (
                       <Badge variant="warning" className="ml-1.5 rounded-full text-[9px]">
                         auto
@@ -111,4 +132,12 @@ export function AttendanceTable({ rows }: { rows: AttendanceRow[] }) {
       />
     </>
   );
+}
+
+function formatDuration(ms: number): string {
+  const total = Math.floor(ms / 60_000);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m}m`;
+  return `${h}h ${m}m`;
 }

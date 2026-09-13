@@ -1,11 +1,13 @@
 import { AlertCircle, ArrowLeft, Clock, LogIn, Users2 } from 'lucide-react';
 import Link from 'next/link';
+import { DateRangeFilter } from '@/components/date-range-filter';
 import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { requireRole } from '@/lib/auth/session';
+import { requirePermission } from '@/lib/auth/session';
+import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchHrDashboard, fetchRecentAttendance, fetchStaffDirectory } from '@/modules/hr/service';
 import { listUsers } from '@/modules/users/repository';
 import { StatChip } from '../../dashboard/stat-chip';
@@ -19,12 +21,18 @@ export const metadata = { title: 'HR admin · Ireland Career Gateway' };
  * Admin HR view — dashboard tiles, staff directory, recent attendance
  * with row-level corrections. ADMIN only.
  */
-export default async function HrAdminPage() {
-  await requireRole(['ADMIN']);
+export default async function HrAdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ created?: string; from?: string; to?: string }>;
+}) {
+  await requirePermission('main', 'hr_board', 'view');
+  const { created, from, to } = await searchParams;
+  const range = parseDateRangeParams({ created, from, to });
   const [dashboard, staff, recent, allUsers] = await Promise.all([
     fetchHrDashboard(),
     fetchStaffDirectory(),
-    fetchRecentAttendance(50),
+    fetchRecentAttendance({ limit: 100, from: range.from, to: range.to }),
     listUsers(),
   ]);
   // Manager options — every internal user, portal roles excluded.
@@ -113,13 +121,16 @@ export default async function HrAdminPage() {
 
       {/* Recent attendance with corrections */}
       <FadeUp delay={0.1}>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Recent attendance
-          </h2>
-          <span className="text-[11px] text-muted-foreground">
-            Server-side timestamps. Corrections audited.
-          </span>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Recent attendance
+            </h2>
+            <span className="text-[11px] text-muted-foreground">
+              Server-side timestamps. Corrections audited.
+            </span>
+          </div>
+          <DateRangeFilter />
         </div>
         <AttendanceTable rows={recent} />
       </FadeUp>

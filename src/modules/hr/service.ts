@@ -3,7 +3,9 @@ import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff, requireRole, requireSession } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
+  type AttendanceBreakSession,
   type AttendanceSession,
+  attendanceBreakSessions,
   attendanceSessions,
   type StaffProfile,
   staffProfiles,
@@ -59,11 +61,61 @@ export async function fetchMyRecentSessions(
     .limit(limit);
 }
 
+/**
+ * Snapshot of the caller's attendance state for the current calendar
+ * day. The Today card renders from this + a client-side ticker; no
+ * "how much time is left" arithmetic is performed on the server so
+ * timezone-of-server never leaks into the UI.
+ */
+export type MyTodayStatus = {
+  openSession: AttendanceSession | null;
+  openBreak: AttendanceBreakSession | null;
+  todaySessions: AttendanceSession[];
+  todayBreaks: AttendanceBreakSession[];
+};
+
+export async function fetchMyTodayStatus(userId: string): Promise<MyTodayStatus> {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const todaySessions = await db
+    .select()
+    .from(attendanceSessions)
+    .where(
+      and(eq(attendanceSessions.userId, userId), gte(attendanceSessions.clockInAt, startOfDay)),
+    )
+    .orderBy(desc(attendanceSessions.clockInAt));
+
+  const openSession = todaySessions.find((s) => !s.clockOutAt) ?? null;
+
+  const todayBreaks =
+    todaySessions.length > 0 ? await fetchBreaksForSessions(todaySessions.map((s) => s.id)) : [];
+  const openBreak = todayBreaks.find((b) => !b.breakEndedAt) ?? null;
+
+  return { openSession, openBreak, todaySessions, todayBreaks };
+}
+
 export type AttendanceRow = {
   session: AttendanceSession;
   userName: string;
   userEmail: string;
+  /** Every break belonging to this session (open or closed). */
+  breaks: AttendanceBreakSession[];
 };
+
+async function attachBreaks(
+  rows: Array<{ session: AttendanceSession; userName: string; userEmail: string }>,
+): Promise<AttendanceRow[]> {
+  if (rows.length === 0) return [];
+  const breaks = await fetchBreaksForSessions(rows.map((r) => r.session.id));
+  const bySession = new Map<string, AttendanceBreakSession[]>();
+  for (const b of breaks) {
+    const arr = bySession.get(b.attendanceSessionId);
+    if (arr) arr.push(b);
+    else bySession.set(b.attendanceSessionId, [b]);
+  }
+  return rows.map((r) => ({ ...r, breaks: bySession.get(r.session.id) ?? [] }));
+}
 
 export async function fetchTodayAttendance(): Promise<AttendanceRow[]> {
   await requireInternalStaff();
@@ -79,11 +131,24 @@ export async function fetchTodayAttendance(): Promise<AttendanceRow[]> {
     .innerJoin(users, eq(users.id, attendanceSessions.userId))
     .where(gte(attendanceSessions.clockInAt, startOfDay))
     .orderBy(desc(attendanceSessions.clockInAt));
-  return rows;
+  return attachBreaks(rows);
 }
 
-export async function fetchRecentAttendance(limit = 50): Promise<AttendanceRow[]> {
+/**
+ * Recent attendance across the whole team, optionally scoped to a
+ * clock-in date range. Callers (the admin history table) pass `from`
+ * and `to` from URL search params so filters survive a refresh.
+ */
+export async function fetchRecentAttendance(opts?: {
+  limit?: number;
+  from?: Date;
+  to?: Date;
+}): Promise<AttendanceRow[]> {
   await requireInternalStaff();
+  const limit = opts?.limit ?? 50;
+  const conditions = [];
+  if (opts?.from) conditions.push(gte(attendanceSessions.clockInAt, opts.from));
+  if (opts?.to) conditions.push(lt(attendanceSessions.clockInAt, opts.to));
   const rows = await db
     .select({
       session: attendanceSessions,
@@ -92,9 +157,10 @@ export async function fetchRecentAttendance(limit = 50): Promise<AttendanceRow[]
     })
     .from(attendanceSessions)
     .innerJoin(users, eq(users.id, attendanceSessions.userId))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(attendanceSessions.clockInAt))
     .limit(limit);
-  return rows;
+  return attachBreaks(rows);
 }
 
 export type StaffDirectoryRow = {
@@ -116,6 +182,8 @@ export type TeamReportRow = {
   userName: string;
   userEmail: string;
   latestSession: AttendanceSession | null;
+  /** If the report is currently on a break, this is that open break. */
+  openBreak: AttendanceBreakSession | null;
 };
 
 export async function fetchDirectReports(managerUserId: string): Promise<TeamReportRow[]> {
@@ -143,9 +211,26 @@ export async function fetchDirectReports(managerUserId: string): Promise<TeamRep
         .where(eq(attendanceSessions.userId, r.userId))
         .orderBy(desc(attendanceSessions.clockInAt))
         .limit(1);
+      // Only look up an open break if the report is currently clocked
+      // in — otherwise there can't be one by construction.
+      let openBreak: AttendanceBreakSession | null = null;
+      if (latest && !latest.clockOutAt) {
+        const [ob] = await db
+          .select()
+          .from(attendanceBreakSessions)
+          .where(
+            and(
+              eq(attendanceBreakSessions.attendanceSessionId, latest.id),
+              isNull(attendanceBreakSessions.breakEndedAt),
+            ),
+          )
+          .limit(1);
+        openBreak = ob ?? null;
+      }
       return {
         ...r,
         latestSession: latest ?? null,
+        openBreak,
       };
     }),
   );
@@ -293,6 +378,24 @@ export async function clockOut(ip: string | null): Promise<AttendanceSession> {
         'You are not currently clocked in. Clock in first.',
       );
     }
+    // Auto-close any open break for this session so we don't leave
+    // orphan `break_ended_at IS NULL` rows on a closed session. The
+    // partial unique index means there is at most one.
+    await tx
+      .update(attendanceBreakSessions)
+      .set({
+        breakEndedAt: sql`NOW()`,
+        durationMinutes: sql`(EXTRACT(EPOCH FROM (NOW() - ${attendanceBreakSessions.breakStartedAt}))/60)::text`,
+        autoClosed: true,
+        updatedAt: sql`NOW()`,
+      })
+      .where(
+        and(
+          eq(attendanceBreakSessions.attendanceSessionId, before.id),
+          isNull(attendanceBreakSessions.breakEndedAt),
+        ),
+      );
+
     const [after] = await tx
       .update(attendanceSessions)
       .set({
@@ -316,6 +419,148 @@ export async function clockOut(ip: string | null): Promise<AttendanceSession> {
 
     return after;
   });
+}
+
+// ─── Break sessions ─────────────────────────────────────────────────
+
+/**
+ * Start a break inside the caller's currently-open attendance session.
+ * Uses `attendance_break_sessions_one_open_per_session` (partial UNIQUE
+ * on `attendance_session_id WHERE break_ended_at IS NULL`) to prevent
+ * the double-start race — a concurrent second start-break gets a 23505
+ * which we map to the human-friendly BusinessRuleError.
+ *
+ * Refuses if no attendance session is open — you can't take a break
+ * without being clocked in.
+ */
+export async function startBreak(): Promise<AttendanceBreakSession> {
+  const session = await requireSession();
+  return db.transaction(async (tx) => {
+    // Anchor break to the open attendance session.
+    const [openSession] = await tx
+      .select({ id: attendanceSessions.id })
+      .from(attendanceSessions)
+      .where(
+        and(eq(attendanceSessions.userId, session.user.id), isNull(attendanceSessions.clockOutAt)),
+      )
+      .limit(1);
+    if (!openSession) {
+      throw new BusinessRuleError('NOT_CLOCKED_IN', 'You must be clocked in to start a break.');
+    }
+
+    let inserted: AttendanceBreakSession | undefined;
+    try {
+      const [row] = await tx
+        .insert(attendanceBreakSessions)
+        .values({ attendanceSessionId: openSession.id })
+        .returning();
+      inserted = row;
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code === '23505') {
+        throw new BusinessRuleError(
+          'ALREADY_ON_BREAK',
+          'You are already on a break. End it before starting a new one.',
+        );
+      }
+      throw err;
+    }
+    if (!inserted) throw new Error('break insert returned no row');
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'attendance_break_session',
+      entityId: inserted.id,
+      action: 'CREATED',
+      after: { breakStartedAt: inserted.breakStartedAt.toISOString() },
+      context: { attendanceSessionId: openSession.id },
+    });
+
+    return inserted;
+  });
+}
+
+/**
+ * End the caller's currently-open break. Idempotent-ish: guarded by
+ * the WHERE clause so a race between two end-break requests never
+ * closes the same break twice.
+ *
+ * `duration_minutes` is set from `EXTRACT(EPOCH FROM (now - start))/60`
+ * at DB level so we don't rely on a clock skew from the app layer.
+ */
+export async function endBreak(): Promise<AttendanceBreakSession> {
+  const session = await requireSession();
+  return db.transaction(async (tx) => {
+    const [openBreak] = await tx
+      .select({
+        id: attendanceBreakSessions.id,
+        attendanceSessionId: attendanceBreakSessions.attendanceSessionId,
+      })
+      .from(attendanceBreakSessions)
+      .innerJoin(
+        attendanceSessions,
+        eq(attendanceSessions.id, attendanceBreakSessions.attendanceSessionId),
+      )
+      .where(
+        and(
+          eq(attendanceSessions.userId, session.user.id),
+          isNull(attendanceBreakSessions.breakEndedAt),
+        ),
+      )
+      .for('update')
+      .limit(1);
+    if (!openBreak) {
+      throw new BusinessRuleError('NOT_ON_BREAK', 'You are not currently on a break.');
+    }
+
+    const [after] = await tx
+      .update(attendanceBreakSessions)
+      .set({
+        breakEndedAt: sql`NOW()`,
+        durationMinutes: sql`(EXTRACT(EPOCH FROM (NOW() - ${attendanceBreakSessions.breakStartedAt}))/60)::text`,
+        updatedAt: sql`NOW()`,
+      })
+      .where(
+        and(
+          eq(attendanceBreakSessions.id, openBreak.id),
+          isNull(attendanceBreakSessions.breakEndedAt),
+        ),
+      )
+      .returning();
+    if (!after) throw new Error('break update returned no row');
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'attendance_break_session',
+      entityId: after.id,
+      action: 'STATUS_CHANGED',
+      before: { breakEndedAt: null },
+      after: { breakEndedAt: after.breakEndedAt?.toISOString() ?? null },
+    });
+
+    return after;
+  });
+}
+
+/**
+ * Fetch every break belonging to a set of attendance sessions.
+ * Callers (Today card, history table) use this to aggregate break
+ * time per session.
+ */
+export async function fetchBreaksForSessions(
+  sessionIds: string[],
+): Promise<AttendanceBreakSession[]> {
+  if (sessionIds.length === 0) return [];
+  return db
+    .select()
+    .from(attendanceBreakSessions)
+    .where(
+      sql`${attendanceBreakSessions.attendanceSessionId} in (${sql.join(
+        sessionIds.map((id) => sql`${id}`),
+        sql`, `,
+      )})`,
+    )
+    .orderBy(desc(attendanceBreakSessions.breakStartedAt));
 }
 
 /**

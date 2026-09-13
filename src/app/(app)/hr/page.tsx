@@ -9,11 +9,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusDot } from '@/components/ui/status-dot';
 import { requireSession } from '@/lib/auth/session';
-import {
-  fetchHrDashboard,
-  fetchMyRecentSessions,
-  findOpenSessionForUser,
-} from '@/modules/hr/service';
+import { fetchHrDashboard, fetchMyRecentSessions, fetchMyTodayStatus } from '@/modules/hr/service';
 import { ClockPanel } from './clock-panel';
 
 export const dynamic = 'force-dynamic';
@@ -26,8 +22,8 @@ export const metadata = { title: 'HR · Ireland Career Gateway' };
  */
 export default async function HrPage() {
   const session = await requireSession();
-  const [openSession, myRecent, dashboard] = await Promise.all([
-    findOpenSessionForUser(session.user.id),
+  const [todayStatus, myRecent, dashboard] = await Promise.all([
+    fetchMyTodayStatus(session.user.id),
     fetchMyRecentSessions(session.user.id, 15),
     // fetchHrDashboard requires ADMIN|STAFF so ok for portal users
     // (which are not allowed on this route by the middleware anyway)
@@ -59,7 +55,7 @@ export default async function HrPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <FadeUp delay={0.05} className="lg:col-span-1">
-          <ClockPanel initialOpen={openSession} />
+          <ClockPanel initial={todayStatus} />
         </FadeUp>
 
         <FadeUp delay={0.08} className="lg:col-span-2">
