@@ -262,6 +262,47 @@ export type HrDashboard = {
   lateToday: number;
 };
 
+/**
+ * Everyone currently clocked in, with their name, clock-in timestamp,
+ * and whether they're on a break right now. Powers the owner's
+ * at-a-glance "who's working now" card on the Main Dashboard so the
+ * owner doesn't need to walk the office to know.
+ */
+export type WorkingNowRow = {
+  userId: string;
+  fullName: string;
+  email: string;
+  clockInAt: Date;
+  onBreakSince: Date | null;
+};
+
+export async function fetchStaffCurrentlyWorking(): Promise<WorkingNowRow[]> {
+  await requireInternalStaff();
+  // One SQL: open attendance sessions LEFT JOIN open break session per
+  // session. Ordered by clock-in ascending so the earliest arrivers show
+  // at the top (matches "punch card" mental model).
+  const rows = await db
+    .select({
+      userId: attendanceSessions.userId,
+      fullName: users.fullName,
+      email: users.email,
+      clockInAt: attendanceSessions.clockInAt,
+      onBreakSince: attendanceBreakSessions.breakStartedAt,
+    })
+    .from(attendanceSessions)
+    .innerJoin(users, eq(users.id, attendanceSessions.userId))
+    .leftJoin(
+      attendanceBreakSessions,
+      and(
+        eq(attendanceBreakSessions.attendanceSessionId, attendanceSessions.id),
+        isNull(attendanceBreakSessions.breakEndedAt),
+      ),
+    )
+    .where(isNull(attendanceSessions.clockOutAt))
+    .orderBy(attendanceSessions.clockInAt);
+  return rows;
+}
+
 export async function fetchHrDashboard(): Promise<HrDashboard> {
   await requireInternalStaff();
   const startOfDay = new Date();

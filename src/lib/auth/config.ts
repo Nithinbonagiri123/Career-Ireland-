@@ -1,5 +1,8 @@
+import { headers } from 'next/headers';
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
+import { recordAudit } from '@/lib/audit/withAudit';
+import { db } from '@/lib/db/client';
 import type { UserRole } from '@/lib/db/schema/users';
 import { logger } from '@/lib/logger';
 import { isLoginBlocked, recordLoginAttempt } from '@/modules/auth/login-throttle';
@@ -7,6 +10,28 @@ import { findUserById } from '@/modules/auth/repository';
 import { LoginSchema } from '@/modules/auth/schemas';
 import { verifyCredentials } from '@/modules/auth/service';
 import { authEdgeConfig } from './edge-config';
+
+/**
+ * Best-effort capture of the caller's IP + user-agent from the current
+ * request. Session events (LOGIN / LOGOUT) go into `audit_events.context`
+ * so the owner can answer "was that really her at 3am?" after the fact.
+ * Failure here must never break auth — hence the try/catch and null
+ * fallbacks.
+ */
+async function readSessionContext(): Promise<{
+  ip: string | null;
+  userAgent: string | null;
+}> {
+  try {
+    const h = await headers();
+    const xff = h.get('x-forwarded-for');
+    const ip = xff ? (xff.split(',')[0]?.trim() ?? null) : h.get('x-real-ip');
+    const userAgent = h.get('user-agent');
+    return { ip, userAgent };
+  } catch {
+    return { ip: null, userAgent: null };
+  }
+}
 
 function readClientIp(req: Request | undefined): string | null {
   if (!req) return null;
@@ -59,6 +84,50 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
+  events: {
+    // Fires after a successful sign-in. Write a LOGIN event so the owner
+    // can trace who signed in, from where, on which device. Wrapped in
+    // try/catch so an audit failure never blocks a legitimate login.
+    async signIn(msg) {
+      const userId = msg.user?.id;
+      if (!userId) return;
+      try {
+        const ctx = await readSessionContext();
+        await recordAudit(db, {
+          actorUserId: userId,
+          entityType: 'session',
+          entityId: userId,
+          action: 'LOGIN',
+          context: {
+            ip: ctx.ip,
+            userAgent: ctx.userAgent,
+            provider: msg.account?.provider ?? 'credentials',
+          },
+        });
+      } catch (err) {
+        logger.error({ err, userId }, 'audit LOGIN failed');
+      }
+    },
+    // Fires when the user actively signs out (not on JWT expiry). The
+    // token payload carries the user id from our jwt callback.
+    async signOut(msg) {
+      const token = 'token' in msg ? msg.token : null;
+      const userId = (token as { id?: string } | null)?.id;
+      if (!userId) return;
+      try {
+        const ctx = await readSessionContext();
+        await recordAudit(db, {
+          actorUserId: userId,
+          entityType: 'session',
+          entityId: userId,
+          action: 'LOGOUT',
+          context: { ip: ctx.ip, userAgent: ctx.userAgent },
+        });
+      } catch (err) {
+        logger.error({ err, userId }, 'audit LOGOUT failed');
+      }
+    },
+  },
   callbacks: {
     ...authEdgeConfig.callbacks,
     async jwt(params) {

@@ -1,12 +1,44 @@
 import { eq } from 'drizzle-orm';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { cache } from 'react';
+import { recordAudit } from '@/lib/audit/withAudit';
 import { db } from '@/lib/db/client';
 import { userPermissions } from '@/lib/db/schema/permissions';
 import { type UserRole, users } from '@/lib/db/schema/users';
 import { AuthorizationError } from '../errors';
 import { auth } from './config';
 import { type Business, encodeKey, hasPermission, type Verb } from './permissions';
+
+/**
+ * Write an AUTH_DENIED audit event. Called by the gate helpers before
+ * they throw, so the owner can see who tried to reach what and was
+ * refused. Best-effort: audit failure never blocks the throw.
+ */
+async function logAuthDenied(
+  userId: string,
+  reason: 'permission' | 'role' | 'any_permission',
+  detail: Record<string, unknown>,
+): Promise<void> {
+  try {
+    let pathname: string | null = null;
+    try {
+      const h = await headers();
+      pathname = h.get('x-icg-pathname');
+    } catch {
+      // No request context (background job) — fine.
+    }
+    await recordAudit(db, {
+      actorUserId: userId,
+      entityType: 'session',
+      entityId: userId,
+      action: 'AUTH_DENIED',
+      context: { reason, path: pathname, ...detail },
+    });
+  } catch {
+    // Swallow — this is instrumentation, not a hard requirement.
+  }
+}
 
 export type Session = {
   user: {
@@ -66,7 +98,10 @@ export type InternalStaffRole = (typeof INTERNAL_STAFF_ROLES)[number];
 /** Internal staff role check. Portal users (CANDIDATE/EMPLOYER) get AuthorizationError. */
 export async function requireRole(roles: UserRole[]): Promise<Session> {
   const s = await requireSession();
-  if (!roles.includes(s.user.role)) throw new AuthorizationError();
+  if (!roles.includes(s.user.role)) {
+    await logAuthDenied(s.user.id, 'role', { required: roles, actual: s.user.role });
+    throw new AuthorizationError();
+  }
   return s;
 }
 
@@ -171,6 +206,7 @@ export async function requirePermission(
   const snap = await loadPermissions(s.user.id);
   if (snap.isOwner) return s;
   if (!hasPermission(snap.granted, business, module, verb)) {
+    await logAuthDenied(s.user.id, 'permission', { business, module, verb });
     throw new AuthorizationError();
   }
   return s;
@@ -207,6 +243,7 @@ export async function requireAnyPermission(
   for (const t of triples) {
     if (hasPermission(snap.granted, t.business, t.module, t.verb)) return s;
   }
+  await logAuthDenied(s.user.id, 'any_permission', { triples });
   throw new AuthorizationError();
 }
 

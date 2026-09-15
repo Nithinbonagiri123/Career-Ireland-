@@ -24,7 +24,7 @@ import { fetchDashboardPipelines } from '@/modules/dashboard/pipelines';
 import { fetchDashboardRevenue } from '@/modules/dashboard/revenue';
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
 import { fetchDashboardTrends } from '@/modules/dashboard/trends';
-import { fetchHrDashboard } from '@/modules/hr/service';
+import { fetchHrDashboard, fetchStaffCurrentlyWorking } from '@/modules/hr/service';
 import { ActivityFeed } from './activity-feed';
 import { AttentionCard } from './attention-card';
 import { DashboardDrilldownsSection } from './drilldowns-section';
@@ -32,6 +32,7 @@ import { PipelineFunnel } from './pipeline-funnel';
 import { RevenueSection } from './revenue-section';
 import { StatChip } from './stat-chip';
 import { TrendChart } from './trend-chart';
+import { WorkingNowCard } from './working-now-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,7 +44,7 @@ export default async function DashboardPage({
   await requirePermission('main', 'overview', 'view');
   const { created, from, to } = await searchParams;
   const range = parseDateRangeParams({ created, from, to });
-  const [m, drilldowns, pipelines, activity, hr, trends, revenue] = await Promise.all([
+  const [m, drilldowns, pipelines, activity, hr, trends, revenue, workingNow] = await Promise.all([
     fetchDashboardMetrics(),
     fetchDashboardDrilldowns(),
     fetchDashboardPipelines(),
@@ -51,6 +52,7 @@ export default async function DashboardPage({
     fetchHrDashboard(),
     fetchDashboardTrends(),
     fetchDashboardRevenue({ from: range.from, to: range.to }),
+    fetchStaffCurrentlyWorking(),
   ]);
 
   const today = new Date();
@@ -177,6 +179,14 @@ export default async function DashboardPage({
               icon={Clock}
               tone="warning"
             />
+          </div>
+
+          {/* Owner's at-a-glance view: names of everyone clocked in
+              right now, whether they're on break, and their clock-in
+              time. Keeps the visibility that a physical office would
+              have when the owner isn't there. */}
+          <div className="mt-3">
+            <WorkingNowCard initial={workingNow} />
           </div>
         </section>
       </FadeUp>

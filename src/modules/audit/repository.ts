@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { type AuditEvent, auditEvents } from '@/lib/db/schema/audit_events';
 import { users } from '@/lib/db/schema/users';
@@ -15,6 +15,9 @@ export async function listAuditEvents(
   const filters = [
     query.entityType ? eq(auditEvents.entityType, query.entityType) : undefined,
     query.actorUserId ? eq(auditEvents.actorUserId, query.actorUserId) : undefined,
+    query.action ? eq(auditEvents.action, query.action) : undefined,
+    query.from ? gte(auditEvents.occurredAt, new Date(query.from)) : undefined,
+    query.to ? lt(auditEvents.occurredAt, new Date(query.to)) : undefined,
     query.cursor
       ? or(
           lt(auditEvents.occurredAt, new Date(query.cursor.occurredAt)),
@@ -62,4 +65,33 @@ export async function listDistinctEntityTypes(): Promise<string[]> {
     .from(auditEvents)
     .orderBy(auditEvents.entityType);
   return rows.map((r) => r.entityType);
+}
+
+export async function listDistinctActions(): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ action: auditEvents.action })
+    .from(auditEvents)
+    .orderBy(auditEvents.action);
+  return rows.map((r) => r.action);
+}
+
+/**
+ * Users who have EVER been the actor on an audit event. Used to
+ * populate the "actor" filter dropdown on the audit page. Left-join
+ * pattern so we can filter out the system rows (actorUserId = null)
+ * cleanly.
+ */
+export async function listDistinctActors(): Promise<
+  Array<{ id: string; email: string; fullName: string }>
+> {
+  const rows = await db
+    .selectDistinct({
+      id: users.id,
+      email: users.email,
+      fullName: users.fullName,
+    })
+    .from(auditEvents)
+    .innerJoin(users, eq(users.id, auditEvents.actorUserId))
+    .orderBy(users.fullName);
+  return rows;
 }

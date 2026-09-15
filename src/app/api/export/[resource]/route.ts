@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { recordAudit } from '@/lib/audit/withAudit';
+import { requireInternalStaff, type Session } from '@/lib/auth/session';
 import { toCsv } from '@/lib/csv';
+import { db } from '@/lib/db/client';
 import { listCandidates } from '@/modules/candidates/repository';
 import { fetchPayments } from '@/modules/commerce/service';
 import { fetchDashboardRevenue } from '@/modules/dashboard/revenue';
@@ -20,13 +22,38 @@ function csvResponse(csv: string, filename: string) {
   });
 }
 
+/**
+ * Wrap `csvResponse` with an audit event so exports leave a trace on
+ * the owner's audit log. Bulk data leaving the app is exactly the kind
+ * of thing an owner needs to see after the fact.
+ */
+async function auditedCsvResponse(
+  session: Session,
+  resource: string,
+  rowCount: number,
+  csv: string,
+  filename: string,
+): Promise<Response> {
+  await recordAudit(db, {
+    actorUserId: session.user.id,
+    entityType: 'data_export',
+    entityId: session.user.id,
+    action: 'EXPORTED',
+    context: { resource, rowCount, filename, format: 'csv' },
+  });
+  return csvResponse(csv, filename);
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ resource: string }> }) {
-  await requireInternalStaff();
+  const session = await requireInternalStaff();
   const { resource } = await params;
 
   if (resource === 'candidates') {
     const rows = await listCandidates();
-    return csvResponse(
+    return auditedCsvResponse(
+      session,
+      resource,
+      rows.length,
       toCsv(rows, [
         { key: 'fullName', header: 'Name' },
         { key: 'email', header: 'Email' },
@@ -42,7 +69,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
 
   if (resource === 'employers') {
     const rows = await fetchEmployers();
-    return csvResponse(
+    return auditedCsvResponse(
+      session,
+      resource,
+      rows.length,
       toCsv(rows, [
         { key: 'legalName', header: 'Legal name' },
         { key: 'tradingName', header: 'Trading name' },
@@ -59,7 +89,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
 
   if (resource === 'requisitions') {
     const rows = await fetchRequisitions();
-    return csvResponse(
+    return auditedCsvResponse(
+      session,
+      resource,
+      rows.length,
       toCsv(rows, [
         { key: 'title', header: 'Title' },
         { key: 'employerName', header: 'Employer' },
@@ -76,7 +109,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
 
   if (resource === 'placements') {
     const rows = await fetchPlacements();
-    return csvResponse(
+    return auditedCsvResponse(
+      session,
+      resource,
+      rows.length,
       toCsv(rows, [
         { key: 'personName', header: 'Candidate' },
         { key: 'employerName', header: 'Employer' },
@@ -95,7 +131,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
 
   if (resource === 'payments') {
     const rows = await fetchPayments();
-    return csvResponse(
+    return auditedCsvResponse(
+      session,
+      resource,
+      rows.length,
       toCsv(rows, [
         { key: 'serviceName', header: 'Service' },
         { key: 'amount', header: 'Amount' },
@@ -112,7 +151,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
 
   if (resource === 'leads') {
     const rows = await fetchLeads();
-    return csvResponse(
+    return auditedCsvResponse(
+      session,
+      resource,
+      rows.length,
       toCsv(rows, [
         { key: 'personName', header: 'Person' },
         { key: 'personEmail', header: 'Email' },
@@ -128,7 +170,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
 
   if (resource === 'immigration') {
     const rows = await fetchCases();
-    return csvResponse(
+    return auditedCsvResponse(
+      session,
+      resource,
+      rows.length,
       toCsv(rows, [
         { key: 'caseType', header: 'Type' },
         { key: 'beneficiaryName', header: 'Beneficiary' },
@@ -145,7 +190,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
 
   if (resource === 'persons') {
     const rows = await fetchPersons();
-    return csvResponse(
+    return auditedCsvResponse(
+      session,
+      resource,
+      rows.length,
       toCsv(rows, [
         { key: 'firstName', header: 'First name' },
         { key: 'lastName', header: 'Last name' },
@@ -178,7 +226,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
     }));
     const from = data.range.from.toISOString().slice(0, 10);
     const to = data.range.to.toISOString().slice(0, 10);
-    return csvResponse(
+    return auditedCsvResponse(
+      session,
+      resource,
+      rows.length,
       toCsv(rows, [
         { key: 'service', header: 'Service' },
         { key: 'code', header: 'Code' },

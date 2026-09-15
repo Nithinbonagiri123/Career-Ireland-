@@ -2,14 +2,62 @@ import { ShieldCheck } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { Badge } from '@/components/ui/badge';
 import { requirePermission } from '@/lib/auth/session';
-import { fetchAuditEvents } from '@/modules/audit/service';
+import { parseDateRangeParams } from '@/lib/date-range';
+import {
+  fetchAuditActions,
+  fetchAuditActors,
+  fetchAuditEntityTypes,
+  fetchAuditEvents,
+} from '@/modules/audit/service';
+import { AuditFilters } from './audit-filters';
 import { AuditTable } from './audit-table';
 
 export const dynamic = 'force-dynamic';
 
-export default async function AuditLogPage() {
+type SearchParams = {
+  actor?: string;
+  action?: string;
+  entity?: string;
+  created?: string;
+  from?: string;
+  to?: string;
+};
+
+export default async function AuditLogPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
   await requirePermission('main', 'admin', 'view');
-  const { items, nextCursor } = await fetchAuditEvents({ limit: 50 });
+  const params = await searchParams;
+  const range = parseDateRangeParams({
+    created: params.created,
+    from: params.from,
+    to: params.to,
+  });
+
+  // Fetch options in parallel with the filtered event list — cheap and
+  // keeps the render single-round-trip from the client's perspective.
+  const [events, actors, actions, entityTypes] = await Promise.all([
+    fetchAuditEvents({
+      limit: 50,
+      actorUserId: params.actor,
+      action: params.action,
+      entityType: params.entity,
+      from: range.from?.toISOString(),
+      to: range.to?.toISOString(),
+    }),
+    fetchAuditActors(),
+    fetchAuditActions(),
+    fetchAuditEntityTypes(),
+  ]);
+
+  const activeFilters = [
+    params.actor && 'actor',
+    params.action && 'action',
+    params.entity && 'entity',
+    range.from || range.to ? 'date' : null,
+  ].filter(Boolean).length;
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
@@ -23,14 +71,24 @@ export default async function AuditLogPage() {
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">Audit log</h1>
           <p className="text-sm text-muted-foreground">
-            Append-only history of every business-critical mutation. Reverts create new events —
-            originals are never modified.
+            Append-only history of every business-critical mutation, plus session events (LOGIN,
+            LOGOUT, AUTH_DENIED) and data exports. Reverts create new events — originals are never
+            modified.
           </p>
         </div>
       </FadeUp>
 
-      <FadeUp delay={0.05}>
-        <AuditTable initialItems={items} initialCursor={nextCursor} />
+      <FadeUp delay={0.03}>
+        <AuditFilters
+          actors={actors}
+          actions={actions}
+          entityTypes={entityTypes}
+          activeFilters={activeFilters}
+        />
+      </FadeUp>
+
+      <FadeUp delay={0.06}>
+        <AuditTable initialItems={events.items} initialCursor={events.nextCursor} />
       </FadeUp>
     </div>
   );

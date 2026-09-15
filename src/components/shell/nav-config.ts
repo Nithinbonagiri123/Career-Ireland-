@@ -96,6 +96,10 @@ export const WORKSPACES: Record<Business, WorkspaceConfig> = {
           { label: 'HR Board', href: '/hr/admin', icon: Users2, module: 'hr_board' },
           { label: 'Admin', href: '/admin', icon: UserCog, module: 'admin' },
           { label: 'Accounts', href: '/payments', icon: Coins, module: 'accounts' },
+          // Audit logs live under Admin already, but the owner uses this daily
+          // to see what happened across the whole business — surfaced as a
+          // top-level nav item so it's one click away.
+          { label: 'Audit logs', href: '/admin/audit', icon: ShieldCheck, module: 'admin' },
         ],
       },
     ],
@@ -300,15 +304,4 @@ export function workspaceFromPathname(pathname: string): Business | null {
  * but the lookups above (BarChart3, Bell, GitMerge, ...) are here so
  * future re-additions have the icon set to choose from.
  */
-void [
-  BarChart3,
-  Bell,
-  GitMerge,
-  GraduationCap,
-  ListChecks,
-  Package,
-  ScrollText,
-  ShieldCheck,
-  Tags,
-  Globe,
-];
+void [BarChart3, Bell, GitMerge, GraduationCap, ListChecks, Package, ScrollText, Tags, Globe];
