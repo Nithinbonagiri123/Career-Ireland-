@@ -1,8 +1,9 @@
 import { format } from 'date-fns';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { PrintButton } from '@/components/print-button';
 import { buttonVariants } from '@/components/ui/button';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { COMPANY_INFO } from '@/modules/billing/company-info';
@@ -184,21 +185,5 @@ export default async function InvoicePrintPage({
         </footer>
       </main>
     </div>
-  );
-}
-
-function PrintButton() {
-  return (
-    <>
-      <button type="button" data-print className={buttonVariants({ size: 'sm' })}>
-        <Printer className="mr-1.5 size-4" /> Print / Save as PDF
-      </button>
-      <script
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: one-liner, no user input
-        dangerouslySetInnerHTML={{
-          __html: `document.querySelectorAll('[data-print]').forEach(b=>b.addEventListener('click',()=>window.print()))`,
-        }}
-      />
-    </>
   );
 }

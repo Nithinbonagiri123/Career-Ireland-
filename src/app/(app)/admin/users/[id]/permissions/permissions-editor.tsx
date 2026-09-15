@@ -1,9 +1,10 @@
 'use client';
 
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { AlertCircle, RotateCcw, Save } from 'lucide-react';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { FadeUp } from '@/components/motion/motion-primitives';
+import { easeStandard, FadeUp } from '@/components/motion/motion-primitives';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,7 +18,6 @@ import {
   VERBS,
   type Verb,
 } from '@/lib/auth/permissions';
-import { cn } from '@/lib/utils';
 import {
   resetUserPermissionsAction,
   updateUserPermissionsAction,
@@ -94,6 +94,7 @@ const VERB_LEVEL: Record<Verb, number> = {
 
 export function PermissionsEditor({ snapshot }: { snapshot: UserPermissionSnapshot }) {
   const readOnly = snapshot.isOwner;
+  const reduce = useReducedMotion();
 
   // Local state — mutated by the checkboxes, compared against snapshot
   // on save to compute the grants/revokes delta.
@@ -254,24 +255,53 @@ export function PermissionsEditor({ snapshot }: { snapshot: UserPermissionSnapsh
       </div>
 
       {!readOnly && (
-        <div
-          className={cn(
-            'sticky bottom-4 z-20 mx-auto mt-6 flex w-fit items-center gap-2 rounded-full border bg-popover px-4 py-2 shadow-xl ring-1 ring-foreground/10 transition-opacity',
-            !dirty && 'opacity-70',
-          )}
+        // The pill reshapes when `dirty` flips: clean state shows only the
+        // always-available Reset; dirty state adds an "Unsaved changes"
+        // label and a Save button. `layout` handles the width change via
+        // FLIP (transform-based, GPU-friendly). Reduced motion drops the
+        // enter/exit translation but keeps the fade.
+        <motion.div
+          layout
+          transition={{ duration: 0.2, ease: easeStandard }}
+          className="sticky bottom-4 z-20 mx-auto mt-6 flex w-fit items-center gap-2 rounded-full border bg-popover px-4 py-2 shadow-xl ring-1 ring-foreground/10"
         >
-          <span className="text-xs text-muted-foreground">
-            {dirty ? 'Unsaved changes' : 'No pending changes'}
-          </span>
+          <AnimatePresence mode="popLayout" initial={false}>
+            {dirty && (
+              <motion.span
+                key="dirty-label"
+                layout
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: easeStandard }}
+                className="text-xs text-muted-foreground"
+              >
+                Unsaved changes
+              </motion.span>
+            )}
+          </AnimatePresence>
           <Button variant="outline" size="sm" onClick={reset} disabled={pending} className="h-8">
             <RotateCcw className="mr-1.5 size-3.5" />
             Reset to {snapshot.role} preset
           </Button>
-          <Button size="sm" onClick={save} disabled={pending || !dirty} className="h-8">
-            <Save className="mr-1.5 size-3.5" />
-            Save
-          </Button>
-        </div>
+          <AnimatePresence mode="popLayout" initial={false}>
+            {dirty && (
+              <motion.div
+                key="save"
+                layout
+                initial={{ opacity: 0, transform: reduce ? 'none' : 'translateX(8px)' }}
+                animate={{ opacity: 1, transform: 'translateX(0px)' }}
+                exit={{ opacity: 0, transform: reduce ? 'none' : 'translateX(8px)' }}
+                transition={{ duration: 0.18, ease: easeStandard }}
+              >
+                <Button size="sm" onClick={save} disabled={pending} className="h-8">
+                  <Save className="mr-1.5 size-3.5" />
+                  Save
+                </Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       )}
     </>
   );

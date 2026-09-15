@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { eq } from 'drizzle-orm';
 import { expect, test } from '@playwright/test';
+import { eq } from 'drizzle-orm';
 
 /**
  * Ad-hoc QA sweep — captures the states the standard visual-qa spec
