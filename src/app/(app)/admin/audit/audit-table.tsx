@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { loadMoreAuditEventsAction } from '@/modules/audit/actions';
 import type { AuditEventWithActor } from '@/modules/audit/repository';
 import type { AuditListQuery } from '@/modules/audit/schemas';
+import { describeEvent } from './describe';
 
 type Props = {
   initialItems: AuditEventWithActor[];
@@ -55,51 +56,32 @@ const columns: ColumnDef<AuditEventWithActor>[] = [
     },
   },
   {
-    header: 'Entity',
-    accessorKey: 'entityType',
-    size: 160,
-    cell: ({ row }) => (
-      <div className="flex flex-col text-xs">
-        <span className="font-mono">{row.original.entityType}</span>
-        <span className="truncate text-[10px] text-muted-foreground">{row.original.entityId}</span>
-      </div>
-    ),
-  },
-  {
-    header: 'Action',
-    accessorKey: 'action',
-    size: 160,
-    cell: ({ row }) => (
-      <Badge variant="secondary" className="rounded-full text-[10px]">
-        {row.original.action}
-      </Badge>
-    ),
-  },
-  {
-    header: 'Details',
-    id: 'details',
+    header: 'What happened',
+    id: 'what',
     cell: ({ row }) => {
-      const { context, revertsEventId } = row.original;
-      if (revertsEventId) {
-        return (
-          <span className="text-xs text-muted-foreground">
-            reverts <span className="font-mono">{revertsEventId.slice(0, 8)}…</span>
-          </span>
-        );
-      }
-      if (context && typeof context === 'object') {
-        const keys = Object.keys(context as Record<string, unknown>);
-        if (keys.length > 0) {
-          return (
-            <span className="line-clamp-1 text-xs text-muted-foreground">
-              {keys
-                .map((k) => `${k}=${JSON.stringify((context as Record<string, unknown>)[k])}`)
-                .join(' · ')}
-            </span>
-          );
-        }
-      }
-      return <span className="text-xs text-muted-foreground">—</span>;
+      const summary = describeEvent(row.original);
+      const { revertsEventId, entityType, entityId } = row.original;
+      // Owner cares about the sentence first. The compact entity ref
+      // sits underneath — small enough not to compete but present for
+      // anyone chasing a specific row.
+      return (
+        <div className="min-w-0">
+          <div className="truncate text-sm">{summary}</div>
+          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <span className="font-mono">{entityType}</span>
+            <span aria-hidden>·</span>
+            <span className="truncate font-mono">{entityId.slice(0, 8)}…</span>
+            {revertsEventId && (
+              <>
+                <span aria-hidden>·</span>
+                <span>
+                  reverts <span className="font-mono">{revertsEventId.slice(0, 8)}…</span>
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      );
     },
   },
 ];
