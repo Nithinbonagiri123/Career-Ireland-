@@ -17,6 +17,7 @@
     "db:seed:e2e-admin": "tsx scripts/seed-e2e-admin.ts",
     "db:reset:password": "tsx scripts/reset-admin-password.ts",
     "db:seed:currencies": "tsx scripts/seed-currencies.ts",
+    "db:seed:services": "tsx scripts/seed-services-2026.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"

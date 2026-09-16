@@ -3,8 +3,10 @@ import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import type { DateRange } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
+import { invoices } from '@/lib/db/schema/billing';
 import { type Payment, type ServiceEngagement, serviceEngagements } from '@/lib/db/schema/commerce';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
+import { insertReceipt, markInvoicePaid } from '@/modules/billing/service';
 import {
   type EngagementListRow,
   getEngagement,
@@ -210,6 +212,69 @@ export async function verifyPayment(input: VerifyPaymentInput): Promise<Payment>
         context: { via: 'payment_verified', paymentId: after.id },
       });
     }
+
+    // Auto-issue a receipt so every VERIFIED payment leaves a
+    // printable trail without the operator having to remember. If an
+    // invoice is attached to the engagement, we also link the receipt
+    // to it and flip the invoice to PAID. The `receipts.payment_id`
+    // UNIQUE constraint keeps this idempotent — if a receipt was
+    // already issued (shouldn't happen since we early-returned on
+    // already-VERIFIED, but defensively) the insert will throw and
+    // the transaction rolls back.
+    const [issuedInvoice] = await tx
+      .select({
+        id: invoices.id,
+        payerPersonId: invoices.payerPersonId,
+        payerEmployerId: invoices.payerEmployerId,
+      })
+      .from(invoices)
+      .where(eq(invoices.serviceEngagementId, after.serviceEngagementId))
+      .limit(1);
+
+    // Resolve payer from the invoice if there is one, otherwise from
+    // the engagement (both are enforced to have exactly one payer by
+    // the xor CHECK constraints).
+    const payerPersonId = issuedInvoice?.payerPersonId ?? engagement?.payerPersonId ?? null;
+    const payerEmployerId = issuedInvoice?.payerEmployerId ?? engagement?.payerEmployerId ?? null;
+
+    if (payerPersonId || payerEmployerId) {
+      const receipt = await insertReceipt(tx, {
+        paymentId: after.id,
+        invoiceId: issuedInvoice?.id ?? null,
+        payerPersonId,
+        payerEmployerId,
+        amount: after.amount,
+        currencyCode: after.currencyCode,
+        receivedAt: after.receivedAt ?? after.verifiedAt ?? new Date(),
+        issuedByUserId: session.user.id,
+      });
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'receipt',
+        entityId: receipt.id,
+        action: 'CREATED',
+        after: {
+          number: receipt.number,
+          paymentId: after.id,
+          invoiceId: issuedInvoice?.id ?? null,
+          via: 'payment_verified',
+        },
+      });
+
+      if (issuedInvoice) {
+        await markInvoicePaid(tx, issuedInvoice.id);
+        await recordAudit(tx, {
+          actorUserId: session.user.id,
+          entityType: 'invoice',
+          entityId: issuedInvoice.id,
+          action: 'STATUS_CHANGED',
+          before: { status: 'ISSUED' },
+          after: { status: 'PAID' },
+          context: { via: 'payment_verified', paymentId: after.id },
+        });
+      }
+    }
+
     return after;
   });
 }

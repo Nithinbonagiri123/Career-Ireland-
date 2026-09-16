@@ -6,6 +6,7 @@ import {
   GraduationCap,
   Package,
   ScrollText,
+  Settings2,
   ShieldCheck,
   Sparkles,
   Tags,
@@ -105,6 +106,18 @@ const SECTIONS: Array<{
         href: '/admin/currencies',
         icon: Globe,
         description: 'Supported currencies',
+      },
+    ],
+  },
+  {
+    heading: 'Company',
+    description: 'Everything that appears on invoices and receipts',
+    items: [
+      {
+        label: 'Settings',
+        href: '/admin/settings',
+        icon: Settings2,
+        description: 'Letterhead, bank details, footer copy',
       },
     ],
   },

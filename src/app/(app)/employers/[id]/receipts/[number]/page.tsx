@@ -11,7 +11,7 @@ import { fetchAppSettings } from '@/modules/settings/service';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Receipt · Ireland Career Gateway' };
 
-export default async function ReceiptPrintPage({
+export default async function EmployerReceiptPrintPage({
   params,
 }: {
   params: Promise<{ id: string; number: string }>;
@@ -19,18 +19,22 @@ export default async function ReceiptPrintPage({
   await requireInternalStaff();
   const { id, number } = await params;
   const [data, settings] = await Promise.all([fetchReceiptForPrint(number), fetchAppSettings()]);
-  if (data?.payer.kind !== 'PERSON' || data.payer.person.id !== id) notFound();
+  if (data?.payer.kind !== 'EMPLOYER' || data.payer.employer.id !== id) notFound();
 
-  const person = data.payer.person;
+  const employer = data.payer.employer;
+  const displayName = employer.tradingName
+    ? `${employer.legalName} (t/a ${employer.tradingName})`
+    : employer.legalName;
+  const locationLine = [employer.city, employer.country].filter(Boolean).join(', ');
 
   return (
     <div className="min-h-screen bg-slate-50 print:bg-white">
       <div className="mx-auto flex max-w-3xl items-center justify-between px-6 pt-6 print:hidden">
         <Link
-          href={`/candidates/${id}`}
+          href={`/employers/${id}`}
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
         >
-          <ArrowLeft className="mr-1.5 size-4" /> Back to candidate
+          <ArrowLeft className="mr-1.5 size-4" /> Back to employer
         </Link>
         <PrintButton />
       </div>
@@ -41,10 +45,10 @@ export default async function ReceiptPrintPage({
         invoice={data.invoice}
         settings={settings}
         payer={{
-          displayName: `${person.firstName} ${person.lastName}`.trim(),
+          displayName,
           contactRows: [
-            person.email ? { label: 'Customer Email', value: person.email } : null,
-            person.phone ? { label: 'Customer Telephone Contact', value: person.phone } : null,
+            locationLine ? { label: 'Customer Location', value: locationLine } : null,
+            employer.website ? { label: 'Customer Website', value: employer.website } : null,
           ].filter((r): r is { label: string; value: string } => r !== null),
         }}
       />

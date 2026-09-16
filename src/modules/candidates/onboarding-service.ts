@@ -8,6 +8,7 @@ import { candidateProfiles, type Person, persons } from '@/lib/db/schema/persons
 import { serviceCatalogItems } from '@/lib/db/schema/services';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { insertInvoice, insertReceipt, markInvoicePaid } from '@/modules/billing/service';
+import { fetchAppSettings } from '@/modules/settings/service';
 import {
   type FinaliseDraftInput,
   FinaliseDraftSchema,
@@ -340,13 +341,17 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
       .returning();
     if (!payment) throw new Error('payments insert returned no row');
 
-    // Invoice + receipt.
+    // Invoice + receipt. Onboarding is always a single line (qty=1,
+    // unit price = agreed payment amount). VAT rate comes from
+    // app_settings so a future rate change is reflected here without
+    // touching this code.
+    const settings = await fetchAppSettings();
     const invoice = await insertInvoice(tx, {
       payerPersonId: draft.id,
       serviceEngagementId: engagement.id,
-      subtotal: d.payment.amount,
-      taxAmount: '0',
-      totalAmount: d.payment.amount,
+      qty: 1,
+      unitPrice: d.payment.amount,
+      vatRatePercent: settings.vatRatePercent,
       currencyCode: d.payment.currencyCode,
       lineDescription: `${CANDIDATE_ONBOARDING_NAME} — ${draft.firstName} ${draft.lastName}`,
       issuedByUserId: session.user.id,

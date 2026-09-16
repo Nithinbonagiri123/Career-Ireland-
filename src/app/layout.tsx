@@ -36,7 +36,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           <TooltipProvider delay={200}>
             {children}
-            <Toaster richColors closeButton />
+            {/* Toaster wrapper — hidden on print so success/error toasts
+                never leak into customer-facing PDFs. */}
+            <div className="print:hidden">
+              <Toaster richColors closeButton />
+            </div>
           </TooltipProvider>
         </ThemeProvider>
       </body>

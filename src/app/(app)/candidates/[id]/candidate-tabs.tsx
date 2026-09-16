@@ -17,11 +17,13 @@ export function CandidateTabs({
   overview,
   applications,
   documents,
+  billing,
   activity,
 }: {
   overview: ReactNode;
   applications: ReactNode;
   documents: ReactNode;
+  billing: ReactNode;
   activity: ReactNode;
 }) {
   return (
@@ -30,11 +32,13 @@ export function CandidateTabs({
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="applications">Applications</TabsTrigger>
         <TabsTrigger value="documents">Documents</TabsTrigger>
+        <TabsTrigger value="billing">Billing</TabsTrigger>
         <TabsTrigger value="activity">Activity</TabsTrigger>
       </TabsList>
       <TabsContent value="overview">{overview}</TabsContent>
       <TabsContent value="applications">{applications}</TabsContent>
       <TabsContent value="documents">{documents}</TabsContent>
+      <TabsContent value="billing">{billing}</TabsContent>
       <TabsContent value="activity">{activity}</TabsContent>
     </Tabs>
   );

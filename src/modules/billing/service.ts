@@ -46,30 +46,70 @@ export async function allocateNextNumber(
  * already validated payer + engagement + currency; this is a low-level
  * insert used by the onboarding finalise action.
  */
+/**
+ * Insert an invoice inside a caller transaction. The payer is exactly
+ * one of `payerPersonId` (candidate / lead flow) or `payerEmployerId`
+ * (employer detail page flow) — enforced by the `invoices_payer_xor`
+ * CHECK constraint on the table. Passing neither or both throws.
+ *
+ * Line math (matches the ICG template's QTY / Unit Price / Sub Total
+ * / VAT / TOTAL DUE layout):
+ *   subtotal    = qty × unitPrice
+ *   taxAmount   = subtotal × (vatRatePercent / 100)
+ *   totalAmount = subtotal + taxAmount
+ *
+ * All three are pinned by DB CHECK constraints so a caller can't ship
+ * inconsistent numbers. Money stays as strings the whole way to dodge
+ * float rounding.
+ */
 export async function insertInvoice(
   tx: DbExecutor,
   args: {
-    payerPersonId: string;
+    payerPersonId?: string | null;
+    payerEmployerId?: string | null;
     serviceEngagementId: string;
-    subtotal: string;
-    taxAmount: string;
-    totalAmount: string;
+    qty: number;
+    unitPrice: string;
+    /** VAT rate to apply, as a percent (e.g. "23.00"). Comes from app_settings. */
+    vatRatePercent: string;
     currencyCode: string;
     lineDescription: string;
     issuedByUserId: string;
   },
 ): Promise<Invoice> {
+  const hasPerson = Boolean(args.payerPersonId);
+  const hasEmployer = Boolean(args.payerEmployerId);
+  if (hasPerson === hasEmployer) {
+    throw new Error('insertInvoice: exactly one of payerPersonId / payerEmployerId is required');
+  }
+  if (!Number.isInteger(args.qty) || args.qty <= 0) {
+    throw new Error('insertInvoice: qty must be a positive integer');
+  }
+  const unitPriceCents = parseCents(args.unitPrice);
+  const subtotalCents = unitPriceCents * args.qty;
+  const vatRate = Number.parseFloat(args.vatRatePercent);
+  if (Number.isNaN(vatRate) || vatRate < 0) {
+    throw new Error('insertInvoice: vatRatePercent must be a non-negative number');
+  }
+  // Round half-up to the nearest cent so `qty × unitPrice + tax` never
+  // drifts from what the customer sees.
+  const taxCents = Math.round((subtotalCents * vatRate) / 100);
+  const totalCents = subtotalCents + taxCents;
+
   const now = new Date();
   const number = await allocateNextNumber(tx, 'INV', now.getUTCFullYear());
   const [row] = await tx
     .insert(invoices)
     .values({
       number,
-      payerPersonId: args.payerPersonId,
+      payerPersonId: args.payerPersonId ?? null,
+      payerEmployerId: args.payerEmployerId ?? null,
       serviceEngagementId: args.serviceEngagementId,
-      subtotal: args.subtotal,
-      taxAmount: args.taxAmount,
-      totalAmount: args.totalAmount,
+      qty: args.qty,
+      unitPrice: args.unitPrice,
+      subtotal: centsToString(subtotalCents),
+      taxAmount: centsToString(taxCents),
+      totalAmount: centsToString(totalCents),
       currencyCode: args.currencyCode,
       lineDescription: args.lineDescription,
       issuedByUserId: args.issuedByUserId,
@@ -78,6 +118,18 @@ export async function insertInvoice(
     .returning();
   if (!row) throw new Error('invoices insert returned no row');
   return row;
+}
+
+function parseCents(v: string): number {
+  const n = Math.round(Number.parseFloat(v) * 100);
+  if (!Number.isFinite(n) || n < 0) {
+    throw new Error(`invalid money value: ${v}`);
+  }
+  return n;
+}
+
+function centsToString(cents: number): string {
+  return (cents / 100).toFixed(2);
 }
 
 /**
@@ -89,13 +141,19 @@ export async function insertReceipt(
   args: {
     paymentId: string;
     invoiceId: string | null;
-    payerPersonId: string;
+    payerPersonId?: string | null;
+    payerEmployerId?: string | null;
     amount: string;
     currencyCode: string;
     receivedAt: Date;
     issuedByUserId: string;
   },
 ): Promise<Receipt> {
+  const hasPerson = Boolean(args.payerPersonId);
+  const hasEmployer = Boolean(args.payerEmployerId);
+  if (hasPerson === hasEmployer) {
+    throw new Error('insertReceipt: exactly one of payerPersonId / payerEmployerId is required');
+  }
   const now = new Date();
   const number = await allocateNextNumber(tx, 'RCT', now.getUTCFullYear());
   const [row] = await tx
@@ -104,7 +162,8 @@ export async function insertReceipt(
       number,
       paymentId: args.paymentId,
       invoiceId: args.invoiceId,
-      payerPersonId: args.payerPersonId,
+      payerPersonId: args.payerPersonId ?? null,
+      payerEmployerId: args.payerEmployerId ?? null,
       amount: args.amount,
       currencyCode: args.currencyCode,
       receivedAt: args.receivedAt,

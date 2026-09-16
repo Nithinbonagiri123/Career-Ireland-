@@ -28,7 +28,7 @@ import { db } from '@/lib/db/client';
 import { candidateProfiles } from '@/lib/db/schema/persons';
 import { statusTone } from '@/lib/ui/status-tone';
 import { listApplicationsForPerson } from '@/modules/applications/service';
-import { fetchLatestBillingLinksForPerson } from '@/modules/billing/read';
+import { fetchLatestBillingLinksForPerson, fetchPersonBillingHistory } from '@/modules/billing/read';
 import {
   listCandidateQualifications,
   listCandidateSkills,
@@ -49,6 +49,7 @@ import { CandidateTabs } from './candidate-tabs';
 import { DocumentsSection } from './documents-section';
 import { EmailAccountPanel } from './email-account-panel';
 import { JustCreatedCard } from './just-created-card';
+import { PersonBillingSection } from './person-billing-section';
 
 export const dynamic = 'force-dynamic';
 
@@ -99,6 +100,7 @@ export default async function CandidateDetail({
     allSkills,
     allQualifications,
     candidateApplications,
+    billingHistory,
   ] = await Promise.all([
     fetchPersonRequirements(id),
     fetchPersonDocuments(id),
@@ -109,6 +111,7 @@ export default async function CandidateDetail({
     fetchSkills(),
     fetchQualifications(),
     listApplicationsForPerson(id),
+    fetchPersonBillingHistory(id),
   ]);
 
   const fullName = `${person.firstName} ${person.lastName}`;
@@ -260,6 +263,23 @@ export default async function CandidateDetail({
     </FadeUp>
   );
 
+  const billingTab = (
+    <FadeUp>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Billing history</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PersonBillingSection
+            personId={id}
+            invoices={billingHistory.invoices}
+            receipts={billingHistory.receipts}
+          />
+        </CardContent>
+      </Card>
+    </FadeUp>
+  );
+
   const activityTab = (
     <div className="space-y-6">
       <FadeUp>
@@ -359,6 +379,7 @@ export default async function CandidateDetail({
         overview={overviewTab}
         applications={applicationsTab}
         documents={documentsTab}
+        billing={billingTab}
         activity={activityTab}
       />
     </div>

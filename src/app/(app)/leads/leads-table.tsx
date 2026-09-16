@@ -3,8 +3,10 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { formatDistanceToNow } from 'date-fns';
 import { Archive, CheckCircle2, FileText, MoreHorizontal, UserCheck, UserX } from 'lucide-react';
+import Link from 'next/link';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { DataTable } from '@/components/data-table/data-table';
 import { DocumentUploader } from '@/components/document-uploader';
 import { PromptDialog } from '@/components/prompt-dialog';
@@ -28,6 +30,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { assignEntityAction } from '@/modules/assignments/actions';
+import type { InvoiceableService } from '@/modules/billing/read';
 import { ensurePaymentProofTypeAction } from '@/modules/document-types/actions';
 import {
   archiveLeadAction,
@@ -45,9 +48,16 @@ const STATUS_VARIANT: Record<LeadListRow['status'], 'default' | 'secondary' | 'o
   REJECTED: 'outline',
 };
 
-type Props = { leads: LeadListRow[]; currentUserId: string };
+type Props = {
+  leads: LeadListRow[];
+  currentUserId: string;
+  /** Active PERSON-payable services + their packages. Fetched by the
+      server page once and passed in so every row's invoice dialog gets
+      the same option list (no extra round-trip per menu-open). */
+  invoiceableServices: InvoiceableService[];
+};
 
-export function LeadsTable({ leads, currentUserId }: Props) {
+export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [convertTarget, setConvertTarget] = useState<LeadListRow | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<LeadListRow | null>(null);
@@ -55,6 +65,7 @@ export function LeadsTable({ leads, currentUserId }: Props) {
   const [paymentProofTypeId, setPaymentProofTypeId] = useState<string | null>(null);
   const [proofDocId, setProofDocId] = useState<string | null>(null);
   const [proofFilename, setProofFilename] = useState<string | null>(null);
+  const [invoicingLead, setInvoicingLead] = useState<LeadListRow | null>(null);
   const [, startTransition] = useTransition();
 
   const confirmArchive = (archiveReason: string) => {
@@ -152,23 +163,48 @@ export function LeadsTable({ leads, currentUserId }: Props) {
       header: 'Person',
       accessorKey: 'personName',
       cell: ({ row }) => (
-        <div className="flex flex-col">
-          <span className="text-sm font-medium">{row.original.personName}</span>
+        <Link
+          href={`/candidates/${row.original.personId}`}
+          className="group flex flex-col rounded-md -mx-2 px-2 py-0.5 hover:bg-muted/60"
+        >
+          <span className="text-sm font-medium group-hover:underline underline-offset-2">
+            {row.original.personName}
+          </span>
           <span className="text-xs text-muted-foreground">
             {row.original.personEmail ?? row.original.personPhone ?? '—'}
           </span>
-        </div>
+        </Link>
       ),
     },
     {
       header: 'Status',
       accessorKey: 'status',
-      size: 150,
-      cell: ({ row }) => (
-        <Badge variant={STATUS_VARIANT[row.original.status]} className="rounded-full">
-          {row.original.status.replace(/_/g, ' ')}
-        </Badge>
-      ),
+      size: 190,
+      cell: ({ row }) => {
+        const lead = row.original;
+        const readyToConvert = lead.hasVerifiedPayment && lead.status !== 'CONVERTED';
+        return (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant={STATUS_VARIANT[lead.status]} className="rounded-full">
+              {lead.status.replace(/_/g, ' ')}
+            </Badge>
+            {readyToConvert && (
+              // A verified payment landed for this lead — the operator's
+              // next action is to convert to a candidate. Prompt sits
+              // inline so it's impossible to miss when scanning the list.
+              <button
+                type="button"
+                onClick={() => openConvert(lead)}
+                className="inline-flex items-center gap-1 rounded-full border border-status-success/40 bg-status-success-soft px-2 py-0.5 text-[10px] font-medium text-status-success hover:brightness-95"
+                title="Payment verified — convert this lead to a candidate"
+              >
+                <CheckCircle2 className="size-3" aria-hidden />
+                Ready to convert
+              </button>
+            )}
+          </div>
+        );
+      },
     },
     {
       header: 'Assigned',
@@ -193,69 +229,128 @@ export function LeadsTable({ leads, currentUserId }: Props) {
     {
       header: '',
       id: 'actions',
-      size: 50,
+      size: 260,
       cell: ({ row }) => {
         const lead = row.original;
         const isBusy = busyId === lead.id;
         const canTransition = lead.status !== 'CONVERTED';
         const isMine = lead.assignedUserId === currentUserId;
+
+        // Context-primary button: the single most likely next action
+        // for this row's state. Order matters — first match wins.
+        //   1. Payment verified? → Convert to candidate (the whole
+        //      point of the flow).
+        //   2. Unassigned? → Assign to me (blocks nothing but gets
+        //      routine work moving).
+        //   3. No verified payment yet → Generate additional invoice
+        //      (bulk of "next actions" fall here).
+        //   4. Converted / lost / rejected → no primary.
+        let primary: React.ReactNode = null;
+        if (canTransition) {
+          if (lead.hasVerifiedPayment) {
+            primary = (
+              <Button size="sm" onClick={() => openConvert(lead)} disabled={isBusy} className="h-8">
+                <UserCheck className="mr-1.5 size-3.5" />
+                Convert
+              </Button>
+            );
+          } else if (!isMine && lead.assignedUserId === null) {
+            primary = (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => toggleAssignToMe(lead)}
+                disabled={isBusy}
+                className="h-8"
+              >
+                <UserCheck className="mr-1.5 size-3.5" />
+                Assign to me
+              </Button>
+            );
+          } else {
+            primary = (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setInvoicingLead(lead)}
+                disabled={isBusy}
+                className="h-8"
+              >
+                <FileText className="mr-1.5 size-3.5" />
+                Invoice
+              </Button>
+            );
+          }
+        }
+
         return (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button variant="ghost" size="icon" aria-label="Actions" disabled={isBusy} />}
-            >
-              <MoreHorizontal className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Assignment</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => toggleAssignToMe(lead)}>
-                {isMine ? (
-                  <>
-                    <UserX className="mr-2 size-4" /> Unassign from me
-                  </>
-                ) : (
-                  <>
-                    <UserCheck className="mr-2 size-4" /> Assign to me
-                  </>
-                )}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel>Change status</DropdownMenuLabel>
-              <DropdownMenuItem
-                disabled={!canTransition}
-                onClick={() => setStatus(lead, 'CONTACTED')}
+          <div className="flex items-center justify-end gap-1.5">
+            {primary}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="More actions"
+                    disabled={isBusy}
+                    className="h-8 w-8"
+                  />
+                }
               >
-                Mark contacted
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!canTransition}
-                onClick={() => setStatus(lead, 'AWAITING_PAYMENT')}
-              >
-                Awaiting payment
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={!canTransition} onClick={() => openConvert(lead)}>
-                <UserCheck className="mr-2 size-4" /> Convert to candidate…
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={!canTransition} onClick={() => setStatus(lead, 'LOST')}>
-                Mark lost
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!canTransition}
-                onClick={() => setStatus(lead, 'REJECTED')}
-              >
-                Mark rejected
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setArchiveTarget(lead)}
-                className="text-destructive focus:text-destructive"
-              >
-                <Archive className="mr-2 size-4" /> Archive lead…
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <MoreHorizontal className="size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuLabel>Status</DropdownMenuLabel>
+                <DropdownMenuItem
+                  disabled={!canTransition || lead.status === 'CONTACTED'}
+                  onClick={() => setStatus(lead, 'CONTACTED')}
+                >
+                  Mark contacted
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canTransition || lead.status === 'AWAITING_PAYMENT'}
+                  onClick={() => setStatus(lead, 'AWAITING_PAYMENT')}
+                >
+                  Mark awaiting payment
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!canTransition} onClick={() => setStatus(lead, 'LOST')}>
+                  Mark lost
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canTransition}
+                  onClick={() => setStatus(lead, 'REJECTED')}
+                >
+                  Mark rejected
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => toggleAssignToMe(lead)}>
+                  {isMine ? (
+                    <>
+                      <UserX className="mr-2 size-4" /> Unassign
+                    </>
+                  ) : (
+                    <>
+                      <UserCheck className="mr-2 size-4" /> Assign to me
+                    </>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!canTransition} onClick={() => setInvoicingLead(lead)}>
+                  <FileText className="mr-2 size-4" /> Add another invoice…
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!canTransition} onClick={() => openConvert(lead)}>
+                  <UserCheck className="mr-2 size-4" /> Convert to candidate…
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setArchiveTarget(lead)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Archive className="mr-2 size-4" /> Archive lead…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         );
       },
     },
@@ -378,6 +473,23 @@ export function LeadsTable({ leads, currentUserId }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Controlled invoice dialog — driven from the row-menu "Generate
+          invoice…" item. Rendered once at the table level (not per-row)
+          so the dropdown can close cleanly before the dialog takes
+          focus. */}
+      {invoicingLead && (
+        <GenerateInvoiceDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setInvoicingLead(null);
+          }}
+          payerMode="PERSON"
+          payerId={invoicingLead.personId}
+          payerLabel={invoicingLead.personName}
+          services={invoiceableServices}
+        />
+      )}
     </>
   );
 }

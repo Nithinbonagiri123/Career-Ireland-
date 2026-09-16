@@ -7,6 +7,7 @@ import { ScopeFilter } from '@/components/scope-filter';
 import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { parseAssignmentScope } from '@/lib/scope';
+import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
 import { fetchLeads } from '@/modules/leads/service';
 import { CreateLeadDialog } from './create-lead-dialog';
 import { LeadsTable } from './leads-table';
@@ -22,7 +23,12 @@ export default async function LeadsPage({
   const { assigned, created, from, to } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const createdRange = parseDateRangeParams({ created, from, to });
-  const leads = await fetchLeads(scope, createdRange);
+  const [leads, invoiceableServices] = await Promise.all([
+    fetchLeads(scope, createdRange),
+    // PERSON-payable services + packages; the row-menu "Generate
+    // invoice" dialog needs the full option list to render locally.
+    fetchInvoiceableServicesFor('PERSON'),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
@@ -36,13 +42,17 @@ export default async function LeadsPage({
               <DateRangeFilter />
               <ScopeFilter current={scope} />
               <CsvExportButton href="/api/export/leads" />
-              <CreateLeadDialog />
+              <CreateLeadDialog invoiceableServices={invoiceableServices} />
             </div>
           }
         />
       </FadeUp>
       <FadeUp delay={0.05}>
-        <LeadsTable leads={leads} currentUserId={session.user.id} />
+        <LeadsTable
+          leads={leads}
+          currentUserId={session.user.id}
+          invoiceableServices={invoiceableServices}
+        />
       </FadeUp>
     </div>
   );

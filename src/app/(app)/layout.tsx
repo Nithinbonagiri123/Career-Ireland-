@@ -64,16 +64,27 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // then drags the sidebar off-screen on nav). `overflow-hidden`
     // makes the shell a hard cap so `<main>` inside ScrollShell is
     // the only surface that actually scrolls.
-    <div className="flex h-screen overflow-hidden">
-      <AppSidebar workspace={workspace} reachable={reachable} visibleModules={visibleModules} />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <TopBar
-          user={session.user}
-          unreadNotifications={unreadCount}
+    // On print, the chrome (sidebar + top bar) must not appear on
+    // customer-facing PDFs. `print:h-auto` releases the h-screen cap so
+    // long documents don't get scissored at one viewport.
+    <div className="flex h-screen overflow-hidden print:block print:h-auto print:overflow-visible">
+      <div className="print:hidden">
+        <AppSidebar
           workspace={workspace}
           reachable={reachable}
           visibleModules={visibleModules}
         />
+      </div>
+      <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
+        <div className="print:hidden">
+          <TopBar
+            user={session.user}
+            unreadNotifications={unreadCount}
+            workspace={workspace}
+            reachable={reachable}
+            visibleModules={visibleModules}
+          />
+        </div>
         {/*
           Workspace canvas — deliberately no ambient pattern. Notion /
           Attio / Stripe / Linear all use a plain warm canvas + strong

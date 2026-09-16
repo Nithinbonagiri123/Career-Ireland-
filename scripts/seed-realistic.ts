@@ -552,6 +552,8 @@ async function main() {
         number: invoiceNumber,
         payerPersonId: person.id,
         serviceEngagementId: engagement.id,
+        qty: 1,
+        unitPrice: amountEUR,
         subtotal: amountEUR,
         taxAmount: '0.00',
         totalAmount: amountEUR,

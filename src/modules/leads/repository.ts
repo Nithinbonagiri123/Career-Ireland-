@@ -1,7 +1,8 @@
-import { and, desc, eq, isNull, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, type SQL } from 'drizzle-orm';
 import type { DbExecutor } from '@/lib/audit/withAudit';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
+import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { type Lead, leads, type NewLead } from '@/lib/db/schema/leads';
 import { persons } from '@/lib/db/schema/persons';
 import { users } from '@/lib/db/schema/users';
@@ -18,6 +19,9 @@ export type LeadListRow = {
   assignedUserName: string | null;
   createdAt: Date;
   convertedAt: Date | null;
+  /** True if any payment (across any engagement for this person) is
+      VERIFIED. Drives the "ready to convert" affordance on the row. */
+  hasVerifiedPayment: boolean;
 };
 
 export async function listLeads(opts?: {
@@ -37,13 +41,12 @@ export async function listLeads(opts?: {
   if (scopeCond) whereConds.push(scopeCond);
   if (createdCond) whereConds.push(createdCond);
 
-  return db
+  const rows = await db
     .select({
       id: leads.id,
       status: leads.status,
       personId: leads.personId,
       personName: persons.firstName,
-      // stitched below
       personEmail: persons.email,
       personPhone: persons.phone,
       assignedUserId: leads.assignedUserId,
@@ -56,21 +59,40 @@ export async function listLeads(opts?: {
     .innerJoin(persons, eq(persons.id, leads.personId))
     .leftJoin(users, eq(users.id, leads.assignedUserId))
     .where(and(...whereConds))
-    .orderBy(desc(leads.createdAt))
-    .then((rows) =>
-      rows.map((r) => ({
-        id: r.id,
-        status: r.status,
-        personId: r.personId,
-        personName: `${r.personName} ${r.lastName}`.trim(),
-        personEmail: r.personEmail,
-        personPhone: r.personPhone,
-        assignedUserId: r.assignedUserId,
-        assignedUserName: r.assignedUserName,
-        createdAt: r.createdAt,
-        convertedAt: r.convertedAt,
-      })),
+    .orderBy(desc(leads.createdAt));
+
+  // Second round-trip: which of these persons has at least one
+  // VERIFIED payment? One `IN (…)` query for the whole page — cheaper
+  // than N per-row lookups. Returns an empty set when there are no
+  // rows to check (skips the trip entirely).
+  const personIds = rows.map((r) => r.personId);
+  let personsWithVerifiedPayment = new Set<string>();
+  if (personIds.length > 0) {
+    const paidRows = await db
+      .selectDistinct({ personId: serviceEngagements.payerPersonId })
+      .from(payments)
+      .innerJoin(serviceEngagements, eq(serviceEngagements.id, payments.serviceEngagementId))
+      .where(
+        and(eq(payments.status, 'VERIFIED'), inArray(serviceEngagements.payerPersonId, personIds)),
+      );
+    personsWithVerifiedPayment = new Set(
+      paidRows.map((r) => r.personId).filter((id): id is string => id !== null),
     );
+  }
+
+  return rows.map((r) => ({
+    id: r.id,
+    status: r.status,
+    personId: r.personId,
+    personName: `${r.personName} ${r.lastName}`.trim(),
+    personEmail: r.personEmail,
+    personPhone: r.personPhone,
+    assignedUserId: r.assignedUserId,
+    assignedUserName: r.assignedUserName,
+    createdAt: r.createdAt,
+    convertedAt: r.convertedAt,
+    hasVerifiedPayment: personsWithVerifiedPayment.has(r.personId),
+  }));
 }
 
 export async function getLead(id: string): Promise<Lead | null> {
