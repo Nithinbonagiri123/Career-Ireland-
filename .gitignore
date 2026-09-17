@@ -46,3 +46,4 @@ next-env.d.ts
 
 # Local visual QA output — not committed
 screenshots/
+artifacts/

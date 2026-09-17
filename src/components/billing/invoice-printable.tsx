@@ -132,7 +132,7 @@ export function InvoicePrintable({
               Invoice Date
             </th>
             <td className="border-l border-slate-300 px-3 py-2">
-              {format(invoice.issuedAt, 'dd MMMM yyyy')}
+              {format(invoice.issuedAt, "dd MMMM yyyy 'at' HH:mm")}
             </td>
           </tr>
         </tbody>

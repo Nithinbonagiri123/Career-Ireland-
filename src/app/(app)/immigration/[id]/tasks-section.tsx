@@ -101,13 +101,19 @@ export function CaseTasksSection({ caseId, rows }: { caseId: string; rows: TaskR
                         {task.dueAt && (
                           <>
                             <span aria-hidden>·</span>
-                            <span
-                              className={overdue ? 'font-medium text-destructive' : ''}
-                              title={format(new Date(task.dueAt), 'PPpp')}
+                            <time
+                              dateTime={new Date(task.dueAt).toISOString()}
+                              className={
+                                overdue
+                                  ? 'font-medium tabular-nums text-destructive'
+                                  : 'tabular-nums'
+                              }
                             >
                               {overdue && <AlertTriangle className="mr-0.5 inline size-3" />}
-                              due {formatDistanceToNow(new Date(task.dueAt), { addSuffix: true })}
-                            </span>
+                              due{' '}
+                              {formatDistanceToNow(new Date(task.dueAt), { addSuffix: true })} ·{' '}
+                              {format(new Date(task.dueAt), "dd MMM yyyy · HH:mm")}
+                            </time>
                           </>
                         )}
                       </p>

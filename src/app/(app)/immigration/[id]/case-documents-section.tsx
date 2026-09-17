@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { CheckCircle2, ClipboardCheck, FileText, Paperclip, Plus, Trash2 } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -386,7 +386,10 @@ export function CaseDocumentsSection({
                     <p className="truncate text-[11px] text-muted-foreground">
                       {d.documentType.name} · v{d.document.version} ·{' '}
                       {d.document.status.toLowerCase()} · attached{' '}
-                      {formatDistanceToNow(d.attachedAt, { addSuffix: true })}
+                      <time dateTime={d.attachedAt.toISOString()} className="tabular-nums">
+                        {formatDistanceToNow(d.attachedAt, { addSuffix: true })} ·{' '}
+                        {format(d.attachedAt, "dd MMM yyyy · HH:mm")}
+                      </time>
                     </p>
                   </div>
                   {d.caseRequirementId && (

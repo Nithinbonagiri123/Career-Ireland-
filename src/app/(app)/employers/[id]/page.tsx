@@ -7,17 +7,16 @@ import {
   MapPin,
   Pencil,
   Plus,
-  Send,
   User,
 } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
+import { BillingSection } from '@/components/billing/billing-section';
 import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { InvitePortalDialog } from '@/components/portal/invite-portal-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +24,7 @@ import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { occupations } from '@/lib/db/schema/occupations';
 import { statusTone } from '@/lib/ui/status-tone';
-import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
+import { fetchEmployerBillingHistory, fetchInvoiceableServicesFor } from '@/modules/billing/read';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchEmployer, fetchEmployerContacts, fetchEmployers } from '@/modules/employers/service';
 import { fetchRequisitionsForEmployer } from '@/modules/requisitions/service';
@@ -41,17 +40,28 @@ export default async function EmployerDetail({ params }: { params: Promise<{ id:
   const employer = await fetchEmployer(id);
   if (!employer) notFound();
 
-  const [contacts, requisitions, employersAll, currencies, occupationList, invoiceableServices] =
-    await Promise.all([
-      fetchEmployerContacts(id),
-      fetchRequisitionsForEmployer(id),
-      fetchEmployers(),
-      fetchCurrencies(),
-      db.select().from(occupations).orderBy(asc(occupations.name)),
-      // Employer-payable services + packages for the header "Generate
-      // invoice" trigger. Includes services with payerType='ANY'.
-      fetchInvoiceableServicesFor('EMPLOYER'),
-    ]);
+  const [
+    contacts,
+    requisitions,
+    employersAll,
+    currencies,
+    occupationList,
+    invoiceableServices,
+    billingHistory,
+  ] = await Promise.all([
+    fetchEmployerContacts(id),
+    fetchRequisitionsForEmployer(id),
+    fetchEmployers(),
+    fetchCurrencies(),
+    db.select().from(occupations).orderBy(asc(occupations.name)),
+    // Employer-payable services + packages for the header "Generate
+    // invoice" trigger. Includes services with payerType='ANY'.
+    fetchInvoiceableServicesFor('EMPLOYER'),
+    fetchEmployerBillingHistory(id),
+  ]);
+
+  const canVerifyPayments =
+    session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
 
   const location = [employer.city, employer.country].filter(Boolean).join(', ');
 
@@ -129,15 +139,6 @@ export default async function EmployerDetail({ params }: { params: Promise<{ id:
                 payerLabel={employer.legalName}
                 services={invoiceableServices}
                 triggerVariant="outline"
-              />
-              <InvitePortalDialog
-                target={{ kind: 'EMPLOYER', employerId: employer.id }}
-                defaultFullName={employer.legalName}
-                trigger={
-                  <Button size="sm" variant="outline">
-                    <Send className="mr-1.5 size-4" /> Invite to portal
-                  </Button>
-                }
               />
               <RequisitionDialog
                 employers={employersAll}
@@ -287,8 +288,24 @@ export default async function EmployerDetail({ params }: { params: Promise<{ id:
         </Card>
       </FadeUp>
 
+      <FadeUp delay={0.15} className="mb-8">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Billing history</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BillingSection
+              profileHref={`/employers/${id}`}
+              invoices={billingHistory.invoices}
+              receipts={billingHistory.receipts}
+              canVerify={canVerifyPayments}
+            />
+          </CardContent>
+        </Card>
+      </FadeUp>
+
       {employer.notes && (
-        <FadeUp delay={0.15}>
+        <FadeUp delay={0.2}>
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Notes</CardTitle>

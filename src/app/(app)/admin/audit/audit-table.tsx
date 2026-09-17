@@ -1,10 +1,10 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { formatDistanceToNow } from 'date-fns';
 import { ShieldCheck, User } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { DataTable } from '@/components/data-table/data-table';
+import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { loadMoreAuditEventsAction } from '@/modules/audit/actions';
@@ -21,15 +21,8 @@ const columns: ColumnDef<AuditEventWithActor>[] = [
   {
     header: 'When',
     accessorKey: 'occurredAt',
-    size: 140,
-    cell: ({ row }) => {
-      const d = row.original.occurredAt;
-      return (
-        <span className="text-xs text-muted-foreground" title={d.toLocaleString()}>
-          {formatDistanceToNow(d, { addSuffix: true })}
-        </span>
-      );
-    },
+    size: 170,
+    cell: ({ row }) => <Timestamp date={row.original.occurredAt} />,
   },
   {
     header: 'Actor',

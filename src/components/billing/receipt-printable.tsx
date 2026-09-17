@@ -90,7 +90,7 @@ export function ReceiptPrintable({
               Receipt Date
             </th>
             <td className="border-l border-slate-300 px-3 py-2">
-              {format(receipt.issuedAt, 'dd MMMM yyyy')}
+              {format(receipt.issuedAt, "dd MMMM yyyy 'at' HH:mm")}
             </td>
           </tr>
         </tbody>
@@ -146,7 +146,7 @@ export function ReceiptPrintable({
               Received on
             </th>
             <td className="border-l border-slate-300 px-3 py-2">
-              {format(receipt.receivedAt, 'dd MMMM yyyy')}
+              {format(receipt.receivedAt, "dd MMMM yyyy 'at' HH:mm")}
             </td>
           </tr>
           {payment.proofReference && (

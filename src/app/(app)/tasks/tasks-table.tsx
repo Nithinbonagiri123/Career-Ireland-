@@ -1,7 +1,6 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { formatDistanceToNow } from 'date-fns';
 import {
   Archive,
   ArrowRight,
@@ -17,6 +16,7 @@ import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
 import { PromptDialog } from '@/components/prompt-dialog';
+import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
@@ -126,27 +126,19 @@ export function TasksTable({ tasks, staffUsers }: { tasks: TaskRow[]; staffUsers
       {
         header: 'Due',
         accessorKey: 'dueAt',
-        size: 140,
-        cell: ({ row }) => (
-          <span className="text-xs text-muted-foreground">
-            {row.original.dueAt
-              ? formatDistanceToNow(row.original.dueAt, { addSuffix: true })
-              : '—'}
-          </span>
-        ),
+        size: 170,
+        cell: ({ row }) =>
+          row.original.dueAt ? (
+            <Timestamp date={row.original.dueAt} />
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          ),
       },
       {
         header: 'Created',
         accessorKey: 'createdAt',
-        size: 130,
-        cell: ({ row }) => (
-          <span
-            className="text-xs text-muted-foreground"
-            title={row.original.createdAt.toISOString()}
-          >
-            {formatDistanceToNow(row.original.createdAt, { addSuffix: true })}
-          </span>
-        ),
+        size: 170,
+        cell: ({ row }) => <Timestamp date={row.original.createdAt} />,
       },
       {
         header: '',

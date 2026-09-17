@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { ExternalLink, Globe, Plus, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
@@ -257,7 +257,10 @@ export function ApplicationsPanel({
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
                     {r.displayCompany ?? '—'}
                     {' · applied '}
-                    {formatDistanceToNow(r.appliedAt, { addSuffix: true })}
+                    <time dateTime={r.appliedAt.toISOString()} className="tabular-nums">
+                      {formatDistanceToNow(r.appliedAt, { addSuffix: true })} ·{' '}
+                      {format(r.appliedAt, "dd MMM yyyy · HH:mm")}
+                    </time>
                     {r.externalJobReference ? ` · ref ${r.externalJobReference}` : ''}
                   </p>
                   {r.externalJobUrl && (

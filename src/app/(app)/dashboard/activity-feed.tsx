@@ -1,4 +1,4 @@
-import { formatDistanceToNowStrict } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
 import {
   Archive,
   ArrowRightLeft,
@@ -118,6 +118,12 @@ export function ActivityFeed({ rows }: { rows: ActivityRow[] }) {
               <p className="mt-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
                 {formatDistanceToNowStrict(r.occurredAt, { addSuffix: true })}
               </p>
+              <time
+                dateTime={r.occurredAt.toISOString()}
+                className="text-[10px] tabular-nums text-muted-foreground/70"
+              >
+                {format(r.occurredAt, "dd MMM yyyy · HH:mm")}
+              </time>
             </div>
           </li>
         );

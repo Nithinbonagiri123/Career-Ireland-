@@ -1,7 +1,6 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { formatDistanceToNow } from 'date-fns';
 import { Archive, CheckCircle2, FileText, MoreHorizontal, UserCheck, UserX } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState, useTransition } from 'react';
@@ -9,6 +8,7 @@ import { toast } from 'sonner';
 import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { DataTable } from '@/components/data-table/data-table';
 import { DocumentUploader } from '@/components/document-uploader';
+import { Timestamp } from '@/components/timestamp';
 import { PromptDialog } from '@/components/prompt-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -219,12 +219,8 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
     {
       header: 'Created',
       accessorKey: 'createdAt',
-      size: 140,
-      cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">
-          {formatDistanceToNow(row.original.createdAt, { addSuffix: true })}
-        </span>
-      ),
+      size: 170,
+      cell: ({ row }) => <Timestamp date={row.original.createdAt} />,
     },
     {
       header: '',

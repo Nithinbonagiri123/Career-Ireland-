@@ -1,12 +1,12 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { formatDistanceToNow } from 'date-fns';
 import { KeyRound, MoreHorizontal, UserCog, UserX } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -135,14 +135,13 @@ export function UsersTable({ users, currentUserId }: Props) {
     {
       header: 'Last login',
       accessorKey: 'lastLoginAt',
-      size: 140,
-      cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">
-          {row.original.lastLoginAt
-            ? formatDistanceToNow(row.original.lastLoginAt, { addSuffix: true })
-            : 'Never'}
-        </span>
-      ),
+      size: 170,
+      cell: ({ row }) =>
+        row.original.lastLoginAt ? (
+          <Timestamp date={row.original.lastLoginAt} />
+        ) : (
+          <span className="text-xs text-muted-foreground">Never</span>
+        ),
     },
     {
       header: '',

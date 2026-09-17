@@ -97,6 +97,12 @@ export function AttendanceTable({ rows }: { rows: AttendanceRow[] }) {
                     {active
                       ? formatDistanceToNowStrict(r.session.clockInAt)
                       : formatDuration(netMs)}
+                    <span className="ml-1 text-[10px] text-muted-foreground/70">
+                      · in{' '}
+                      <time dateTime={r.session.clockInAt.toISOString()}>
+                        {format(r.session.clockInAt, 'HH:mm')}
+                      </time>
+                    </span>
                     {r.session.autoClosed && (
                       <Badge variant="warning" className="ml-1.5 rounded-full text-[9px]">
                         auto

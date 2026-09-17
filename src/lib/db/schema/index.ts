@@ -7,6 +7,7 @@ export * from './campaigns';
 export * from './candidate_details';
 export * from './commerce';
 export * from './currencies';
+export * from './document_upload_requests';
 export * from './documents';
 export * from './email_accounts';
 export * from './hr';

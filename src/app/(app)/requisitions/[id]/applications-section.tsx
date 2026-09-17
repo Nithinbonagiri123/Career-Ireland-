@@ -1,13 +1,13 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { formatDistanceToNow } from 'date-fns';
 import { ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
 import { PromptDialog } from '@/components/prompt-dialog';
+import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { updateApplicationStatusAction } from '@/modules/applications/actions';
@@ -94,12 +94,8 @@ export function ApplicationsSection({
     {
       header: 'Applied',
       accessorKey: 'appliedAt',
-      size: 130,
-      cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">
-          {formatDistanceToNow(row.original.appliedAt, { addSuffix: true })}
-        </span>
-      ),
+      size: 170,
+      cell: ({ row }) => <Timestamp date={row.original.appliedAt} />,
     },
     {
       header: '',

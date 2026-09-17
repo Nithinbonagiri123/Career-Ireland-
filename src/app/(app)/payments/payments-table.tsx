@@ -1,13 +1,13 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { formatDistanceToNow } from 'date-fns';
 import { ArrowRight, Check, Coins, MoreHorizontal, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
 import { PromptDialog } from '@/components/prompt-dialog';
+import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
@@ -111,12 +111,8 @@ export function PaymentsTable({ payments, role }: { payments: Row[]; role: UserR
     {
       header: 'Created',
       accessorKey: 'createdAt',
-      size: 130,
-      cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">
-          {formatDistanceToNow(row.original.createdAt, { addSuffix: true })}
-        </span>
-      ),
+      size: 170,
+      cell: ({ row }) => <Timestamp date={row.original.createdAt} />,
     },
     {
       header: '',

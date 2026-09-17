@@ -1,12 +1,12 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { formatDistanceToNow } from 'date-fns';
 import { Archive, GitMerge } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
 import { PromptDialog } from '@/components/prompt-dialog';
+import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Person } from '@/lib/db/schema/persons';
@@ -50,12 +50,8 @@ const activeColumns: ColumnDef<Person>[] = [
   {
     header: 'Added',
     accessorKey: 'createdAt',
-    size: 140,
-    cell: ({ row }) => (
-      <span className="text-xs text-muted-foreground">
-        {formatDistanceToNow(row.original.createdAt, { addSuffix: true })}
-      </span>
-    ),
+    size: 170,
+    cell: ({ row }) => <Timestamp date={row.original.createdAt} />,
   },
 ];
 
@@ -155,14 +151,13 @@ const mergedColumns: ColumnDef<MergedRow>[] = [
   {
     header: 'Merged at',
     accessorKey: 'mergedAt',
-    size: 160,
-    cell: ({ row }) => (
-      <span className="text-xs text-muted-foreground">
-        {row.original.mergedAt
-          ? formatDistanceToNow(row.original.mergedAt, { addSuffix: true })
-          : '—'}
-      </span>
-    ),
+    size: 170,
+    cell: ({ row }) =>
+      row.original.mergedAt ? (
+        <Timestamp date={row.original.mergedAt} />
+      ) : (
+        <span className="text-xs text-muted-foreground">—</span>
+      ),
   },
 ];
 

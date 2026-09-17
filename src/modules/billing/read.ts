@@ -229,6 +229,43 @@ export async function fetchPersonBillingHistory(personId: string): Promise<{
   };
 }
 
+/** Same shape for employer-payer billing so the shared Billing UI can
+    render either payer without branching. */
+export async function fetchEmployerBillingHistory(employerId: string): Promise<{
+  invoices: PersonBillingRow[];
+  receipts: PersonReceiptRow[];
+}> {
+  await requireInternalStaff();
+  const [invoiceRows, receiptRows] = await Promise.all([
+    db
+      .select({
+        invoice: invoices,
+        serviceName: serviceCatalogItems.name,
+      })
+      .from(invoices)
+      .innerJoin(serviceEngagements, eq(serviceEngagements.id, invoices.serviceEngagementId))
+      .innerJoin(
+        serviceCatalogItems,
+        eq(serviceCatalogItems.id, serviceEngagements.serviceCatalogItemId),
+      )
+      .where(eq(invoices.payerEmployerId, employerId))
+      .orderBy(desc(invoices.issuedAt)),
+    db
+      .select({
+        receipt: receipts,
+        invoiceNumber: invoices.number,
+      })
+      .from(receipts)
+      .leftJoin(invoices, eq(invoices.id, receipts.invoiceId))
+      .where(eq(receipts.payerEmployerId, employerId))
+      .orderBy(desc(receipts.issuedAt)),
+  ]);
+  return {
+    invoices: invoiceRows.map((r) => ({ invoice: r.invoice, serviceName: r.serviceName })),
+    receipts: receiptRows.map((r) => ({ receipt: r.receipt, invoiceNumber: r.invoiceNumber })),
+  };
+}
+
 export async function fetchReceiptForPrint(number: string): Promise<ReceiptPrintable | null> {
   await requireInternalStaff();
   const [row] = await db

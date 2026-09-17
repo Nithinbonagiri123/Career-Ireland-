@@ -135,9 +135,15 @@ export function DashboardDrilldownsSection({ data }: { data: DashboardDrilldowns
                   {iv.jobLabel} · {MODE_LABEL[iv.mode]}
                 </p>
               </div>
-              <span className="shrink-0 text-[10px] text-muted-foreground">
-                {formatDistanceToNow(iv.scheduledAt, { addSuffix: true })}
-              </span>
+              <time
+                dateTime={iv.scheduledAt.toISOString()}
+                className="flex shrink-0 flex-col items-end text-[10px] text-muted-foreground"
+              >
+                <span>{formatDistanceToNow(iv.scheduledAt, { addSuffix: true })}</span>
+                <span className="tabular-nums text-muted-foreground/70">
+                  {format(iv.scheduledAt, "dd MMM · HH:mm")}
+                </span>
+              </time>
             </Link>
           </li>
         ))}
@@ -163,7 +169,15 @@ export function DashboardDrilldownsSection({ data }: { data: DashboardDrilldowns
                 </div>
                 <p className="truncate text-[11px] text-muted-foreground">
                   {t.assignedName}
-                  {t.dueAt && ` · due ${formatDistanceToNow(t.dueAt, { addSuffix: true })}`}
+                  {t.dueAt && (
+                    <>
+                      {' · due '}
+                      <time dateTime={t.dueAt.toISOString()} className="tabular-nums">
+                        {formatDistanceToNow(t.dueAt, { addSuffix: true })} ·{' '}
+                        {format(t.dueAt, "dd MMM · HH:mm")}
+                      </time>
+                    </>
+                  )}
                 </p>
               </div>
               <Badge variant={PRIORITY_VARIANT[t.priority]} className="rounded-full text-[10px]">

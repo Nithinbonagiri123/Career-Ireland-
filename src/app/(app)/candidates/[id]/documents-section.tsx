@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { FileText, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useTransition } from 'react';
@@ -116,7 +116,13 @@ export function DocumentsSection({
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{d.originalFilename}</p>
                   <p className="text-[10px] text-muted-foreground">
-                    v{d.version} · {formatDistanceToNow(d.createdAt, { addSuffix: true })}
+                    v{d.version} · {formatDistanceToNow(d.createdAt, { addSuffix: true })} ·{' '}
+                    <time
+                      dateTime={d.createdAt.toISOString()}
+                      className="tabular-nums text-muted-foreground/80"
+                    >
+                      {format(d.createdAt, "dd MMM yyyy · HH:mm")}
+                    </time>
                   </p>
                 </div>
                 <div className="flex items-center gap-3">

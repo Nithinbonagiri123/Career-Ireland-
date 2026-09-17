@@ -1,13 +1,22 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { formatDistanceToNow } from 'date-fns';
-import { Ban, Check, Download, MoreHorizontal, X } from 'lucide-react';
+import {
+  Ban,
+  Check,
+  Download,
+  ExternalLink,
+  FileText,
+  MoreHorizontal,
+  Receipt as ReceiptIcon,
+  X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
 import { PromptDialog } from '@/components/prompt-dialog';
+import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
@@ -18,32 +27,52 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { statusTone } from '@/lib/ui/status-tone';
 import { reviewDocumentAction, voidDocumentAction } from '@/modules/documents/actions';
-import type { StaffDocumentRow } from '@/modules/documents/service';
+import type { DocumentsHubRow } from '@/modules/documents/hub';
 
-const STATUS_VARIANT: Record<StaffDocumentRow['status'], 'default' | 'secondary' | 'outline'> = {
-  UPLOADED: 'secondary',
-  UNDER_REVIEW: 'secondary',
-  ACCEPTED: 'default',
-  REJECTED: 'outline',
-  EXPIRED: 'outline',
+const KIND_TONE: Record<DocumentsHubRow['kind'], 'info' | 'success' | 'neutral'> = {
+  UPLOADED: 'neutral',
+  INVOICE: 'info',
+  RECEIPT: 'success',
 };
 
-export function DocumentsTable({ documents }: { documents: StaffDocumentRow[] }) {
+const KIND_ICON: Record<DocumentsHubRow['kind'], typeof FileText> = {
+  UPLOADED: FileText,
+  INVOICE: FileText,
+  RECEIPT: ReceiptIcon,
+};
+
+/**
+ * Build the "open the printable" URL for an invoice / receipt. The
+ * print routes are scoped to `/candidates/[id]` or `/employers/[id]`
+ * depending on payer type — same rule as the Billing tab links.
+ */
+function printableHref(row: DocumentsHubRow): string | null {
+  if (row.kind === 'UPLOADED' || !row.number) return null;
+  const scope = row.ownerKind === 'PERSON' ? 'candidates' : 'employers';
+  const bucket = row.kind === 'INVOICE' ? 'invoices' : 'receipts';
+  return `/${scope}/${row.ownerId}/${bucket}/${row.number}`;
+}
+
+export function DocumentsTable({ documents }: { documents: DocumentsHubRow[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [decideTarget, setDecideTarget] = useState<{
     docId: string;
     decision: 'ACCEPTED' | 'REJECTED';
   } | null>(null);
-  const [voidTarget, setVoidTarget] = useState<StaffDocumentRow | null>(null);
+  const [voidTarget, setVoidTarget] = useState<DocumentsHubRow | null>(null);
   const [, startTransition] = useTransition();
 
   const confirmVoid = (reason: string) => {
-    if (!voidTarget) return;
+    if (!voidTarget || !voidTarget.documentInstanceId) return;
     const target = voidTarget;
     setBusy(target.id);
     startTransition(async () => {
-      const r = await voidDocumentAction({ documentInstanceId: target.id, reason });
+      const r = await voidDocumentAction({
+        documentInstanceId: target.documentInstanceId ?? '',
+        reason,
+      });
       setBusy(null);
       if (r.ok) {
         toast.success('Document voided');
@@ -55,7 +84,6 @@ export function DocumentsTable({ documents }: { documents: StaffDocumentRow[] })
   };
 
   const accept = (docId: string) => {
-    // Accept doesn't require a reason. Fire directly.
     setBusy(docId);
     startTransition(async () => {
       const r = await reviewDocumentAction({
@@ -89,71 +117,103 @@ export function DocumentsTable({ documents }: { documents: StaffDocumentRow[] })
     });
   };
 
-  const columns: ColumnDef<StaffDocumentRow>[] = [
+  const columns: ColumnDef<DocumentsHubRow>[] = [
     {
       header: 'Owner',
       accessorKey: 'ownerName',
       cell: ({ row }) => (
-        <div className="flex flex-col">
-          <span className="text-sm font-medium">{row.original.ownerName}</span>
+        <Link
+          href={
+            row.original.ownerKind === 'PERSON'
+              ? `/candidates/${row.original.ownerId}`
+              : `/employers/${row.original.ownerId}`
+          }
+          className="group flex flex-col rounded-md -mx-2 px-2 py-0.5 hover:bg-muted/60"
+        >
+          <span className="text-sm font-medium group-hover:underline underline-offset-2">
+            {row.original.ownerName}
+          </span>
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
             {row.original.ownerKind}
           </span>
-        </div>
+        </Link>
       ),
     },
     {
       header: 'Type',
-      accessorKey: 'documentTypeName',
-      size: 200,
-      cell: ({ row }) => (
-        <div className="flex flex-col">
-          <span className="text-sm">{row.original.documentTypeName}</span>
-          <span className="text-[10px] text-muted-foreground">v{row.original.version}</span>
-        </div>
-      ),
+      accessorKey: 'typeLabel',
+      size: 180,
+      cell: ({ row }) => {
+        const Icon = KIND_ICON[row.original.kind];
+        return (
+          <div className="flex items-center gap-2">
+            <Badge variant={KIND_TONE[row.original.kind]} className="gap-1">
+              <Icon className="size-3" />
+              {row.original.kind === 'UPLOADED' ? 'FILE' : row.original.kind}
+            </Badge>
+            <span className="truncate text-xs text-muted-foreground" title={row.original.typeLabel}>
+              {row.original.typeLabel}
+            </span>
+          </div>
+        );
+      },
     },
     {
-      header: 'File',
-      accessorKey: 'originalFilename',
+      header: 'Reference',
+      accessorKey: 'reference',
       cell: ({ row }) => (
         <span
-          className="line-clamp-1 text-xs text-muted-foreground"
-          title={row.original.originalFilename}
+          className="line-clamp-1 font-mono text-xs text-muted-foreground"
+          title={row.original.reference}
         >
-          {row.original.originalFilename}
+          {row.original.reference}
+          {row.original.version ? (
+            <span className="ml-1.5 text-muted-foreground/70">v{row.original.version}</span>
+          ) : null}
         </span>
       ),
     },
     {
-      header: 'Size',
-      accessorKey: 'fileSizeBytes',
-      size: 90,
-      cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">
-          {formatBytes(row.original.fileSizeBytes)}
-        </span>
-      ),
+      header: 'Amount / size',
+      accessorKey: 'amount',
+      size: 130,
+      cell: ({ row }) => {
+        if (row.original.kind === 'UPLOADED') {
+          return (
+            <span className="text-xs text-muted-foreground">
+              {formatBytes(row.original.fileSizeBytes ?? 0)}
+            </span>
+          );
+        }
+        return (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {row.original.amount && row.original.currencyCode
+              ? formatMoney(row.original.amount, row.original.currencyCode)
+              : '—'}
+          </span>
+        );
+      },
     },
     {
       header: 'Status',
       accessorKey: 'status',
-      size: 130,
-      cell: ({ row }) => (
-        <Badge variant={STATUS_VARIANT[row.original.status]} className="rounded-full">
-          {row.original.status.replace(/_/g, ' ')}
-        </Badge>
-      ),
+      size: 120,
+      cell: ({ row }) => {
+        const status =
+          row.original.kind === 'UPLOADED'
+            ? row.original.status
+            : row.original.financialStatus ?? 'ISSUED';
+        if (!status) return <span className="text-xs text-muted-foreground">—</span>;
+        return (
+          <Badge variant={statusTone(status)}>{status.replace(/_/g, ' ')}</Badge>
+        );
+      },
     },
     {
-      header: 'Uploaded',
+      header: 'Date',
       accessorKey: 'createdAt',
-      size: 130,
-      cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">
-          {formatDistanceToNow(row.original.createdAt, { addSuffix: true })}
-        </span>
-      ),
+      size: 150,
+      cell: ({ row }) => <Timestamp date={row.original.createdAt} />,
     },
     {
       header: '',
@@ -161,50 +221,72 @@ export function DocumentsTable({ documents }: { documents: StaffDocumentRow[] })
       size: 130,
       cell: ({ row }) => {
         const doc = row.original;
-        const canReview = doc.status === 'UPLOADED' || doc.status === 'UNDER_REVIEW';
-        return (
-          <div className="flex items-center justify-end gap-1.5">
-            <Link
-              href={`/api/documents/${doc.id}/download`}
-              className={buttonVariants({ variant: 'ghost', size: 'icon' })}
-              aria-label="Download"
-              prefetch={false}
-            >
-              <Download className="size-3.5" />
-            </Link>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Actions"
-                    disabled={busy === doc.id}
-                  />
-                }
+        if (doc.kind === 'UPLOADED') {
+          const canReview = doc.status === 'UPLOADED' || doc.status === 'UNDER_REVIEW';
+          return (
+            <div className="flex items-center justify-end gap-1.5">
+              <Link
+                href={`/api/documents/${doc.id}/download`}
+                className={buttonVariants({ variant: 'ghost', size: 'icon' })}
+                aria-label="Download"
+                prefetch={false}
+                title="Download file"
               >
-                <MoreHorizontal className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {canReview && (
-                  <>
-                    <DropdownMenuLabel>Review decision</DropdownMenuLabel>
-                    <DropdownMenuItem onClick={() => accept(doc.id)}>
-                      <Check className="mr-2 size-4" /> Accept
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setDecideTarget({ docId: doc.id, decision: 'REJECTED' })}
-                    >
-                      <X className="mr-2 size-4" /> Reject…
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                  </>
-                )}
-                <DropdownMenuItem variant="destructive" onSelect={() => setVoidTarget(doc)}>
-                  <Ban className="mr-2 size-4" /> Void document…
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                <Download className="size-3.5" />
+              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Actions"
+                      disabled={busy === doc.id}
+                    />
+                  }
+                >
+                  <MoreHorizontal className="size-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {canReview && (
+                    <>
+                      <DropdownMenuLabel>Review decision</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={() => accept(doc.id)}>
+                        <Check className="mr-2 size-4" /> Accept
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setDecideTarget({ docId: doc.id, decision: 'REJECTED' })}
+                      >
+                        <X className="mr-2 size-4" /> Reject…
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+                  <DropdownMenuItem variant="destructive" onSelect={() => setVoidTarget(doc)}>
+                    <Ban className="mr-2 size-4" /> Void document…
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          );
+        }
+
+        // INVOICE / RECEIPT — open the printable page in a new tab so
+        // the operator's flow through the list isn't interrupted.
+        const href = printableHref(doc);
+        return (
+          <div className="flex items-center justify-end">
+            {href && (
+              <Link
+                href={href}
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open
+                <ExternalLink className="ml-1 size-3.5" />
+              </Link>
+            )}
           </div>
         );
       },
@@ -216,8 +298,8 @@ export function DocumentsTable({ documents }: { documents: StaffDocumentRow[] })
       <DataTable
         columns={columns}
         data={documents}
-        emptyTitle="No documents yet"
-        emptyDescription="Documents uploaded from candidate/employer portals or the internal CRM appear here."
+        emptyTitle="No documents match these filters"
+        emptyDescription="Clear filters or widen the date range to see more."
       />
       <PromptDialog
         open={decideTarget !== null}
@@ -235,7 +317,7 @@ export function DocumentsTable({ documents }: { documents: StaffDocumentRow[] })
         open={voidTarget !== null}
         onCancel={() => setVoidTarget(null)}
         onConfirm={confirmVoid}
-        title={`Void "${voidTarget?.originalFilename ?? ''}"?`}
+        title={`Void "${voidTarget?.reference ?? ''}"?`}
         description="Voided documents disappear from lists, exports, and requirement fulfilment. The DB row + S3 object stay for audit."
         label="Reason (audited)"
         placeholder="e.g. Uploaded to wrong candidate / superseded by newer version"
@@ -251,4 +333,25 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const currencyFormatters = new Map<string, Intl.NumberFormat>();
+function formatMoney(amount: string, currency: string): string {
+  let fmt = currencyFormatters.get(currency);
+  if (!fmt) {
+    try {
+      fmt = new Intl.NumberFormat('en-IE', {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    } catch {
+      fmt = new Intl.NumberFormat('en-IE', { minimumFractionDigits: 2 });
+    }
+    currencyFormatters.set(currency, fmt);
+  }
+  const n = Number.parseFloat(amount);
+  if (!Number.isFinite(n)) return `${amount} ${currency}`;
+  return fmt.format(n);
 }

@@ -204,6 +204,13 @@
       "when": 1789594134413,
       "tag": "0028_fast_salo",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1789670801660,
+      "tag": "0029_purple_exodus",
+      "breakpoints": true
     }
   ]
 }

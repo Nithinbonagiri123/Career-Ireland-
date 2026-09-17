@@ -84,13 +84,23 @@ export function WorkingNowCard({ initial }: { initial: WorkingNowRow[] }) {
                         </p>
                       </div>
                     </div>
-                    <div className="text-right text-[10px] uppercase tracking-wider text-muted-foreground">
-                      since{' '}
-                      {new Intl.DateTimeFormat('en-IE', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      }).format(r.clockInAt)}
-                    </div>
+                    <time
+                      dateTime={r.clockInAt.toISOString()}
+                      className="flex flex-col items-end text-right text-[10px] uppercase tracking-wider text-muted-foreground"
+                    >
+                      <span>since{' '}
+                        {new Intl.DateTimeFormat('en-IE', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        }).format(r.clockInAt)}
+                      </span>
+                      <span className="tabular-nums text-muted-foreground/70">
+                        {new Intl.DateTimeFormat('en-IE', {
+                          day: '2-digit',
+                          month: 'short',
+                        }).format(r.clockInAt)}
+                      </span>
+                    </time>
                   </motion.li>
                 );
               })}

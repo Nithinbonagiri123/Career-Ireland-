@@ -1,4 +1,4 @@
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { eq } from 'drizzle-orm';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -8,7 +8,6 @@ import {
   MapPin,
   MessagesSquare,
   PlaneTakeoff,
-  Send,
   Trophy,
   User,
   UserPlus,
@@ -18,9 +17,7 @@ import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { InvitePortalDialog } from '@/components/portal/invite-portal-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusDot } from '@/components/ui/status-dot';
 import { requireInternalStaff } from '@/lib/auth/session';
@@ -29,6 +26,7 @@ import { candidateProfiles } from '@/lib/db/schema/persons';
 import { statusTone } from '@/lib/ui/status-tone';
 import { listApplicationsForPerson } from '@/modules/applications/service';
 import { fetchLatestBillingLinksForPerson, fetchPersonBillingHistory } from '@/modules/billing/read';
+import { listUploadRequestsForPerson } from '@/modules/document-upload-requests/service';
 import {
   listCandidateQualifications,
   listCandidateSkills,
@@ -46,10 +44,11 @@ import {
   SkillsSection,
 } from './candidate-details-panel';
 import { CandidateTabs } from './candidate-tabs';
+import { BillingSection } from '@/components/billing/billing-section';
 import { DocumentsSection } from './documents-section';
 import { EmailAccountPanel } from './email-account-panel';
 import { JustCreatedCard } from './just-created-card';
-import { PersonBillingSection } from './person-billing-section';
+import { RequestDocumentsPanel } from './request-documents-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,6 +100,7 @@ export default async function CandidateDetail({
     allQualifications,
     candidateApplications,
     billingHistory,
+    uploadRequests,
   ] = await Promise.all([
     fetchPersonRequirements(id),
     fetchPersonDocuments(id),
@@ -112,6 +112,7 @@ export default async function CandidateDetail({
     fetchQualifications(),
     listApplicationsForPerson(id),
     fetchPersonBillingHistory(id),
+    listUploadRequestsForPerson(id),
   ]);
 
   const fullName = `${person.firstName} ${person.lastName}`;
@@ -192,9 +193,13 @@ export default async function CandidateDetail({
                 )}
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Activated</span>
-                  <span className="text-xs">
-                    {formatDistanceToNow(candidateProfile.activatedAt, { addSuffix: true })}
-                  </span>
+                  <time
+                    dateTime={candidateProfile.activatedAt.toISOString()}
+                    className="text-xs tabular-nums"
+                  >
+                    {formatDistanceToNow(candidateProfile.activatedAt, { addSuffix: true })} ·{' '}
+                    {format(candidateProfile.activatedAt, "dd MMM yyyy · HH:mm")}
+                  </time>
                 </div>
               </>
             ) : (
@@ -250,19 +255,39 @@ export default async function CandidateDetail({
     </FadeUp>
   );
 
+  const missingRequirementCount = requirements.filter((r) => r.status === 'MISSING').length;
   const documentsTab = (
-    <FadeUp>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Documents</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DocumentsSection personId={id} requirements={requirements} documents={documents} />
-        </CardContent>
-      </Card>
-    </FadeUp>
+    <div className="space-y-6">
+      <FadeUp>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Ask the candidate to upload</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RequestDocumentsPanel
+              personId={id}
+              personEmail={person.email}
+              missingRequirementCount={missingRequirementCount}
+              requests={uploadRequests}
+            />
+          </CardContent>
+        </Card>
+      </FadeUp>
+      <FadeUp delay={0.05}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Documents</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DocumentsSection personId={id} requirements={requirements} documents={documents} />
+          </CardContent>
+        </Card>
+      </FadeUp>
+    </div>
   );
 
+  const canVerifyPayments =
+    session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
   const billingTab = (
     <FadeUp>
       <Card>
@@ -270,10 +295,11 @@ export default async function CandidateDetail({
           <CardTitle className="text-base">Billing history</CardTitle>
         </CardHeader>
         <CardContent>
-          <PersonBillingSection
-            personId={id}
+          <BillingSection
+            profileHref={`/candidates/${id}`}
             invoices={billingHistory.invoices}
             receipts={billingHistory.receipts}
+            canVerify={canVerifyPayments}
           />
         </CardContent>
       </Card>
@@ -311,10 +337,15 @@ export default async function CandidateDetail({
                           <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>
                         </div>
                         <time
-                          className="whitespace-nowrap text-[10px] uppercase tracking-wide text-muted-foreground"
-                          title={item.at.toLocaleString()}
+                          className="flex flex-col items-end text-[10px] text-muted-foreground"
+                          dateTime={item.at.toISOString()}
                         >
-                          {formatDistanceToNow(item.at, { addSuffix: true })}
+                          <span className="uppercase tracking-wide">
+                            {formatDistanceToNow(item.at, { addSuffix: true })}
+                          </span>
+                          <span className="tabular-nums text-muted-foreground/70">
+                            {format(item.at, "dd MMM yyyy · HH:mm")}
+                          </span>
                         </time>
                       </div>
                     </li>
@@ -351,26 +382,14 @@ export default async function CandidateDetail({
           breadcrumbs={[{ label: 'Candidates', href: '/candidates' }, { label: fullName }]}
           meta={metaStrip}
           action={
-            <div className="flex items-center gap-2">
-              {candidateProfile && (
-                <AssignToMeButton
-                  entity="candidate"
-                  id={person.id}
-                  currentUserId={session.user.id}
-                  currentAssignedUserId={assignedUserId}
-                />
-              )}
-              <InvitePortalDialog
-                target={{ kind: 'CANDIDATE', personId: person.id }}
-                defaultEmail={person.email ?? undefined}
-                defaultFullName={fullName}
-                trigger={
-                  <Button size="sm" variant="outline">
-                    <Send className="mr-1.5 size-4" /> Invite to portal
-                  </Button>
-                }
+            candidateProfile && (
+              <AssignToMeButton
+                entity="candidate"
+                id={person.id}
+                currentUserId={session.user.id}
+                currentAssignedUserId={assignedUserId}
               />
-            </div>
+            )
           }
         />
       </FadeUp>

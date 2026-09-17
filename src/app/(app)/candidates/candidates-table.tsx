@@ -1,12 +1,12 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { formatDistanceToNow } from 'date-fns';
 import { UserPlus, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { DataTable } from '@/components/data-table/data-table';
+import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { StatusDot } from '@/components/ui/status-dot';
@@ -77,22 +77,14 @@ const columns: ColumnDef<CandidateListRow>[] = [
   {
     header: 'Activated',
     accessorKey: 'activatedAt',
-    size: 140,
-    cell: ({ row }) => (
-      <span className="text-xs text-muted-foreground">
-        {formatDistanceToNow(row.original.activatedAt, { addSuffix: true })}
-      </span>
-    ),
+    size: 170,
+    cell: ({ row }) => <Timestamp date={row.original.activatedAt} />,
   },
   {
     header: 'Created',
     accessorKey: 'createdAt',
-    size: 140,
-    cell: ({ row }) => (
-      <span className="text-xs text-muted-foreground" title={row.original.createdAt.toISOString()}>
-        {formatDistanceToNow(row.original.createdAt, { addSuffix: true })}
-      </span>
-    ),
+    size: 170,
+    cell: ({ row }) => <Timestamp date={row.original.createdAt} />,
   },
 ];
 

@@ -18,6 +18,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { Badge } from '@/components/ui/badge';
 import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
+import { fetchAgingReport } from '@/modules/billing/aging';
 import { fetchRecentActivity } from '@/modules/dashboard/activity';
 import { fetchDashboardDrilldowns } from '@/modules/dashboard/drilldowns';
 import { fetchDashboardPipelines } from '@/modules/dashboard/pipelines';
@@ -26,6 +27,7 @@ import { fetchDashboardMetrics } from '@/modules/dashboard/service';
 import { fetchDashboardTrends } from '@/modules/dashboard/trends';
 import { fetchHrDashboard, fetchStaffCurrentlyWorking } from '@/modules/hr/service';
 import { ActivityFeed } from './activity-feed';
+import { AgingSection } from './aging-section';
 import { AttentionCard } from './attention-card';
 import { DashboardDrilldownsSection } from './drilldowns-section';
 import { PipelineFunnel } from './pipeline-funnel';
@@ -44,16 +46,18 @@ export default async function DashboardPage({
   await requirePermission('main', 'overview', 'view');
   const { created, from, to } = await searchParams;
   const range = parseDateRangeParams({ created, from, to });
-  const [m, drilldowns, pipelines, activity, hr, trends, revenue, workingNow] = await Promise.all([
-    fetchDashboardMetrics(),
-    fetchDashboardDrilldowns(),
-    fetchDashboardPipelines(),
-    fetchRecentActivity(10),
-    fetchHrDashboard(),
-    fetchDashboardTrends(),
-    fetchDashboardRevenue({ from: range.from, to: range.to }),
-    fetchStaffCurrentlyWorking(),
-  ]);
+  const [m, drilldowns, pipelines, activity, hr, trends, revenue, workingNow, aging] =
+    await Promise.all([
+      fetchDashboardMetrics(),
+      fetchDashboardDrilldowns(),
+      fetchDashboardPipelines(),
+      fetchRecentActivity(10),
+      fetchHrDashboard(),
+      fetchDashboardTrends(),
+      fetchDashboardRevenue({ from: range.from, to: range.to }),
+      fetchStaffCurrentlyWorking(),
+      fetchAgingReport(),
+    ]);
 
   const today = new Date();
 
@@ -135,6 +139,11 @@ export default async function DashboardPage({
       {/* ─── Revenue ─────────────────────────────────────────────── */}
       <FadeUp delay={0.05}>
         <RevenueSection data={revenue} />
+      </FadeUp>
+
+      {/* ─── Invoice aging (AR pipeline) ─────────────────────────── */}
+      <FadeUp delay={0.055} className="mt-8">
+        <AgingSection report={aging} />
       </FadeUp>
 
       {/* ─── HR strip ────────────────────────────────────────────── */}
@@ -289,9 +298,19 @@ export default async function DashboardPage({
                 {drilldowns.overdueTasks.slice(0, 3).map((t) => (
                   <li key={t.id} className="flex items-baseline justify-between gap-2">
                     <span className="truncate">{t.title}</span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground">
-                      {t.dueAt ? formatDistanceToNow(t.dueAt, { addSuffix: true }) : 'no due date'}
-                    </span>
+                    {t.dueAt ? (
+                      <time
+                        dateTime={t.dueAt.toISOString()}
+                        className="flex shrink-0 flex-col items-end text-[10px] text-muted-foreground"
+                      >
+                        <span>{formatDistanceToNow(t.dueAt, { addSuffix: true })}</span>
+                        <span className="tabular-nums text-muted-foreground/70">
+                          {format(t.dueAt, "dd MMM · HH:mm")}
+                        </span>
+                      </time>
+                    ) : (
+                      <span className="shrink-0 text-[10px] text-muted-foreground">no due date</span>
+                    )}
                   </li>
                 ))}
                 {m.tasks.overdue > 3 && (

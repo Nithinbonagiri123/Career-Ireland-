@@ -108,10 +108,18 @@ export default async function HrPage() {
                             </Badge>
                           )}
                         </div>
-                        <span className="text-xs text-muted-foreground tabular-nums">
-                          {active
-                            ? formatDistanceToNowStrict(s.clockInAt, { addSuffix: false })
-                            : `${hours}h ${minutes}m`}
+                        <span className="flex flex-col items-end text-xs text-muted-foreground tabular-nums">
+                          <span>
+                            {active
+                              ? formatDistanceToNowStrict(s.clockInAt, { addSuffix: false })
+                              : `${hours}h ${minutes}m`}
+                          </span>
+                          <time
+                            dateTime={s.clockInAt.toISOString()}
+                            className="text-[10px] text-muted-foreground/70"
+                          >
+                            in {format(s.clockInAt, 'HH:mm')}
+                          </time>
                         </span>
                       </li>
                     );
