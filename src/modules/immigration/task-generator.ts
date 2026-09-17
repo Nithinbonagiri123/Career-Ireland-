@@ -88,6 +88,15 @@ const EXPIRY_REMINDER: TaskTemplate = {
   priority: 'HIGH',
 };
 
+/** User-picked follow-up on the case. Fires on the reminder_on date itself. */
+const CUSTOM_REMINDER: TaskTemplate = {
+  title: 'Reminder: follow up on immigration case',
+  description:
+    'Reminder date reached on this case. Check in with beneficiary / sponsor / authority as needed.',
+  dueInDays: 0, // due date computed from reminderOn
+  priority: 'NORMAL',
+};
+
 /**
  * Idempotent insert. Two guards protect against the check-then-insert race
  * two concurrent status transitions on the same case can trigger:
@@ -231,4 +240,67 @@ export async function ensureExpiryReminder(
     auditContext: { trigger: 'expiry_reminder', expiresOn: args.expiresOn },
   });
   return { created: inserted };
+}
+
+/**
+ * Fire the user-picked reminder task on `reminderOn`. Idempotent — the partial unique
+ * index on (immigration_case_id, title) prevents duplicates. If the reminder date is
+ * moved forward on an existing open task, cancel it here first with {@link cancelReminderTask}
+ * so a fresh task with the new due date can be created.
+ */
+export async function ensureReminderTask(
+  tx: DbExecutor,
+  args: {
+    caseId: string;
+    reminderOn: string; // date string YYYY-MM-DD
+    actorUserId: string;
+    caseAssignedUserId: string | null;
+  },
+): Promise<{ created: boolean }> {
+  const dueAt = new Date(args.reminderOn);
+  if (Number.isNaN(dueAt.getTime())) return { created: false };
+  // Never schedule in the past — bump to now so the follow-up surfaces immediately.
+  const now = new Date();
+  if (dueAt < now) dueAt.setTime(now.getTime());
+
+  const inserted = await insertIfMissing(tx, args.caseId, CUSTOM_REMINDER, {
+    actorUserId: args.actorUserId,
+    assignedUserId: args.caseAssignedUserId ?? args.actorUserId,
+    dueAt,
+    auditContext: { trigger: 'custom_reminder', reminderOn: args.reminderOn },
+  });
+  return { created: inserted };
+}
+
+/**
+ * Cancel any open custom-reminder task on this case. Called when the reminder date is
+ * cleared or moved — the partial unique index rules out having two open reminder tasks
+ * with the same title on the same case, so we cancel-then-recreate rather than update.
+ */
+export async function cancelReminderTask(
+  tx: DbExecutor,
+  args: { caseId: string; actorUserId: string },
+): Promise<{ cancelled: number }> {
+  const rows = await tx
+    .update(tasks)
+    .set({ status: 'CANCELLED', completedAt: new Date() })
+    .where(
+      and(
+        eq(tasks.immigrationCaseId, args.caseId),
+        eq(tasks.title, CUSTOM_REMINDER.title),
+        inArray(tasks.status, ['OPEN', 'IN_PROGRESS']),
+      ),
+    )
+    .returning({ id: tasks.id });
+  for (const row of rows) {
+    await recordAudit(tx, {
+      actorUserId: args.actorUserId,
+      entityType: 'task',
+      entityId: row.id,
+      action: 'STATUS_CHANGED',
+      after: { status: 'CANCELLED' },
+      context: { via: 'auto:immigration', trigger: 'reminder_cleared' },
+    });
+  }
+  return { cancelled: rows.length };
 }

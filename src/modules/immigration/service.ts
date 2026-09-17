@@ -38,7 +38,12 @@ import {
   type UpsertCaseInput,
   UpsertCaseSchema,
 } from './schemas';
-import { ensureExpiryReminder, generateCaseTasks } from './task-generator';
+import {
+  cancelReminderTask,
+  ensureExpiryReminder,
+  ensureReminderTask,
+  generateCaseTasks,
+} from './task-generator';
 
 function blankToNull(v: string | undefined | null): string | null {
   return v && v.trim().length > 0 ? v : null;
@@ -126,6 +131,7 @@ export async function upsertCase(input: UpsertCaseInput): Promise<ImmigrationCas
     submittedAt: blankToNull(d.submittedAt),
     decisionAt: blankToNull(d.decisionAt),
     expiresOn: blankToNull(d.expiresOn),
+    reminderOn: blankToNull(d.reminderOn),
     notes: blankToNull(d.notes),
   };
 
@@ -160,6 +166,23 @@ export async function upsertCase(input: UpsertCaseInput): Promise<ImmigrationCas
           caseAssignedUserId: after.assignedUserId,
         });
       }
+      // Refresh the user-picked reminder task. If the reminder date moved or was
+      // cleared, cancel the open reminder first so the partial unique index lets
+      // us re-create one for the new date.
+      if (after.reminderOn !== before.reminderOn) {
+        await cancelReminderTask(tx, {
+          caseId: after.id,
+          actorUserId: session.user.id,
+        });
+        if (after.reminderOn) {
+          await ensureReminderTask(tx, {
+            caseId: after.id,
+            reminderOn: after.reminderOn,
+            actorUserId: session.user.id,
+            caseAssignedUserId: after.assignedUserId,
+          });
+        }
+      }
       return after;
     }
     const [created] = await tx.insert(immigrationCases).values(values).returning();
@@ -187,6 +210,15 @@ export async function upsertCase(input: UpsertCaseInput): Promise<ImmigrationCas
       await ensureExpiryReminder(tx, {
         caseId: created.id,
         expiresOn: created.expiresOn,
+        actorUserId: session.user.id,
+        caseAssignedUserId: created.assignedUserId,
+      });
+    }
+    // Seed the user-picked reminder task if one was set at creation.
+    if (created.reminderOn) {
+      await ensureReminderTask(tx, {
+        caseId: created.id,
+        reminderOn: created.reminderOn,
         actorUserId: session.user.id,
         caseAssignedUserId: created.assignedUserId,
       });

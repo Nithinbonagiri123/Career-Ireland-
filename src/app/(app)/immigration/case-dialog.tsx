@@ -57,6 +57,7 @@ export function CaseDialog({ trigger, persons, employers, initial }: Props) {
       submittedAt: initial?.submittedAt ?? '',
       decisionAt: initial?.decisionAt ?? '',
       expiresOn: initial?.expiresOn ?? '',
+      reminderOn: initial?.reminderOn ?? '',
       notes: initial?.notes ?? '',
     },
   });
@@ -174,6 +175,14 @@ export function CaseDialog({ trigger, persons, employers, initial }: Props) {
               <Label htmlFor="ic-expires">Expires</Label>
               <Input id="ic-expires" type="date" {...register('expiresOn')} />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ic-reminder">Reminder date</Label>
+            <Input id="ic-reminder" type="date" {...register('reminderOn')} />
+            <p className="text-xs text-muted-foreground">
+              A follow-up task fires on this date. Clear the field to remove the reminder.
+            </p>
           </div>
 
           <div className="space-y-1.5">

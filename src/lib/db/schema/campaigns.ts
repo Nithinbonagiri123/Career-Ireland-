@@ -46,6 +46,8 @@ export const advertisements = pgTable(
     targetApplicants: integer('target_applicants').notNull().default(0),
     startDate: date('start_date').notNull(),
     expiryDate: date('expiry_date').notNull(),
+    /** User-picked follow-up date. Fires a "Reminder: follow up on advert" task on that day. */
+    reminderOn: date('reminder_on'),
     status: text('status', {
       enum: ['DRAFT', 'ACTIVE', 'EXPIRED', 'CLOSED'],
     })
@@ -58,6 +60,7 @@ export const advertisements = pgTable(
   (t) => [
     index('advertisements_campaign_idx').on(t.campaignId),
     index('advertisements_expiry_idx').on(t.expiryDate),
+    index('advertisements_reminder_idx').on(t.reminderOn),
   ],
 );
 

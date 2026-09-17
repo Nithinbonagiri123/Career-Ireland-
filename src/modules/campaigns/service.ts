@@ -32,6 +32,7 @@ import {
   type UpsertCampaignInput,
   UpsertCampaignSchema,
 } from './schemas';
+import { cancelAdReminderTask, ensureAdReminderTask } from './task-generator';
 
 function blankToNull(v: string | undefined | null): string | null {
   return v && v.trim().length > 0 ? v : null;
@@ -167,6 +168,7 @@ export async function upsertAdvertisement(input: UpsertAdInput): Promise<Adverti
     targetApplicants: d.targetApplicants,
     startDate: d.startDate,
     expiryDate: d.expiryDate,
+    reminderOn: blankToNull(d.reminderOn),
     status: d.status,
     notes: blankToNull(d.notes),
   };
@@ -200,6 +202,19 @@ export async function upsertAdvertisement(input: UpsertAdInput): Promise<Adverti
           status: after.status,
         },
       });
+      if (after.reminderOn !== before.reminderOn) {
+        await cancelAdReminderTask(tx, {
+          advertisementId: after.id,
+          actorUserId: session.user.id,
+        });
+        if (after.reminderOn) {
+          await ensureAdReminderTask(tx, {
+            advertisementId: after.id,
+            reminderOn: after.reminderOn,
+            actorUserId: session.user.id,
+          });
+        }
+      }
       return after;
     }
     const [created] = await tx.insert(advertisements).values(values).returning();
@@ -215,6 +230,13 @@ export async function upsertAdvertisement(input: UpsertAdInput): Promise<Adverti
         status: created.status,
       },
     });
+    if (created.reminderOn) {
+      await ensureAdReminderTask(tx, {
+        advertisementId: created.id,
+        reminderOn: created.reminderOn,
+        actorUserId: session.user.id,
+      });
+    }
     return created;
   });
 }

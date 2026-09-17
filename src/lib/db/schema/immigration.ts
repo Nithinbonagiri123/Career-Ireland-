@@ -54,6 +54,8 @@ export const immigrationCases = pgTable(
     submittedAt: date('submitted_at'),
     decisionAt: date('decision_at'),
     expiresOn: date('expires_on'),
+    /** User-picked follow-up date. Fires a "Reminder: follow up on immigration case" task on that day. */
+    reminderOn: date('reminder_on'),
     /** Staff member responsible for driving this case. NULL = unassigned. */
     assignedUserId: uuid('assigned_user_id').references(() => users.id),
     notes: text('notes'),
@@ -66,6 +68,7 @@ export const immigrationCases = pgTable(
     index('immigration_cases_sponsor_idx').on(t.sponsorEmployerId),
     index('immigration_cases_status_idx').on(t.status),
     index('immigration_cases_expires_idx').on(t.expiresOn),
+    index('immigration_cases_reminder_idx').on(t.reminderOn),
     index('immigration_cases_assigned_idx').on(t.assignedUserId),
   ],
 );

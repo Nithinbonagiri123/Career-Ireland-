@@ -24,6 +24,7 @@ export const UpsertCaseSchema = z.object({
   submittedAt: z.string().date().optional().or(z.literal('')),
   decisionAt: z.string().date().optional().or(z.literal('')),
   expiresOn: z.string().date().optional().or(z.literal('')),
+  reminderOn: z.string().date().optional().or(z.literal('')),
   notes: z.string().max(4000).optional().or(z.literal('')),
 });
 

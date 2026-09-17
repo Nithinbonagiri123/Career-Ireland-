@@ -105,6 +105,7 @@ export default async function CampaignDetail({ params }: { params: Promise<{ id:
                     </CardTitle>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Target {ad.targetApplicants} · {ad.startDate} → {ad.expiryDate}
+                      {ad.reminderOn ? ` · reminder ${ad.reminderOn}` : ''}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

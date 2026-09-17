@@ -46,6 +46,7 @@ export function AdDialog({ trigger, campaignId, initial }: Props) {
       expiryDate:
         initial?.expiryDate ??
         new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      reminderOn: initial?.reminderOn ?? '',
       status: initial?.status ?? 'DRAFT',
       notes: initial?.notes ?? '',
     },
@@ -147,6 +148,13 @@ export function AdDialog({ trigger, campaignId, initial }: Props) {
                 <option value="CLOSED">Closed</option>
               </select>
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ad-reminder">Reminder date</Label>
+            <Input id="ad-reminder" type="date" {...register('reminderOn')} />
+            <p className="text-xs text-muted-foreground">
+              A follow-up task fires on this date. Clear the field to remove the reminder.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ad-notes">Notes</Label>

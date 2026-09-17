@@ -73,6 +73,14 @@ const columns: ColumnDef<CaseListRow>[] = [
       <span className="text-xs text-muted-foreground">{row.original.expiresOn ?? '—'}</span>
     ),
   },
+  {
+    header: 'Reminder',
+    accessorKey: 'reminderOn',
+    size: 130,
+    cell: ({ row }) => (
+      <span className="text-xs text-muted-foreground">{row.original.reminderOn ?? '—'}</span>
+    ),
+  },
 ];
 
 export function CasesTable({ cases }: { cases: CaseListRow[] }) {

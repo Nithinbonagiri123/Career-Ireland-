@@ -26,6 +26,7 @@ export const UpsertAdSchema = z.object({
   targetApplicants: z.number().int().min(1).max(9999),
   startDate: z.string().date(),
   expiryDate: z.string().date(),
+  reminderOn: z.string().date().optional().or(z.literal('')),
   status: AdStatusSchema,
   notes: z.string().max(2000).optional().or(z.literal('')),
 });

@@ -11,6 +11,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { createdAt, updatedAt } from './_shared';
+import { advertisements } from './campaigns';
 import { serviceEngagements } from './commerce';
 import { immigrationCases } from './immigration';
 import { persons } from './persons';
@@ -82,6 +83,7 @@ export const tasks = pgTable(
     jobRequisitionId: uuid('job_requisition_id').references(() => jobRequisitions.id),
     serviceEngagementId: uuid('service_engagement_id').references(() => serviceEngagements.id),
     immigrationCaseId: uuid('immigration_case_id').references(() => immigrationCases.id),
+    advertisementId: uuid('advertisement_id').references(() => advertisements.id),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     archivedByUserId: uuid('archived_by_user_id').references(() => users.id),
     createdAt,
@@ -93,6 +95,7 @@ export const tasks = pgTable(
     index('tasks_employer_idx').on(t.employerId),
     index('tasks_requisition_idx').on(t.jobRequisitionId),
     index('tasks_immigration_case_idx').on(t.immigrationCaseId),
+    index('tasks_advertisement_idx').on(t.advertisementId),
     // Partial unique indexes — close the auto-task-generator race pattern for
     // every task-parent entity. Two concurrent triggers on the same parent can
     // no longer both insert the same (parent, title) with an active status.
@@ -113,6 +116,11 @@ export const tasks = pgTable(
       .on(t.serviceEngagementId, t.title)
       .where(
         sql`${t.serviceEngagementId} IS NOT NULL AND ${t.status} IN ('OPEN', 'IN_PROGRESS') AND ${t.archivedAt} IS NULL`,
+      ),
+    uniqueIndex('tasks_advertisement_title_active_uidx')
+      .on(t.advertisementId, t.title)
+      .where(
+        sql`${t.advertisementId} IS NOT NULL AND ${t.status} IN ('OPEN', 'IN_PROGRESS') AND ${t.archivedAt} IS NULL`,
       ),
   ],
 );

@@ -1,4 +1,4 @@
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { Building2, CalendarClock, Fingerprint, PlaneTakeoff, User } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -111,11 +111,16 @@ export default async function ImmigrationCaseDetail({
               <span className="text-muted-foreground">Expires</span>
               <span>{c.expiresOn ?? '—'}</span>
             </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Reminder</span>
+              <span>{c.reminderOn ?? '—'}</span>
+            </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">Opened</span>
-              <span title={c.createdAt.toLocaleString()}>
-                {formatDistanceToNow(c.createdAt, { addSuffix: true })}
-              </span>
+              <time dateTime={c.createdAt.toISOString()} className="tabular-nums">
+                {formatDistanceToNow(c.createdAt, { addSuffix: true })} ·{' '}
+                {format(c.createdAt, "dd MMM yyyy · HH:mm")}
+              </time>
             </div>
             {c.notes && (
               <div className="border-t pt-3">
