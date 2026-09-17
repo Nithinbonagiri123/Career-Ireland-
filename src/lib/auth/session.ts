@@ -81,8 +81,11 @@ export async function requireSession(): Promise<Session> {
  * Every internal-user role. Any of these can read the CRM chrome;
  * finer-grained gating (e.g. FINANCE-only payment mutations, ADMIN-only
  * user management) happens at the service/action layer with a specific
- * `requireRole([...])` call. Portal roles (CANDIDATE/EMPLOYER) are
- * intentionally excluded.
+ * `requireRole([...])` call.
+ *
+ * Legacy CANDIDATE/EMPLOYER portal roles are still in the DB enum for
+ * back-compat (no rows in prod), but are unreachable in the app — the
+ * portal was removed.
  */
 export const INTERNAL_STAFF_ROLES = [
   'ADMIN',
@@ -95,7 +98,7 @@ export const INTERNAL_STAFF_ROLES = [
 
 export type InternalStaffRole = (typeof INTERNAL_STAFF_ROLES)[number];
 
-/** Internal staff role check. Portal users (CANDIDATE/EMPLOYER) get AuthorizationError. */
+/** Internal staff role check — throws AuthorizationError for any other role. */
 export async function requireRole(roles: UserRole[]): Promise<Session> {
   const s = await requireSession();
   if (!roles.includes(s.user.role)) {
@@ -114,24 +117,6 @@ export async function requireRole(roles: UserRole[]): Promise<Session> {
  */
 export async function requireInternalStaff(): Promise<Session> {
   return requireRole([...INTERNAL_STAFF_ROLES]);
-}
-
-/** Portal candidate. Returns the scoped Person ID so downstream queries filter correctly. */
-export async function requirePortalCandidate(): Promise<Session & { user: { personId: string } }> {
-  const s = await requireSession();
-  if (s.user.role !== 'CANDIDATE' || !s.user.personId) {
-    throw new AuthorizationError();
-  }
-  return s as Session & { user: { personId: string } };
-}
-
-/** Portal employer. Returns the scoped Employer ID so downstream queries filter correctly. */
-export async function requirePortalEmployer(): Promise<Session & { user: { employerId: string } }> {
-  const s = await requireSession();
-  if (s.user.role !== 'EMPLOYER' || !s.user.employerId) {
-    throw new AuthorizationError();
-  }
-  return s as Session & { user: { employerId: string } };
 }
 
 // ─── Fine-grained permission checks ───────────────────────────────────────
@@ -191,11 +176,8 @@ const loadPermissions = cache(async (userId: string): Promise<PermissionSnapshot
 
 /**
  * Assert the current user has `verb` on `(business, module)`. Owner
- * bypasses. Portal users always fail (they don't have granted
- * permissions in this table and are not the owner).
- *
- * Throws `AuthorizationError` on failure; the calling page/action
- * bubbles that up as a 403.
+ * bypasses. Throws `AuthorizationError` on failure; the calling
+ * page/action bubbles that up as a 403.
  */
 export async function requirePermission(
   business: Business,

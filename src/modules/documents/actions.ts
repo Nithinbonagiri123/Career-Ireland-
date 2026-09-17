@@ -27,7 +27,6 @@ export async function registerUploadAction(input: RegisterUploadInput) {
     revalidatePath('/documents');
     if (input.ownerType === 'PERSON') {
       revalidatePath(`/candidates/${input.ownerId}`);
-      revalidatePath('/portal/candidate/documents');
     }
   }
   return r;
@@ -77,7 +76,6 @@ export async function voidDocumentAction(input: VoidDocumentInput) {
     revalidatePath('/documents');
     // Fan-out revalidation isn't cheap but there are many places docs surface.
     revalidatePath('/candidates');
-    revalidatePath('/portal/candidate/documents');
   }
   return r;
 }

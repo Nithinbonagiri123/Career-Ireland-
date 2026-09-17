@@ -7,7 +7,6 @@ describe('safeCallbackUrl', () => {
       ['/dashboard'],
       ['/admin/users'],
       ['/candidates/abc-123'],
-      ['/portal/candidate/documents'],
       ['/dashboard?filter=open'],
       ['/dashboard#section'],
     ])('%s', (input) => {
@@ -20,7 +19,7 @@ describe('safeCallbackUrl', () => {
     it('undefined', () => expect(safeCallbackUrl(undefined)).toBe('/dashboard'));
     it('empty string', () => expect(safeCallbackUrl('')).toBe('/dashboard'));
     it('custom fallback', () =>
-      expect(safeCallbackUrl(null, '/portal/candidate')).toBe('/portal/candidate'));
+      expect(safeCallbackUrl(null, '/candidates')).toBe('/candidates'));
   });
 
   describe('rejects open-redirect attempts', () => {

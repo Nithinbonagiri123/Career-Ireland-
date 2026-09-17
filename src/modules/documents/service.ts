@@ -1,11 +1,6 @@
 import { and, desc, eq, inArray, isNull, or, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import {
-  requireInternalStaff,
-  requirePortalCandidate,
-  requireRole,
-  requireSession,
-} from '@/lib/auth/session';
+import { requireInternalStaff, requireRole, requireSession } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import {
@@ -630,17 +625,6 @@ export async function fetchAllDocumentsForStaff(
         ? `${r.personFirst} ${r.personLast}`
         : (r.instance.ownerEmployerId ?? '(unknown)'),
   }));
-}
-
-// --------- Portal candidate helpers ---------
-
-export async function fetchMyRequirementsAndDocuments() {
-  const session = await requirePortalCandidate();
-  const [reqs, docs] = await Promise.all([
-    fetchPersonRequirements(session.user.personId),
-    fetchPersonDocuments(session.user.personId),
-  ]);
-  return { requirements: reqs, documents: docs };
 }
 
 // --------- Void (soft-delete) ---------
