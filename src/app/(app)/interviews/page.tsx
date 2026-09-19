@@ -10,7 +10,7 @@ import { listUpcomingInterviews } from '@/modules/interviews/service';
 import { InterviewsCalendar } from './calendar';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Interviews · Ireland Career Gateway' };
+export const metadata = { title: 'Interviews' };
 
 export default async function InterviewsPage({
   searchParams,

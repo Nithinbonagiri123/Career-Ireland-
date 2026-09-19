@@ -181,7 +181,7 @@ async function fetchUploaded(
         ownerKind: r.instance.ownerPersonId ? 'PERSON' : 'EMPLOYER',
         ownerName,
         typeLabel: r.typeName,
-        reference: r.instance.originalFilename,
+        reference: r.instance.displayName ?? r.instance.originalFilename,
         createdAt: r.instance.createdAt,
         fileSizeBytes: r.instance.fileSizeBytes,
         status: r.instance.status,

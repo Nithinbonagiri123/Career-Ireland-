@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import {
   bulkAssignCandidatesAction,
   bulkUpdateCandidateLifecycleAction,
@@ -123,11 +124,10 @@ function AssignDialog({
         <div className="space-y-3">
           <div className="space-y-1">
             <Label htmlFor="bulk-assign-user">Assign to</Label>
-            <select
+            <Select
               id="bulk-assign-user"
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
-              className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
             >
               <option value="">Select a staff member…</option>
               {staffUsers.map((u) => (
@@ -135,7 +135,7 @@ function AssignDialog({
                   {u.fullName} · {u.email}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <p className="text-[11px] text-muted-foreground">
             Each candidate profile is updated in a single transaction. Audit history is preserved
@@ -212,16 +212,15 @@ function LifecycleDialog({ selectedIds, onDone }: { selectedIds: string[]; onDon
         <div className="space-y-3">
           <div className="space-y-1">
             <Label htmlFor="bulk-lifecycle">Set to</Label>
-            <select
+            <Select
               id="bulk-lifecycle"
               value={status}
               onChange={(e) => setStatus(e.target.value as LifecycleStatus)}
-              className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
             >
               <option value="ACTIVE">Active</option>
               <option value="INACTIVE">Inactive</option>
               <option value="ARCHIVED">Archived</option>
-            </select>
+            </Select>
           </div>
           <p className="text-[11px] text-muted-foreground">
             Does not touch availability. Archived candidates stay searchable but won't be scored by

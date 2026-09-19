@@ -33,6 +33,7 @@ import {
   listEmploymentHistory,
 } from '@/modules/candidate-details/service';
 import { fetchPersonDocuments, fetchPersonRequirements } from '@/modules/documents/service';
+import { fetchDocumentTypes } from '@/modules/document-types/service';
 import { getEmailAccountForCandidate } from '@/modules/email-accounts/service';
 import { fetchPersonDetail, type PersonTimelineItem } from '@/modules/persons/detail';
 import { fetchQualifications } from '@/modules/qualifications/service';
@@ -45,6 +46,7 @@ import {
 } from './candidate-details-panel';
 import { CandidateTabs } from './candidate-tabs';
 import { BillingSection } from '@/components/billing/billing-section';
+import { CvSuggestionsPanel } from './cv-suggestions-panel';
 import { DocumentsSection } from './documents-section';
 import { EmailAccountPanel } from './email-account-panel';
 import { JustCreatedCard } from './just-created-card';
@@ -101,6 +103,7 @@ export default async function CandidateDetail({
     candidateApplications,
     billingHistory,
     uploadRequests,
+    allDocumentTypes,
   ] = await Promise.all([
     fetchPersonRequirements(id),
     fetchPersonDocuments(id),
@@ -113,6 +116,7 @@ export default async function CandidateDetail({
     listApplicationsForPerson(id),
     fetchPersonBillingHistory(id),
     listUploadRequestsForPerson(id),
+    fetchDocumentTypes(),
   ]);
 
   const fullName = `${person.firstName} ${person.lastName}`;
@@ -232,6 +236,9 @@ export default async function CandidateDetail({
       </FadeUp>
 
       <div className="space-y-6 lg:col-span-2">
+        <FadeUp delay={0.08}>
+          <CvSuggestionsPanel personId={id} />
+        </FadeUp>
         <FadeUp delay={0.1}>
           <SkillsSection personId={id} rows={candidateSkillRows} allSkills={allSkills} />
         </FadeUp>
@@ -279,7 +286,19 @@ export default async function CandidateDetail({
             <CardTitle className="text-base">Documents</CardTitle>
           </CardHeader>
           <CardContent>
-            <DocumentsSection personId={id} requirements={requirements} documents={documents} />
+            <DocumentsSection
+              personId={id}
+              requirements={requirements}
+              documents={documents}
+              documentTypes={allDocumentTypes
+                .filter((t) => t.isActive && (t.appliesTo === 'PERSON' || t.appliesTo === 'BOTH'))
+                .map((t) => ({
+                  id: t.id,
+                  code: t.code,
+                  name: t.name,
+                  hasExpiry: t.hasExpiry,
+                }))}
+            />
           </CardContent>
         </Card>
       </FadeUp>

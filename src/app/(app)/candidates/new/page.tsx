@@ -12,7 +12,7 @@ import { fetchPersonDocuments } from '@/modules/documents/service';
 import { fetchOccupations } from '@/modules/occupations/service';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Add candidate · Ireland Career Gateway' };
+export const metadata = { title: 'Add candidate' };
 
 /**
  * Landing screen for the "Add candidate" workflow.
@@ -88,7 +88,12 @@ export default async function NewCandidatePage({
           notes: draft.notes ?? '',
         }}
         currencies={currencies.map((c) => ({ code: c.code, symbol: c.symbol }))}
-        docTypes={personDocTypes.map((t) => ({ id: t.id, name: t.name, code: t.code }))}
+        docTypes={personDocTypes.map((t) => ({
+          id: t.id,
+          name: t.name,
+          code: t.code,
+          hasExpiry: t.hasExpiry,
+        }))}
         occupations={occupations.filter((o) => o.isActive).map((o) => ({ id: o.id, name: o.name }))}
         existingDocuments={existingDocuments.map((d) => ({
           id: d.id,

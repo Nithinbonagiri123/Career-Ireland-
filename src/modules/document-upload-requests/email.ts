@@ -7,8 +7,12 @@ import { format } from 'date-fns';
  *
  * The URL is included as raw text — many mail clients auto-link URLs,
  * and staff pasting it into WhatsApp still works.
+ *
+ * The `brand` string comes from `app_settings.legalName` — never hardcode
+ * a product name here. See memory `no-hardcoded-document-content`.
  */
 export function renderDocumentRequestEmail(input: {
+  brand: string;
   candidateName: string;
   uploadUrl: string;
   requestedItems: string[];
@@ -20,11 +24,13 @@ export function renderDocumentRequestEmail(input: {
     : 'Hello,';
   const itemBullets = input.requestedItems.map((it) => `  •  ${it}`).join('\n');
   const htmlItems = input.requestedItems.map((it) => `<li>${escapeHtml(it)}</li>`).join('');
+  const brand = input.brand;
+  const escapedBrand = escapeHtml(brand);
 
   const text = [
     greeting,
     '',
-    'Ireland Career Gateway needs a few documents from you before we can start your service.',
+    `${brand} needs a few documents from you before we can start your service.`,
     '',
     'Please upload the following:',
     itemBullets,
@@ -34,14 +40,14 @@ export function renderDocumentRequestEmail(input: {
     'The link is private and one-time — no account or password needed.',
     expiryLine,
     '',
-    '— Ireland Career Gateway',
+    `— ${brand}`,
   ].join('\n');
 
   const html = `<!doctype html>
 <html>
   <body style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #111827; line-height: 1.55; max-width: 560px; margin: 24px auto; padding: 0 16px;">
     <p>${escapeHtml(greeting)}</p>
-    <p>Ireland Career Gateway needs a few documents from you before we can start your service.</p>
+    <p>${escapedBrand} needs a few documents from you before we can start your service.</p>
     <p><strong>Please upload the following:</strong></p>
     <ul>${htmlItems}</ul>
     <p style="margin: 24px 0;">
@@ -56,12 +62,12 @@ export function renderDocumentRequestEmail(input: {
     <p style="font-size:13px;color:#6b7280;">
       The link is private and one-time — no account or password needed. ${escapeHtml(expiryLine)}
     </p>
-    <p style="font-size:13px;color:#6b7280;">— Ireland Career Gateway</p>
+    <p style="font-size:13px;color:#6b7280;">— ${escapedBrand}</p>
   </body>
 </html>`;
 
   return {
-    subject: 'Please upload your documents — Ireland Career Gateway',
+    subject: `Please upload your documents — ${brand}`,
     text,
     html,
   };

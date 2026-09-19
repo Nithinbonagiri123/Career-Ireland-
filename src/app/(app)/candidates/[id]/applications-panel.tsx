@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
 import { createExternalApplicationAction } from '@/modules/applications/actions';
 import type { CandidateApplicationRow } from '@/modules/applications/service';
@@ -121,18 +122,17 @@ function AddExternalDialog({ personId }: { personId: string }) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label htmlFor="src">Source *</Label>
-              <select
+              <Select
                 id="src"
                 value={source}
                 onChange={(e) => setSource(e.target.value as typeof source)}
-                className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
               >
                 {EXTERNAL_SOURCES.map((s) => (
                   <option key={s} value={s}>
                     {SOURCE_LABEL[s]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label htmlFor="appliedAt">Applied on</Label>
@@ -222,8 +222,7 @@ export function ApplicationsPanel({
             </Badge>
           </CardTitle>
           <p className="mt-1 text-xs text-muted-foreground">
-            Both internal (Ireland Career Gateway requisitions) and external (IrishJobs, Indeed,
-            JobsIreland).
+            Both internal (in-house requisitions) and external (IrishJobs, Indeed, JobsIreland).
           </p>
         </div>
         <AddExternalDialog personId={personId} />

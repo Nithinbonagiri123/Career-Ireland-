@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
+import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -20,12 +21,16 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
+import { formatCurrency } from '@/lib/currency';
+import type { Currency } from '@/lib/db/schema/currencies';
 import { generateInvoiceAction } from '@/modules/billing/generate-actions';
 import type { InvoiceableService } from '@/modules/billing/read';
 import { createLeadAction } from '@/modules/leads/actions';
 import { findSimilarPersonsAction } from '@/modules/persons/actions';
 import type { SimilarMatch } from '@/modules/persons/repository';
 import { type CreatePersonInput, CreatePersonSchema } from '@/modules/persons/schemas';
+import { createServiceItemFromNameAction } from '@/modules/services-catalog/actions';
 
 /**
  * "New lead" dialog. Atomic flow: person details (top) + optional
@@ -46,8 +51,10 @@ import { type CreatePersonInput, CreatePersonSchema } from '@/modules/persons/sc
  */
 export function CreateLeadDialog({
   invoiceableServices,
+  currencies,
 }: {
   invoiceableServices: InvoiceableService[];
+  currencies: Currency[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -80,22 +87,32 @@ export function CreateLeadDialog({
 
   // ── Optional first-invoice state ──────────────────────────────
   const [serviceId, setServiceId] = useState<string>('');
+  const [serviceSelection, setServiceSelection] = useState<Selection>(null);
+  const [localServices, setLocalServices] = useState<InvoiceableService[]>(invoiceableServices);
   const [packageId, setPackageId] = useState<string>('');
   const [qty, setQty] = useState<string>('1');
   const [unitPrice, setUnitPrice] = useState<string>('');
-  const [currency, setCurrency] = useState<string>('EUR');
+  const activeCurrencies = useMemo(
+    () => currencies.filter((c) => c.isActive),
+    [currencies],
+  );
+  const [currency, setCurrency] = useState<string>(
+    activeCurrencies.find((c) => c.code === 'EUR')?.code ?? activeCurrencies[0]?.code ?? 'EUR',
+  );
   const [lineDescription, setLineDescription] = useState<string>('');
 
   const service = useMemo(
-    () => invoiceableServices.find((s) => s.id === serviceId),
-    [invoiceableServices, serviceId],
+    () => localServices.find((s) => s.id === serviceId),
+    [localServices, serviceId],
   );
 
   const onServiceChange = (nextId: string) => {
     setServiceId(nextId);
     setPackageId('');
     setUnitPrice('');
-    setCurrency('EUR');
+    setCurrency(
+      activeCurrencies.find((c) => c.code === 'EUR')?.code ?? activeCurrencies[0]?.code ?? 'EUR',
+    );
     setLineDescription('');
   };
 
@@ -122,10 +139,13 @@ export function CreateLeadDialog({
     setMatches(null);
     setFormError(null);
     setServiceId('');
+    setServiceSelection(null);
     setPackageId('');
     setQty('1');
     setUnitPrice('');
-    setCurrency('EUR');
+    setCurrency(
+      activeCurrencies.find((c) => c.code === 'EUR')?.code ?? activeCurrencies[0]?.code ?? 'EUR',
+    );
     setLineDescription('');
   };
 
@@ -282,17 +302,13 @@ export function CreateLeadDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cl-source">Source</Label>
-              <select
-                id="cl-source"
-                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                {...register('source')}
-              >
+              <Select id="cl-source" {...register('source')}>
                 <option value="DIRECT">Direct inquiry</option>
                 <option value="REFERRAL">Referral</option>
                 <option value="ADVERTISEMENT">Advertisement</option>
                 <option value="EMPLOYER_REFERRAL">Employer referral</option>
                 <option value="OTHER">Other</option>
-              </select>
+              </Select>
             </div>
 
             <div className="flex items-center justify-between rounded-md border border-dashed p-3">
@@ -379,19 +395,30 @@ export function CreateLeadDialog({
                   <Label htmlFor="cl-svc" className="text-xs">
                     Service
                   </Label>
-                  <select
-                    id="cl-svc"
-                    value={serviceId}
-                    onChange={(e) => onServiceChange(e.target.value)}
-                    className="h-9 w-full rounded-md border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                  >
-                    <option value="">— skip, no invoice —</option>
-                    {invoiceableServices.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
+                  <CatalogAutosuggest
+                    inputId="cl-svc"
+                    options={localServices.map((s) => ({ id: s.id, name: s.name, isActive: true }))}
+                    value={serviceSelection}
+                    onChange={(v) => {
+                      setServiceSelection(v);
+                      onServiceChange(v?.kind === 'catalog' ? v.id : '');
+                    }}
+                    placeholder="Type to search — or add a new service (leave blank to skip)"
+                    createLabel="Add service"
+                    onCreateNew={async (name) => {
+                      const r = await createServiceItemFromNameAction({ name });
+                      if (!r.ok) throw new Error(r.error.message);
+                      const newService: InvoiceableService = {
+                        id: r.data.id,
+                        code: r.data.code,
+                        name: r.data.name,
+                        payerType: r.data.payerType,
+                        packages: [],
+                      };
+                      setLocalServices((prev) => [...prev, newService]);
+                      return { id: r.data.id, label: r.data.name };
+                    }}
+                  />
                 </div>
 
                 {serviceId && (
@@ -401,19 +428,18 @@ export function CreateLeadDialog({
                         <Label htmlFor="cl-pkg" className="text-xs">
                           Prefill from package (optional)
                         </Label>
-                        <select
+                        <Select
                           id="cl-pkg"
                           value={packageId}
                           onChange={(e) => onPackageChange(e.target.value)}
-                          className="h-9 w-full rounded-md border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                         >
                           <option value="">— none, enter unit price manually —</option>
                           {service?.packages.map((p) => (
                             <option key={p.id} value={p.id}>
-                              {p.currencyCode} · {formatMoney(p.price, p.currencyCode)} · {p.name}
+                              {p.currencyCode} · {formatCurrency(p.price, p.currencyCode)} · {p.name}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                       </div>
                     )}
 
@@ -446,15 +472,17 @@ export function CreateLeadDialog({
                         <Label htmlFor="cl-cur" className="text-xs">
                           Currency
                         </Label>
-                        <select
+                        <Select
                           id="cl-cur"
                           value={currency}
                           onChange={(e) => setCurrency(e.target.value)}
-                          className="h-8 w-full rounded-md border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                         >
-                          <option value="EUR">EUR</option>
-                          <option value="ZAR">ZAR</option>
-                        </select>
+                          {activeCurrencies.map((c) => (
+                            <option key={c.code} value={c.code}>
+                              {c.code}
+                            </option>
+                          ))}
+                        </Select>
                       </div>
                     </div>
 
@@ -500,14 +528,3 @@ export function CreateLeadDialog({
   );
 }
 
-function formatMoney(amount: string, currency: string): string {
-  try {
-    return new Intl.NumberFormat('en-IE', {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 2,
-    }).format(Number.parseFloat(amount));
-  } catch {
-    return `${amount} ${currency}`;
-  }
-}

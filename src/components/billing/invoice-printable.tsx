@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import Image from 'next/image';
+import { formatCurrency } from '@/lib/currency';
 import type { AppSettings } from '@/lib/db/schema/app_settings';
 import type { Invoice } from '@/lib/db/schema/billing';
 
@@ -77,7 +78,7 @@ export function InvoicePrintable({
   const isVoided = invoice.status === 'VOIDED';
   const desc = lineDescription ?? invoice.lineDescription;
   const currency = invoice.currencyCode;
-  const money = (v: string) => formatMoney(v, currency);
+  const money = (v: string) => formatCurrency(v, currency);
   const vatRate = Number.parseFloat(settings.vatRatePercent);
   const showVatLine = true; // Template always shows VAT row; €0.00 when 0%.
 
@@ -305,29 +306,6 @@ export function InvoicePrintable({
   );
 }
 
-const currencyFormatters = new Map<string, Intl.NumberFormat>();
-function formatMoney(amount: string, currency: string): string {
-  let fmt = currencyFormatters.get(currency);
-  if (!fmt) {
-    try {
-      fmt = new Intl.NumberFormat('en-IE', {
-        style: 'currency',
-        currency,
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-    } catch {
-      fmt = new Intl.NumberFormat('en-IE', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-    }
-    currencyFormatters.set(currency, fmt);
-  }
-  const n = Number.parseFloat(amount);
-  if (!Number.isFinite(n)) return `${amount} ${currency}`;
-  return fmt.format(n);
-}
 
 function formatRate(rate: number): string {
   if (!Number.isFinite(rate)) return '0';

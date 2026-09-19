@@ -6,7 +6,7 @@ import { fetchAppSettings } from '@/modules/settings/service';
 import { SettingsForm } from './settings-form';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Settings · Ireland Career Gateway' };
+export const metadata = { title: 'Settings' };
 
 /**
  * Company letterhead + printable-document configuration. Every invoice

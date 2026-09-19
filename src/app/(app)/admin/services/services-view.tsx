@@ -238,7 +238,7 @@ export function ServicesView({ services, packages, currencies }: Props) {
           columns={serviceColumns}
           data={services}
           emptyTitle="No services yet"
-          emptyDescription="Add services Ireland Career Gateway sells (Job Search, Employment Permit, Visa…)."
+          emptyDescription="Add services you sell (Job Search, Employment Permit, Visa…)."
         />
       </section>
 

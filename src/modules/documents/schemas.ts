@@ -18,6 +18,8 @@ export const RegisterUploadSchema = z.object({
   documentTypeId: z.string().uuid(),
   s3ObjectKey: z.string().min(1).max(500),
   originalFilename: z.string().min(1).max(255),
+  /** Friendly staff-provided label. Optional; blank = fall back to originalFilename. */
+  displayName: z.string().max(255).optional().or(z.literal('')),
   mimeType: z.string().min(1).max(120),
   fileSizeBytes: z.number().int().positive(),
   expiresOn: z.string().date().optional().or(z.literal('')),

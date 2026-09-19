@@ -1,11 +1,12 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { motion } from 'framer-motion';
-import { AlertCircle, Loader2 } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
+import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
+import { FormErrorAlert } from '@/components/form-error-alert';
+import { FormField } from '@/components/form-field';
+import { SubmitButton } from '@/components/submit-button';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -17,10 +18,14 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import type { Currency } from '@/lib/db/schema/currencies';
 import type { ServiceCatalogItem, ServicePackage } from '@/lib/db/schema/services';
-import { upsertServicePackageAction } from '@/modules/services-catalog/actions';
+import { useFormDialog } from '@/lib/hooks/use-form-dialog';
+import {
+  createServiceItemFromNameAction,
+  upsertServicePackageAction,
+} from '@/modules/services-catalog/actions';
 import {
   type UpsertServicePackageInput,
   UpsertServicePackageSchema,
@@ -34,16 +39,8 @@ type Props = {
 };
 
 export function ServicePackageDialog({ trigger, services, currencies, initial }: Props) {
-  const [open, setOpen] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
   const isEdit = Boolean(initial);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<UpsertServicePackageInput>({
+  const form = useForm<UpsertServicePackageInput>({
     resolver: zodResolver(UpsertServicePackageSchema),
     defaultValues: {
       id: initial?.id,
@@ -54,73 +51,79 @@ export function ServicePackageDialog({ trigger, services, currencies, initial }:
       isActive: initial?.isActive ?? true,
     },
   });
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = form;
+  const { open, onOpenChange, formError, submit } = useFormDialog(form);
 
-  const onSubmit = handleSubmit(async (data) => {
-    setFormError(null);
-    const result = await upsertServicePackageAction(data);
-    if (!result.ok) {
-      setFormError(result.error.message);
-      return;
-    }
-    toast.success(isEdit ? 'Package updated' : 'Package added');
-    reset(data);
-    setOpen(false);
-  });
+  const initialService = services.find(
+    (s) => s.id === (initial?.serviceCatalogItemId ?? services[0]?.id),
+  );
+  const [serviceSelection, setServiceSelection] = useState<Selection>(
+    initialService
+      ? { kind: 'catalog', id: initialService.id, label: initialService.name }
+      : null,
+  );
+  const [serviceOptions, setServiceOptions] = useState(() =>
+    services.map((s) => ({ id: s.id, name: s.name, isActive: s.isActive })),
+  );
+
+  const onSubmit = handleSubmit((data) =>
+    submit(data, upsertServicePackageAction, {
+      successMessage: isEdit ? 'Package updated' : 'Package added',
+    }),
+  );
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) {
-          reset();
-          setFormError(null);
-        }
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger render={trigger} />
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit package' : 'Add package'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <div className="space-y-1.5">
-            <Label htmlFor="sp-name">Name</Label>
+          <FormField id="sp-name" label="Name" error={errors.name?.message}>
             <Input id="sp-name" aria-invalid={Boolean(errors.name)} {...register('name')} />
-            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="sp-service">Service</Label>
-            <select
-              id="sp-service"
-              className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-              {...register('serviceCatalogItemId')}
-            >
-              {services.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.code})
-                </option>
-              ))}
-            </select>
-          </div>
+          </FormField>
+          <FormField id="sp-service" label="Service">
+            <input type="hidden" {...register('serviceCatalogItemId')} />
+            <CatalogAutosuggest
+              inputId="sp-service"
+              options={serviceOptions}
+              value={serviceSelection}
+              onChange={(v) => {
+                setServiceSelection(v);
+                setValue('serviceCatalogItemId', v?.kind === 'catalog' ? v.id : '', {
+                  shouldDirty: true,
+                });
+              }}
+              placeholder="Type to search — or add a new service"
+              createLabel="Add service"
+              onCreateNew={async (name) => {
+                const r = await createServiceItemFromNameAction({ name });
+                if (!r.ok) throw new Error(r.error.message);
+                setServiceOptions((prev) => [
+                  ...prev,
+                  { id: r.data.id, name: r.data.name, isActive: r.data.isActive },
+                ]);
+                return { id: r.data.id, label: r.data.name };
+              }}
+            />
+          </FormField>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="sp-price">Price</Label>
+            <FormField id="sp-price" label="Price" error={errors.price?.message}>
               <Input
                 id="sp-price"
                 inputMode="decimal"
                 aria-invalid={Boolean(errors.price)}
                 {...register('price')}
               />
-              {errors.price && <p className="text-xs text-destructive">{errors.price.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sp-currency">Currency</Label>
-              <select
-                id="sp-currency"
-                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                {...register('currencyCode')}
-              >
+            </FormField>
+            <FormField id="sp-currency" label="Currency">
+              <Select id="sp-currency" {...register('currencyCode')}>
                 {currencies
                   .filter((c) => c.isActive || c.code === initial?.currencyCode)
                   .map((c) => (
@@ -128,30 +131,19 @@ export function ServicePackageDialog({ trigger, services, currencies, initial }:
                       {c.code} — {c.symbol}
                     </option>
                   ))}
-              </select>
-            </div>
+              </Select>
+            </FormField>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...register('isActive')} className="size-4 accent-accent" />
             Active
           </label>
-          {formError && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
-              role="alert"
-            >
-              <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-              <span>{formError}</span>
-            </motion.div>
-          )}
+          <FormErrorAlert error={formError} />
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
+            <SubmitButton loading={isSubmitting}>
               {isEdit ? 'Save' : 'Add package'}
-            </Button>
+            </SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

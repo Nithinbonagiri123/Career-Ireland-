@@ -61,8 +61,10 @@ export function CvPicker({
           <Loader2 className="size-3.5 animate-spin" /> Loading CVs…
         </div>
       ) : existing.length === 0 ? (
-        <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          No CVs on file for this candidate yet. Upload one below.
+        <div className="rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium">No CV on file yet.</span> Upload one below, or skip and
+          request it from the candidate later — from the candidate profile's Documents tab, use{' '}
+          <span className="font-medium">Send upload link</span> to email them a one-time upload URL.
         </div>
       ) : (
         <ul className="divide-y rounded-md border bg-card">

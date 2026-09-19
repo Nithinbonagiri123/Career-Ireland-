@@ -8,6 +8,7 @@ import type {
   UpsertServicePackageInput,
 } from './schemas';
 import {
+  createServiceItemFromName,
   setServiceItemActive,
   setServicePackageActive,
   upsertServiceItem,
@@ -35,4 +36,8 @@ export async function setServicePackageActiveAction(input: SetActiveByIdInput) {
   const r = await toActionResult(() => setServicePackageActive(input));
   if (r.ok) rev();
   return r;
+}
+
+export async function createServiceItemFromNameAction(input: { name: string }) {
+  return toActionResult(() => createServiceItemFromName(input.name));
 }

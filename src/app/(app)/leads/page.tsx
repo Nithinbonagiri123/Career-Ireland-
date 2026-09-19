@@ -8,6 +8,7 @@ import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { parseAssignmentScope } from '@/lib/scope';
 import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
+import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchLeads } from '@/modules/leads/service';
 import { CreateLeadDialog } from './create-lead-dialog';
 import { LeadsTable } from './leads-table';
@@ -23,11 +24,12 @@ export default async function LeadsPage({
   const { assigned, created, from, to } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const createdRange = parseDateRangeParams({ created, from, to });
-  const [leads, invoiceableServices] = await Promise.all([
+  const [leads, invoiceableServices, currencies] = await Promise.all([
     fetchLeads(scope, createdRange),
     // PERSON-payable services + packages; the row-menu "Generate
     // invoice" dialog needs the full option list to render locally.
     fetchInvoiceableServicesFor('PERSON'),
+    fetchCurrencies(),
   ]);
 
   return (
@@ -42,7 +44,10 @@ export default async function LeadsPage({
               <DateRangeFilter />
               <ScopeFilter current={scope} />
               <CsvExportButton href="/api/export/leads" />
-              <CreateLeadDialog invoiceableServices={invoiceableServices} />
+              <CreateLeadDialog
+                invoiceableServices={invoiceableServices}
+                currencies={currencies}
+              />
             </div>
           }
         />

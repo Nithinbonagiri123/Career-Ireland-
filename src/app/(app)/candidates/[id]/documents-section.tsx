@@ -6,7 +6,9 @@ import Link from 'next/link';
 import { useTransition } from 'react';
 import { toast } from 'sonner';
 import { DocumentUploader } from '@/components/document-uploader';
+import type { DocumentTypeOption } from '@/components/document-type-picker';
 import { EmptyState } from '@/components/empty-state';
+import { MultiDocumentUploader } from '@/components/multi-document-uploader';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
@@ -25,10 +27,12 @@ export function DocumentsSection({
   personId,
   requirements,
   documents,
+  documentTypes,
 }: {
   personId: string;
   requirements: PersonRequirementRow[];
   documents: DocumentInstance[];
+  documentTypes: DocumentTypeOption[];
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -101,6 +105,21 @@ export function DocumentsSection({
 
       <div>
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Attach more documents
+        </h3>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Drop multiple files at once — each picks its own type + display name.
+          Pick <span className="font-medium">+ New type…</span> if the category isn't listed.
+        </p>
+        <MultiDocumentUploader
+          ownerType="PERSON"
+          ownerId={personId}
+          documentTypes={documentTypes}
+        />
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Uploaded documents ({documents.length})
         </h3>
         {documents.length === 0 ? (
@@ -114,9 +133,12 @@ export function DocumentsSection({
             {documents.map((d) => (
               <li key={d.id} className="flex items-center justify-between px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">{d.originalFilename}</p>
+                  <p className="truncate text-sm font-medium" title={d.originalFilename}>
+                    {d.displayName ?? d.originalFilename}
+                  </p>
                   <p className="text-[10px] text-muted-foreground">
-                    v{d.version} · {formatDistanceToNow(d.createdAt, { addSuffix: true })} ·{' '}
+                    {d.displayName ? `${d.originalFilename} · ` : ''}v{d.version} ·{' '}
+                    {formatDistanceToNow(d.createdAt, { addSuffix: true })} ·{' '}
                     <time
                       dateTime={d.createdAt.toISOString()}
                       className="tabular-nums text-muted-foreground/80"

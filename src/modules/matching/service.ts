@@ -145,14 +145,19 @@ export async function runAssistedMatching(requisitionId: string): Promise<{ upse
       .where(inArray(candidateQualifications.personId, personIds)),
   ]);
 
+  // Free-text candidate skills / qualifications (custom_name set, no catalog
+  // id) can't participate in matching — matching is by canonical id, and
+  // there's nothing to compare a free-text label against. Skip nulls.
   const skillsByPerson = new Map<string, Set<string>>();
   for (const r of allSkillRows) {
+    if (r.skillId === null) continue;
     const s = skillsByPerson.get(r.personId) ?? new Set<string>();
     s.add(r.skillId);
     skillsByPerson.set(r.personId, s);
   }
   const qualsByPerson = new Map<string, Set<string>>();
   for (const r of allQualRows) {
+    if (r.qualificationId === null) continue;
     const s = qualsByPerson.get(r.personId) ?? new Set<string>();
     s.add(r.qualificationId);
     qualsByPerson.set(r.personId, s);

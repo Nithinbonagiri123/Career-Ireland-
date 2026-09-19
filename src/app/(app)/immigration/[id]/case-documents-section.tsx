@@ -4,6 +4,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { CheckCircle2, ClipboardCheck, FileText, Paperclip, Plus, Trash2 } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { DocumentTypePicker, type DocumentTypeOption } from '@/components/document-type-picker';
 import { DocumentUploader } from '@/components/document-uploader';
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +20,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
 import type { DocumentType } from '@/lib/db/schema/reference';
 import {
@@ -53,11 +55,14 @@ function AddRequirementDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [typeId, setTypeId] = useState('');
+  const [localTypes, setLocalTypes] = useState<DocumentTypeOption[]>(() =>
+    documentTypes
+      .filter((t) => t.isActive && !existing.has(t.id))
+      .map((t) => ({ id: t.id, code: t.code, name: t.name, hasExpiry: t.hasExpiry })),
+  );
   const [isMandatory, setIsMandatory] = useState<'MANDATORY' | 'OPTIONAL'>('MANDATORY');
   const [notes, setNotes] = useState('');
   const [pending, startTransition] = useTransition();
-
-  const available = documentTypes.filter((t) => t.isActive && !existing.has(t.id));
 
   const submit = () => {
     startTransition(async () => {
@@ -94,31 +99,27 @@ function AddRequirementDialog({
         <div className="space-y-3">
           <div className="space-y-1">
             <Label htmlFor="type">Document type</Label>
-            <select
-              id="type"
+            <DocumentTypePicker
+              inputId="type"
+              options={localTypes}
               value={typeId}
-              onChange={(e) => setTypeId(e.target.value)}
-              className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
-            >
-              <option value="">Select…</option>
-              {available.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
+              onChange={setTypeId}
+              onOptionsChanged={(created) => {
+                setLocalTypes((prev) => [...prev, created]);
+              }}
+              placeholder="Select type — or add new…"
+            />
           </div>
           <div className="space-y-1">
             <Label htmlFor="mand">Mandatory level</Label>
-            <select
+            <Select
               id="mand"
               value={isMandatory}
               onChange={(e) => setIsMandatory(e.target.value as 'MANDATORY' | 'OPTIONAL')}
-              className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
             >
               <option value="MANDATORY">Mandatory</option>
               <option value="OPTIONAL">Optional</option>
-            </select>
+            </Select>
           </div>
           <div className="space-y-1">
             <Label htmlFor="rnotes">Notes</Label>
@@ -194,11 +195,10 @@ function AttachDocDialog({
           </p>
           <div className="space-y-1">
             <Label htmlFor="doc">Document</Label>
-            <select
+            <Select
               id="doc"
               value={docId}
               onChange={(e) => setDocId(e.target.value)}
-              className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
             >
               <option value="">Select…</option>
               {available.map((d) => (
@@ -206,7 +206,7 @@ function AttachDocDialog({
                   {d.originalFilename} (v{d.version}, {d.status.toLowerCase()})
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
         <DialogFooter>
@@ -320,19 +320,19 @@ export function CaseDocumentsSection({
                       {req.isMandatory === 'OPTIONAL' ? ' · optional' : ''}
                     </p>
                   </div>
-                  <select
+                  <Select
                     value={req.status}
                     onChange={(e) =>
                       setStatus(req.id, e.target.value as CaseDocumentRequirementRow['status'])
                     }
-                    className="h-8 rounded-md border bg-transparent px-2 py-0 text-xs"
+                    className="w-auto px-2 text-xs"
                     aria-label="Requirement status"
                   >
                     <option value="MISSING">MISSING</option>
                     <option value="PROVIDED">PROVIDED</option>
                     <option value="ACCEPTED">ACCEPTED</option>
                     <option value="REJECTED">REJECTED</option>
-                  </select>
+                  </Select>
                   <Badge variant={STATUS_VARIANT[req.status]} className="rounded-full">
                     {req.status}
                   </Badge>

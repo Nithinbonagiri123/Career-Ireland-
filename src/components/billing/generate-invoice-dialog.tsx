@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
+import { formatCurrency } from '@/lib/currency';
 import { generateInvoiceAction } from '@/modules/billing/generate-actions';
 import type { InvoiceableService } from '@/modules/billing/read';
 
@@ -161,18 +163,13 @@ export function GenerateInvoiceDialog({
               <Label htmlFor="svc" className="text-xs font-medium">
                 Service
               </Label>
-              <select
-                id="svc"
-                value={serviceId}
-                onChange={(e) => onServiceChange(e.target.value)}
-                className="h-9 w-full rounded-md border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              >
+              <Select id="svc" value={serviceId} onChange={(e) => onServiceChange(e.target.value)}>
                 {services.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
 
             {(service?.packages.length ?? 0) > 0 && (
@@ -180,19 +177,18 @@ export function GenerateInvoiceDialog({
                 <Label htmlFor="pkg" className="text-xs font-medium">
                   Prefill from package (optional)
                 </Label>
-                <select
+                <Select
                   id="pkg"
                   value={packageId}
                   onChange={(e) => onPackageChange(e.target.value)}
-                  className="h-9 w-full rounded-md border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 >
                   <option value="">— none, enter unit price manually —</option>
                   {service?.packages.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.currencyCode} · {formatMoney(p.price, p.currencyCode)} · {p.name}
+                      {p.currencyCode} · {formatCurrency(p.price, p.currencyCode)} · {p.name}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <p className="text-[11px] text-muted-foreground">
                   Prefills the fields below. You can still override any of them.
                 </p>
@@ -228,15 +224,14 @@ export function GenerateInvoiceDialog({
                 <Label htmlFor="currency" className="text-xs font-medium">
                   Currency
                 </Label>
-                <select
+                <Select
                   id="currency"
                   value={currency}
                   onChange={(e) => setCurrency(e.target.value)}
-                  className="h-8 w-full rounded-md border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 >
                   <option value="EUR">EUR</option>
                   <option value="ZAR">ZAR</option>
-                </select>
+                </Select>
               </div>
               <div className="col-span-3 text-[11px] text-muted-foreground">
                 Total = QTY × Unit price. VAT is applied per the rate set in{' '}
@@ -276,14 +271,3 @@ export function GenerateInvoiceDialog({
   );
 }
 
-function formatMoney(amount: string, currency: string): string {
-  try {
-    return new Intl.NumberFormat('en-IE', {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 2,
-    }).format(Number.parseFloat(amount));
-  } catch {
-    return `${amount} ${currency}`;
-  }
-}

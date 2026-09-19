@@ -1,4 +1,4 @@
-import { asc, eq, sql } from 'drizzle-orm';
+import { asc, eq, ilike, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -102,6 +102,72 @@ export async function upsertServiceItem(
       entityId: created.id,
       action: 'CREATED',
       after: { code: created.code, name: created.name, payerType: created.payerType },
+    });
+    return created;
+  });
+}
+
+/**
+ * Inline-create a service catalog item from a display name. Auto-derives
+ * the `code` from the name (uppercased slug), defaults `payerType` to
+ * PERSON, leaves `defaultCurrencyCode` and `defaultPrice` null so an
+ * admin knows to fill them in on the services admin page. Idempotent
+ * by name (case-insensitive). Available to any internal staff.
+ */
+export async function createServiceItemFromName(name: string): Promise<ServiceCatalogItem> {
+  const session = await requireInternalStaff();
+  const trimmed = name.trim();
+  if (trimmed.length < 2 || trimmed.length > 120) {
+    throw new ValidationError('Invalid service name', {
+      name: 'Service name must be 2–120 characters',
+    });
+  }
+  const baseCode = trimmed
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 55);
+
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(serviceCatalogItems)
+      .where(ilike(serviceCatalogItems.name, trimmed))
+      .limit(1);
+    if (existing) return existing;
+
+    // Uniqueify code if another row already claims it.
+    let code = baseCode || 'SERVICE';
+    let suffix = 1;
+    while (true) {
+      const [clash] = await tx
+        .select()
+        .from(serviceCatalogItems)
+        .where(eq(serviceCatalogItems.code, code))
+        .limit(1);
+      if (!clash) break;
+      suffix += 1;
+      code = `${baseCode}_${suffix}`.slice(0, 60);
+    }
+
+    const [created] = await tx
+      .insert(serviceCatalogItems)
+      .values({
+        code,
+        name: trimmed,
+        defaultCurrencyCode: null,
+        defaultPrice: null,
+        payerType: 'PERSON',
+        isActive: true,
+      })
+      .returning();
+    if (!created) throw new Error('insert returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'service_catalog_item',
+      entityId: created.id,
+      action: 'CREATED',
+      after: { code: created.code, name: created.name, viaInlineCreate: true },
     });
     return created;
   });

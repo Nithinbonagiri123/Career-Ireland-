@@ -164,6 +164,7 @@ export async function registerUpload(input: RegisterUploadInput): Promise<Docume
         version: nextVersion,
         status: 'UPLOADED',
         originalFilename: d.originalFilename,
+        displayName: blankToNull(d.displayName),
         mimeType: d.mimeType,
         fileSizeBytes: d.fileSizeBytes,
         s3Bucket: DOCUMENTS_BUCKET,

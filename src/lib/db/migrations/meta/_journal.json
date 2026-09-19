@@ -211,6 +211,34 @@
       "when": 1789670801660,
       "tag": "0029_purple_exodus",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1789757198122,
+      "tag": "0030_daffy_zaladane",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1789757579758,
+      "tag": "0031_groovy_malice",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1789759586322,
+      "tag": "0032_careless_arachne",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1789766277964,
+      "tag": "0033_lumpy_venom",
+      "breakpoints": true
     }
   ]
 }

@@ -9,7 +9,7 @@ import { fetchInvoiceForPrint } from '@/modules/billing/read';
 import { fetchAppSettings } from '@/modules/settings/service';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Invoice · Ireland Career Gateway' };
+export const metadata = { title: 'Invoice' };
 
 /**
  * Employer-scoped printable invoice. Refuses when the invoice was

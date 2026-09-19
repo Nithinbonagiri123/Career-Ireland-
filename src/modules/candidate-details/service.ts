@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -37,17 +37,30 @@ function blankToNull(v: string | undefined | null): string | null {
 
 // ─── Skills ───────────────────────────────────────────────────────────────────
 
-export type CandidateSkillRow = CandidateSkill & { skillName: string };
+/**
+ * Client-facing skill row. `skillName` is the label to show — either the
+ * canonical catalog name (when `skillId` is set) or the free-text
+ * `customName` the operator typed. `isCustom` tells the UI to render a
+ * subtle "custom" tag so it's clear this one doesn't feed matching.
+ */
+export type CandidateSkillRow = CandidateSkill & {
+  skillName: string;
+  isCustom: boolean;
+};
 
 export async function listCandidateSkills(personId: string): Promise<CandidateSkillRow[]> {
   await requireInternalStaff();
   const rows = await db
     .select({ skill: candidateSkills, name: skills.name })
     .from(candidateSkills)
-    .innerJoin(skills, eq(skills.id, candidateSkills.skillId))
+    .leftJoin(skills, eq(skills.id, candidateSkills.skillId))
     .where(eq(candidateSkills.personId, personId))
-    .orderBy(asc(skills.name));
-  return rows.map((r) => ({ ...r.skill, skillName: r.name }));
+    .orderBy(asc(sql`COALESCE(${skills.name}, ${candidateSkills.customName})`));
+  return rows.map((r) => ({
+    ...r.skill,
+    skillName: r.name ?? r.skill.customName ?? '(unknown)',
+    isCustom: r.skill.skillId === null,
+  }));
 }
 
 export async function addCandidateSkill(input: AddCandidateSkillInput): Promise<CandidateSkill> {
@@ -60,20 +73,43 @@ export async function addCandidateSkill(input: AddCandidateSkillInput): Promise<
     );
   }
   const d = parsed.data;
+  const skillId = typeof d.skillId === 'string' && d.skillId.length > 0 ? d.skillId : null;
+  const customName = blankToNull(d.customName ?? undefined);
   return db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select()
-      .from(candidateSkills)
-      .where(and(eq(candidateSkills.personId, d.personId), eq(candidateSkills.skillId, d.skillId)))
-      .limit(1);
-    if (existing) {
-      throw new BusinessRuleError('SKILL_ALREADY_ADDED', 'This skill is already recorded');
+    // Reject duplicates per shape.
+    if (skillId) {
+      const [existing] = await tx
+        .select()
+        .from(candidateSkills)
+        .where(and(eq(candidateSkills.personId, d.personId), eq(candidateSkills.skillId, skillId)))
+        .limit(1);
+      if (existing) {
+        throw new BusinessRuleError('SKILL_ALREADY_ADDED', 'This skill is already recorded');
+      }
+    } else if (customName) {
+      const [existing] = await tx
+        .select()
+        .from(candidateSkills)
+        .where(
+          and(
+            eq(candidateSkills.personId, d.personId),
+            eq(sql`LOWER(${candidateSkills.customName})`, customName.toLowerCase()),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        throw new BusinessRuleError(
+          'SKILL_ALREADY_ADDED',
+          'A skill with that name is already recorded',
+        );
+      }
     }
     const [row] = await tx
       .insert(candidateSkills)
       .values({
         personId: d.personId,
-        skillId: d.skillId,
+        skillId,
+        customName,
         proficiency: d.proficiency,
         yearsExperience: d.yearsExperience ?? null,
         notes: blankToNull(d.notes ?? undefined),
@@ -85,7 +121,12 @@ export async function addCandidateSkill(input: AddCandidateSkillInput): Promise<
       entityType: 'candidate_skill',
       entityId: row.id,
       action: 'CREATED',
-      after: { personId: row.personId, skillId: row.skillId, proficiency: row.proficiency },
+      after: {
+        personId: row.personId,
+        skillId: row.skillId,
+        customName: row.customName,
+        proficiency: row.proficiency,
+      },
     });
     return row;
   });
@@ -148,7 +189,10 @@ export async function removeCandidateSkill(input: RemoveCandidateSkillInput): Pr
 
 // ─── Qualifications ───────────────────────────────────────────────────────────
 
-export type CandidateQualificationRow = CandidateQualification & { qualificationName: string };
+export type CandidateQualificationRow = CandidateQualification & {
+  qualificationName: string;
+  isCustom: boolean;
+};
 
 export async function listCandidateQualifications(
   personId: string,
@@ -157,10 +201,14 @@ export async function listCandidateQualifications(
   const rows = await db
     .select({ q: candidateQualifications, name: qualifications.name })
     .from(candidateQualifications)
-    .innerJoin(qualifications, eq(qualifications.id, candidateQualifications.qualificationId))
+    .leftJoin(qualifications, eq(qualifications.id, candidateQualifications.qualificationId))
     .where(eq(candidateQualifications.personId, personId))
     .orderBy(desc(candidateQualifications.awardedOn));
-  return rows.map((r) => ({ ...r.q, qualificationName: r.name }));
+  return rows.map((r) => ({
+    ...r.q,
+    qualificationName: r.name ?? r.q.customName ?? '(unknown)',
+    isCustom: r.q.qualificationId === null,
+  }));
 }
 
 export async function addCandidateQualification(
@@ -175,28 +223,53 @@ export async function addCandidateQualification(
     );
   }
   const d = parsed.data;
+  const qualificationId =
+    typeof d.qualificationId === 'string' && d.qualificationId.length > 0
+      ? d.qualificationId
+      : null;
+  const customName = blankToNull(d.customName ?? undefined);
   return db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select()
-      .from(candidateQualifications)
-      .where(
-        and(
-          eq(candidateQualifications.personId, d.personId),
-          eq(candidateQualifications.qualificationId, d.qualificationId),
-        ),
-      )
-      .limit(1);
-    if (existing) {
-      throw new BusinessRuleError(
-        'QUALIFICATION_ALREADY_ADDED',
-        'This qualification is already recorded',
-      );
+    if (qualificationId) {
+      const [existing] = await tx
+        .select()
+        .from(candidateQualifications)
+        .where(
+          and(
+            eq(candidateQualifications.personId, d.personId),
+            eq(candidateQualifications.qualificationId, qualificationId),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        throw new BusinessRuleError(
+          'QUALIFICATION_ALREADY_ADDED',
+          'This qualification is already recorded',
+        );
+      }
+    } else if (customName) {
+      const [existing] = await tx
+        .select()
+        .from(candidateQualifications)
+        .where(
+          and(
+            eq(candidateQualifications.personId, d.personId),
+            eq(sql`LOWER(${candidateQualifications.customName})`, customName.toLowerCase()),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        throw new BusinessRuleError(
+          'QUALIFICATION_ALREADY_ADDED',
+          'A qualification with that name is already recorded',
+        );
+      }
     }
     const [row] = await tx
       .insert(candidateQualifications)
       .values({
         personId: d.personId,
-        qualificationId: d.qualificationId,
+        qualificationId,
+        customName,
         awardedOn: blankToNull(d.awardedOn ?? undefined),
         institution: blankToNull(d.institution ?? undefined),
         referenceNumber: blankToNull(d.referenceNumber ?? undefined),
@@ -209,7 +282,11 @@ export async function addCandidateQualification(
       entityType: 'candidate_qualification',
       entityId: row.id,
       action: 'CREATED',
-      after: { personId: row.personId, qualificationId: row.qualificationId },
+      after: {
+        personId: row.personId,
+        qualificationId: row.qualificationId,
+        customName: row.customName,
+      },
     });
     return row;
   });

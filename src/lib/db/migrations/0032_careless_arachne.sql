@@ -1,0 +1,1 @@
+ALTER TABLE "document_instances" ADD COLUMN "display_name" varchar(255);

@@ -24,8 +24,10 @@ import {
   listRequisitionSkills,
 } from '@/modules/requisitions/service';
 import { fetchSkills } from '@/modules/skills/service';
+import { listChecklistsForRequisition } from '@/modules/work-permit-checklists/service';
 import { RequisitionDialog } from '../requisition-dialog';
 import { ApplicationsSection } from './applications-section';
+import { ChecklistsSection } from './checklists-section';
 import { MatchesSection } from './matches-section';
 import { PromoteShortlistSection } from './promote-shortlist';
 import { RequisitionQualificationsSection, RequisitionSkillsSection } from './requirements-section';
@@ -51,6 +53,7 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     employers,
     currencies,
     occupationList,
+    checklists,
   ] = await Promise.all([
     listMatches(id),
     listApplicationsForRequisition(id),
@@ -62,7 +65,31 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     fetchEmployers(),
     fetchCurrencies(),
     fetchOccupations(),
+    listChecklistsForRequisition(id),
   ]);
+
+  // Pool of candidates the checklist dialog offers = applicants + shortlist,
+  // deduped by personId.
+  const candidatePoolMap = new Map<string, { personId: string; personName: string }>();
+  for (const a of applications) {
+    if (a.personId) {
+      candidatePoolMap.set(a.personId, {
+        personId: a.personId,
+        personName: a.personName ?? '(unknown)',
+      });
+    }
+  }
+  for (const s of shortlistPromotions) {
+    if (!candidatePoolMap.has(s.personId)) {
+      candidatePoolMap.set(s.personId, {
+        personId: s.personId,
+        personName: s.personName,
+      });
+    }
+  }
+  const candidatePool = Array.from(candidatePoolMap.values()).sort((a, b) =>
+    a.personName.localeCompare(b.personName),
+  );
 
   const fillPct = Math.min(
     100,
@@ -207,6 +234,23 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     </FadeUp>
   );
 
+  const checklistsTab = (
+    <FadeUp>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Work Permit Checklists</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChecklistsSection
+            requisitionId={id}
+            existing={checklists}
+            candidatePool={candidatePool}
+          />
+        </CardContent>
+      </Card>
+    </FadeUp>
+  );
+
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
       <FadeUp>
@@ -248,10 +292,12 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
         matches={matchesTab}
         shortlist={shortlistTab}
         applications={applicationsTab}
+        checklists={checklistsTab}
         counts={{
           matches: matches.length,
           shortlist: shortlistPromotions.length,
           applications: applications.length,
+          checklists: checklists.length,
         }}
       />
     </div>

@@ -1,8 +1,10 @@
 'use client';
 
-import { AlertCircle, Loader2 } from 'lucide-react';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { FormErrorAlert } from '@/components/form-error-alert';
+import { FormField } from '@/components/form-field';
+import { SubmitButton } from '@/components/submit-button';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,7 +15,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import type { StaffProfile } from '@/lib/db/schema/hr';
 import { upsertStaffProfileAction } from '@/modules/hr/actions';
 
@@ -100,8 +102,7 @@ export function StaffProfileDialog({
         </DialogHeader>
         <div className="space-y-4 text-sm">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="sp-department">Department</Label>
+            <FormField id="sp-department" label="Department">
               <Input
                 id="sp-department"
                 value={department}
@@ -109,9 +110,8 @@ export function StaffProfileDialog({
                 maxLength={120}
                 placeholder="e.g. Candidate Services"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sp-position">Position</Label>
+            </FormField>
+            <FormField id="sp-position" label="Position">
               <Input
                 id="sp-position"
                 value={position}
@@ -119,37 +119,36 @@ export function StaffProfileDialog({
                 maxLength={120}
                 placeholder="e.g. Senior Recruiter"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sp-joining">Joining date</Label>
+            </FormField>
+            <FormField id="sp-joining" label="Joining date">
               <Input
                 id="sp-joining"
                 type="date"
                 value={joiningDate}
                 onChange={(e) => setJoiningDate(e.currentTarget.value)}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sp-status">Status</Label>
-              <select
+            </FormField>
+            <FormField id="sp-status" label="Status">
+              <Select
                 id="sp-status"
                 value={status}
                 onChange={(e) => setStatus(e.currentTarget.value as typeof status)}
-                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
               >
                 <option value="ACTIVE">Active</option>
                 <option value="ON_LEAVE">On leave</option>
                 <option value="TERMINATED">Terminated</option>
-              </select>
-            </div>
+              </Select>
+            </FormField>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="sp-manager">Reporting manager</Label>
-            <select
+          <FormField
+            id="sp-manager"
+            label="Reporting manager"
+            hint="Feeds /hr/team — direct reports show up under their manager."
+          >
+            <Select
               id="sp-manager"
               value={managerUserId}
               onChange={(e) => setManagerUserId(e.currentTarget.value)}
-              className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
             >
               <option value="">— none —</option>
               {availableManagers.map((m) => (
@@ -157,24 +156,15 @@ export function StaffProfileDialog({
                   {m.fullName} ({m.email})
                 </option>
               ))}
-            </select>
-            <p className="text-[11px] text-muted-foreground">
-              Feeds /hr/team — direct reports show up under their manager.
-            </p>
-          </div>
-          {error && (
-            <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-              <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
+            </Select>
+          </FormField>
+          <FormErrorAlert error={error} />
         </div>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-          <Button type="button" onClick={submit} disabled={pending}>
-            {pending && <Loader2 className="mr-2 size-4 animate-spin" />}
+          <SubmitButton type="button" onClick={submit} loading={pending}>
             Save changes
-          </Button>
+          </SubmitButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

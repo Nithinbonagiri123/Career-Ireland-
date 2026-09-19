@@ -101,7 +101,15 @@ export const documentInstances = pgTable(
     })
       .notNull()
       .default('UPLOADED'),
+    /** Filename as the browser sent it — kept for audit + fall-back display. */
     originalFilename: varchar('original_filename', { length: 255 }).notNull(),
+    /**
+     * Staff-provided friendly label ("Rob's diploma", "Passport biometric page")
+     * — nullable, defaults to null. Every list surface prefers this when set,
+     * falling back to originalFilename. The original never gets rewritten so
+     * we can still trace back to the raw upload.
+     */
+    displayName: varchar('display_name', { length: 255 }),
     mimeType: varchar('mime_type', { length: 120 }).notNull(),
     fileSizeBytes: bigint('file_size_bytes', { mode: 'number' }).notNull(),
     s3Bucket: varchar('s3_bucket', { length: 120 }).notNull(),

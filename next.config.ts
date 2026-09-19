@@ -23,6 +23,13 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  /**
+   * Server-only Node packages that Next's bundler must NOT try to bundle —
+   * they use Node-only APIs (fs, Buffer, canvas) or their transitive deps
+   * (pdfjs-dist inside pdf-parse) touch browser-only DOM APIs that break
+   * during the RSC/action bundling step.
+   */
+  serverExternalPackages: ['pdf-parse', 'pdfjs-dist', 'mammoth'],
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
   },

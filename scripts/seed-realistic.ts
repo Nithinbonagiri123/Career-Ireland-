@@ -417,9 +417,10 @@ async function main() {
   const pick = <T>(arr: T[], i: number): T => arr[i % arr.length] as T;
   const pickRandom = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)] as T;
 
-  // ─── 100 candidates ─────────────────────────────────────────────────
+  // ─── N candidates (default 100, override with SEED_COUNT env var) ──
 
-  console.log('▶ Seeding 100 candidates…');
+  const N_CANDIDATES = Math.max(1, Number.parseInt(process.env.SEED_COUNT ?? '', 10) || 100);
+  console.log(`▶ Seeding ${N_CANDIDATES} candidates…`);
   const seedRunAt = new Date();
   const suffix = seedRunAt.getTime().toString(36).slice(-4);
 
@@ -431,7 +432,7 @@ async function main() {
     amountEUR: string;
   }> = [];
 
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < N_CANDIDATES; i++) {
     const useIrishName = i % 3 === 0; // ~1/3 Irish, 2/3 international
     const firstName = useIrishName ? pick(IRISH_FIRST, i) : pick(INTL_FIRST, i);
     const lastName = useIrishName ? pick(IRISH_LAST, i) : pick(INTL_LAST, i);
@@ -586,9 +587,9 @@ async function main() {
       amountEUR,
     });
 
-    if ((i + 1) % 25 === 0) console.log(`  ${i + 1}/100 candidates seeded`);
+    if ((i + 1) % 25 === 0) console.log(`  ${i + 1}/${N_CANDIDATES} candidates seeded`);
   }
-  console.log(`  ✓ 100 candidates + engagements + invoices + receipts inserted`);
+  console.log(`  ✓ ${N_CANDIDATES} candidates + engagements + invoices + receipts inserted`);
 
   // ─── 8 employers + contacts ──────────────────────────────────────────
 

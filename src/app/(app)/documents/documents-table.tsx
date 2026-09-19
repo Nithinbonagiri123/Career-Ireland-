@@ -27,6 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { formatCurrency } from '@/lib/currency';
 import { statusTone } from '@/lib/ui/status-tone';
 import { reviewDocumentAction, voidDocumentAction } from '@/modules/documents/actions';
 import type { DocumentsHubRow } from '@/modules/documents/hub';
@@ -188,7 +189,7 @@ export function DocumentsTable({ documents }: { documents: DocumentsHubRow[] }) 
         return (
           <span className="text-xs tabular-nums text-muted-foreground">
             {row.original.amount && row.original.currencyCode
-              ? formatMoney(row.original.amount, row.original.currencyCode)
+              ? formatCurrency(row.original.amount, row.original.currencyCode)
               : '—'}
           </span>
         );
@@ -335,23 +336,3 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const currencyFormatters = new Map<string, Intl.NumberFormat>();
-function formatMoney(amount: string, currency: string): string {
-  let fmt = currencyFormatters.get(currency);
-  if (!fmt) {
-    try {
-      fmt = new Intl.NumberFormat('en-IE', {
-        style: 'currency',
-        currency,
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-    } catch {
-      fmt = new Intl.NumberFormat('en-IE', { minimumFractionDigits: 2 });
-    }
-    currencyFormatters.set(currency, fmt);
-  }
-  const n = Number.parseFloat(amount);
-  if (!Number.isFinite(n)) return `${amount} ${currency}`;
-  return fmt.format(n);
-}

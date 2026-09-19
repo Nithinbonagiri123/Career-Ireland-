@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/empty-state';
 import { PromptDialog } from '@/components/prompt-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -149,7 +150,7 @@ export function PromoteShortlistSection({
               </p>
               <div className="space-y-1">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  CV / Résumé
+                  CV / Résumé (optional)
                 </p>
                 <CvPicker personId={target.personId} value={cv} onChange={setCv} />
               </div>
@@ -160,12 +161,11 @@ export function PromoteShortlistSection({
                 >
                   Notes (optional)
                 </label>
-                <textarea
+                <Textarea
                   id="app-notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
-                  className="w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
                   placeholder="Cover-letter summary, submission details, etc."
                 />
               </div>

@@ -1,11 +1,11 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { motion } from 'framer-motion';
-import { AlertCircle, Loader2, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { Plus } from 'lucide-react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
+import { FormErrorAlert } from '@/components/form-error-alert';
+import { FormField } from '@/components/form-field';
+import { SubmitButton } from '@/components/submit-button';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -18,27 +18,18 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
+import { useFormDialog } from '@/lib/hooks/use-form-dialog';
 import { recordPaymentAction } from '@/modules/commerce/actions';
 import type { EngagementListRow } from '@/modules/commerce/repository';
 import { type RecordPaymentInput, RecordPaymentSchema } from '@/modules/commerce/schemas';
 
 export function RecordPaymentDialog({ engagements }: { engagements: EngagementListRow[] }) {
-  const [open, setOpen] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-
   const openEngagements = engagements.filter(
     (e) => e.status !== 'CANCELLED' && e.status !== 'COMPLETED',
   );
 
-  const {
-    register,
-    handleSubmit,
-    watch,
-    setValue,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<RecordPaymentInput>({
+  const form = useForm<RecordPaymentInput>({
     resolver: zodResolver(RecordPaymentSchema),
     defaultValues: {
       serviceEngagementId: openEngagements[0]?.id ?? '',
@@ -49,22 +40,21 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
       receivedAt: '',
     },
   });
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = form;
+  const { open, onOpenChange, formError, submit } = useFormDialog(form);
 
-  // On engagement change, populate amount and currency from selected engagement.
   const selectedEngagementId = watch('serviceEngagementId');
   const selectedEngagement = openEngagements.find((e) => e.id === selectedEngagementId);
 
-  const onSubmit = handleSubmit(async (data) => {
-    setFormError(null);
-    const result = await recordPaymentAction(data);
-    if (!result.ok) {
-      setFormError(result.error.message);
-      return;
-    }
-    toast.success('Payment recorded');
-    reset();
-    setOpen(false);
-  });
+  const onSubmit = handleSubmit((data) =>
+    submit(data, recordPaymentAction, { successMessage: 'Payment recorded' }),
+  );
 
   const onEngagementSelect = (id: string) => {
     setValue('serviceEngagementId', id);
@@ -76,16 +66,7 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) {
-          reset();
-          setFormError(null);
-        }
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
           <Button size="sm" disabled={openEngagements.length === 0}>
@@ -102,11 +83,17 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <div className="space-y-1.5">
-            <Label htmlFor="p-engagement">Engagement</Label>
-            <select
+          <FormField
+            id="p-engagement"
+            label="Engagement"
+            hint={
+              selectedEngagement
+                ? `Agreed ${selectedEngagement.agreedAmount} ${selectedEngagement.currencyCode} · status ${selectedEngagement.status.replace(/_/g, ' ')}`
+                : undefined
+            }
+          >
+            <Select
               id="p-engagement"
-              className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
               value={selectedEngagementId}
               onChange={(e) => onEngagementSelect(e.target.value)}
             >
@@ -115,28 +102,19 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
                   {e.serviceName} — {e.payerLabel} — {e.agreedAmount} {e.currencyCode}
                 </option>
               ))}
-            </select>
-            {selectedEngagement && (
-              <p className="text-xs text-muted-foreground">
-                Agreed {selectedEngagement.agreedAmount} {selectedEngagement.currencyCode} · status{' '}
-                {selectedEngagement.status.replace(/_/g, ' ')}
-              </p>
-            )}
-          </div>
+            </Select>
+          </FormField>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="p-amount">Amount</Label>
+            <FormField id="p-amount" label="Amount" error={errors.amount?.message}>
               <Input
                 id="p-amount"
                 inputMode="decimal"
                 aria-invalid={Boolean(errors.amount)}
                 {...register('amount')}
               />
-              {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="p-currency">Currency</Label>
+            </FormField>
+            <FormField id="p-currency" label="Currency">
               <Input
                 id="p-currency"
                 maxLength={3}
@@ -144,55 +122,38 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
                 className="uppercase opacity-60"
                 {...register('currencyCode')}
               />
-            </div>
+            </FormField>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="p-method">Method</Label>
-              <select
-                id="p-method"
-                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                {...register('method')}
-              >
+            <FormField id="p-method" label="Method">
+              <Select id="p-method" {...register('method')}>
                 <option value="BANK_TRANSFER">Bank transfer</option>
                 <option value="CASH">Cash</option>
                 <option value="OTHER">Other</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="p-received">Received on</Label>
+              </Select>
+            </FormField>
+            <FormField id="p-received" label="Received on">
               <Input id="p-received" type="date" {...register('receivedAt')} />
-            </div>
+            </FormField>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="p-ref">Proof reference (bank statement id / cash receipt #)</Label>
+          <FormField
+            id="p-ref"
+            label="Proof reference (bank statement id / cash receipt #)"
+          >
             <Input
               id="p-ref"
               placeholder="Optional — file uploads land in 5.7"
               {...register('proofReference')}
             />
-          </div>
+          </FormField>
 
-          {formError && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
-              role="alert"
-            >
-              <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-              <span>{formError}</span>
-            </motion.div>
-          )}
+          <FormErrorAlert error={formError} />
 
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Record payment
-            </Button>
+            <SubmitButton loading={isSubmitting}>Record payment</SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

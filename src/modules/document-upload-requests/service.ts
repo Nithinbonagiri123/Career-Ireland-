@@ -20,6 +20,7 @@ import { logger } from '@/lib/logger';
 import { getMailer } from '@/lib/mail';
 import { DOCUMENTS_BUCKET } from '@/lib/s3/client';
 import { ALLOWED_UPLOAD_MIME, buildObjectKey, MAX_UPLOAD_BYTES, presignUpload } from '@/lib/s3/presign';
+import { fetchAppSettings } from '@/modules/settings/read';
 import { renderDocumentRequestEmail } from './email';
 
 /**
@@ -188,9 +189,15 @@ export async function issueUploadRequest(input: { personId: string }): Promise<
   // 4) Send the email. On failure we still keep the row (the staff
   // member can copy the URL manually) — the delivery status is
   // returned so the UI can flag it.
+  //
+  // Brand name for the copy comes from app_settings.legalName — never
+  // hardcoded so a customer can rebrand the whole platform from
+  // /admin/settings without a redeploy.
   const uploadUrl = buildUploadUrl(token);
   const candidateName = `${person.firstName} ${person.lastName}`.trim();
+  const brandSettings = await fetchAppSettings();
   const message = renderDocumentRequestEmail({
+    brand: brandSettings.legalName,
     candidateName,
     uploadUrl,
     requestedItems: missingReqs.map((r) => r.documentTypeName),

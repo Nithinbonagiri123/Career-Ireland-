@@ -1,11 +1,11 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { motion } from 'framer-motion';
-import { AlertCircle, Loader2 } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
+import { FormErrorAlert } from '@/components/form-error-alert';
+import { FormField } from '@/components/form-field';
+import { SubmitButton } from '@/components/submit-button';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -17,8 +17,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import type { DocumentType } from '@/lib/db/schema/reference';
+import { useFormDialog } from '@/lib/hooks/use-form-dialog';
 import { upsertDocumentTypeAction } from '@/modules/document-types/actions';
 import {
   type UpsertDocumentTypeInput,
@@ -28,16 +29,8 @@ import {
 type Props = { trigger: ReactElement; initial?: DocumentType };
 
 export function DocTypeDialog({ trigger, initial }: Props) {
-  const [open, setOpen] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
   const isEdit = Boolean(initial);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<UpsertDocumentTypeInput>({
+  const form = useForm<UpsertDocumentTypeInput>({
     resolver: zodResolver(UpsertDocumentTypeSchema),
     defaultValues: {
       id: initial?.id,
@@ -48,30 +41,21 @@ export function DocTypeDialog({ trigger, initial }: Props) {
       isActive: initial?.isActive ?? true,
     },
   });
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = form;
+  const { open, onOpenChange, formError, submit } = useFormDialog(form);
 
-  const onSubmit = handleSubmit(async (data) => {
-    setFormError(null);
-    const result = await upsertDocumentTypeAction(data);
-    if (!result.ok) {
-      setFormError(result.error.message);
-      return;
-    }
-    toast.success(isEdit ? 'Document type updated' : 'Document type added');
-    reset(data);
-    setOpen(false);
-  });
+  const onSubmit = handleSubmit((data) =>
+    submit(data, upsertDocumentTypeAction, {
+      successMessage: isEdit ? 'Document type updated' : 'Document type added',
+    }),
+  );
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) {
-          reset();
-          setFormError(null);
-        }
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger render={trigger} />
       <DialogContent>
         <DialogHeader>
@@ -79,8 +63,7 @@ export function DocTypeDialog({ trigger, initial }: Props) {
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="dt-code">Code</Label>
+            <FormField id="dt-code" label="Code" error={errors.code?.message}>
               <Input
                 id="dt-code"
                 readOnly={isEdit}
@@ -88,26 +71,23 @@ export function DocTypeDialog({ trigger, initial }: Props) {
                 aria-invalid={Boolean(errors.code)}
                 {...register('code')}
               />
-              {errors.code && <p className="text-xs text-destructive">{errors.code.message}</p>}
-            </div>
-            <div className="col-span-2 space-y-1.5">
-              <Label htmlFor="dt-name">Name</Label>
-              <Input id="dt-name" aria-invalid={Boolean(errors.name)} {...register('name')} />
-              {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="dt-applies">Applies to</Label>
-            <select
-              id="dt-applies"
-              className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-              {...register('appliesTo')}
+            </FormField>
+            <FormField
+              id="dt-name"
+              label="Name"
+              error={errors.name?.message}
+              className="col-span-2"
             >
+              <Input id="dt-name" aria-invalid={Boolean(errors.name)} {...register('name')} />
+            </FormField>
+          </div>
+          <FormField id="dt-applies" label="Applies to">
+            <Select id="dt-applies" {...register('appliesTo')}>
               <option value="PERSON">Person only (candidate documents)</option>
               <option value="EMPLOYER">Employer only (company documents)</option>
               <option value="BOTH">Both</option>
-            </select>
-          </div>
+            </Select>
+          </FormField>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...register('hasExpiry')} className="size-4 accent-accent" />
             Has expiry date (staff will be prompted for one on upload)
@@ -116,23 +96,12 @@ export function DocTypeDialog({ trigger, initial }: Props) {
             <input type="checkbox" {...register('isActive')} className="size-4 accent-accent" />
             Active
           </label>
-          {formError && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
-              role="alert"
-            >
-              <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-              <span>{formError}</span>
-            </motion.div>
-          )}
+          <FormErrorAlert error={formError} />
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
+            <SubmitButton loading={isSubmitting}>
               {isEdit ? 'Save' : 'Add document type'}
-            </Button>
+            </SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

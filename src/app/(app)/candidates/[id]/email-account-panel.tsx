@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import {
   removeEmailAccountAction,
   revealPasswordAction,
@@ -105,17 +106,16 @@ function AccountDialog({
             </div>
             <div className="space-y-1">
               <Label htmlFor="provider">Provider</Label>
-              <select
+              <Select
                 id="provider"
                 value={provider}
                 onChange={(e) => setProvider(e.target.value as Provider)}
-                className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
               >
                 <option value="GMAIL">Gmail</option>
                 <option value="OUTLOOK">Outlook</option>
                 <option value="YAHOO">Yahoo</option>
                 <option value="CUSTOM">Custom</option>
-              </select>
+              </Select>
             </div>
           </div>
           <div className="space-y-1">

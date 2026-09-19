@@ -1,6 +1,8 @@
+import { ilike } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
+import { occupationCategories, occupations } from '@/lib/db/schema/occupations';
 import type { Occupation, OccupationCategory } from '@/lib/db/schema/occupations';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import {
@@ -144,6 +146,65 @@ export async function upsertOccupation(input: UpsertOccupationInput): Promise<Oc
       entityId: created.id,
       action: 'CREATED',
       after: { name: created.name, categoryId: created.categoryId },
+    });
+    return created;
+  });
+}
+
+/** Name of the category used when staff inline-create an occupation from a picker. */
+const INLINE_CATEGORY_NAME = 'Uncategorised';
+
+/**
+ * Inline-create an occupation from a display name — used by
+ * `CatalogAutosuggest`. Occupations require a category, so we ensure
+ * an "Uncategorised" bucket exists and slot new inline-created rows
+ * into it. Admins can recategorise them later from `/admin/occupations`.
+ * Idempotent by name (case-insensitive).
+ */
+export async function createOccupationFromName(name: string): Promise<Occupation> {
+  const session = await requireInternalStaff();
+  const trimmed = name.trim();
+  if (trimmed.length < 2 || trimmed.length > 120) {
+    throw new ValidationError('Invalid occupation name', {
+      name: 'Occupation name must be 2–120 characters',
+    });
+  }
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(occupations)
+      .where(ilike(occupations.name, trimmed))
+      .limit(1);
+    if (existing) return existing;
+
+    let [category] = await tx
+      .select()
+      .from(occupationCategories)
+      .where(ilike(occupationCategories.name, INLINE_CATEGORY_NAME))
+      .limit(1);
+    if (!category) {
+      const inserted = await insertCategory(tx, {
+        name: INLINE_CATEGORY_NAME,
+        isActive: true,
+      });
+      category = inserted;
+    }
+
+    const created = await insertOccupation(tx, {
+      name: trimmed,
+      categoryId: category.id,
+      isActive: true,
+    });
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'occupation',
+      entityId: created.id,
+      action: 'CREATED',
+      after: {
+        name: created.name,
+        categoryId: created.categoryId,
+        viaInlineCreate: true,
+      },
     });
     return created;
   });

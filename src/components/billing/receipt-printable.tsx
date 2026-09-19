@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import Image from 'next/image';
+import { formatCurrency } from '@/lib/currency';
 import type { AppSettings } from '@/lib/db/schema/app_settings';
 import type { Invoice, Receipt } from '@/lib/db/schema/billing';
 import type { Payment } from '@/lib/db/schema/commerce';
@@ -52,7 +53,7 @@ export function ReceiptPrintable({
   settings: AppSettings;
 }) {
   const address = settings.addressLines.join(', ');
-  const money = (v: string) => formatMoney(v, receipt.currencyCode);
+  const money = (v: string) => formatCurrency(v, receipt.currencyCode);
 
   return (
     <main className="mx-auto my-6 max-w-3xl bg-white p-10 shadow-sm print:my-0 print:max-w-none print:p-0 print:shadow-none">
@@ -185,26 +186,3 @@ export function ReceiptPrintable({
   );
 }
 
-const currencyFormatters = new Map<string, Intl.NumberFormat>();
-function formatMoney(amount: string, currency: string): string {
-  let fmt = currencyFormatters.get(currency);
-  if (!fmt) {
-    try {
-      fmt = new Intl.NumberFormat('en-IE', {
-        style: 'currency',
-        currency,
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-    } catch {
-      fmt = new Intl.NumberFormat('en-IE', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-    }
-    currencyFormatters.set(currency, fmt);
-  }
-  const n = Number.parseFloat(amount);
-  if (!Number.isFinite(n)) return `${amount} ${currency}`;
-  return fmt.format(n);
-}

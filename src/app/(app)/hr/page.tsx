@@ -13,7 +13,7 @@ import { fetchHrDashboard, fetchMyRecentSessions, fetchMyTodayStatus } from '@/m
 import { ClockPanel } from './clock-panel';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'HR · Ireland Career Gateway' };
+export const metadata = { title: 'HR' };
 
 /**
  * Self-service HR — every staff user sees their own attendance +

@@ -1,11 +1,11 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { motion } from 'framer-motion';
-import { AlertCircle, Loader2 } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
+import { FormErrorAlert } from '@/components/form-error-alert';
+import { FormField } from '@/components/form-field';
+import { SubmitButton } from '@/components/submit-button';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -17,24 +17,16 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import type { EmployerContact } from '@/lib/db/schema/recruitment';
+import { useFormDialog } from '@/lib/hooks/use-form-dialog';
 import { upsertEmployerContactAction } from '@/modules/employers/actions';
 import { type UpsertContactInput, UpsertContactSchema } from '@/modules/employers/schemas';
 
 type Props = { trigger: ReactElement; employerId: string; initial?: EmployerContact };
 
 export function ContactDialog({ trigger, employerId, initial }: Props) {
-  const [open, setOpen] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
   const isEdit = Boolean(initial);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<UpsertContactInput>({
+  const form = useForm<UpsertContactInput>({
     resolver: zodResolver(UpsertContactSchema),
     defaultValues: {
       id: initial?.id,
@@ -46,78 +38,51 @@ export function ContactDialog({ trigger, employerId, initial }: Props) {
       isPrimary: initial?.isPrimary ?? false,
     },
   });
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = form;
+  const { open, onOpenChange, formError, submit } = useFormDialog(form);
 
-  const onSubmit = handleSubmit(async (data) => {
-    setFormError(null);
-    const result = await upsertEmployerContactAction(data);
-    if (!result.ok) {
-      setFormError(result.error.message);
-      return;
-    }
-    toast.success(isEdit ? 'Contact updated' : 'Contact added');
-    reset(data);
-    setOpen(false);
-  });
+  const onSubmit = handleSubmit((data) =>
+    submit(data, upsertEmployerContactAction, {
+      successMessage: isEdit ? 'Contact updated' : 'Contact added',
+    }),
+  );
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) {
-          reset();
-          setFormError(null);
-        }
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger render={trigger} />
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit contact' : 'Add contact'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <div className="space-y-1.5">
-            <Label htmlFor="c-name">Full name</Label>
+          <FormField id="c-name" label="Full name" error={errors.fullName?.message}>
             <Input id="c-name" aria-invalid={Boolean(errors.fullName)} {...register('fullName')} />
-            {errors.fullName && (
-              <p className="text-xs text-destructive">{errors.fullName.message}</p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="c-title">Job title</Label>
+          </FormField>
+          <FormField id="c-title" label="Job title">
             <Input id="c-title" {...register('jobTitle')} />
-          </div>
+          </FormField>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="c-email">Email</Label>
+            <FormField id="c-email" label="Email">
               <Input id="c-email" type="email" {...register('email')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="c-phone">Phone</Label>
+            </FormField>
+            <FormField id="c-phone" label="Phone">
               <Input id="c-phone" type="tel" {...register('phone')} />
-            </div>
+            </FormField>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...register('isPrimary')} className="size-4 accent-accent" />
             Primary contact (only one primary per employer)
           </label>
-          {formError && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
-              role="alert"
-            >
-              <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-              <span>{formError}</span>
-            </motion.div>
-          )}
+          <FormErrorAlert error={formError} />
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
+            <SubmitButton loading={isSubmitting}>
               {isEdit ? 'Save' : 'Add contact'}
-            </Button>
+            </SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

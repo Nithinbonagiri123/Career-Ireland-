@@ -26,6 +26,7 @@ import { fetchDashboardRevenue } from '@/modules/dashboard/revenue';
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
 import { fetchDashboardTrends } from '@/modules/dashboard/trends';
 import { fetchHrDashboard, fetchStaffCurrentlyWorking } from '@/modules/hr/service';
+import { fetchAppSettings } from '@/modules/settings/service';
 import { ActivityFeed } from './activity-feed';
 import { AgingSection } from './aging-section';
 import { AttentionCard } from './attention-card';
@@ -46,7 +47,7 @@ export default async function DashboardPage({
   await requirePermission('main', 'overview', 'view');
   const { created, from, to } = await searchParams;
   const range = parseDateRangeParams({ created, from, to });
-  const [m, drilldowns, pipelines, activity, hr, trends, revenue, workingNow, aging] =
+  const [m, drilldowns, pipelines, activity, hr, trends, revenue, workingNow, aging, settings] =
     await Promise.all([
       fetchDashboardMetrics(),
       fetchDashboardDrilldowns(),
@@ -57,6 +58,7 @@ export default async function DashboardPage({
       fetchDashboardRevenue({ from: range.from, to: range.to }),
       fetchStaffCurrentlyWorking(),
       fetchAgingReport(),
+      fetchAppSettings(),
     ]);
 
   const today = new Date();
@@ -76,7 +78,7 @@ export default async function DashboardPage({
               </span>
             </div>
             <h1 className="text-[28px] font-semibold leading-tight tracking-tight">
-              Ireland Career Gateway — today
+              {settings.legalName} — today
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               What is happening, what needs attention, and what to do next.

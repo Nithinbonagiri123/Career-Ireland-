@@ -1,4 +1,4 @@
-import { asc, eq, sql } from 'drizzle-orm';
+import { asc, eq, ilike, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -64,6 +64,43 @@ export async function upsertQualification(input: UpsertQualificationInput): Prom
       entityId: created.id,
       action: 'CREATED',
       after: { name: created.name },
+    });
+    return created;
+  });
+}
+
+/**
+ * Inline-create a qualification from a display name — used by
+ * `CatalogAutosuggest` across the app. See `createSkillFromName` for the
+ * rationale (recruiters shouldn't be blocked on an admin to add options).
+ * Idempotent: matching name (case-insensitive) returns the existing row.
+ */
+export async function createQualificationFromName(name: string): Promise<Qualification> {
+  const session = await requireInternalStaff();
+  const trimmed = name.trim();
+  if (trimmed.length < 2 || trimmed.length > 120) {
+    throw new ValidationError('Invalid qualification name', {
+      name: 'Qualification name must be 2–120 characters',
+    });
+  }
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(qualifications)
+      .where(ilike(qualifications.name, trimmed))
+      .limit(1);
+    if (existing) return existing;
+    const [created] = await tx
+      .insert(qualifications)
+      .values({ name: trimmed, isActive: true })
+      .returning();
+    if (!created) throw new Error('insert returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'qualification',
+      entityId: created.id,
+      action: 'CREATED',
+      after: { name: created.name, viaInlineCreate: true },
     });
     return created;
   });

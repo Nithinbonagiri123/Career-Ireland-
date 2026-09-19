@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
 import type { Occupation, OccupationCategory } from '@/lib/db/schema/occupations';
 import { setCategoryActiveAction, setOccupationActiveAction } from '@/modules/occupations/actions';
 import type { CategoryWithCount } from '@/modules/occupations/repository';
@@ -202,8 +203,8 @@ export function OccupationsView({ categories, occupations }: Props) {
             Occupations
           </h2>
           <div className="flex items-center gap-2">
-            <select
-              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+            <Select
+              className="w-auto"
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
             >
@@ -213,7 +214,7 @@ export function OccupationsView({ categories, occupations }: Props) {
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
             <OccupationDialog
               categories={activeCategoriesForDialog}
               defaultCategoryId={selectedCategory === 'ALL' ? undefined : selectedCategory}

@@ -15,7 +15,16 @@ import { createdAt, updatedAt } from './_shared';
 import { persons } from './persons';
 import { qualifications, skills } from './reference';
 
-/** Skills a candidate has, with proficiency and experience. Enables structured matching. */
+/**
+ * Skills a candidate has, with proficiency and experience.
+ *
+ * A row represents EITHER a canonical catalog skill (`skill_id` set, enables
+ * matching against requisitions) OR a free-text label (`custom_name` set,
+ * kept because Tracey often wants to record what's literally on the CV even
+ * when it doesn't map to the catalog — e.g. "AutoCAD LT 2024" vs the
+ * canonical "AutoCAD"). Exactly one of the two must be set, enforced by
+ * `candidate_skills_skill_xor` below.
+ */
 export const candidateSkills = pgTable(
   'candidate_skills',
   {
@@ -23,9 +32,8 @@ export const candidateSkills = pgTable(
     personId: uuid('person_id')
       .notNull()
       .references(() => persons.id),
-    skillId: uuid('skill_id')
-      .notNull()
-      .references(() => skills.id),
+    skillId: uuid('skill_id').references(() => skills.id),
+    customName: varchar('custom_name', { length: 200 }),
     proficiency: text('proficiency', {
       enum: ['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT'],
     })
@@ -37,13 +45,24 @@ export const candidateSkills = pgTable(
     updatedAt,
   },
   (t) => [
-    unique('candidate_skills_person_skill_unique').on(t.personId, t.skillId),
     index('candidate_skills_person_idx').on(t.personId),
     index('candidate_skills_skill_idx').on(t.skillId),
+    // Exactly one of skill_id / custom_name must be set.
+    check(
+      'candidate_skills_skill_xor',
+      sql`(${t.skillId} IS NOT NULL) <> (${t.customName} IS NOT NULL)`,
+    ),
+    // Per-person uniqueness — split across the two shapes.
+    unique('candidate_skills_person_skill_unique').on(t.personId, t.skillId),
+    unique('candidate_skills_person_custom_unique').on(t.personId, t.customName),
   ],
 );
 
-/** Qualifications a candidate holds. */
+/**
+ * Qualifications a candidate holds. Same catalog-or-custom shape as
+ * `candidate_skills` — Tracey copy-pastes the CV wording and it rarely
+ * matches Ireland's national qualification names.
+ */
 export const candidateQualifications = pgTable(
   'candidate_qualifications',
   {
@@ -51,9 +70,8 @@ export const candidateQualifications = pgTable(
     personId: uuid('person_id')
       .notNull()
       .references(() => persons.id),
-    qualificationId: uuid('qualification_id')
-      .notNull()
-      .references(() => qualifications.id),
+    qualificationId: uuid('qualification_id').references(() => qualifications.id),
+    customName: varchar('custom_name', { length: 200 }),
     awardedOn: date('awarded_on'),
     institution: varchar('institution', { length: 200 }),
     referenceNumber: varchar('reference_number', { length: 120 }),
@@ -62,8 +80,13 @@ export const candidateQualifications = pgTable(
     updatedAt,
   },
   (t) => [
-    unique('candidate_quals_person_qual_unique').on(t.personId, t.qualificationId),
     index('candidate_quals_person_idx').on(t.personId),
+    check(
+      'candidate_quals_qual_xor',
+      sql`(${t.qualificationId} IS NOT NULL) <> (${t.customName} IS NOT NULL)`,
+    ),
+    unique('candidate_quals_person_qual_unique').on(t.personId, t.qualificationId),
+    unique('candidate_quals_person_custom_unique').on(t.personId, t.customName),
   ],
 );
 

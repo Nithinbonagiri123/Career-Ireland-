@@ -1,10 +1,11 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
+import { FormField } from '@/components/form-field';
+import { SubmitButton } from '@/components/submit-button';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -15,7 +16,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { toastResult } from '@/lib/toast-result';
 import { updateTaskAction } from '@/modules/activities/actions';
 import { type UpdateTaskInput, UpdateTaskSchema } from '@/modules/activities/schemas';
 import type { TaskRow } from '@/modules/activities/service';
@@ -46,7 +49,6 @@ export function EditTaskDialog({
     defaultValues: emptyDefaults(),
   });
 
-  // Reset the form whenever the target task changes.
   useEffect(() => {
     if (task) {
       reset({
@@ -63,18 +65,12 @@ export function EditTaskDialog({
   }, [task, reset]);
 
   const onSubmit = handleSubmit(async (raw) => {
-    // If a datetime-local value is present, convert to ISO for the server.
     const payload: UpdateTaskInput = {
       ...raw,
       dueAt: raw.dueAt ? new Date(raw.dueAt).toISOString() : '',
     };
     const r = await updateTaskAction(payload);
-    if (r.ok) {
-      toast.success('Task updated');
-      onOpenChange(false);
-    } else {
-      toast.error(r.error.message);
-    }
+    if (toastResult(r, { success: 'Task updated' })) onOpenChange(false);
   });
 
   return (
@@ -86,55 +82,37 @@ export function EditTaskDialog({
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <input type="hidden" {...register('taskId')} />
 
-          <div className="space-y-1.5">
-            <Label htmlFor="title">Title</Label>
+          <FormField id="title" label="Title" error={errors.title?.message}>
             <Input id="title" {...register('title')} aria-invalid={Boolean(errors.title)} />
-            {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
-          </div>
+          </FormField>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="description">Description</Label>
-            <textarea
-              id="description"
-              className="min-h-20 w-full rounded-md border border-input bg-background p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-              {...register('description')}
-            />
-          </div>
+          <FormField id="description" label="Description">
+            <Textarea id="description" className="min-h-20" {...register('description')} />
+          </FormField>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="assignedUserId">Assignee</Label>
-              <select
-                id="assignedUserId"
-                className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                {...register('assignedUserId')}
-              >
+            <FormField id="assignedUserId" label="Assignee">
+              <Select id="assignedUserId" {...register('assignedUserId')}>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.fullName}
                   </option>
                 ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="priority">Priority</Label>
-              <select
-                id="priority"
-                className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                {...register('priority')}
-              >
+              </Select>
+            </FormField>
+            <FormField id="priority" label="Priority">
+              <Select id="priority" {...register('priority')}>
                 <option value="LOW">Low</option>
                 <option value="NORMAL">Normal</option>
                 <option value="HIGH">High</option>
                 <option value="URGENT">Urgent</option>
-              </select>
-            </div>
+              </Select>
+            </FormField>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="dueAt">Due at</Label>
+          <FormField id="dueAt" label="Due at">
             <Input id="dueAt" type="datetime-local" {...register('dueAt')} />
-          </div>
+          </FormField>
 
           {Object.keys(errors).length > 0 && !errors.title && (
             <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
@@ -145,10 +123,7 @@ export function EditTaskDialog({
 
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Save changes
-            </Button>
+            <SubmitButton loading={isSubmitting}>Save changes</SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

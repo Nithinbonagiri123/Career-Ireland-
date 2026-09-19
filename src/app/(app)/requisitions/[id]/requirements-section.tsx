@@ -1,8 +1,9 @@
 'use client';
 
 import { Award, GraduationCap, Plus, Star, StarOff, X } from 'lucide-react';
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Qualification, Skill } from '@/lib/db/schema/reference';
+import { createQualificationFromNameAction } from '@/modules/qualifications/actions';
 import {
   attachRequisitionQualificationAction,
   attachRequisitionSkillAction,
@@ -29,6 +31,7 @@ import type {
   RequisitionQualificationRow,
   RequisitionSkillRow,
 } from '@/modules/requisitions/service';
+import { createSkillFromNameAction } from '@/modules/skills/actions';
 
 // ─── Skills ───────────────────────────────────────────────────────────────────
 
@@ -42,14 +45,26 @@ function AttachSkillDialog({
   existing: Set<string>;
 }) {
   const [open, setOpen] = useState(false);
-  const [skillId, setSkillId] = useState('');
+  const [selection, setSelection] = useState<Selection>(null);
   const [isRequired, setIsRequired] = useState(true);
   const [weight, setWeight] = useState('1');
   const [pending, startTransition] = useTransition();
 
-  const available = allSkills.filter((s) => s.isActive && !existing.has(s.id));
+  const options = useMemo(
+    () => allSkills.map((s) => ({ id: s.id, name: s.name, isActive: s.isActive })),
+    [allSkills],
+  );
+
+  const skillId = selection?.kind === 'catalog' ? selection.id : '';
+
+  const reset = () => {
+    setSelection(null);
+    setIsRequired(true);
+    setWeight('1');
+  };
 
   const submit = () => {
+    if (!skillId) return;
     startTransition(async () => {
       const r = await attachRequisitionSkillAction({
         jobRequisitionId: requisitionId,
@@ -60,9 +75,7 @@ function AttachSkillDialog({
       if (r.ok) {
         toast.success('Skill added to requisition');
         setOpen(false);
-        setSkillId('');
-        setIsRequired(true);
-        setWeight('1');
+        reset();
       } else {
         toast.error(r.error.message);
       }
@@ -85,19 +98,20 @@ function AttachSkillDialog({
         <div className="space-y-3">
           <div className="space-y-1">
             <Label htmlFor="skill">Skill</Label>
-            <select
-              id="skill"
-              value={skillId}
-              onChange={(e) => setSkillId(e.target.value)}
-              className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
-            >
-              <option value="">Select…</option>
-              {available.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <CatalogAutosuggest
+              inputId="skill"
+              options={options}
+              value={selection}
+              onChange={setSelection}
+              excludeIds={existing}
+              placeholder="Type to search — or add a new skill"
+              createLabel="Add skill"
+              onCreateNew={async (name) => {
+                const r = await createSkillFromNameAction({ name });
+                if (!r.ok) throw new Error(r.error.message);
+                return { id: r.data.id, label: r.data.name };
+              }}
+            />
           </div>
           <div className="flex items-center gap-2">
             <Checkbox
@@ -125,7 +139,14 @@ function AttachSkillDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setOpen(false);
+              reset();
+            }}
+            disabled={pending}
+          >
             Cancel
           </Button>
           <Button onClick={submit} disabled={pending || !skillId}>
@@ -230,13 +251,24 @@ function AttachQualDialog({
   existing: Set<string>;
 }) {
   const [open, setOpen] = useState(false);
-  const [qualId, setQualId] = useState('');
+  const [selection, setSelection] = useState<Selection>(null);
   const [isRequired, setIsRequired] = useState(true);
   const [pending, startTransition] = useTransition();
 
-  const available = allQuals.filter((q) => q.isActive && !existing.has(q.id));
+  const options = useMemo(
+    () => allQuals.map((q) => ({ id: q.id, name: q.name, isActive: q.isActive })),
+    [allQuals],
+  );
+
+  const qualId = selection?.kind === 'catalog' ? selection.id : '';
+
+  const reset = () => {
+    setSelection(null);
+    setIsRequired(true);
+  };
 
   const submit = () => {
+    if (!qualId) return;
     startTransition(async () => {
       const r = await attachRequisitionQualificationAction({
         jobRequisitionId: requisitionId,
@@ -246,8 +278,7 @@ function AttachQualDialog({
       if (r.ok) {
         toast.success('Qualification added');
         setOpen(false);
-        setQualId('');
-        setIsRequired(true);
+        reset();
       } else {
         toast.error(r.error.message);
       }
@@ -270,19 +301,20 @@ function AttachQualDialog({
         <div className="space-y-3">
           <div className="space-y-1">
             <Label htmlFor="qual">Qualification</Label>
-            <select
-              id="qual"
-              value={qualId}
-              onChange={(e) => setQualId(e.target.value)}
-              className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
-            >
-              <option value="">Select…</option>
-              {available.map((q) => (
-                <option key={q.id} value={q.id}>
-                  {q.name}
-                </option>
-              ))}
-            </select>
+            <CatalogAutosuggest
+              inputId="qual"
+              options={options}
+              value={selection}
+              onChange={setSelection}
+              excludeIds={existing}
+              placeholder="Type to search — or add a new qualification"
+              createLabel="Add qualification"
+              onCreateNew={async (name) => {
+                const r = await createQualificationFromNameAction({ name });
+                if (!r.ok) throw new Error(r.error.message);
+                return { id: r.data.id, label: r.data.name };
+              }}
+            />
           </div>
           <div className="flex items-center gap-2">
             <Checkbox
@@ -296,7 +328,14 @@ function AttachQualDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setOpen(false);
+              reset();
+            }}
+            disabled={pending}
+          >
             Cancel
           </Button>
           <Button onClick={submit} disabled={pending || !qualId}>

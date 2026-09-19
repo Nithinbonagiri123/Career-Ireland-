@@ -9,7 +9,7 @@ import { fetchReceiptForPrint } from '@/modules/billing/read';
 import { fetchAppSettings } from '@/modules/settings/service';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Receipt · Ireland Career Gateway' };
+export const metadata = { title: 'Receipt' };
 
 export default async function ReceiptPrintPage({
   params,

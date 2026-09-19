@@ -8,6 +8,7 @@ import { fetchEngagements } from '@/modules/commerce/service';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchPersons } from '@/modules/persons/service';
 import { fetchServiceCatalog } from '@/modules/services-catalog/service';
+import { fetchAppSettings } from '@/modules/settings/service';
 import { CreateEngagementDialog } from './create-engagement-dialog';
 import { EngagementsTable } from './engagements-table';
 
@@ -21,11 +22,12 @@ export default async function EngagementsPage({
   await requirePermission('candidate_services', 'engagements', 'view');
   const { created, from, to } = await searchParams;
   const createdRange = parseDateRangeParams({ created, from, to });
-  const [engagements, services, currencies, persons] = await Promise.all([
+  const [engagements, services, currencies, persons, settings] = await Promise.all([
     fetchEngagements(createdRange),
     fetchServiceCatalog(),
     fetchCurrencies(),
     fetchPersons(),
+    fetchAppSettings(),
   ]);
 
   return (
@@ -34,7 +36,7 @@ export default async function EngagementsPage({
         <PageHeader
           icon={Coins}
           title="Service engagements"
-          description="Commercial orders for Ireland Career Gateway services. Create an engagement first, then record payments against it."
+          description={`Commercial orders for ${settings.legalName} services. Create an engagement first, then record payments against it.`}
           action={
             <div className="flex flex-wrap items-center gap-2">
               <DateRangeFilter />

@@ -6,6 +6,7 @@ import { useCallback } from 'react';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
 
 /**
  * URL-driven filters for the audit log page. Reads/writes:
@@ -70,11 +71,11 @@ export function AuditFilters({
         )}
       </div>
 
-      <select
+      <Select
         aria-label="Actor"
         value={currentActor}
         onChange={(e) => setParam('actor', e.target.value || null)}
-        className="h-8 rounded-md border bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="w-auto text-xs"
       >
         <option value="">All actors</option>
         {actors.map((a) => (
@@ -82,13 +83,13 @@ export function AuditFilters({
             {a.fullName}
           </option>
         ))}
-      </select>
+      </Select>
 
-      <select
+      <Select
         aria-label="Action"
         value={currentAction}
         onChange={(e) => setParam('action', e.target.value || null)}
-        className="h-8 rounded-md border bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="w-auto text-xs"
       >
         <option value="">All actions</option>
         {actions.map((a) => (
@@ -96,13 +97,13 @@ export function AuditFilters({
             {a}
           </option>
         ))}
-      </select>
+      </Select>
 
-      <select
+      <Select
         aria-label="Entity type"
         value={currentEntity}
         onChange={(e) => setParam('entity', e.target.value || null)}
-        className="h-8 rounded-md border bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="w-auto text-xs"
       >
         <option value="">All entities</option>
         {entityTypes.map((t) => (
@@ -110,7 +111,7 @@ export function AuditFilters({
             {t}
           </option>
         ))}
-      </select>
+      </Select>
 
       <DateRangeFilter />
 

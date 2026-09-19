@@ -4,7 +4,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { LoginForm } from './login-form';
 import { LoginHero } from './login-hero';
 
-export const metadata = { title: 'Log in · Ireland Career Gateway' };
+export const metadata = { title: 'Log in' };
 
 export default function LoginPage() {
   return (
@@ -29,7 +29,7 @@ export default function LoginPage() {
                 <div className="mb-6 flex justify-center">
                   <Image
                     src="/logo.png"
-                    alt="Ireland Career Gateway"
+                    alt="Logo"
                     width={848}
                     height={1200}
                     priority

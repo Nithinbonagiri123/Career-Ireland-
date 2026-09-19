@@ -7,6 +7,7 @@ import { env } from '@/lib/env';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { getMailer } from '@/lib/mail';
+import { fetchAppSettings } from '@/modules/settings/read';
 import { hashPassword } from './service';
 
 /**
@@ -123,20 +124,25 @@ export async function requestPasswordReset(input: {
   // Send the email. We deliberately don't await inside a try/catch that swallows
   // — if the mailer fails, the request must fail visibly so the user knows to
   // retry rather than checking a nonexistent inbox.
+  //
+  // Brand name is read from app_settings.legalName so it always matches
+  // whatever the customer set on /admin/settings. No hardcoded product name.
+  const settings = await fetchAppSettings();
+  const brand = settings.legalName;
   await getMailer().send({
     to: user.email,
-    subject: 'Reset your Ireland Career Gateway password',
+    subject: `Reset your ${brand} password`,
     text: [
       `Hello ${user.fullName || 'there'},`,
       '',
-      'A password reset was requested for your Ireland Career Gateway account.',
+      `A password reset was requested for your ${brand} account.`,
       'Click the link below to set a new password. This link expires in 1 hour and can be used only once.',
       '',
       buildResetUrl(token),
       '',
       "If you didn't request this, you can safely ignore this email — your password won't change.",
       '',
-      '— Ireland Career Gateway',
+      `— ${brand}`,
     ].join('\n'),
   });
 

@@ -1,4 +1,4 @@
-import { asc, eq, sql } from 'drizzle-orm';
+import { asc, eq, ilike, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -64,6 +64,43 @@ export async function upsertSkill(input: UpsertSkillInput): Promise<Skill> {
       entityId: created.id,
       action: 'CREATED',
       after: { name: created.name },
+    });
+    return created;
+  });
+}
+
+/**
+ * Inline-create a new skill from just its display name — used by the
+ * `CatalogAutosuggest` "+ Add to catalog: X" affordance across the app.
+ *
+ * Available to any internal staff (not just ADMIN) so recruiters can
+ * add skills they encounter without waiting on an admin. If a skill
+ * with the same name (case-insensitive) already exists it is returned
+ * rather than duplicated — makes the affordance idempotent.
+ */
+export async function createSkillFromName(name: string): Promise<Skill> {
+  const session = await requireInternalStaff();
+  const trimmed = name.trim();
+  if (trimmed.length < 2 || trimmed.length > 120) {
+    throw new ValidationError('Invalid skill name', {
+      name: 'Skill name must be 2–120 characters',
+    });
+  }
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(skills)
+      .where(ilike(skills.name, trimmed))
+      .limit(1);
+    if (existing) return existing;
+    const [created] = await tx.insert(skills).values({ name: trimmed, isActive: true }).returning();
+    if (!created) throw new Error('insert returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'skill',
+      entityId: created.id,
+      action: 'CREATED',
+      after: { name: created.name, viaInlineCreate: true },
     });
     return created;
   });

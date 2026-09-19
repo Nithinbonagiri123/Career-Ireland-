@@ -66,7 +66,7 @@ export function AppSidebar({
       <Link
         href={config.landingPath}
         className="flex h-14 items-center gap-2 border-b border-sidebar-border px-5"
-        aria-label="Ireland Career Gateway home"
+        aria-label="Home"
       >
         <Image
           src="/logo-mark.png"

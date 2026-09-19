@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
 import type { SetActiveByIdInput, UpsertCategoryInput, UpsertOccupationInput } from './schemas';
 import {
+  createOccupationFromName,
   setCategoryActive,
   setOccupationActive,
   upsertCategory,
@@ -34,4 +35,8 @@ export async function setOccupationActiveAction(input: SetActiveByIdInput) {
   const result = await toActionResult(() => setOccupationActive(input));
   if (result.ok) revalidate();
   return result;
+}
+
+export async function createOccupationFromNameAction(input: { name: string }) {
+  return toActionResult(() => createOccupationFromName(input.name));
 }

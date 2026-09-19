@@ -3,6 +3,7 @@
 import { Award, Briefcase, GraduationCap, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import type { EmploymentHistory } from '@/lib/db/schema/candidate_details';
 import type { Qualification, Skill } from '@/lib/db/schema/reference';
 import {
@@ -58,7 +60,12 @@ function SkillDialog({
   onDone: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [skillId, setSkillId] = useState(editingRow?.skillId ?? '');
+  const initialSelection: Selection = editingRow?.skillId
+    ? { kind: 'catalog', id: editingRow.skillId, label: editingRow.skillName ?? '' }
+    : editingRow?.customName
+      ? { kind: 'custom', customName: editingRow.customName }
+      : null;
+  const [selection, setSelection] = useState<Selection>(initialSelection);
   const [proficiency, setProficiency] = useState<keyof typeof PROF_LABEL>(
     editingRow?.proficiency ?? 'INTERMEDIATE',
   );
@@ -66,32 +73,44 @@ function SkillDialog({
   const [notes, setNotes] = useState(editingRow?.notes ?? '');
   const [pending, startTransition] = useTransition();
 
-  const availableSkills = allSkills.filter(
-    (s) => s.isActive && (s.id === skillId || !existing.has(s.id)),
-  );
+  const excludeIds = new Set([...existing].filter((id): id is string => Boolean(id)));
 
   const submit = () => {
     startTransition(async () => {
       const yearsN = years.trim().length === 0 ? null : Number(years);
-      const r = editingRow
-        ? await updateCandidateSkillAction(
-            {
-              id: editingRow.id,
-              proficiency,
-              yearsExperience: yearsN,
-              notes,
-            },
-            personId,
-          )
-        : await addCandidateSkillAction({
-            personId,
-            skillId,
+      if (editingRow) {
+        const r = await updateCandidateSkillAction(
+          {
+            id: editingRow.id,
             proficiency,
             yearsExperience: yearsN,
             notes,
-          });
+          },
+          personId,
+        );
+        if (r.ok) {
+          toast.success('Skill updated');
+          setOpen(false);
+          onDone();
+        } else {
+          toast.error(r.error.message);
+        }
+        return;
+      }
+      if (!selection) {
+        toast.error('Pick a skill or type one to add');
+        return;
+      }
+      const r = await addCandidateSkillAction({
+        personId,
+        skillId: selection.kind === 'catalog' ? selection.id : '',
+        customName: selection.kind === 'custom' ? selection.customName : '',
+        proficiency,
+        yearsExperience: yearsN,
+        notes,
+      });
       if (r.ok) {
-        toast.success(editingRow ? 'Skill updated' : 'Skill added');
+        toast.success('Skill added');
         setOpen(false);
         onDone();
       } else {
@@ -123,35 +142,30 @@ function SkillDialog({
           {!editingRow && (
             <div className="space-y-1">
               <Label htmlFor="skill">Skill</Label>
-              <select
-                id="skill"
-                value={skillId}
-                onChange={(e) => setSkillId(e.target.value)}
-                className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
-              >
-                <option value="">Select…</option>
-                {availableSkills.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <CatalogAutosuggest
+                inputId="skill"
+                options={allSkills}
+                value={selection}
+                onChange={setSelection}
+                excludeIds={excludeIds}
+                placeholder="Type to search — or paste from the CV"
+                autoFocus
+              />
             </div>
           )}
           <div className="space-y-1">
             <Label htmlFor="prof">Proficiency</Label>
-            <select
+            <Select
               id="prof"
               value={proficiency}
               onChange={(e) => setProficiency(e.target.value as keyof typeof PROF_LABEL)}
-              className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
             >
               {Object.entries(PROF_LABEL).map(([k, v]) => (
                 <option key={k} value={k}>
                   {v}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="space-y-1">
             <Label htmlFor="years">Years of experience</Label>
@@ -179,7 +193,7 @@ function SkillDialog({
           <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={pending || (!editingRow && !skillId)}>
+          <Button onClick={submit} disabled={pending || (!editingRow && !selection)}>
             {editingRow ? 'Save' : 'Add'}
           </Button>
         </DialogFooter>
@@ -200,7 +214,10 @@ export function SkillsSection({
   const [, startTransition] = useTransition();
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((t) => t + 1);
-  const existing = new Set(rows.map((r) => r.skillId));
+  // Only catalog IDs — custom entries aren't offered by autosuggest anyway.
+  const existing = new Set(
+    rows.map((r) => r.skillId).filter((id): id is string => id !== null),
+  );
 
   const remove = (id: string) => {
     if (!confirm('Remove this skill?')) return;
@@ -241,7 +258,14 @@ export function SkillsSection({
             {rows.map((r) => (
               <li key={r.id} className="flex items-center justify-between py-2 text-sm">
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{r.skillName}</p>
+                  <p className="flex items-center gap-2 truncate font-medium">
+                    {r.skillName}
+                    {r.isCustom && (
+                      <Badge variant="outline" className="text-[9px]">
+                        CUSTOM
+                      </Badge>
+                    )}
+                  </p>
                   <p className="truncate text-[11px] text-muted-foreground">
                     {PROF_LABEL[r.proficiency]}
                     {r.yearsExperience ? ` · ${r.yearsExperience}y` : ''}
@@ -291,38 +315,57 @@ function QualificationDialog({
   onDone: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [qualId, setQualId] = useState(editingRow?.qualificationId ?? '');
+  const initialSelection: Selection = editingRow?.qualificationId
+    ? { kind: 'catalog', id: editingRow.qualificationId, label: editingRow.qualificationName ?? '' }
+    : editingRow?.customName
+      ? { kind: 'custom', customName: editingRow.customName }
+      : null;
+  const [selection, setSelection] = useState<Selection>(initialSelection);
   const [awardedOn, setAwardedOn] = useState(editingRow?.awardedOn ?? '');
   const [institution, setInstitution] = useState(editingRow?.institution ?? '');
   const [refNumber, setRefNumber] = useState(editingRow?.referenceNumber ?? '');
   const [notes, setNotes] = useState(editingRow?.notes ?? '');
   const [pending, startTransition] = useTransition();
 
-  const available = allQuals.filter((q) => q.isActive && (q.id === qualId || !existing.has(q.id)));
+  const excludeIds = new Set([...existing].filter((id): id is string => Boolean(id)));
 
   const submit = () => {
     startTransition(async () => {
-      const r = editingRow
-        ? await updateCandidateQualificationAction(
-            {
-              id: editingRow.id,
-              awardedOn,
-              institution,
-              referenceNumber: refNumber,
-              notes,
-            },
-            personId,
-          )
-        : await addCandidateQualificationAction({
-            personId,
-            qualificationId: qualId,
+      if (editingRow) {
+        const r = await updateCandidateQualificationAction(
+          {
+            id: editingRow.id,
             awardedOn,
             institution,
             referenceNumber: refNumber,
             notes,
-          });
+          },
+          personId,
+        );
+        if (r.ok) {
+          toast.success('Qualification updated');
+          setOpen(false);
+          onDone();
+        } else {
+          toast.error(r.error.message);
+        }
+        return;
+      }
+      if (!selection) {
+        toast.error('Pick a qualification or type one to add');
+        return;
+      }
+      const r = await addCandidateQualificationAction({
+        personId,
+        qualificationId: selection.kind === 'catalog' ? selection.id : '',
+        customName: selection.kind === 'custom' ? selection.customName : '',
+        awardedOn,
+        institution,
+        referenceNumber: refNumber,
+        notes,
+      });
       if (r.ok) {
-        toast.success(editingRow ? 'Qualification updated' : 'Qualification added');
+        toast.success('Qualification added');
         setOpen(false);
         onDone();
       } else {
@@ -354,19 +397,15 @@ function QualificationDialog({
           {!editingRow && (
             <div className="space-y-1">
               <Label htmlFor="qual">Qualification</Label>
-              <select
-                id="qual"
-                value={qualId}
-                onChange={(e) => setQualId(e.target.value)}
-                className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
-              >
-                <option value="">Select…</option>
-                {available.map((q) => (
-                  <option key={q.id} value={q.id}>
-                    {q.name}
-                  </option>
-                ))}
-              </select>
+              <CatalogAutosuggest
+                inputId="qual"
+                options={allQuals}
+                value={selection}
+                onChange={setSelection}
+                excludeIds={excludeIds}
+                placeholder="Type to search — or paste from the CV"
+                autoFocus
+              />
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
@@ -401,7 +440,7 @@ function QualificationDialog({
           <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={pending || (!editingRow && !qualId)}>
+          <Button onClick={submit} disabled={pending || (!editingRow && !selection)}>
             {editingRow ? 'Save' : 'Add'}
           </Button>
         </DialogFooter>
@@ -422,7 +461,9 @@ export function QualificationsSection({
   const [, startTransition] = useTransition();
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((t) => t + 1);
-  const existing = new Set(rows.map((r) => r.qualificationId));
+  const existing = new Set(
+    rows.map((r) => r.qualificationId).filter((id): id is string => id !== null),
+  );
 
   const remove = (id: string) => {
     if (!confirm('Remove this qualification?')) return;
@@ -463,7 +504,14 @@ export function QualificationsSection({
             {rows.map((r) => (
               <li key={r.id} className="flex items-center justify-between py-2 text-sm">
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{r.qualificationName}</p>
+                  <p className="flex items-center gap-2 truncate font-medium">
+                    {r.qualificationName}
+                    {r.isCustom && (
+                      <Badge variant="outline" className="text-[9px]">
+                        CUSTOM
+                      </Badge>
+                    )}
+                  </p>
                   <p className="truncate text-[11px] text-muted-foreground">
                     {r.institution ? `${r.institution}` : 'Institution not set'}
                     {r.awardedOn ? ` · ${r.awardedOn}` : ''}

@@ -1,5 +1,4 @@
 import { eq } from 'drizzle-orm';
-import { cache } from 'react';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requirePermission, requireSession } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -13,28 +12,14 @@ import { BusinessRuleError } from '@/lib/errors';
  * `fetchAppSettings()` — never import a hardcoded constant. See memory
  * `no-hardcoded-document-content` for the standing rule.
  *
- * `fetchAppSettings` is wrapped in React `cache()` so a single
- * dashboard/invoice render only hits the DB once even if multiple
- * server components request the settings independently.
+ * `fetchAppSettings` is defined in `./read` (auth-free, cached) so
+ * pre-login callers can import it without dragging next-auth into
+ * their module graph. We re-export it here for backwards compatibility
+ * with the existing app-side imports.
  */
 
-export const fetchAppSettings = cache(async (): Promise<AppSettings> => {
-  const [row] = await db
-    .select()
-    .from(appSettings)
-    .where(eq(appSettings.id, APP_SETTINGS_ID))
-    .limit(1);
-  if (!row) {
-    // The migration seeds the singleton; if it's missing something
-    // broke in the migration path — surface a clear error rather than
-    // rendering `undefined` everywhere.
-    throw new BusinessRuleError(
-      'APP_SETTINGS_MISSING',
-      'app_settings singleton row is missing — re-run pnpm db:migrate',
-    );
-  }
-  return row;
-});
+export { fetchAppSettings } from './read';
+import { fetchAppSettings } from './read';
 
 /**
  * Shape of the editable fields — the admin form binds to this. `id`,

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { fetchAppSettings } from '@/modules/settings/read';
 import './globals.css';
 
 const geistSans = Geist({
@@ -15,10 +16,34 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
-export const metadata: Metadata = {
-  title: 'Ireland Career Gateway CRM',
-  description: 'Internal CRM for Ireland Career Gateway',
-};
+/**
+ * Root metadata is derived from `app_settings.legalName` so the browser
+ * tab, share previews, and PWA title all reflect the customer's brand —
+ * no hardcoded product name. Falls back gracefully if the singleton row
+ * is missing (never render `undefined`).
+ *
+ * The `title.template` string is what Next.js uses to compose child-page
+ * titles: any page that exports `title: 'Candidates'` will render as
+ * `'Candidates · <brand>'` in the tab. Child pages can therefore drop
+ * the brand suffix — it's supplied automatically here.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const settings = await fetchAppSettings();
+    return {
+      title: {
+        default: `${settings.legalName} CRM`,
+        template: `%s · ${settings.legalName}`,
+      },
+      description: `Internal CRM for ${settings.legalName}`,
+    };
+  } catch {
+    return {
+      title: { default: 'CRM', template: '%s · CRM' },
+      description: 'Internal CRM',
+    };
+  }
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

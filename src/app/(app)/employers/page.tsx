@@ -9,6 +9,7 @@ import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { parseAssignmentScope } from '@/lib/scope';
 import { fetchEmployers } from '@/modules/employers/service';
+import { fetchAppSettings } from '@/modules/settings/service';
 import { EmployerDialog } from './employer-dialog';
 import { EmployersTable } from './employers-table';
 
@@ -23,7 +24,10 @@ export default async function EmployersPage({
   const { assigned, created, from, to } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const createdRange = parseDateRangeParams({ created, from, to });
-  const employers = await fetchEmployers(scope, createdRange);
+  const [employers, settings] = await Promise.all([
+    fetchEmployers(scope, createdRange),
+    fetchAppSettings(),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
@@ -31,7 +35,7 @@ export default async function EmployersPage({
         <PageHeader
           icon={Building2}
           title="Employers"
-          description="Irish employers Ireland Career Gateway recruits for. Each employer has multiple contacts and can raise multiple Job Requisitions."
+          description={`Employers ${settings.legalName} recruits for. Each employer has multiple contacts and can raise multiple Job Requisitions.`}
           action={
             <div className="flex flex-wrap items-center gap-2">
               <DateRangeFilter />

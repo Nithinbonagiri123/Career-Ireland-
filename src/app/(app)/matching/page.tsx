@@ -7,7 +7,7 @@ import { fetchRequisitions } from '@/modules/requisitions/service';
 import { WorkflowRequisitionList } from '../_workflow-list/requisition-list';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Matching · Ireland Career Gateway' };
+export const metadata = { title: 'Matching' };
 
 export default async function MatchingPage() {
   await requirePermission('recruitment', 'matching', 'view');

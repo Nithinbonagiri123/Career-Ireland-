@@ -1,10 +1,11 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
+import { FormField } from '@/components/form-field';
+import { SubmitButton } from '@/components/submit-button';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -15,7 +16,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { toastResult } from '@/lib/toast-result';
 import { updateCommunicationAction } from '@/modules/activities/actions';
 import {
   type UpdateCommunicationInput,
@@ -67,12 +70,7 @@ export function EditCommDialog({
       occurredAt: raw.occurredAt ? new Date(raw.occurredAt).toISOString() : '',
     };
     const r = await updateCommunicationAction(payload);
-    if (r.ok) {
-      toast.success('Communication updated');
-      onOpenChange(false);
-    } else {
-      toast.error(r.error.message);
-    }
+    if (toastResult(r, { success: 'Communication updated' })) onOpenChange(false);
   });
 
   return (
@@ -85,52 +83,35 @@ export function EditCommDialog({
           <input type="hidden" {...register('communicationId')} />
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="type">Type</Label>
-              <select
-                id="type"
-                className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                {...register('type')}
-              >
+            <FormField id="type" label="Type">
+              <Select id="type" {...register('type')}>
                 <option value="EMAIL">Email</option>
                 <option value="PHONE">Phone</option>
                 <option value="MEETING">Meeting</option>
                 <option value="INTERNAL_NOTE">Internal note</option>
                 <option value="OTHER">Other</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="direction">Direction</Label>
-              <select
-                id="direction"
-                className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                {...register('direction')}
-              >
+              </Select>
+            </FormField>
+            <FormField id="direction" label="Direction">
+              <Select id="direction" {...register('direction')}>
                 <option value="OUTBOUND">Outbound</option>
                 <option value="INBOUND">Inbound</option>
                 <option value="INTERNAL">Internal</option>
-              </select>
-            </div>
+              </Select>
+            </FormField>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="occurredAt">Occurred at</Label>
+          <FormField id="occurredAt" label="Occurred at">
             <Input id="occurredAt" type="datetime-local" {...register('occurredAt')} />
-          </div>
+          </FormField>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="subject">Subject</Label>
+          <FormField id="subject" label="Subject">
             <Input id="subject" {...register('subject')} />
-          </div>
+          </FormField>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="body">Body</Label>
-            <textarea
-              id="body"
-              className="min-h-32 w-full rounded-md border border-input bg-background p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-              {...register('body')}
-            />
-          </div>
+          <FormField id="body" label="Body">
+            <Textarea id="body" className="min-h-32" {...register('body')} />
+          </FormField>
 
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...register('followUpRequired')} />
@@ -146,10 +127,7 @@ export function EditCommDialog({
 
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Save changes
-            </Button>
+            <SubmitButton loading={isSubmitting}>Save changes</SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

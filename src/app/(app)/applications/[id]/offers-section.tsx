@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import type { Currency } from '@/lib/db/schema/currencies';
 import type { Offer } from '@/lib/db/schema/interviews_offers';
 import {
@@ -113,33 +114,31 @@ function CreateOfferDialog({
             </div>
             <div className="space-y-1">
               <Label htmlFor="ccy">Currency</Label>
-              <select
+              <Select
                 id="ccy"
                 value={currencyCode}
                 onChange={(e) => setCurrencyCode(e.target.value)}
-                className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
               >
                 {currencies.map((c) => (
                   <option key={c.code} value={c.code}>
                     {c.code}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
           <div className="space-y-1">
             <Label htmlFor="period">Period</Label>
-            <select
+            <Select
               id="period"
               value={period}
               onChange={(e) => setPeriod(e.target.value as Offer['period'])}
-              className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
             >
               <option value="ANNUAL">Annual</option>
               <option value="MONTHLY">Monthly</option>
               <option value="WEEKLY">Weekly</option>
               <option value="HOURLY">Hourly</option>
-            </select>
+            </Select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">

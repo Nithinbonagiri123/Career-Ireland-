@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import type { Interview } from '@/lib/db/schema/interviews_offers';
 import {
   removeInterviewAction,
@@ -130,17 +131,16 @@ function ScheduleDialog({ applicationId }: { applicationId: string }) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label htmlFor="mode">Mode</Label>
-              <select
+              <Select
                 id="mode"
                 value={mode}
                 onChange={(e) => setMode(e.target.value as Interview['mode'])}
-                className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm"
               >
                 <option value="VIDEO">Video</option>
                 <option value="PHONE">Phone</option>
                 <option value="IN_PERSON">In person</option>
                 <option value="PANEL">Panel</option>
-              </select>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label htmlFor="round">Round</Label>

@@ -10,6 +10,7 @@ import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { parseAssignmentScope } from '@/lib/scope';
 import { fetchCandidates } from '@/modules/candidates/service';
+import { fetchAppSettings } from '@/modules/settings/service';
 import { fetchStaffUserOptions } from '@/modules/users/service';
 import { CandidatesTable } from './candidates-table';
 
@@ -24,9 +25,10 @@ export default async function CandidatesPage({
   const { assigned, created, from, to } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const createdRange = parseDateRangeParams({ created, from, to });
-  const [candidates, staffUsers] = await Promise.all([
+  const [candidates, staffUsers, settings] = await Promise.all([
     fetchCandidates(scope, createdRange),
     fetchStaffUserOptions(),
+    fetchAppSettings(),
   ]);
 
   return (
@@ -35,7 +37,7 @@ export default async function CandidatesPage({
         <PageHeader
           icon={Users}
           title="Candidates"
-          description="Ireland Career Gateway's active talent pool. Shared across Candidate Services and Recruitment — each person is a single record. Click any row for the full timeline."
+          description={`${settings.legalName}'s active talent pool. Shared across Candidate Services and Recruitment — each person is a single record. Click any row for the full timeline.`}
           action={
             <div className="flex flex-wrap items-center gap-2">
               <DateRangeFilter />

@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { recordPaymentAction, verifyPaymentAction } from '@/modules/commerce/actions';
 import { type RecordPaymentInput, RecordPaymentSchema } from '@/modules/commerce/schemas';
 
@@ -163,15 +164,11 @@ export function RecordInvoicePaymentDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="rp-method">Method</Label>
-              <select
-                id="rp-method"
-                className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                {...register('method')}
-              >
+              <Select id="rp-method" {...register('method')}>
                 <option value="BANK_TRANSFER">Bank transfer</option>
                 <option value="CASH">Cash</option>
                 <option value="OTHER">Other</option>
-              </select>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="rp-received">Received on</Label>

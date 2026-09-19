@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { formatCurrency } from '@/lib/currency';
 import type { AgingBucket, AgingReport } from '@/modules/billing/aging';
 
 /**
@@ -62,7 +63,7 @@ export function AgingSection({ report }: { report: AgingReport }) {
                 <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
                   {report.overdueTotals.map((t) => (
                     <p key={t.currencyCode} className="text-base font-semibold tabular-nums">
-                      {formatMoney(t.total, t.currencyCode)}
+                      {formatCurrency(t.total, t.currencyCode, { maximumFractionDigits: 0, minimumFractionDigits: 0 })}
                       <span className="ml-1.5 text-xs font-normal text-muted-foreground">
                         · {t.count} {t.count === 1 ? 'invoice' : 'invoices'}
                       </span>
@@ -98,7 +99,7 @@ export function AgingSection({ report }: { report: AgingReport }) {
                             key={r.currencyCode}
                             className="truncate text-xs tabular-nums text-muted-foreground"
                           >
-                            {formatMoney(r.total, r.currencyCode)}
+                            {formatCurrency(r.total, r.currencyCode, { maximumFractionDigits: 0, minimumFractionDigits: 0 })}
                           </li>
                         ))}
                       </ul>
@@ -125,23 +126,3 @@ export function AgingSection({ report }: { report: AgingReport }) {
   );
 }
 
-const currencyFormatters = new Map<string, Intl.NumberFormat>();
-function formatMoney(amount: string, currency: string): string {
-  let fmt = currencyFormatters.get(currency);
-  if (!fmt) {
-    try {
-      fmt = new Intl.NumberFormat('en-IE', {
-        style: 'currency',
-        currency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      });
-    } catch {
-      fmt = new Intl.NumberFormat('en-IE', { minimumFractionDigits: 0 });
-    }
-    currencyFormatters.set(currency, fmt);
-  }
-  const n = Number.parseFloat(amount);
-  if (!Number.isFinite(n)) return `${amount} ${currency}`;
-  return fmt.format(n);
-}

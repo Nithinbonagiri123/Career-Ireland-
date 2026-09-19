@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import type { z } from 'zod';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { ProspectStatusSchema } from '@/modules/campaigns/schemas';
 
@@ -89,11 +90,11 @@ export function ProspectsFilters({
             aria-label="Search prospects"
           />
         </div>
-        <select
+        <Select
           aria-label="Filter by campaign"
           value={active.campaignId ?? ''}
           onChange={(e) => setParam('campaign', e.target.value || undefined)}
-          className="h-9 rounded-md border bg-transparent px-3 text-sm"
+          className="w-auto"
         >
           <option value="">All campaigns</option>
           {campaigns.map((c) => (
@@ -101,12 +102,12 @@ export function ProspectsFilters({
               {c.name}
             </option>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
           aria-label="Filter by country"
           value={active.country ?? ''}
           onChange={(e) => setParam('country', e.target.value || undefined)}
-          className="h-9 rounded-md border bg-transparent px-3 text-sm"
+          className="w-auto"
         >
           <option value="">All countries</option>
           {countries.map((c) => (
@@ -114,7 +115,7 @@ export function ProspectsFilters({
               {c}
             </option>
           ))}
-        </select>
+        </Select>
         {activeCount > 0 && (
           <button
             type="button"

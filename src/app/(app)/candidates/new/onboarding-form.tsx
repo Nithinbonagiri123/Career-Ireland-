@@ -13,9 +13,12 @@ import {
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { DocumentUploader } from '@/components/document-uploader';
+import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
+import { MultiDocumentUploader } from '@/components/multi-document-uploader';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
@@ -31,6 +34,7 @@ import {
   finaliseDraftAction,
   updateDraftPersonAction,
 } from '@/modules/candidates/onboarding-actions';
+import { createOccupationFromNameAction } from '@/modules/occupations/actions';
 
 type Draft = {
   personId: string;
@@ -47,7 +51,7 @@ type Draft = {
 
 type Currency = { code: string; symbol: string };
 
-type DocType = { id: string; name: string; code: string };
+type DocType = { id: string; name: string; code: string; hasExpiry: boolean };
 type UploadedDoc = { id: string; filename: string; documentTypeId: string };
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -159,9 +163,11 @@ export function OnboardingForm({
   // The candidate's primary occupation (Plumber, Electrician, etc.) —
   // set on candidate_profiles at finalise. Not auto-saved because there's
   // no candidate profile yet during draft; picked once at intake, and
-  // editable on the candidate detail page afterwards. Empty string
-  // means "not chosen" (a valid state; you can add it later).
-  const [primaryOccupationId, setPrimaryOccupationId] = useState('');
+  // editable on the candidate detail page afterwards. `null` means
+  // "not chosen" (a valid state; you can add it later).
+  const [occupationSelection, setOccupationSelection] = useState<Selection>(null);
+  const primaryOccupationId =
+    occupationSelection?.kind === 'catalog' ? occupationSelection.id : '';
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -173,7 +179,6 @@ export function OnboardingForm({
   // finaliseDraft flips the person's is_draft flag they become visible on
   // the candidate detail page's Documents section automatically.
   const [uploads, setUploads] = useState<UploadedDoc[]>(existingDocuments);
-  const [selectedDocTypeId, setSelectedDocTypeId] = useState<string>(docTypes[0]?.id ?? '');
 
   const canFinalise =
     personal.firstName.trim().length > 0 &&
@@ -290,25 +295,25 @@ export function OnboardingForm({
                   Used by the matching algorithm to score this candidate against requisitions.
                 </span>
               </Label>
-              <select
-                id="primaryOccupation"
-                value={primaryOccupationId}
-                onChange={(e) => setPrimaryOccupationId(e.currentTarget.value)}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-              >
-                <option value="">— none / choose later —</option>
-                {occupations.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
+              <CatalogAutosuggest
+                inputId="primaryOccupation"
+                options={occupations.map((o) => ({ id: o.id, name: o.name, isActive: true }))}
+                value={occupationSelection}
+                onChange={setOccupationSelection}
+                placeholder="Type to search — or add a new occupation"
+                createLabel="Add occupation"
+                onCreateNew={async (name) => {
+                  const r = await createOccupationFromNameAction({ name });
+                  if (!r.ok) throw new Error(r.error.message);
+                  return { id: r.data.id, label: r.data.name };
+                }}
+              />
             </div>
             <div className="md:col-span-2 space-y-1.5">
               <Label htmlFor="notes">Notes / profile summary</Label>
-              <textarea
+              <Textarea
                 id="notes"
-                className="w-full min-h-24 rounded-md border border-input bg-background p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                className="min-h-24"
                 value={personal.notes}
                 onChange={(e) => setPersonal((p) => ({ ...p, notes: e.currentTarget.value }))}
                 placeholder="Short bio, key achievements, anything worth surfacing to recruiters…"
@@ -328,8 +333,8 @@ export function OnboardingForm({
             </p>
           </CardHeader>
           <CardContent>
-            <textarea
-              className="w-full min-h-40 rounded-md border border-input bg-background p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+            <Textarea
+              className="min-h-40"
               value={coverLetter}
               onChange={(e) => setCoverLetter(e.currentTarget.value)}
               maxLength={10000}
@@ -344,57 +349,29 @@ export function OnboardingForm({
           <CardHeader>
             <CardTitle className="text-base">Documents</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              CV, cover letter PDF, passport, degree certificates — anything you want on file.
-              Uploads attach to the draft candidate and stay with it after Create.
+              Drop multiple files at once — each row picks its own type + display name.
+              Missing a type? Pick <span className="font-medium">+ New type…</span> and it'll
+              show up in every dropdown across the system.
             </p>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {docTypes.length === 0 ? (
-              <p className="rounded-md border border-dashed bg-muted/40 p-3 text-xs text-muted-foreground">
-                No person-applicable document types are configured. Add some under Admin → Document
-                types and come back.
-              </p>
-            ) : (
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="min-w-52 flex-1 space-y-1.5">
-                  <Label htmlFor="docType">Document type</Label>
-                  <select
-                    id="docType"
-                    className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                    value={selectedDocTypeId}
-                    onChange={(e) => setSelectedDocTypeId(e.currentTarget.value)}
-                  >
-                    {docTypes.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {/* `key` forces a fresh uploader after every successful upload
-                    so the button label resets from "Uploaded" back to "Upload
-                    file" and staff can add another doc without an extra click. */}
-                <DocumentUploader
-                  key={`${selectedDocTypeId}:${uploads.length}`}
-                  ownerType="PERSON"
-                  ownerId={draft.personId}
-                  documentTypeId={selectedDocTypeId}
-                  onUploaded={(doc) =>
-                    setUploads((prev) => [
-                      ...prev,
-                      {
-                        id: doc.id,
-                        filename: doc.originalFilename,
-                        documentTypeId: doc.documentTypeId,
-                      },
-                    ])
-                  }
-                />
-              </div>
-            )}
-
+          <CardContent>
+            <MultiDocumentUploader
+              ownerType="PERSON"
+              ownerId={draft.personId}
+              documentTypes={docTypes}
+              onUploaded={(doc) =>
+                setUploads((prev) => [
+                  ...prev,
+                  {
+                    id: doc.id,
+                    filename: doc.displayName ?? doc.originalFilename,
+                    documentTypeId: doc.documentTypeId,
+                  },
+                ])
+              }
+            />
             {uploads.length > 0 && (
-              <ul className="divide-y rounded-md border">
+              <ul className="mt-4 divide-y rounded-md border">
                 {uploads.map((u) => {
                   const typeName =
                     docTypes.find((t) => t.id === u.documentTypeId)?.name ?? 'Document';
@@ -444,9 +421,8 @@ export function OnboardingForm({
             />
             <div className="space-y-1.5">
               <Label htmlFor="currencyCode">Currency *</Label>
-              <select
+              <Select
                 id="currencyCode"
-                className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
                 value={payment.currencyCode}
                 onChange={(e) => setPayment((p) => ({ ...p, currencyCode: e.currentTarget.value }))}
               >
@@ -455,16 +431,15 @@ export function OnboardingForm({
                     {c.code} ({c.symbol})
                   </option>
                 ))}
-              </select>
+              </Select>
               {fieldErrors['payment.currencyCode'] && (
                 <p className="text-xs text-destructive">{fieldErrors['payment.currencyCode']}</p>
               )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="method">Method *</Label>
-              <select
+              <Select
                 id="method"
-                className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
                 value={payment.method}
                 onChange={(e) =>
                   setPayment((p) => ({
@@ -476,7 +451,7 @@ export function OnboardingForm({
                 <option value="BANK_TRANSFER">Bank transfer</option>
                 <option value="CASH">Cash</option>
                 <option value="OTHER">Other</option>
-              </select>
+              </Select>
             </div>
             <FieldPair
               id="receivedAt"
@@ -495,9 +470,9 @@ export function OnboardingForm({
             />
             <div className="space-y-1.5 md:col-span-2">
               <Label htmlFor="paymentNotes">Notes</Label>
-              <textarea
+              <Textarea
                 id="paymentNotes"
-                className="w-full min-h-20 rounded-md border border-input bg-background p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                className="min-h-20"
                 value={payment.notes}
                 onChange={(e) => setPayment((p) => ({ ...p, notes: e.currentTarget.value }))}
                 maxLength={2000}

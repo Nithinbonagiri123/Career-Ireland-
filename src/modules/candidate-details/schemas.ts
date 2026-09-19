@@ -7,13 +7,23 @@ export const ProficiencySchema = z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED',
 
 // ─── Skills ───────────────────────────────────────────────────────────────────
 
-export const AddCandidateSkillSchema = z.object({
-  personId: uuid,
-  skillId: uuid,
-  proficiency: ProficiencySchema.default('INTERMEDIATE'),
-  yearsExperience: z.coerce.number().int().min(0).max(80).optional().nullable(),
-  notes: z.string().max(500).optional().or(blank),
-});
+export const AddCandidateSkillSchema = z
+  .object({
+    personId: uuid,
+    /** Set when the operator picked a catalog match. Nullable for free text. */
+    skillId: uuid.optional().or(blank),
+    /** Set when the operator entered free text ("copy-paste from the CV"). */
+    customName: z.string().min(1).max(200).optional().or(blank),
+    proficiency: ProficiencySchema.default('INTERMEDIATE'),
+    yearsExperience: z.coerce.number().int().min(0).max(80).optional().nullable(),
+    notes: z.string().max(500).optional().or(blank),
+  })
+  .refine(
+    (v) =>
+      (typeof v.skillId === 'string' && v.skillId.length > 0) !==
+      (typeof v.customName === 'string' && v.customName.length > 0),
+    { message: 'Provide exactly one of skillId or customName', path: ['customName'] },
+  );
 
 export const UpdateCandidateSkillSchema = z.object({
   id: uuid,
@@ -26,14 +36,27 @@ export const RemoveCandidateSkillSchema = z.object({ id: uuid });
 
 // ─── Qualifications ───────────────────────────────────────────────────────────
 
-export const AddCandidateQualificationSchema = z.object({
-  personId: uuid,
-  qualificationId: uuid,
-  awardedOn: z.string().optional().or(blank),
-  institution: z.string().max(200).optional().or(blank),
-  referenceNumber: z.string().max(120).optional().or(blank),
-  notes: z.string().max(500).optional().or(blank),
-});
+export const AddCandidateQualificationSchema = z
+  .object({
+    personId: uuid,
+    /** Set when the operator picked a catalog match. Nullable for free text. */
+    qualificationId: uuid.optional().or(blank),
+    /** Set when the operator entered free text. */
+    customName: z.string().min(1).max(200).optional().or(blank),
+    awardedOn: z.string().optional().or(blank),
+    institution: z.string().max(200).optional().or(blank),
+    referenceNumber: z.string().max(120).optional().or(blank),
+    notes: z.string().max(500).optional().or(blank),
+  })
+  .refine(
+    (v) =>
+      (typeof v.qualificationId === 'string' && v.qualificationId.length > 0) !==
+      (typeof v.customName === 'string' && v.customName.length > 0),
+    {
+      message: 'Provide exactly one of qualificationId or customName',
+      path: ['customName'],
+    },
+  );
 
 export const UpdateCandidateQualificationSchema = z.object({
   id: uuid,

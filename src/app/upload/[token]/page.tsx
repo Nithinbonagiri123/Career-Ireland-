@@ -6,7 +6,7 @@ import { validateUploadRequest } from '@/modules/document-upload-requests/servic
 import { UploadForm } from './upload-form';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Upload your documents · Ireland Career Gateway' };
+export const metadata = { title: 'Upload your documents' };
 
 /**
  * Public "please upload your documents" page. No login, token in URL

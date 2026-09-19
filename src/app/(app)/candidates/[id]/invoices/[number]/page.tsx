@@ -10,7 +10,7 @@ import { fetchAppSettings } from '@/modules/settings/service';
 import { VoidInvoiceControls } from './void-invoice-controls';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Invoice · Ireland Career Gateway' };
+export const metadata = { title: 'Invoice' };
 
 /**
  * Person-scoped printable invoice. Refuses when the invoice is
