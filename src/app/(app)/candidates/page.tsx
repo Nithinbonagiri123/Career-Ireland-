@@ -12,6 +12,7 @@ import { parseAssignmentScope } from '@/lib/scope';
 import { fetchCandidates } from '@/modules/candidates/service';
 import { fetchAppSettings } from '@/modules/settings/service';
 import { fetchStaffUserOptions } from '@/modules/users/service';
+import { CandidatesCardGrid, CandidatesViewToggle } from './candidate-card';
 import { CandidatesTable } from './candidates-table';
 
 export const dynamic = 'force-dynamic';
@@ -19,12 +20,19 @@ export const dynamic = 'force-dynamic';
 export default async function CandidatesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ assigned?: string; created?: string; from?: string; to?: string }>;
+  searchParams: Promise<{
+    assigned?: string;
+    created?: string;
+    from?: string;
+    to?: string;
+    view?: string;
+  }>;
 }) {
   await requirePermission('candidate_services', 'candidates', 'view');
-  const { assigned, created, from, to } = await searchParams;
+  const { assigned, created, from, to, view } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const createdRange = parseDateRangeParams({ created, from, to });
+  const currentView: 'grid' | 'table' = view === 'table' ? 'table' : 'grid';
   const [candidates, staffUsers, settings] = await Promise.all([
     fetchCandidates(scope, createdRange),
     fetchStaffUserOptions(),
@@ -43,6 +51,7 @@ export default async function CandidatesPage({
             <div className="flex flex-wrap items-center gap-2">
               <DateRangeFilter />
               <ScopeFilter current={scope} />
+              <CandidatesViewToggle current={currentView} />
               <CsvExportButton href="/api/export/candidates" />
               <Link href="/candidates/new" className={buttonVariants({ size: 'default' })}>
                 <Plus className="mr-1.5 size-4" />
@@ -53,14 +62,18 @@ export default async function CandidatesPage({
         />
       </FadeUp>
       <FadeUp delay={0.05}>
-        <CandidatesTable
-          candidates={candidates}
-          staffUsers={staffUsers.map((u) => ({
-            id: u.id,
-            fullName: u.fullName,
-            email: u.email,
-          }))}
-        />
+        {currentView === 'grid' ? (
+          <CandidatesCardGrid candidates={candidates} />
+        ) : (
+          <CandidatesTable
+            candidates={candidates}
+            staffUsers={staffUsers.map((u) => ({
+              id: u.id,
+              fullName: u.fullName,
+              email: u.email,
+            }))}
+          />
+        )}
       </FadeUp>
     </div>
   );
