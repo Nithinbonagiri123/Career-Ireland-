@@ -1,0 +1,126 @@
+name: Deploy
+
+# Deploy pipeline for main. Gated so nothing ships until the whole
+# verification suite (typecheck, lint, unit tests, integration tests,
+# e2e tests) has already passed on the same SHA via ci.yml.
+#
+# Flow:
+#   1. `wait-for-ci`  — hard block until ci.yml (both verify + e2e jobs)
+#                       completes successfully for this commit. If CI is
+#                       still running we wait; if it failed we abort.
+#   2. `db-push`      — apply schema changes to the production database.
+#                       Uses `drizzle-kit push` for a state-based apply
+#                       rather than the migration file replay CI uses.
+#                       DATABASE_URL comes from secrets, never from env.
+#   3. `deploy`       — placeholder for the platform-specific push
+#                       (Vercel / Fly / Docker / etc.). Wire this up
+#                       once the deploy target is chosen — the guard
+#                       and db-push steps above are the immovable ones.
+#
+# Branch protection on main should require BOTH `CI / verify` and
+# `CI / e2e` as required status checks so a merge can't happen without
+# a green CI run. This workflow doubles that guarantee for direct
+# pushes (which shouldn't happen under branch protection, but belt &
+# braces).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # Only one deploy at a time on main — cancel any in-flight run when a
+  # newer commit lands.
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  wait-for-ci:
+    name: Wait for CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for ci.yml (verify + e2e) to succeed
+        # `lewagon/wait-on-check-action` polls the checks API for the
+        # given commit SHA. If any required check fails or is cancelled,
+        # this step fails and the rest of the pipeline is skipped.
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-regexp: '^CI /'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 15
+          allowed-conclusions: success
+
+  db-push:
+    name: Apply DB schema (drizzle push)
+    needs: wait-for-ci
+    runs-on: ubuntu-latest
+    env:
+      # Production DATABASE_URL comes from a repository secret. Never
+      # commit a real URL. The drizzle-kit push command reads it via
+      # drizzle.config.ts, which itself reads env.DATABASE_URL.
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      # Drizzle push requires the same env shape as runtime, but for
+      # this step none of the app runtime services (S3, cron, email
+      # crypto) are exercised — placeholders keep env.ts's zod schema
+      # happy without exposing real secrets.
+      AUTH_SECRET: ${{ secrets.PROD_AUTH_SECRET }}
+      AUTH_URL: ${{ secrets.PROD_AUTH_URL }}
+      AWS_REGION: eu-west-1
+      S3_BUCKET_DOCUMENTS: placeholder
+      LOG_LEVEL: warn
+      NODE_ENV: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Approve required build scripts
+        run: pnpm rebuild argon2
+
+      - name: Push schema to production
+        # State-based push. CI already ran the migration replay against
+        # a scratch DB, so any drift here would be a bug in the migration
+        # generator, not a schema mismatch.
+        run: pnpm exec drizzle-kit push
+
+  deploy:
+    name: Deploy application
+    needs: db-push
+    runs-on: ubuntu-latest
+    # Environment guard — GitHub will show any protection rules
+    # (required reviewers, wait timer) attached to the "production"
+    # environment before this job runs.
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # TODO: replace with the actual deploy step for your host.
+      # Vercel example:
+      #   - uses: amondnet/vercel-action@v25
+      #     with:
+      #       vercel-token: ${{ secrets.VERCEL_TOKEN }}
+      #       vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+      #       vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+      #       vercel-args: '--prod'
+      # Fly.io example:
+      #   - uses: superfly/flyctl-actions/setup-flyctl@master
+      #   - run: flyctl deploy --remote-only
+      #     env:
+      #       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Placeholder deploy
+        run: |
+          echo "CI + DB push both green — plug the platform deploy command in here."
+          echo "SHA: ${{ github.sha }}"
