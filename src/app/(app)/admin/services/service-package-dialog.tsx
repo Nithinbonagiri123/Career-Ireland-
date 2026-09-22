@@ -63,9 +63,7 @@ export function ServicePackageDialog({ trigger, services, currencies, initial }:
     (s) => s.id === (initial?.serviceCatalogItemId ?? services[0]?.id),
   );
   const [serviceSelection, setServiceSelection] = useState<Selection>(
-    initialService
-      ? { kind: 'catalog', id: initialService.id, label: initialService.name }
-      : null,
+    initialService ? { kind: 'catalog', id: initialService.id, label: initialService.name } : null,
   );
   const [serviceOptions, setServiceOptions] = useState(() =>
     services.map((s) => ({ id: s.id, name: s.name, isActive: s.isActive })),
@@ -141,9 +139,7 @@ export function ServicePackageDialog({ trigger, services, currencies, initial }:
           <FormErrorAlert error={formError} />
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-            <SubmitButton loading={isSubmitting}>
-              {isEdit ? 'Save' : 'Add package'}
-            </SubmitButton>
+            <SubmitButton loading={isSubmitting}>{isEdit ? 'Save' : 'Add package'}</SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

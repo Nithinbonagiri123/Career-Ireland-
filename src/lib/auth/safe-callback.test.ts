@@ -18,8 +18,7 @@ describe('safeCallbackUrl', () => {
     it('null', () => expect(safeCallbackUrl(null)).toBe('/dashboard'));
     it('undefined', () => expect(safeCallbackUrl(undefined)).toBe('/dashboard'));
     it('empty string', () => expect(safeCallbackUrl('')).toBe('/dashboard'));
-    it('custom fallback', () =>
-      expect(safeCallbackUrl(null, '/candidates')).toBe('/candidates'));
+    it('custom fallback', () => expect(safeCallbackUrl(null, '/candidates')).toBe('/candidates'));
   });
 
   describe('rejects open-redirect attempts', () => {

@@ -47,9 +47,7 @@ export function SectionHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <CardHeader
-      className={cn('flex-row items-center justify-between space-y-0', className)}
-    >
+    <CardHeader className={cn('flex-row items-center justify-between space-y-0', className)}>
       <div className="min-w-0">
         <CardTitle className="flex items-center gap-2 text-base">
           {Icon && <Icon className="size-4" />}
@@ -60,9 +58,7 @@ export function SectionHeader({
             </Badge>
           )}
         </CardTitle>
-        {children && (
-          <p className="mt-1 text-xs text-muted-foreground">{children}</p>
-        )}
+        {children && <p className="mt-1 text-xs text-muted-foreground">{children}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </CardHeader>

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
+import { BillingSection } from '@/components/billing/billing-section';
 import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
@@ -25,15 +26,18 @@ import { db } from '@/lib/db/client';
 import { candidateProfiles } from '@/lib/db/schema/persons';
 import { statusTone } from '@/lib/ui/status-tone';
 import { listApplicationsForPerson } from '@/modules/applications/service';
-import { fetchLatestBillingLinksForPerson, fetchPersonBillingHistory } from '@/modules/billing/read';
-import { listUploadRequestsForPerson } from '@/modules/document-upload-requests/service';
+import {
+  fetchLatestBillingLinksForPerson,
+  fetchPersonBillingHistory,
+} from '@/modules/billing/read';
 import {
   listCandidateQualifications,
   listCandidateSkills,
   listEmploymentHistory,
 } from '@/modules/candidate-details/service';
-import { fetchPersonDocuments, fetchPersonRequirements } from '@/modules/documents/service';
 import { fetchDocumentTypes } from '@/modules/document-types/service';
+import { listUploadRequestsForPerson } from '@/modules/document-upload-requests/service';
+import { fetchPersonDocuments, fetchPersonRequirements } from '@/modules/documents/service';
 import { getEmailAccountForCandidate } from '@/modules/email-accounts/service';
 import { fetchPersonDetail, type PersonTimelineItem } from '@/modules/persons/detail';
 import { fetchQualifications } from '@/modules/qualifications/service';
@@ -45,7 +49,6 @@ import {
   SkillsSection,
 } from './candidate-details-panel';
 import { CandidateTabs } from './candidate-tabs';
-import { BillingSection } from '@/components/billing/billing-section';
 import { CvSuggestionsPanel } from './cv-suggestions-panel';
 import { DocumentsSection } from './documents-section';
 import { EmailAccountPanel } from './email-account-panel';
@@ -202,7 +205,7 @@ export default async function CandidateDetail({
                     className="text-xs tabular-nums"
                   >
                     {formatDistanceToNow(candidateProfile.activatedAt, { addSuffix: true })} ·{' '}
-                    {format(candidateProfile.activatedAt, "dd MMM yyyy · HH:mm")}
+                    {format(candidateProfile.activatedAt, 'dd MMM yyyy · HH:mm')}
                   </time>
                 </div>
               </>
@@ -305,8 +308,7 @@ export default async function CandidateDetail({
     </div>
   );
 
-  const canVerifyPayments =
-    session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
+  const canVerifyPayments = session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
   const billingTab = (
     <FadeUp>
       <Card>
@@ -363,7 +365,7 @@ export default async function CandidateDetail({
                             {formatDistanceToNow(item.at, { addSuffix: true })}
                           </span>
                           <span className="tabular-nums text-muted-foreground/70">
-                            {format(item.at, "dd MMM yyyy · HH:mm")}
+                            {format(item.at, 'dd MMM yyyy · HH:mm')}
                           </span>
                         </time>
                       </div>

@@ -92,10 +92,7 @@ export function TasksTable({ tasks, staffUsers }: { tasks: TaskRow[]; staffUsers
         accessorKey: 'priority',
         size: 100,
         cell: ({ row }) => (
-          <Badge
-            variant={statusTone(row.original.priority)}
-            className="rounded-full text-[10px]"
-          >
+          <Badge variant={statusTone(row.original.priority)} className="rounded-full text-[10px]">
             {row.original.priority}
           </Badge>
         ),

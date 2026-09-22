@@ -5,9 +5,9 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
 import { EmptyState } from '@/components/empty-state';
+import { SectionHeader } from '@/components/section-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { SectionHeader } from '@/components/section-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -216,9 +216,7 @@ export function SkillsSection({
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((t) => t + 1);
   // Only catalog IDs — custom entries aren't offered by autosuggest anyway.
-  const existing = new Set(
-    rows.map((r) => r.skillId).filter((id): id is string => id !== null),
-  );
+  const existing = new Set(rows.map((r) => r.skillId).filter((id): id is string => id !== null));
 
   const remove = (id: string) => {
     if (!confirm('Remove this skill?')) return;

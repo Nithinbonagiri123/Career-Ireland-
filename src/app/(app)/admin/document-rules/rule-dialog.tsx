@@ -107,11 +107,7 @@ export function RuleDialog({ trigger, documentTypes, occupations, packages, init
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <FormField
-            id="rr-type"
-            label="Document type"
-            error={errors.documentTypeId?.message}
-          >
+          <FormField id="rr-type" label="Document type" error={errors.documentTypeId?.message}>
             <Select id="rr-type" {...register('documentTypeId')}>
               {documentTypes
                 .filter((t) => t.isActive || t.id === initial?.documentTypeId)
@@ -196,9 +192,7 @@ export function RuleDialog({ trigger, documentTypes, occupations, packages, init
 
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-            <SubmitButton loading={isSubmitting}>
-              {isEdit ? 'Save' : 'Create rule'}
-            </SubmitButton>
+            <SubmitButton loading={isSubmitting}>{isEdit ? 'Save' : 'Create rule'}</SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

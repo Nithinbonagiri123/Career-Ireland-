@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
-import { ArrowLeft } from 'lucide-react';
 import { eq } from 'drizzle-orm';
+import { ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -11,13 +11,13 @@ import { db } from '@/lib/db/client';
 import { persons } from '@/lib/db/schema/persons';
 import type { ChecklistAnswer } from '@/lib/db/schema/work_permit_checklists';
 import { fetchRequisition } from '@/modules/requisitions/service';
+import { fetchAppSettings } from '@/modules/settings/service';
 import {
   ADVERT_INFO_FIELDS,
   DOC_CHECK_FIELDS,
   MATCH_CHECK_FIELDS,
 } from '@/modules/work-permit-checklists/schemas';
 import { fetchChecklist } from '@/modules/work-permit-checklists/service';
-import { fetchAppSettings } from '@/modules/settings/service';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Work Permit Checklist' };
@@ -36,7 +36,12 @@ export default async function ChecklistPrintPage({
     fetchRequisition(id),
     fetchChecklist({ jobRequisitionId: id, personId }),
     db
-      .select({ firstName: persons.firstName, lastName: persons.lastName, email: persons.email, phone: persons.phone })
+      .select({
+        firstName: persons.firstName,
+        lastName: persons.lastName,
+        email: persons.email,
+        phone: persons.phone,
+      })
       .from(persons)
       .where(eq(persons.id, personId))
       .limit(1),
@@ -91,10 +96,7 @@ export default async function ChecklistPrintPage({
             <MetaRow label="Email" value={p.email ?? '—'} />
             <MetaRow label="Telephone" value={p.phone ?? '—'} />
             <MetaRow label="Job Requisition" value={requisition.title} />
-            <MetaRow
-              label="Date"
-              value={format(new Date(), "dd MMM yyyy 'at' HH:mm")}
-            />
+            <MetaRow label="Date" value={format(new Date(), "dd MMM yyyy 'at' HH:mm")} />
             <MetaRow
               label="Date Contract Signed"
               value={
@@ -114,11 +116,7 @@ export default async function ChecklistPrintPage({
           </tbody>
         </table>
 
-        <SectionTable
-          title="Requirement Match"
-          fields={MATCH_CHECK_FIELDS}
-          answers={matchChecks}
-        />
+        <SectionTable title="Requirement Match" fields={MATCH_CHECK_FIELDS} answers={matchChecks} />
         <SectionTable
           title="Advert Info verified"
           fields={ADVERT_INFO_FIELDS}
@@ -132,9 +130,7 @@ export default async function ChecklistPrintPage({
 
         {checklist?.notes && (
           <section className="mt-6">
-            <h2 className="text-sm font-bold uppercase tracking-widest text-emerald-900">
-              Notes
-            </h2>
+            <h2 className="text-sm font-bold uppercase tracking-widest text-emerald-900">Notes</h2>
             <p className="mt-2 whitespace-pre-wrap rounded border border-border p-3 text-sm">
               {checklist.notes}
             </p>
@@ -171,9 +167,7 @@ function SectionTable({
 }) {
   return (
     <section className="mt-6">
-      <h2 className="mb-2 text-sm font-bold uppercase tracking-widest text-emerald-900">
-        {title}
-      </h2>
+      <h2 className="mb-2 text-sm font-bold uppercase tracking-widest text-emerald-900">{title}</h2>
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr>

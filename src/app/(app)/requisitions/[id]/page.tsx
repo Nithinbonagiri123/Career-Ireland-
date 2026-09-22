@@ -28,10 +28,7 @@ import { listChecklistsForRequisition } from '@/modules/work-permit-checklists/s
 import { RequisitionDialog } from '../requisition-dialog';
 import { ChecklistsSection } from './checklists-section';
 import { PipelineWall } from './pipeline-wall';
-import {
-  RequisitionQualificationsSection,
-  RequisitionSkillsSection,
-} from './requirements-section';
+import { RequisitionQualificationsSection, RequisitionSkillsSection } from './requirements-section';
 import { RunMatchingButton } from './requisition-actions';
 import { RequisitionTabs } from './requisition-tabs';
 

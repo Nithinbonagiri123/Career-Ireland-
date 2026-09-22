@@ -257,6 +257,7 @@ function ChecklistCard({
                   aria-label={f.label}
                 >
                   {ANSWER_OPTIONS.map((opt) => (
+                    // biome-ignore lint/a11y/useSemanticElements: styled toggle group — <input type="radio"> would break the yes/no/na custom colouring per option
                     <button
                       key={String(opt)}
                       type="button"

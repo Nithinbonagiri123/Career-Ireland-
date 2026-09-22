@@ -79,9 +79,7 @@ export function UploadForm({
 
       // Optimistically mark this row fulfilled so the UI updates
       // without a full round-trip.
-      setRequirements((rs) =>
-        rs.map((r) => (r.id === req.id ? { ...r, fulfilled: true } : r)),
-      );
+      setRequirements((rs) => rs.map((r) => (r.id === req.id ? { ...r, fulfilled: true } : r)));
       setRowState((s) => ({ ...s, [req.id]: 'ok' }));
       toast.success(`${req.documentTypeName} received`);
 
@@ -108,7 +106,10 @@ export function UploadForm({
           const state = rowState[req.id] ?? (req.fulfilled ? 'ok' : 'idle');
           const err = rowError[req.id];
           return (
-            <li key={req.id} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <li
+              key={req.id}
+              className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"
+            >
               <div className="min-w-0">
                 <p className="font-medium text-slate-900">{req.documentTypeName}</p>
                 <p className="text-xs text-slate-500 font-mono">{req.documentTypeCode}</p>

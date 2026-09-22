@@ -191,18 +191,30 @@ export function customCandidatesFrom(
 // ─── Employment history extraction ──────────────────────────────────────────
 
 const MONTHS: Record<string, number> = {
-  jan: 1, january: 1,
-  feb: 2, february: 2,
-  mar: 3, march: 3,
-  apr: 4, april: 4,
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
   may: 5,
-  jun: 6, june: 6,
-  jul: 7, july: 7,
-  aug: 8, august: 8,
-  sep: 9, sept: 9, september: 9,
-  oct: 10, october: 10,
-  nov: 11, november: 11,
-  dec: 12, december: 12,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
 };
 
 const PRESENT_WORDS = /\b(present|current|now|to\s*date|ongoing)\b/i;
@@ -228,7 +240,7 @@ function parseDatePart(raw: string): ParsedDate {
       return { iso: padYearMonth(year, month) };
     }
   }
-  const m2 = s.match(/^(\d{1,2})[\/\-](\d{4})$/);
+  const m2 = s.match(/^(\d{1,2})[/-](\d{4})$/);
   if (m2) {
     const month = parseInt(m2[1], 10);
     const year = parseInt(m2[2], 10);
@@ -238,12 +250,10 @@ function parseDatePart(raw: string): ParsedDate {
   if (m3) {
     return { iso: `${m3[1]}-01-01` };
   }
-  const m4 = s.match(/^(\d{1,2})[\/\- ](\d{1,2}|[A-Za-z]{3,9})[\/\- ](\d{2}|\d{4})$/);
+  const m4 = s.match(/^(\d{1,2})[/\- ](\d{1,2}|[A-Za-z]{3,9})[/\- ](\d{2}|\d{4})$/);
   if (m4) {
     const monthRaw = m4[2];
-    const month = /^\d+$/.test(monthRaw)
-      ? parseInt(monthRaw, 10)
-      : MONTHS[monthRaw.toLowerCase()];
+    const month = /^\d+$/.test(monthRaw) ? parseInt(monthRaw, 10) : MONTHS[monthRaw.toLowerCase()];
     if (month) {
       let year = parseInt(m4[3], 10);
       if (year < 100) year += year > 60 ? 1900 : 2000;
@@ -262,7 +272,7 @@ type DateRange = {
 
 function findDateRange(text: string): DateRange | null {
   const dateAlt =
-    '(?:[A-Za-z]{3,9}\\s*\\d{4}|[A-Za-z]{3,9}\\s*\'?\\d{2}|\\d{1,2}[\\/\\-]\\d{4}|\\d{4}|Present|Current|Now|Ongoing)';
+    "(?:[A-Za-z]{3,9}\\s*\\d{4}|[A-Za-z]{3,9}\\s*'?\\d{2}|\\d{1,2}[\\/\\-]\\d{4}|\\d{4}|Present|Current|Now|Ongoing)";
   const sep = '\\s*(?:[-–—]|to)\\s*';
   const re = new RegExp(`(${dateAlt})${sep}(${dateAlt}|Present|Current|Now|Ongoing)`, 'i');
   const m = text.match(re);
@@ -372,7 +382,12 @@ function parseEmploymentBlock(block: string[]): EmploymentCandidate | null {
 
   const stripRange = (s: string | null) => {
     if (!s || !range) return s;
-    return s.replace(range.matchedText, '').replace(/[·|,\-–—]\s*$/, '').trim() || null;
+    return (
+      s
+        .replace(range.matchedText, '')
+        .replace(/[·|,\-–—]\s*$/, '')
+        .trim() || null
+    );
   };
   employerName = stripRange(employerName);
   jobTitle = stripRange(jobTitle);

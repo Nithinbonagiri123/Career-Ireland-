@@ -119,7 +119,7 @@ export default async function ImmigrationCaseDetail({
               <span className="text-muted-foreground">Opened</span>
               <time dateTime={c.createdAt.toISOString()} className="tabular-nums">
                 {formatDistanceToNow(c.createdAt, { addSuffix: true })} ·{' '}
-                {format(c.createdAt, "dd MMM yyyy · HH:mm")}
+                {format(c.createdAt, 'dd MMM yyyy · HH:mm')}
               </time>
             </div>
             {c.notes && (

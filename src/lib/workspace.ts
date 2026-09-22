@@ -92,6 +92,8 @@ export async function resolveCurrentWorkspace(): Promise<{
     return { current: 'main', reachable, isOwner: true };
   }
 
-  // 4. First reachable
-  return { current: reachable[0]!, reachable, isOwner: false };
+  // 4. First reachable. Length > 0 guaranteed by the early return above,
+  // so reachable[0] cannot be undefined here — we just fall back to
+  // 'main' defensively rather than assert-non-null.
+  return { current: reachable[0] ?? 'main', reachable, isOwner: false };
 }

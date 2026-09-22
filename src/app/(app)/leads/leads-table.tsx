@@ -8,8 +8,8 @@ import { toast } from 'sonner';
 import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { DataTable } from '@/components/data-table/data-table';
 import { DocumentUploader } from '@/components/document-uploader';
-import { Timestamp } from '@/components/timestamp';
 import { PromptDialog } from '@/components/prompt-dialog';
+import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -29,10 +29,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { statusTone } from '@/lib/ui/status-tone';
 import { assignEntityAction } from '@/modules/assignments/actions';
 import type { InvoiceableService } from '@/modules/billing/read';
 import { ensurePaymentProofTypeAction } from '@/modules/document-types/actions';
-import { statusTone } from '@/lib/ui/status-tone';
 import {
   archiveLeadAction,
   convertLeadAction,

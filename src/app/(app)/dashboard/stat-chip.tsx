@@ -85,9 +85,7 @@ export function StatChip({
           <div
             className={cn(
               'flex size-6 items-center justify-center rounded-md transition-colors',
-              noteTone
-                ? 'bg-black/5 group-hover:bg-black/10'
-                : 'bg-muted/50 group-hover:bg-muted',
+              noteTone ? 'bg-black/5 group-hover:bg-black/10' : 'bg-muted/50 group-hover:bg-muted',
               !noteTone &&
                 showTone &&
                 tone === 'warning' &&

@@ -344,11 +344,13 @@ export default async function DashboardPage({
                       >
                         <span>{formatDistanceToNow(t.dueAt, { addSuffix: true })}</span>
                         <span className="tabular-nums text-muted-foreground/70">
-                          {format(t.dueAt, "dd MMM · HH:mm")}
+                          {format(t.dueAt, 'dd MMM · HH:mm')}
                         </span>
                       </time>
                     ) : (
-                      <span className="shrink-0 text-[10px] text-muted-foreground">no due date</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        no due date
+                      </span>
                     )}
                   </li>
                 ))}

@@ -132,7 +132,7 @@ export function DashboardDrilldownsSection({ data }: { data: DashboardDrilldowns
               >
                 <span>{formatDistanceToNow(iv.scheduledAt, { addSuffix: true })}</span>
                 <span className="tabular-nums text-muted-foreground/70">
-                  {format(iv.scheduledAt, "dd MMM · HH:mm")}
+                  {format(iv.scheduledAt, 'dd MMM · HH:mm')}
                 </span>
               </time>
             </Link>
@@ -165,7 +165,7 @@ export function DashboardDrilldownsSection({ data }: { data: DashboardDrilldowns
                       {' · due '}
                       <time dateTime={t.dueAt.toISOString()} className="tabular-nums">
                         {formatDistanceToNow(t.dueAt, { addSuffix: true })} ·{' '}
-                        {format(t.dueAt, "dd MMM · HH:mm")}
+                        {format(t.dueAt, 'dd MMM · HH:mm')}
                       </time>
                     </>
                   )}

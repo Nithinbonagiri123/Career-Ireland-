@@ -33,8 +33,7 @@ test('02 · /portal paths no longer resolve (route deleted)', async ({ page }) =
   // Either 404 from Next.js OR a redirect (proxy may bounce it). Either
   // outcome is fine — the point is the operator can't reach the portal.
   const finalUrl = page.url();
-  const notResolved =
-    (response?.status() ?? 0) >= 400 || !finalUrl.includes('/portal/candidate');
+  const notResolved = (response?.status() ?? 0) >= 400 || !finalUrl.includes('/portal/candidate');
   expect(notResolved).toBe(true);
   await shot(page, 'e2e__cleanup-02-portal-gone');
 });

@@ -64,9 +64,7 @@ export async function fetchDocumentsHub(input: {
   const q = input.ownerQ?.trim();
   const like = q ? `%${q}%` : null;
   const scope =
-    input.ownerId && input.ownerKind
-      ? { id: input.ownerId, kind: input.ownerKind }
-      : null;
+    input.ownerId && input.ownerKind ? { id: input.ownerId, kind: input.ownerKind } : null;
 
   const wantUploaded = input.kind === 'ALL' || input.kind === 'UPLOADED';
   const wantInvoices = input.kind === 'ALL' || input.kind === 'INVOICE';
@@ -189,7 +187,9 @@ async function fetchUploaded(
         documentInstanceId: r.instance.id,
       };
     })
-    .filter((r) => (like ? r.ownerName.toLowerCase().includes(like.replace(/%/g, '').toLowerCase()) : true));
+    .filter((r) =>
+      like ? r.ownerName.toLowerCase().includes(like.replace(/%/g, '').toLowerCase()) : true,
+    );
 }
 
 async function fetchInvoices(

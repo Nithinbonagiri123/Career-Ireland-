@@ -104,9 +104,8 @@ export function CaseTasksSection({ caseId, rows }: { caseId: string; rows: TaskR
                               }
                             >
                               {overdue && <AlertTriangle className="mr-0.5 inline size-3" />}
-                              due{' '}
-                              {formatDistanceToNow(new Date(task.dueAt), { addSuffix: true })} ·{' '}
-                              {format(new Date(task.dueAt), "dd MMM yyyy · HH:mm")}
+                              due {formatDistanceToNow(new Date(task.dueAt), { addSuffix: true })} ·{' '}
+                              {format(new Date(task.dueAt), 'dd MMM yyyy · HH:mm')}
                             </time>
                           </>
                         )}
@@ -114,10 +113,7 @@ export function CaseTasksSection({ caseId, rows }: { caseId: string; rows: TaskR
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-1">
-                    <Badge
-                      variant={statusTone(task.priority)}
-                      className="rounded-full text-[10px]"
-                    >
+                    <Badge variant={statusTone(task.priority)} className="rounded-full text-[10px]">
                       {task.priority}
                     </Badge>
                     {task.status !== 'DONE' && task.status !== 'CANCELLED' && (

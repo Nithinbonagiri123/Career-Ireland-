@@ -57,6 +57,7 @@ export function TopBar({
   const pathname = usePathname();
   const [signingOut, startSignOut] = useTransition();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset drawer only on route change
   useEffect(() => {
     setMobileNavOpen(false);
   }, [pathname]);

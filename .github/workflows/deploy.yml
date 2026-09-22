@@ -39,14 +39,26 @@ jobs:
     name: Wait for CI
     runs-on: ubuntu-latest
     steps:
-      - name: Wait for ci.yml (verify + e2e) to succeed
+      - name: Wait for CI/Verify to succeed
         # `lewagon/wait-on-check-action` polls the checks API for the
-        # given commit SHA. If any required check fails or is cancelled,
-        # this step fails and the rest of the pipeline is skipped.
+        # given commit SHA. If the check fails or is cancelled, this
+        # step fails and the rest of the pipeline is skipped.
+        # The check names are the job names from ci.yml ("Verify" +
+        # "E2E") — GitHub does NOT prefix them with the workflow name
+        # in the checks API, only in the PR summary UI.
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
           ref: ${{ github.sha }}
-          check-regexp: '^CI /'
+          check-name: Verify
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 15
+          allowed-conclusions: success
+
+      - name: Wait for CI/E2E to succeed
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: E2E
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 15
           allowed-conclusions: success

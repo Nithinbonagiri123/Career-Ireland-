@@ -21,7 +21,7 @@ async function ensureMissingRequirement(personId: string): Promise<{
   ok: boolean;
   message: string;
 }> {
-  const { and, eq, isNull, sql } = await import('drizzle-orm');
+  const { and, eq, isNull } = await import('drizzle-orm');
   const { db } = await import('../src/lib/db/client');
   const { candidateDocumentRequirements } = await import('../src/lib/db/schema/documents');
   const { documentUploadRequests } = await import('../src/lib/db/schema/document_upload_requests');
@@ -144,9 +144,14 @@ test('staff issues an upload link, public page renders scoped upload UI', async 
   const anon = await browser.newContext();
   const publicPage = await anon.newPage();
   await publicPage.goto(rawUrl, { waitUntil: 'networkidle' });
-  await expect(publicPage.getByRole('heading', { name: /please upload your documents/i })).toBeVisible();
+  await expect(
+    publicPage.getByRole('heading', { name: /please upload your documents/i }),
+  ).toBeVisible();
   await publicPage.setViewportSize({ width: 1440, height: 900 });
-  await publicPage.screenshot({ path: path.join(SHOTS, 'e2e__upload-link-04-public-page.png'), fullPage: true });
+  await publicPage.screenshot({
+    path: path.join(SHOTS, 'e2e__upload-link-04-public-page.png'),
+    fullPage: true,
+  });
 
   // At least one requirement row should have a "Choose file" trigger.
   await expect(publicPage.getByLabel(/choose file/i).first()).toBeVisible();
@@ -156,7 +161,10 @@ test('staff issues an upload link, public page renders scoped upload UI', async 
     waitUntil: 'networkidle',
   });
   await expect(publicPage.getByText(/no longer valid/i)).toBeVisible();
-  await publicPage.screenshot({ path: path.join(SHOTS, 'e2e__upload-link-05-invalid.png'), fullPage: true });
+  await publicPage.screenshot({
+    path: path.join(SHOTS, 'e2e__upload-link-05-invalid.png'),
+    fullPage: true,
+  });
 
   await anon.close();
 

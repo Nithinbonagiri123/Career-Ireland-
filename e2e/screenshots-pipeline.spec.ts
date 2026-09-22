@@ -14,9 +14,7 @@ const SHOTS = path.join(process.cwd(), 'screenshots');
 test('requisitions grid uses design-system tokens', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/requisitions?view=grid', { waitUntil: 'networkidle' });
-  await expect(
-    page.getByRole('heading', { name: /job requisitions/i }).first(),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: /job requisitions/i }).first()).toBeVisible();
   await page.screenshot({
     path: path.join(SHOTS, 'e2e__ds-requisitions-grid.png'),
     fullPage: false,

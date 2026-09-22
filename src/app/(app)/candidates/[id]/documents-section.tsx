@@ -5,8 +5,8 @@ import { FileText, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useTransition } from 'react';
 import { toast } from 'sonner';
-import { DocumentUploader } from '@/components/document-uploader';
 import type { DocumentTypeOption } from '@/components/document-type-picker';
+import { DocumentUploader } from '@/components/document-uploader';
 import { EmptyState } from '@/components/empty-state';
 import { MultiDocumentUploader } from '@/components/multi-document-uploader';
 import { Badge } from '@/components/ui/badge';
@@ -101,8 +101,8 @@ export function DocumentsSection({
           Attach more documents
         </h3>
         <p className="mb-3 text-xs text-muted-foreground">
-          Drop multiple files at once — each picks its own type + display name.
-          Pick <span className="font-medium">+ New type…</span> if the category isn't listed.
+          Drop multiple files at once — each picks its own type + display name. Pick{' '}
+          <span className="font-medium">+ New type…</span> if the category isn't listed.
         </p>
         <MultiDocumentUploader
           ownerType="PERSON"
@@ -136,7 +136,7 @@ export function DocumentsSection({
                       dateTime={d.createdAt.toISOString()}
                       className="tabular-nums text-muted-foreground/80"
                     >
-                      {format(d.createdAt, "dd MMM yyyy · HH:mm")}
+                      {format(d.createdAt, 'dd MMM yyyy · HH:mm')}
                     </time>
                   </p>
                 </div>

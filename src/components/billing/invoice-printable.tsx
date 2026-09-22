@@ -306,7 +306,6 @@ export function InvoicePrintable({
   );
 }
 
-
 function formatRate(rate: number): string {
   if (!Number.isFinite(rate)) return '0';
   return Number.isInteger(rate) ? String(rate) : rate.toFixed(2);

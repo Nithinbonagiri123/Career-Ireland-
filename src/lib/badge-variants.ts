@@ -57,13 +57,7 @@ export const IMMIGRATION_CASE_STATUS: Record<
 
 /** Requisition status. */
 export const REQUISITION_STATUS: Record<
-  | 'DRAFT'
-  | 'OPEN'
-  | 'IN_PROGRESS'
-  | 'PARTIALLY_FILLED'
-  | 'FILLED'
-  | 'CLOSED'
-  | 'CANCELLED',
+  'DRAFT' | 'OPEN' | 'IN_PROGRESS' | 'PARTIALLY_FILLED' | 'FILLED' | 'CLOSED' | 'CANCELLED',
   BadgeEntry
 > = {
   DRAFT: { variant: 'outline', label: 'Draft' },
@@ -87,10 +81,7 @@ export const REQUIREMENT_STATUS: Record<
 };
 
 /** Employer relationship status. */
-export const EMPLOYER_STATUS: Record<
-  'PROSPECT' | 'ACTIVE' | 'ON_HOLD' | 'ARCHIVED',
-  BadgeEntry
-> = {
+export const EMPLOYER_STATUS: Record<'PROSPECT' | 'ACTIVE' | 'ON_HOLD' | 'ARCHIVED', BadgeEntry> = {
   PROSPECT: { variant: 'outline', label: 'Prospect' },
   ACTIVE: { variant: 'default', label: 'Active' },
   ON_HOLD: { variant: 'secondary', label: 'On hold' },

@@ -9,10 +9,7 @@ import {
   workPermitChecklists,
 } from '@/lib/db/schema/work_permit_checklists';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
-import {
-  type UpsertWorkPermitChecklistInput,
-  UpsertWorkPermitChecklistSchema,
-} from './schemas';
+import { type UpsertWorkPermitChecklistInput, UpsertWorkPermitChecklistSchema } from './schemas';
 
 function blankToNull(v: string | undefined | null): string | null {
   return v && v.trim().length > 0 ? v : null;

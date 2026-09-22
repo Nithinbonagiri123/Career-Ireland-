@@ -14,8 +14,8 @@ import {
 import { CalendarClock, ExternalLink, MapPin, Users, Video } from 'lucide-react';
 import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';
-import { Badge } from '@/components/ui/badge';
 import { SectionHeader } from '@/components/section-header';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import type { Interview } from '@/lib/db/schema/interviews_offers';
 import { statusTone } from '@/lib/ui/status-tone';

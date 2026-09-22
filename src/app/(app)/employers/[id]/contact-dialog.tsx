@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { useForm } from 'react-hook-form';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';
@@ -80,9 +80,7 @@ export function ContactDialog({ trigger, employerId, initial }: Props) {
           <FormErrorAlert error={formError} />
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-            <SubmitButton loading={isSubmitting}>
-              {isEdit ? 'Save' : 'Add contact'}
-            </SubmitButton>
+            <SubmitButton loading={isSubmitting}>{isEdit ? 'Save' : 'Add contact'}</SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

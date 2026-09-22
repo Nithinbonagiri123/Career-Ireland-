@@ -4,7 +4,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { CheckCircle2, ClipboardCheck, FileText, Paperclip, Plus, Trash2 } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { DocumentTypePicker, type DocumentTypeOption } from '@/components/document-type-picker';
+import { type DocumentTypeOption, DocumentTypePicker } from '@/components/document-type-picker';
 import { DocumentUploader } from '@/components/document-uploader';
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
@@ -186,11 +186,7 @@ function AttachDocDialog({
           </p>
           <div className="space-y-1">
             <Label htmlFor="doc">Document</Label>
-            <Select
-              id="doc"
-              value={docId}
-              onChange={(e) => setDocId(e.target.value)}
-            >
+            <Select id="doc" value={docId} onChange={(e) => setDocId(e.target.value)}>
               <option value="">Select…</option>
               {available.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -379,7 +375,7 @@ export function CaseDocumentsSection({
                       {d.document.status.toLowerCase()} · attached{' '}
                       <time dateTime={d.attachedAt.toISOString()} className="tabular-nums">
                         {formatDistanceToNow(d.attachedAt, { addSuffix: true })} ·{' '}
-                        {format(d.attachedAt, "dd MMM yyyy · HH:mm")}
+                        {format(d.attachedAt, 'dd MMM yyyy · HH:mm')}
                       </time>
                     </p>
                   </div>

@@ -26,7 +26,10 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { formatCurrency } from '@/lib/currency';
 import { toastResult } from '@/lib/toast-result';
 import { cn } from '@/lib/utils';
-import { createApplicationAction, updateApplicationStatusAction } from '@/modules/applications/actions';
+import {
+  createApplicationAction,
+  updateApplicationStatusAction,
+} from '@/modules/applications/actions';
 import { dismissMatchAction, shortlistMatchAction } from '@/modules/matching/actions';
 import type { PipelineData, PipelineEntry, PipelineStageKey } from '@/modules/pipeline/service';
 import type { RequisitionListRow } from '@/modules/requisitions/service';
@@ -183,9 +186,7 @@ function PipelineBand({
         <span className="text-[11px] font-medium opacity-75">{entries.length} candidates</span>
       </header>
       {entries.length === 0 ? (
-        <div className="px-4 py-6 text-center text-xs opacity-70">
-          {emptyMessage(stage)}
-        </div>
+        <div className="px-4 py-6 text-center text-xs opacity-70">{emptyMessage(stage)}</div>
       ) : (
         <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 py-4">
           {entries.map((entry) => (

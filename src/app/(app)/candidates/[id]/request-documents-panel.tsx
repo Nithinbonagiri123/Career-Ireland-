@@ -110,7 +110,7 @@ export function RequestDocumentsPanel({
           title={
             activeRequest
               ? 'An active link already exists — revoke it below first.'
-              : disabledReason ?? undefined
+              : (disabledReason ?? undefined)
           }
         >
           <Mail className="mr-1.5 size-4" />
@@ -182,15 +182,12 @@ export function RequestDocumentsPanel({
                         dateTime={eventDate.toISOString()}
                         className="tabular-nums text-foreground"
                       >
-                        {format(eventDate, "dd MMM yyyy · HH:mm")}
+                        {format(eventDate, 'dd MMM yyyy · HH:mm')}
                       </time>{' '}
                       · sent{' '}
-                      <time
-                        dateTime={r.createdAt.toISOString()}
-                        className="tabular-nums"
-                      >
+                      <time dateTime={r.createdAt.toISOString()} className="tabular-nums">
                         {formatDistanceToNow(r.createdAt, { addSuffix: true })} ·{' '}
-                        {format(r.createdAt, "dd MMM yyyy · HH:mm")}
+                        {format(r.createdAt, 'dd MMM yyyy · HH:mm')}
                       </time>
                     </p>
                   </div>

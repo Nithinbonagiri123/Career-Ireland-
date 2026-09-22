@@ -66,7 +66,7 @@ export function DocumentsTable({ documents }: { documents: DocumentsHubRow[] }) 
   const [, startTransition] = useTransition();
 
   const confirmVoid = (reason: string) => {
-    if (!voidTarget || !voidTarget.documentInstanceId) return;
+    if (!voidTarget?.documentInstanceId) return;
     const target = voidTarget;
     setBusy(target.id);
     startTransition(async () => {
@@ -203,11 +203,9 @@ export function DocumentsTable({ documents }: { documents: DocumentsHubRow[] }) 
         const status =
           row.original.kind === 'UPLOADED'
             ? row.original.status
-            : row.original.financialStatus ?? 'ISSUED';
+            : (row.original.financialStatus ?? 'ISSUED');
         if (!status) return <span className="text-xs text-muted-foreground">—</span>;
-        return (
-          <Badge variant={statusTone(status)}>{status.replace(/_/g, ' ')}</Badge>
-        );
+        return <Badge variant={statusTone(status)}>{status.replace(/_/g, ' ')}</Badge>;
       },
     },
     {
@@ -335,4 +333,3 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
-

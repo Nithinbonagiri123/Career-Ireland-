@@ -54,13 +54,13 @@ async function main() {
     await db
       .update(appSettings)
       .set({ vatNumber: null })
-      .where(
-        and(eq(appSettings.id, APP_SETTINGS_ID), eq(appSettings.vatNumber, PLACEHOLDER_VAT)),
-      );
+      .where(and(eq(appSettings.id, APP_SETTINGS_ID), eq(appSettings.vatNumber, PLACEHOLDER_VAT)));
     cleared++;
   }
 
-  console.log(`\n✓ Placeholder cleanup complete — ${cleared} field${cleared === 1 ? '' : 's'} cleared`);
+  console.log(
+    `\n✓ Placeholder cleanup complete — ${cleared} field${cleared === 1 ? '' : 's'} cleared`,
+  );
   process.exit(0);
 }
 

@@ -68,9 +68,7 @@ export function CreateEngagementDialog({ services, currencies, persons }: Props)
 
   const initialService = activeServices.find((s) => s.id === selectedServiceId);
   const [serviceSelection, setServiceSelection] = useState<Selection>(
-    initialService
-      ? { kind: 'catalog', id: initialService.id, label: initialService.name }
-      : null,
+    initialService ? { kind: 'catalog', id: initialService.id, label: initialService.name } : null,
   );
   const [serviceOptions, setServiceOptions] = useState(() =>
     activeServices.map((s) => ({ id: s.id, name: s.name, isActive: s.isActive })),
@@ -180,11 +178,7 @@ export function CreateEngagementDialog({ services, currencies, persons }: Props)
           </FormField>
 
           <div className="grid grid-cols-2 gap-3">
-            <FormField
-              id="e-amount"
-              label="Agreed amount"
-              error={errors.agreedAmount?.message}
-            >
+            <FormField id="e-amount" label="Agreed amount" error={errors.agreedAmount?.message}>
               <Input
                 id="e-amount"
                 inputMode="decimal"

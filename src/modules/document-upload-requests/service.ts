@@ -4,22 +4,27 @@ import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
-  documentUploadRequests,
   type DocumentUploadRequest,
+  documentUploadRequests,
 } from '@/lib/db/schema/document_upload_requests';
 import {
-  candidateDocumentRequirements as personDocumentRequirements,
   documentInstances,
   documentRequirementFulfillments,
+  candidateDocumentRequirements as personDocumentRequirements,
 } from '@/lib/db/schema/documents';
-import { documentTypes } from '@/lib/db/schema/reference';
 import { persons } from '@/lib/db/schema/persons';
+import { documentTypes } from '@/lib/db/schema/reference';
 import { env } from '@/lib/env';
 import { BusinessRuleError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { getMailer } from '@/lib/mail';
 import { DOCUMENTS_BUCKET } from '@/lib/s3/client';
-import { ALLOWED_UPLOAD_MIME, buildObjectKey, MAX_UPLOAD_BYTES, presignUpload } from '@/lib/s3/presign';
+import {
+  ALLOWED_UPLOAD_MIME,
+  buildObjectKey,
+  MAX_UPLOAD_BYTES,
+  presignUpload,
+} from '@/lib/s3/presign';
 import { fetchAppSettings } from '@/modules/settings/read';
 import { renderDocumentRequestEmail } from './email';
 
@@ -79,9 +84,9 @@ export type IssueUploadRequestResult = {
  * person — staff should revoke or wait for it to expire, so we don't
  * spam the candidate's inbox.
  */
-export async function issueUploadRequest(input: { personId: string }): Promise<
-  IssueUploadRequestResult
-> {
+export async function issueUploadRequest(input: {
+  personId: string;
+}): Promise<IssueUploadRequestResult> {
   const session = await requireInternalStaff();
   const now = new Date();
 
@@ -111,10 +116,7 @@ export async function issueUploadRequest(input: { personId: string }): Promise<
       documentTypeName: documentTypes.name,
     })
     .from(personDocumentRequirements)
-    .innerJoin(
-      documentTypes,
-      eq(documentTypes.id, personDocumentRequirements.documentTypeId),
-    )
+    .innerJoin(documentTypes, eq(documentTypes.id, personDocumentRequirements.documentTypeId))
     .where(
       and(
         eq(personDocumentRequirements.personId, input.personId),
@@ -238,10 +240,7 @@ export async function revokeUploadRequest(input: { requestId: string; reason?: s
       throw new BusinessRuleError('ALREADY_REVOKED', 'Already revoked');
     }
     if (before.completedAt) {
-      throw new BusinessRuleError(
-        'ALREADY_COMPLETED',
-        'Already used — nothing to revoke',
-      );
+      throw new BusinessRuleError('ALREADY_COMPLETED', 'Already used — nothing to revoke');
     }
     const [after] = await tx
       .update(documentUploadRequests)
@@ -322,9 +321,7 @@ export type ValidatedUploadRequest = {
  * render one generic "link is no longer valid" screen and avoid
  * leaking which failure mode it was (defence against enumeration).
  */
-export async function validateUploadRequest(
-  token: string,
-): Promise<ValidatedUploadRequest | null> {
+export async function validateUploadRequest(token: string): Promise<ValidatedUploadRequest | null> {
   if (!token || typeof token !== 'string' || token.length < 20) return null;
   const inputHash = hashToken(token);
 
@@ -569,9 +566,7 @@ export async function registerUploadForToken(input: {
  * Idempotent: safe to call every upload; only the transition to
  * completed writes the audit row.
  */
-export async function markCompletedIfDone(
-  requestId: string,
-): Promise<{ justCompleted: boolean }> {
+export async function markCompletedIfDone(requestId: string): Promise<{ justCompleted: boolean }> {
   return db.transaction(async (tx) => {
     const [row] = await tx
       .select()

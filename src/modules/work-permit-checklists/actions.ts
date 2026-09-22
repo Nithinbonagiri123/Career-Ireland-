@@ -9,17 +9,12 @@ export async function upsertChecklistAction(input: UpsertWorkPermitChecklistInpu
   const r = await toActionResult(() => upsertChecklist(input));
   if (r.ok) {
     revalidatePath(`/requisitions/${input.jobRequisitionId}`);
-    revalidatePath(
-      `/requisitions/${input.jobRequisitionId}/checklists/${input.personId}`,
-    );
+    revalidatePath(`/requisitions/${input.jobRequisitionId}/checklists/${input.personId}`);
   }
   return r;
 }
 
-export async function deleteChecklistAction(input: {
-  id: string;
-  jobRequisitionId: string;
-}) {
+export async function deleteChecklistAction(input: { id: string; jobRequisitionId: string }) {
   const r = await toActionResult(async () => {
     await deleteChecklist(input.id);
     return { ok: true };

@@ -45,10 +45,7 @@ export default async function LeadsPage({
               <DateRangeFilter />
               <ScopeFilter current={scope} />
               <CsvExportButton href="/api/export/leads" />
-              <CreateLeadDialog
-                invoiceableServices={invoiceableServices}
-                currencies={currencies}
-              />
+              <CreateLeadDialog invoiceableServices={invoiceableServices} currencies={currencies} />
             </div>
           }
         />

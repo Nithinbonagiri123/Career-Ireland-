@@ -5,14 +5,11 @@ import { Briefcase, CheckCircle2, FileScan, Loader2, Plus, ScanLine } from 'luci
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
+import { SectionHeader } from '@/components/section-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { SectionHeader } from '@/components/section-header';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  acceptCvSuggestionsAction,
-  buildCvSuggestionsAction,
-} from '@/modules/cv-parse/actions';
+import { acceptCvSuggestionsAction, buildCvSuggestionsAction } from '@/modules/cv-parse/actions';
 import type { CvSuggestions } from '@/modules/cv-parse/suggest';
 
 /**
@@ -147,10 +144,9 @@ export function CvSuggestionsPanel({ personId }: { personId: string }) {
           </Button>
         }
       >
-        Deterministic scan of the latest uploaded CV — matches against Skills /
-        Qualifications catalogs, picks free-text candidates from typical CV
-        sections, and parses the Employment History block. No LLM, no external
-        calls.
+        Deterministic scan of the latest uploaded CV — matches against Skills / Qualifications
+        catalogs, picks free-text candidates from typical CV sections, and parses the Employment
+        History block. No LLM, no external calls.
       </SectionHeader>
       <CardContent>
         {!suggestions ? (
@@ -239,9 +235,7 @@ export function CvSuggestionsPanel({ personId }: { personId: string }) {
             />
 
             <div className="flex items-center justify-between border-t pt-4">
-              <p className="text-xs text-muted-foreground">
-                {totalPicked} selected
-              </p>
+              <p className="text-xs text-muted-foreground">{totalPicked} selected</p>
               <Button onClick={accept} disabled={totalPicked === 0 || pending}>
                 <Plus className="mr-1.5 size-4" />
                 Accept selected ({totalPicked})
@@ -329,8 +323,8 @@ function EmploymentSection({
         <span className="text-[10px] text-muted-foreground">{candidates.length}</span>
       </div>
       <p className="mb-2 text-[11px] text-muted-foreground">
-        Parsed from the CV's Employment / Work Experience section. Dates are
-        best-effort — edit them after accepting if the CV used an unusual format.
+        Parsed from the CV's Employment / Work Experience section. Dates are best-effort — edit them
+        after accepting if the CV used an unusual format.
       </p>
       <ul className="divide-y rounded-md glass-panel">
         {candidates.map((c) => {
@@ -349,16 +343,12 @@ function EmploymentSection({
                     <Briefcase className="size-3.5 text-muted-foreground" />
                     <span className="text-sm font-medium">{c.employerName}</span>
                     {c.jobTitle && (
-                      <span className="text-xs text-muted-foreground">
-                        — {c.jobTitle}
-                      </span>
+                      <span className="text-xs text-muted-foreground">— {c.jobTitle}</span>
                     )}
                     <Badge variant="outline" className="text-[9px]">
                       EMPLOYMENT
                     </Badge>
-                    {selected && (
-                      <CheckCircle2 className="size-3.5 text-status-success" />
-                    )}
+                    {selected && <CheckCircle2 className="size-3.5 text-status-success" />}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
                     {(c.startDate || c.endDate || c.isCurrent) && (

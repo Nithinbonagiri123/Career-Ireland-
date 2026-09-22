@@ -69,11 +69,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // long documents don't get scissored at one viewport.
     <div className="flex h-screen overflow-hidden print:block print:h-auto print:overflow-visible">
       <div className="print:hidden">
-        <AppSidebar
-          workspace={workspace}
-          reachable={reachable}
-          visibleModules={visibleModules}
-        />
+        <AppSidebar workspace={workspace} reachable={reachable} visibleModules={visibleModules} />
       </div>
       <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible">
         <div className="print:hidden">

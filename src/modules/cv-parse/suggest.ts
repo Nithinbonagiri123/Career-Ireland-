@@ -11,11 +11,7 @@ import { documentTypes } from '@/lib/db/schema/reference';
 import { fetchQualifications } from '@/modules/qualifications/service';
 import { fetchSkills } from '@/modules/skills/service';
 import { extractCvText } from './service';
-import {
-  catalogHitsFor,
-  customCandidatesFrom,
-  extractEmploymentCandidates,
-} from './text';
+import { catalogHitsFor, customCandidatesFrom, extractEmploymentCandidates } from './text';
 
 /**
  * CV-derived suggestions for a candidate.
@@ -75,12 +71,7 @@ async function findLatestCvForPerson(
     })
     .from(documentInstances)
     .innerJoin(documentTypes, eq(documentTypes.id, documentInstances.documentTypeId))
-    .where(
-      and(
-        eq(documentInstances.ownerPersonId, personId),
-        eq(documentTypes.code, 'CV'),
-      ),
-    )
+    .where(and(eq(documentInstances.ownerPersonId, personId), eq(documentTypes.code, 'CV')))
     .orderBy(desc(documentInstances.createdAt))
     .limit(1);
   if (!row) return null;

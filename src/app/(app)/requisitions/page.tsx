@@ -13,14 +13,8 @@ import { occupations } from '@/lib/db/schema/occupations';
 import { parseAssignmentScope } from '@/lib/scope';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchEmployers } from '@/modules/employers/service';
-import {
-  fetchRequisitions,
-  fetchRequisitionsWithCounts,
-} from '@/modules/requisitions/service';
-import {
-  RequisitionsCardGrid,
-  RequisitionsViewToggle,
-} from './requisition-card';
+import { fetchRequisitions, fetchRequisitionsWithCounts } from '@/modules/requisitions/service';
+import { RequisitionsCardGrid, RequisitionsViewToggle } from './requisition-card';
 import { RequisitionDialog } from './requisition-dialog';
 import { RequisitionsTable } from './requisitions-table';
 
@@ -45,14 +39,15 @@ export default async function RequisitionsPage({
   // default because they surface the matched/applied/shortlisted counters
   // that operators previously had to drill into.
   const cardView = view !== 'table';
-  const [requisitions, requisitionCards, employers, currencies, occupationList] =
-    await Promise.all([
+  const [requisitions, requisitionCards, employers, currencies, occupationList] = await Promise.all(
+    [
       cardView ? Promise.resolve([]) : fetchRequisitions(scope, createdRange),
       cardView ? fetchRequisitionsWithCounts(scope, createdRange) : Promise.resolve([]),
       fetchEmployers(),
       fetchCurrencies(),
       db.select().from(occupations).orderBy(asc(occupations.name)),
-    ]);
+    ],
+  );
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">

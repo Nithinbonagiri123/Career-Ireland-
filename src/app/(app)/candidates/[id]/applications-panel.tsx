@@ -7,9 +7,9 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { CvPicker } from '@/components/cv-picker';
 import { EmptyState } from '@/components/empty-state';
+import { SectionHeader } from '@/components/section-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { SectionHeader } from '@/components/section-header';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
@@ -240,7 +240,7 @@ export function ApplicationsPanel({
                     {' · applied '}
                     <time dateTime={r.appliedAt.toISOString()} className="tabular-nums">
                       {formatDistanceToNow(r.appliedAt, { addSuffix: true })} ·{' '}
-                      {format(r.appliedAt, "dd MMM yyyy · HH:mm")}
+                      {format(r.appliedAt, 'dd MMM yyyy · HH:mm')}
                     </time>
                     {r.externalJobReference ? ` · ref ${r.externalJobReference}` : ''}
                   </p>

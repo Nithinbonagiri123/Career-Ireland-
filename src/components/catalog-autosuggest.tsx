@@ -126,12 +126,11 @@ export function CatalogAutosuggest({
     }
   };
 
-  const rows: Array<
-    { kind: 'catalog'; entry: CatalogEntry } | { kind: 'custom'; label: string }
-  > = [
-    ...matches.map((m) => ({ kind: 'catalog' as const, entry: m })),
-    ...(canUseAsCustom ? [{ kind: 'custom' as const, label: text.trim() }] : []),
-  ];
+  const rows: Array<{ kind: 'catalog'; entry: CatalogEntry } | { kind: 'custom'; label: string }> =
+    [
+      ...matches.map((m) => ({ kind: 'catalog' as const, entry: m })),
+      ...(canUseAsCustom ? [{ kind: 'custom' as const, label: text.trim() }] : []),
+    ];
 
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!open) return;

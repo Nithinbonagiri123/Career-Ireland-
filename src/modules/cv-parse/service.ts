@@ -38,9 +38,7 @@ async function streamToBuffer(stream: unknown): Promise<Buffer> {
 }
 
 async function fetchObjectBuffer(objectKey: string): Promise<Buffer> {
-  const resp = await s3.send(
-    new GetObjectCommand({ Bucket: DOCUMENTS_BUCKET, Key: objectKey }),
-  );
+  const resp = await s3.send(new GetObjectCommand({ Bucket: DOCUMENTS_BUCKET, Key: objectKey }));
   if (!resp.Body) throw new BusinessRuleError('S3_EMPTY_BODY', 'S3 object had no body');
   return streamToBuffer(resp.Body);
 }
@@ -59,10 +57,7 @@ async function parseBufferToText(buffer: Buffer, mimeType: string): Promise<stri
       await parser.destroy();
     }
   }
-  if (
-    mimeType ===
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  ) {
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
     const { value } = await mammoth.extractRawText({ buffer });
     return (value ?? '').trim();
   }

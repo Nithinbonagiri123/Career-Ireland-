@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { useForm } from 'react-hook-form';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';

@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { FormErrorAlert } from '@/components/form-error-alert';
@@ -51,8 +51,7 @@ export function CurrencyDialog({ trigger, initial }: Props) {
     submit(data, upsertCurrencyAction, {
       // Base success — augmented below with the code so operators know which row.
       successMessage: isEdit ? 'Currency updated' : 'Currency added',
-      onSuccess: (row) =>
-        toast.success(isEdit ? `Updated ${row.code}` : `Added ${row.code}`),
+      onSuccess: (row) => toast.success(isEdit ? `Updated ${row.code}` : `Added ${row.code}`),
     }),
   );
 

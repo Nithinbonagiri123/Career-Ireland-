@@ -14,11 +14,9 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
-import { MultiDocumentUploader } from '@/components/multi-document-uploader';
 import { FadeUp } from '@/components/motion/motion-primitives';
+import { MultiDocumentUploader } from '@/components/multi-document-uploader';
 import { Button } from '@/components/ui/button';
-import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
@@ -29,6 +27,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import {
   discardDraftAction,
   finaliseDraftAction,
@@ -166,8 +166,7 @@ export function OnboardingForm({
   // editable on the candidate detail page afterwards. `null` means
   // "not chosen" (a valid state; you can add it later).
   const [occupationSelection, setOccupationSelection] = useState<Selection>(null);
-  const primaryOccupationId =
-    occupationSelection?.kind === 'catalog' ? occupationSelection.id : '';
+  const primaryOccupationId = occupationSelection?.kind === 'catalog' ? occupationSelection.id : '';
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -349,9 +348,9 @@ export function OnboardingForm({
           <CardHeader>
             <CardTitle className="text-base">Documents</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              Drop multiple files at once — each row picks its own type + display name.
-              Missing a type? Pick <span className="font-medium">+ New type…</span> and it'll
-              show up in every dropdown across the system.
+              Drop multiple files at once — each row picks its own type + display name. Missing a
+              type? Pick <span className="font-medium">+ New type…</span> and it'll show up in every
+              dropdown across the system.
             </p>
           </CardHeader>
           <CardContent>

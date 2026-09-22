@@ -3,11 +3,12 @@ import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
+import { occupationCategories, occupations } from '@/lib/db/schema/occupations';
 import {
   candidateMatches,
   employers,
-  jobApplications,
   type JobRequisition,
+  jobApplications,
   jobRequisitions,
   type RequisitionQualification,
   type RequisitionSkill,
@@ -15,7 +16,6 @@ import {
   requisitionSkills,
   shortlistEntries,
 } from '@/lib/db/schema/recruitment';
-import { occupationCategories, occupations } from '@/lib/db/schema/occupations';
 import { qualifications, skills } from '@/lib/db/schema/reference';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { type AssignmentScope, assignmentCondition } from '@/lib/scope';

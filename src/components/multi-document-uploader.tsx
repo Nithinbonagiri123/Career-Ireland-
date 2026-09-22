@@ -3,13 +3,9 @@
 import { CheckCircle2, Loader2, Trash2, UploadCloud, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import {
-  DocumentTypePicker,
-  type DocumentTypeOption,
-} from '@/components/document-type-picker';
+import { type DocumentTypeOption, DocumentTypePicker } from '@/components/document-type-picker';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
 import { registerUploadAction } from '@/modules/documents/actions';
 
@@ -188,7 +184,10 @@ export function MultiDocumentUploader({
         <div className="space-y-2">
           <ul className="divide-y rounded-lg glass-panel">
             {rows.map((r) => (
-              <li key={r.key} className="grid grid-cols-1 gap-2 px-3 py-3 sm:grid-cols-[1fr_180px_1fr_auto]">
+              <li
+                key={r.key}
+                className="grid grid-cols-1 gap-2 px-3 py-3 sm:grid-cols-[1fr_180px_1fr_auto]"
+              >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{r.file.name}</p>
                   <p className="text-[10px] text-muted-foreground">
@@ -203,9 +202,7 @@ export function MultiDocumentUploader({
                     options={types}
                     value={r.documentTypeId}
                     onChange={(id) => updateRow(r.key, { documentTypeId: id })}
-                    onOptionsChanged={(created) =>
-                      setTypes((prev) => [...prev, created])
-                    }
+                    onOptionsChanged={(created) => setTypes((prev) => [...prev, created])}
                     disabled={r.state === 'uploading' || r.state === 'ok'}
                   />
                 </div>

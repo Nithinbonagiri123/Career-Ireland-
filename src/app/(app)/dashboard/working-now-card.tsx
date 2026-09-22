@@ -88,7 +88,8 @@ export function WorkingNowCard({ initial }: { initial: WorkingNowRow[] }) {
                       dateTime={r.clockInAt.toISOString()}
                       className="flex flex-col items-end text-right text-[10px] uppercase tracking-wider text-muted-foreground"
                     >
-                      <span>since{' '}
+                      <span>
+                        since{' '}
                         {new Intl.DateTimeFormat('en-IE', {
                           hour: '2-digit',
                           minute: '2-digit',

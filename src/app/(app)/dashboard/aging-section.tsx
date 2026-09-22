@@ -63,7 +63,10 @@ export function AgingSection({ report }: { report: AgingReport }) {
                 <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
                   {report.overdueTotals.map((t) => (
                     <p key={t.currencyCode} className="text-base font-semibold tabular-nums">
-                      {formatCurrency(t.total, t.currencyCode, { maximumFractionDigits: 0, minimumFractionDigits: 0 })}
+                      {formatCurrency(t.total, t.currencyCode, {
+                        maximumFractionDigits: 0,
+                        minimumFractionDigits: 0,
+                      })}
                       <span className="ml-1.5 text-xs font-normal text-muted-foreground">
                         · {t.count} {t.count === 1 ? 'invoice' : 'invoices'}
                       </span>
@@ -99,7 +102,10 @@ export function AgingSection({ report }: { report: AgingReport }) {
                             key={r.currencyCode}
                             className="truncate text-xs tabular-nums text-muted-foreground"
                           >
-                            {formatCurrency(r.total, r.currencyCode, { maximumFractionDigits: 0, minimumFractionDigits: 0 })}
+                            {formatCurrency(r.total, r.currencyCode, {
+                              maximumFractionDigits: 0,
+                              minimumFractionDigits: 0,
+                            })}
                           </li>
                         ))}
                       </ul>
@@ -111,10 +117,7 @@ export function AgingSection({ report }: { report: AgingReport }) {
 
             <p className="text-xs text-muted-foreground">
               Buckets group issued invoices by days since issue.{' '}
-              <Link
-                href="/payments"
-                className="underline underline-offset-2 hover:text-foreground"
-              >
+              <Link href="/payments" className="underline underline-offset-2 hover:text-foreground">
                 See all payments
               </Link>
               .
@@ -125,4 +128,3 @@ export function AgingSection({ report }: { report: AgingReport }) {
     </Card>
   );
 }
-

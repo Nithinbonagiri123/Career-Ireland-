@@ -40,8 +40,6 @@ test('02 · Candidate profile skills autosuggest input renders', async ({ page }
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   // "Add skill" opens the dialog with the autosuggest input.
   await page.getByRole('button', { name: /add skill/i }).click();
-  await expect(
-    page.getByPlaceholder(/type to search — or paste from the cv/i),
-  ).toBeVisible();
+  await expect(page.getByPlaceholder(/type to search — or paste from the cv/i)).toBeVisible();
   await shot(page, 'e2e__checklists-02-skills-autosuggest');
 });

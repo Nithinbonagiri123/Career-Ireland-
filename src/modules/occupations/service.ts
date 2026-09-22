@@ -2,8 +2,8 @@ import { ilike } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
-import { occupationCategories, occupations } from '@/lib/db/schema/occupations';
 import type { Occupation, OccupationCategory } from '@/lib/db/schema/occupations';
+import { occupationCategories, occupations } from '@/lib/db/schema/occupations';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import {
   type CategoryWithCount,

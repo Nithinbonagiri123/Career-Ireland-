@@ -45,9 +45,7 @@ export function ChecklistsSection({
   const [pending, startTransition] = useTransition();
 
   const existingPersonIds = new Set(existing.map((r) => r.personId));
-  const availableCandidates = candidatePool.filter(
-    (c) => !existingPersonIds.has(c.personId),
-  );
+  const availableCandidates = candidatePool.filter((c) => !existingPersonIds.has(c.personId));
 
   const create = () => {
     if (!pickedPersonId) return;
@@ -77,8 +75,8 @@ export function ChecklistsSection({
         <div>
           <p className="text-sm font-medium">Work permit checklists</p>
           <p className="text-xs text-muted-foreground">
-            One per candidate — verifies the advert matches the contract they're being offered
-            and tracks the documents you've collected.
+            One per candidate — verifies the advert matches the contract they're being offered and
+            tracks the documents you've collected.
           </p>
         </div>
         <Button

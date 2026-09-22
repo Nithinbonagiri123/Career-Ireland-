@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, Files, Receipt as ReceiptIcon } from 'lucide-react';
+import { Files, FileText, Receipt as ReceiptIcon } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 

@@ -19,9 +19,7 @@ export function renderDocumentRequestEmail(input: {
   expiresAt: Date;
 }) {
   const expiryLine = `This link stops working on ${format(input.expiresAt, "d MMM yyyy 'at' HH:mm")}.`;
-  const greeting = input.candidateName
-    ? `Hi ${input.candidateName.split(' ')[0]},`
-    : 'Hello,';
+  const greeting = input.candidateName ? `Hi ${input.candidateName.split(' ')[0]},` : 'Hello,';
   const itemBullets = input.requestedItems.map((it) => `  •  ${it}`).join('\n');
   const htmlItems = input.requestedItems.map((it) => `<li>${escapeHtml(it)}</li>`).join('');
   const brand = input.brand;

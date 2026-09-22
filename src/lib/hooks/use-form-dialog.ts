@@ -37,7 +37,7 @@ export function useFormDialog<TValues extends FieldValues>(form: UseFormReturn<T
   );
 
   const submit = useCallback(
-    async <TData,>(
+    async <TData>(
       data: TValues,
       action: (input: TValues) => Promise<ActionResult<TData>>,
       opts: { successMessage: string; onSuccess?: (data: TData) => void },

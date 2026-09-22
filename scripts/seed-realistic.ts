@@ -252,7 +252,8 @@ async function main() {
       'No currencies configured — seed at least EUR before running this. Try pnpm db:seed:currencies.',
     );
   }
-  const eurRow = allCurrencies.find((c) => c.code === 'EUR') ?? allCurrencies[0]!;
+  const eurRow = allCurrencies.find((c) => c.code === 'EUR') ?? allCurrencies[0];
+  if (!eurRow) throw new Error('No currencies seeded — run `pnpm db:seed:currencies` first.');
 
   const [existingCatalog] = await db
     .select()
@@ -663,8 +664,7 @@ async function main() {
     },
   ];
   const employerIds: string[] = [];
-  for (let i = 0; i < EMPLOYERS.length; i++) {
-    const e = EMPLOYERS[i]!;
+  for (const [i, e] of EMPLOYERS.entries()) {
     const [row] = await db
       .insert(employers)
       .values({
@@ -847,10 +847,15 @@ async function main() {
   const occByName = new Map(allOccupations.map((o) => [o.name.toLowerCase(), o]));
   const skillByName = new Map(allSkills.map((s) => [s.name.toLowerCase(), s]));
 
-  const employerRoundRobin = (i: number): string => employerIds[i % employerIds.length]!;
+  const employerRoundRobin = (i: number): string => {
+    const id = employerIds[i % employerIds.length];
+    if (!id) throw new Error('No employers seeded — employerIds is empty.');
+    return id;
+  };
 
   for (let i = 0; i < REQ_SPECS.length; i++) {
-    const spec = REQ_SPECS[i]!;
+    const spec = REQ_SPECS[i];
+    if (!spec) continue;
     const occupation = occByName.get(spec.occupationName.toLowerCase());
     if (!occupation) {
       console.warn(`  ⚠ occupation not found: ${spec.occupationName} — skipping ${spec.title}`);

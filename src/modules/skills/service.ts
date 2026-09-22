@@ -87,11 +87,7 @@ export async function createSkillFromName(name: string): Promise<Skill> {
     });
   }
   return db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select()
-      .from(skills)
-      .where(ilike(skills.name, trimmed))
-      .limit(1);
+    const [existing] = await tx.select().from(skills).where(ilike(skills.name, trimmed)).limit(1);
     if (existing) return existing;
     const [created] = await tx.insert(skills).values({ name: trimmed, isActive: true }).returning();
     if (!created) throw new Error('insert returned no row');

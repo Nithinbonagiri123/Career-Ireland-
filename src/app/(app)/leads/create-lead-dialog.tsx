@@ -92,10 +92,7 @@ export function CreateLeadDialog({
   const [packageId, setPackageId] = useState<string>('');
   const [qty, setQty] = useState<string>('1');
   const [unitPrice, setUnitPrice] = useState<string>('');
-  const activeCurrencies = useMemo(
-    () => currencies.filter((c) => c.isActive),
-    [currencies],
-  );
+  const activeCurrencies = useMemo(() => currencies.filter((c) => c.isActive), [currencies]);
   const [currency, setCurrency] = useState<string>(
     activeCurrencies.find((c) => c.code === 'EUR')?.code ?? activeCurrencies[0]?.code ?? 'EUR',
   );
@@ -436,7 +433,8 @@ export function CreateLeadDialog({
                           <option value="">— none, enter unit price manually —</option>
                           {service?.packages.map((p) => (
                             <option key={p.id} value={p.id}>
-                              {p.currencyCode} · {formatCurrency(p.price, p.currencyCode)} · {p.name}
+                              {p.currencyCode} · {formatCurrency(p.price, p.currencyCode)} ·{' '}
+                              {p.name}
                             </option>
                           ))}
                         </Select>
@@ -527,4 +525,3 @@ export function CreateLeadDialog({
     </Dialog>
   );
 }
-

@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { useForm } from 'react-hook-form';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';
@@ -163,9 +163,7 @@ export function CaseDialog({ trigger, persons, employers, initial }: Props) {
 
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-            <SubmitButton loading={isSubmitting}>
-              {isEdit ? 'Save' : 'Open case'}
-            </SubmitButton>
+            <SubmitButton loading={isSubmitting}>{isEdit ? 'Save' : 'Open case'}</SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

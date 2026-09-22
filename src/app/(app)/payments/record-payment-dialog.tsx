@@ -138,10 +138,7 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
             </FormField>
           </div>
 
-          <FormField
-            id="p-ref"
-            label="Proof reference (bank statement id / cash receipt #)"
-          >
+          <FormField id="p-ref" label="Proof reference (bank statement id / cash receipt #)">
             <Input
               id="p-ref"
               placeholder="Optional — file uploads land in 5.7"

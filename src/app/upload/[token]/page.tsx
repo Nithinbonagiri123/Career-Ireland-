@@ -1,8 +1,8 @@
 import { format } from 'date-fns';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import Image from 'next/image';
-import { fetchAppSettings } from '@/modules/settings/service';
 import { validateUploadRequest } from '@/modules/document-upload-requests/service';
+import { fetchAppSettings } from '@/modules/settings/service';
 import { UploadForm } from './upload-form';
 
 export const dynamic = 'force-dynamic';
@@ -18,11 +18,7 @@ export const metadata = { title: 'Upload your documents' };
  * We deliberately do not leak which failure mode caused #2 — makes
  * token enumeration pointless.
  */
-export default async function UploadPage({
-  params,
-}: {
-  params: Promise<{ token: string }>;
-}) {
+export default async function UploadPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const [validated, settings] = await Promise.all([
     validateUploadRequest(token),
@@ -38,9 +34,9 @@ export default async function UploadPage({
             This upload link is no longer valid
           </h1>
           <p className="mt-2 text-sm text-slate-600">
-            The link may have expired, already been used, or been revoked. If you still need to
-            send documents, please reply to the last message you received from us and we'll issue a
-            new link.
+            The link may have expired, already been used, or been revoked. If you still need to send
+            documents, please reply to the last message you received from us and we'll issue a new
+            link.
           </p>
         </div>
       </Shell>

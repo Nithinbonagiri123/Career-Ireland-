@@ -1,14 +1,5 @@
 import { asc } from 'drizzle-orm';
-import {
-  ArrowRight,
-  Briefcase,
-  Building2,
-  Globe,
-  MapPin,
-  Pencil,
-  Plus,
-  User,
-} from 'lucide-react';
+import { ArrowRight, Briefcase, Building2, Globe, MapPin, Pencil, Plus, User } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
@@ -60,8 +51,7 @@ export default async function EmployerDetail({ params }: { params: Promise<{ id:
     fetchEmployerBillingHistory(id),
   ]);
 
-  const canVerifyPayments =
-    session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
+  const canVerifyPayments = session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
 
   const location = [employer.city, employer.country].filter(Boolean).join(', ');
 

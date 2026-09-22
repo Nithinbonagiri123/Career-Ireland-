@@ -218,10 +218,7 @@ function InterviewRow({
             {interview.status.replace(/_/g, ' ')}
           </Badge>
           {interview.status !== 'SCHEDULED' && (
-            <Badge
-              variant={statusTone(interview.outcome)}
-              className="rounded-full text-[10px]"
-            >
+            <Badge variant={statusTone(interview.outcome)} className="rounded-full text-[10px]">
               {interview.outcome}
             </Badge>
           )}

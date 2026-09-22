@@ -10,10 +10,7 @@ import { presignUploadForToken } from '@/modules/document-upload-requests/servic
  * validation (token, requirement scope, mime, size) is done inside
  * `presignUploadForToken`.
  */
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ token: string }> },
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   try {
     const { token } = await params;
     const body = await request.json();

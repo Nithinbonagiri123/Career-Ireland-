@@ -1,7 +1,7 @@
+import { eq } from 'drizzle-orm';
 import { ArrowLeft, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { eq } from 'drizzle-orm';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { buttonVariants } from '@/components/ui/button';
@@ -26,7 +26,12 @@ export default async function ChecklistDetailPage({
     fetchRequisition(id),
     fetchChecklist({ jobRequisitionId: id, personId }),
     db
-      .select({ firstName: persons.firstName, lastName: persons.lastName, email: persons.email, phone: persons.phone })
+      .select({
+        firstName: persons.firstName,
+        lastName: persons.lastName,
+        email: persons.email,
+        phone: persons.phone,
+      })
       .from(persons)
       .where(eq(persons.id, personId))
       .limit(1),

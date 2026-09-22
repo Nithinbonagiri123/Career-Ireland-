@@ -20,12 +20,7 @@ export function MetaRow({
   className?: string;
 }) {
   return (
-    <li
-      className={cn(
-        'flex items-center gap-1.5 text-xs text-muted-foreground',
-        className,
-      )}
-    >
+    <li className={cn('flex items-center gap-1.5 text-xs text-muted-foreground', className)}>
       {icon && <span className="shrink-0 [&_svg]:size-3.5">{icon}</span>}
       <span className="truncate">{children}</span>
     </li>

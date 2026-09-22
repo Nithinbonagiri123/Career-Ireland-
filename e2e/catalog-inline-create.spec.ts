@@ -19,7 +19,9 @@ import { expect, test } from '@playwright/test';
  * catalog. The affordance being visible is enough to prove the wiring.
  */
 
-test('requisition: Add required skill dialog shows autosuggest + inline-create', async ({ page }) => {
+test('requisition: Add required skill dialog shows autosuggest + inline-create', async ({
+  page,
+}) => {
   await page.goto('/requisitions');
   // The Open link is what navigates — rows themselves aren't clickable.
   const firstOpen = page.getByRole('link', { name: /open/i }).first();
@@ -28,7 +30,10 @@ test('requisition: Add required skill dialog shows autosuggest + inline-create',
   await page.waitForURL(/\/requisitions\/[0-9a-f-]+/i);
 
   // Scroll to the requirements section + open the Add skill dialog.
-  await page.getByRole('button', { name: /add skill/i }).first().click();
+  await page
+    .getByRole('button', { name: /add skill/i })
+    .first()
+    .click();
 
   // The old <select id="skill"> should be gone — the autosuggest renders
   // an <input> instead. `CatalogAutosuggest` uses <Input /> with the
@@ -55,7 +60,10 @@ test('requisition: Add required qualification dialog shows autosuggest + inline-
   await expect(firstOpen).toBeVisible();
   await firstOpen.click();
   await page.waitForURL(/\/requisitions\/[0-9a-f-]+/i);
-  await page.getByRole('button', { name: /add qualification/i }).first().click();
+  await page
+    .getByRole('button', { name: /add qualification/i })
+    .first()
+    .click();
 
   const qualInput = page.locator('#qual');
   await expect(qualInput).toBeVisible();

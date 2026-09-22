@@ -1,5 +1,5 @@
-import { cn } from '@/lib/utils';
 import type { PipelineStage } from '@/components/pipeline-chip';
+import { cn } from '@/lib/utils';
 
 /**
  * Circle-outlined metric counter — a large tabular number ringed by

@@ -198,9 +198,7 @@ export function EmployerDialog({ trigger, initial }: Props) {
           </AnimatePresence>
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-            <SubmitButton loading={isSubmitting}>
-              {isEdit ? 'Save' : 'Add employer'}
-            </SubmitButton>
+            <SubmitButton loading={isSubmitting}>{isEdit ? 'Save' : 'Add employer'}</SubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>

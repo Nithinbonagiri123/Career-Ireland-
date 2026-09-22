@@ -122,7 +122,7 @@ export function ActivityFeed({ rows }: { rows: ActivityRow[] }) {
                 dateTime={r.occurredAt.toISOString()}
                 className="text-[10px] tabular-nums text-muted-foreground/70"
               >
-                {format(r.occurredAt, "dd MMM yyyy · HH:mm")}
+                {format(r.occurredAt, 'dd MMM yyyy · HH:mm')}
               </time>
             </div>
           </li>

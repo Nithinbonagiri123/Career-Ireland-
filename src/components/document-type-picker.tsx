@@ -1,6 +1,5 @@
 'use client';
 
-import { Plus } from 'lucide-react';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -150,8 +149,8 @@ export function DocumentTypePicker({
               <span className="flex-1">
                 <span className="font-medium">Has expiry</span>
                 <span className="block text-xs text-muted-foreground">
-                  Tick if the document expires (e.g. Police Clearance, Bank Statement).
-                  Uploads will surface an expiry-date field.
+                  Tick if the document expires (e.g. Police Clearance, Bank Statement). Uploads will
+                  surface an expiry-date field.
                 </span>
               </span>
             </label>

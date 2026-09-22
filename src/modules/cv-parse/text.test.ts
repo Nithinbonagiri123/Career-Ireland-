@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  customCandidatesFrom,
-  extractEmploymentCandidates,
-  looksLikeHeader,
-} from './text';
+import { customCandidatesFrom, extractEmploymentCandidates, looksLikeHeader } from './text';
 
 const SAMPLE_CV = `
 NITHIN BONAGIRI

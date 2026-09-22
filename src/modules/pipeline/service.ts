@@ -105,12 +105,7 @@ export async function fetchRequisitionPipeline(requisitionId: string): Promise<P
     })
     .from(jobApplications)
     .innerJoin(persons, eq(persons.id, jobApplications.personId))
-    .where(
-      and(
-        eq(jobApplications.jobRequisitionId, requisitionId),
-        isNull(persons.archivedAt),
-      ),
-    );
+    .where(and(eq(jobApplications.jobRequisitionId, requisitionId), isNull(persons.archivedAt)));
 
   // ── 3. Shortlist entries ─────────────────────────────────
   const shortlistRows = await db
@@ -126,12 +121,7 @@ export async function fetchRequisitionPipeline(requisitionId: string): Promise<P
     })
     .from(shortlistEntries)
     .innerJoin(persons, eq(persons.id, shortlistEntries.personId))
-    .where(
-      and(
-        eq(shortlistEntries.jobRequisitionId, requisitionId),
-        isNull(persons.archivedAt),
-      ),
-    );
+    .where(and(eq(shortlistEntries.jobRequisitionId, requisitionId), isNull(persons.archivedAt)));
 
   // ── 4. Matches (source + review bands) ───────────────────
   const matchRows = await db
@@ -150,19 +140,25 @@ export async function fetchRequisitionPipeline(requisitionId: string): Promise<P
     .from(candidateMatches)
     .innerJoin(persons, eq(persons.id, candidateMatches.personId))
     .leftJoin(candidateProfiles, eq(candidateProfiles.personId, candidateMatches.personId))
-    .where(
-      and(
-        eq(candidateMatches.jobRequisitionId, requisitionId),
-        isNull(persons.archivedAt),
-      ),
-    )
+    .where(and(eq(candidateMatches.jobRequisitionId, requisitionId), isNull(persons.archivedAt)))
     .orderBy(desc(candidateMatches.score));
 
   const scoreByPerson = new Map<string, number>();
   for (const r of matchRows) scoreByPerson.set(r.personId, r.score);
 
   // ── Assemble bands ────────────────────────────────────────
-  const toEntry = <T extends { firstName: string; lastName: string; email: string | null; phone: string | null; currentCity: string | null; currentCountry: string | null; personId: string; entryId: string }>(
+  const toEntry = <
+    T extends {
+      firstName: string;
+      lastName: string;
+      email: string | null;
+      phone: string | null;
+      currentCity: string | null;
+      currentCountry: string | null;
+      personId: string;
+      entryId: string;
+    },
+  >(
     r: T,
   ): PipelineEntry => ({
     personId: r.personId,

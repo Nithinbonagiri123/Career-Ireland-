@@ -19,9 +19,7 @@ export function isInvoiceOverdue(
   today: Date = new Date(),
 ): boolean {
   if (invoice.status !== 'ISSUED') return false;
-  const days = Math.floor(
-    (today.getTime() - invoice.issuedAt.getTime()) / (1000 * 60 * 60 * 24),
-  );
+  const days = Math.floor((today.getTime() - invoice.issuedAt.getTime()) / (1000 * 60 * 60 * 24));
   return days >= OVERDUE_THRESHOLD_DAYS;
 }
 
@@ -110,11 +108,14 @@ export async function fetchAgingReport(): Promise<AgingReport> {
       overdueByCurrency.set(row.currencyCode, entry);
     }
   }
-  const overdueTotals: AgingCurrencyTotal[] = Array.from(overdueByCurrency, ([currencyCode, v]) => ({
-    currencyCode,
-    count: v.count,
-    total: (v.totalCents / 100).toFixed(2),
-  }));
+  const overdueTotals: AgingCurrencyTotal[] = Array.from(
+    overdueByCurrency,
+    ([currencyCode, v]) => ({
+      currencyCode,
+      count: v.count,
+      total: (v.totalCents / 100).toFixed(2),
+    }),
+  );
 
   return { buckets, overdueTotals };
 }

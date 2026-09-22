@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import { ArrowLeft, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { DateRangeFilter } from '@/components/date-range-filter';
@@ -9,7 +10,6 @@ import { parseDateRangeParams } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import { persons } from '@/lib/db/schema/persons';
 import { employers } from '@/lib/db/schema/recruitment';
-import { eq } from 'drizzle-orm';
 import {
   type DocumentHubKind,
   fetchDocumentClientFolders,
@@ -22,12 +22,7 @@ import { OwnerSearch } from './owner-search';
 
 export const dynamic = 'force-dynamic';
 
-const VALID_KINDS: readonly (DocumentHubKind | 'ALL')[] = [
-  'ALL',
-  'UPLOADED',
-  'INVOICE',
-  'RECEIPT',
-];
+const VALID_KINDS: readonly (DocumentHubKind | 'ALL')[] = ['ALL', 'UPLOADED', 'INVOICE', 'RECEIPT'];
 
 export default async function DocumentsPage({
   searchParams,
@@ -70,13 +65,10 @@ export default async function DocumentsPage({
         <FadeUp>
           <PageHeader
             icon={FileText}
-          iconTone="neutral"
+            iconTone="neutral"
             title={ownerName ?? 'Client folder'}
             description={`Every file, invoice, and receipt for this ${ownerKind === 'PERSON' ? 'candidate' : 'employer'}.`}
-            breadcrumbs={[
-              { label: 'Documents', href: '/documents' },
-              { label: ownerName ?? '…' },
-            ]}
+            breadcrumbs={[{ label: 'Documents', href: '/documents' }, { label: ownerName ?? '…' }]}
             action={
               <div className="flex flex-wrap items-center gap-2">
                 <Link
