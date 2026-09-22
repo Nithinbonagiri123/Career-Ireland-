@@ -101,10 +101,10 @@ export function RevenueSection({ data }: { data: DashboardRevenue }) {
     <section aria-label="Revenue" className="mb-8">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
             Revenue
           </h2>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
+          <p className="mt-0.5 text-[11px] text-foreground/60">
             Verified payments · {formatRangeLabel(range.from, range.to)}
           </p>
         </div>
@@ -155,10 +155,10 @@ export function RevenueSection({ data }: { data: DashboardRevenue }) {
             <div className="mt-6">
               <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
                 <div className="flex items-baseline gap-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
                     Top services
                   </h3>
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-[11px] text-foreground/60">
                     Ordered by revenue in the selected range.
                   </span>
                 </div>
@@ -167,7 +167,7 @@ export function RevenueSection({ data }: { data: DashboardRevenue }) {
                   label={`Download all ${services.length} services`}
                 />
               </div>
-              <div className="overflow-hidden rounded-lg border bg-card">
+              <div className="overflow-hidden rounded-lg glass-panel">
                 <table className="w-full text-sm">
                   <thead className="border-b bg-muted/20 text-left text-xs uppercase tracking-wider text-muted-foreground">
                     <tr>
@@ -270,7 +270,7 @@ function StreamCard({ stream }: { stream: RevenueByStream }) {
       </CardHeader>
       <CardContent>
         {isEmpty ? (
-          <p className="text-xs text-muted-foreground">No revenue in this range.</p>
+          <p className="py-2 text-center text-xs text-foreground/55">No revenue in this range.</p>
         ) : (
           <ul className="space-y-1.5">
             {stream.byCurrency.map((c) => (

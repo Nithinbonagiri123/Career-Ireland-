@@ -243,3 +243,76 @@ export async function fetchDashboardRevenue(opts?: {
     services: current.services,
   };
 }
+
+/* ── Daily trend by source ─────────────────────────────────────────────
+ * Powers the per-business pie + line charts on the dashboards. Returns
+ * one row per (day × source × currency) so the client can pivot into
+ * an area chart with a series per stream. Kept currency-aware since we
+ * still don't do FX rollup; multi-currency workspaces render one chart
+ * per currency in practice.
+ */
+export type RevenueTrendPoint = {
+  /** ISO date, YYYY-MM-DD in DB timezone. */
+  date: string;
+  source: RevenueSource;
+  currencyCode: string;
+  total: number;
+  count: number;
+};
+
+export async function fetchRevenueTrendBySource(opts?: {
+  from?: Date;
+  to?: Date;
+}): Promise<RevenueTrendPoint[]> {
+  await requireInternalStaff();
+  const range = defaultRevenueRange(opts);
+
+  const rows = await db
+    .select({
+      day: sql<string>`to_char(date_trunc('day', ${payments.verifiedAt}), 'YYYY-MM-DD')`,
+      currencyCode: payments.currencyCode,
+      relatedPlacementId: serviceEngagements.relatedPlacementId,
+      relatedImmigrationCaseId: serviceEngagements.relatedImmigrationCaseId,
+      count: sql<number>`COUNT(${payments.id})::int`,
+      total: sql<string>`SUM(${payments.amount})::text`,
+    })
+    .from(payments)
+    .innerJoin(serviceEngagements, eq(serviceEngagements.id, payments.serviceEngagementId))
+    .where(
+      and(
+        eq(payments.status, 'VERIFIED'),
+        isNotNull(payments.verifiedAt),
+        gte(payments.verifiedAt, range.from),
+        lt(payments.verifiedAt, range.to),
+      ),
+    )
+    .groupBy(
+      sql`date_trunc('day', ${payments.verifiedAt})`,
+      payments.currencyCode,
+      serviceEngagements.relatedPlacementId,
+      serviceEngagements.relatedImmigrationCaseId,
+    );
+
+  const bucketMap = new Map<string, RevenueTrendPoint>();
+  for (const r of rows) {
+    const source = classifySource(r);
+    const total = Number.parseFloat(r.total);
+    if (!Number.isFinite(total)) continue;
+    const key = `${r.day}::${source}::${r.currencyCode}`;
+    const existing = bucketMap.get(key);
+    if (existing) {
+      existing.total += total;
+      existing.count += r.count;
+    } else {
+      bucketMap.set(key, {
+        date: r.day,
+        source,
+        currencyCode: r.currencyCode,
+        total,
+        count: r.count,
+      });
+    }
+  }
+
+  return Array.from(bucketMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+}

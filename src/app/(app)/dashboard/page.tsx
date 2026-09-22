@@ -22,7 +22,7 @@ import { fetchAgingReport } from '@/modules/billing/aging';
 import { fetchRecentActivity } from '@/modules/dashboard/activity';
 import { fetchDashboardDrilldowns } from '@/modules/dashboard/drilldowns';
 import { fetchDashboardPipelines } from '@/modules/dashboard/pipelines';
-import { fetchDashboardRevenue } from '@/modules/dashboard/revenue';
+import { fetchDashboardRevenue, fetchRevenueTrendBySource } from '@/modules/dashboard/revenue';
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
 import { fetchDashboardTrends } from '@/modules/dashboard/trends';
 import { fetchHrDashboard, fetchStaffCurrentlyWorking } from '@/modules/hr/service';
@@ -32,6 +32,7 @@ import { AgingSection } from './aging-section';
 import { AttentionCard } from './attention-card';
 import { DashboardDrilldownsSection } from './drilldowns-section';
 import { PipelineFunnel } from './pipeline-funnel';
+import { RevenueBusinessGrid } from './revenue-business-chart';
 import { RevenueSection } from './revenue-section';
 import { StatChip } from './stat-chip';
 import { TrendChart } from './trend-chart';
@@ -47,19 +48,31 @@ export default async function DashboardPage({
   await requirePermission('main', 'overview', 'view');
   const { created, from, to } = await searchParams;
   const range = parseDateRangeParams({ created, from, to });
-  const [m, drilldowns, pipelines, activity, hr, trends, revenue, workingNow, aging, settings] =
-    await Promise.all([
-      fetchDashboardMetrics(),
-      fetchDashboardDrilldowns(),
-      fetchDashboardPipelines(),
-      fetchRecentActivity(10),
-      fetchHrDashboard(),
-      fetchDashboardTrends(),
-      fetchDashboardRevenue({ from: range.from, to: range.to }),
-      fetchStaffCurrentlyWorking(),
-      fetchAgingReport(),
-      fetchAppSettings(),
-    ]);
+  const [
+    m,
+    drilldowns,
+    pipelines,
+    activity,
+    hr,
+    trends,
+    revenue,
+    revenueTrend,
+    workingNow,
+    aging,
+    settings,
+  ] = await Promise.all([
+    fetchDashboardMetrics(),
+    fetchDashboardDrilldowns(),
+    fetchDashboardPipelines(),
+    fetchRecentActivity(10),
+    fetchHrDashboard(),
+    fetchDashboardTrends(),
+    fetchDashboardRevenue({ from: range.from, to: range.to }),
+    fetchRevenueTrendBySource({ from: range.from, to: range.to }),
+    fetchStaffCurrentlyWorking(),
+    fetchAgingReport(),
+    fetchAppSettings(),
+  ]);
 
   const today = new Date();
 
@@ -73,7 +86,7 @@ export default async function DashboardPage({
               <Badge variant="secondary" className="rounded-full">
                 Overview
               </Badge>
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              <span className="text-[11px] uppercase tracking-wider text-foreground/75">
                 {format(today, 'EEEE, d MMM yyyy')}
               </span>
             </div>
@@ -148,6 +161,23 @@ export default async function DashboardPage({
         <RevenueSection data={revenue} />
       </FadeUp>
 
+      {/* ─── Revenue by business (pie + line per source) ─────────── */}
+      <FadeUp delay={0.055}>
+        <section aria-label="Revenue by business" className="mb-8">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
+                Revenue by business
+              </h2>
+              <p className="mt-0.5 text-[11px] text-foreground/60">
+                Service mix (pie) + daily trend (line) per business, primary currency shown.
+              </p>
+            </div>
+          </div>
+          <RevenueBusinessGrid services={revenue.services} trend={revenueTrend} />
+        </section>
+      </FadeUp>
+
       {/* ─── Invoice aging (AR pipeline) ─────────────────────────── */}
       <FadeUp delay={0.055} className="mt-8">
         <AgingSection report={aging} />
@@ -157,10 +187,10 @@ export default async function DashboardPage({
       <FadeUp delay={0.06}>
         <section aria-label="HR" className="mb-8">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
               People
             </h2>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-[11px] text-foreground/60">
               Attendance is server-side + audited.
             </span>
           </div>
@@ -213,10 +243,10 @@ export default async function DashboardPage({
       <FadeUp delay={0.07}>
         <section aria-label="30-day trends" className="mb-8">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
               30-day trends
             </h2>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-[11px] text-foreground/60">
               Real counts, second-half vs first-half of the window.
             </span>
           </div>
@@ -250,10 +280,10 @@ export default async function DashboardPage({
       <FadeUp delay={0.08}>
         <section aria-label="Operational pipelines" className="mb-8">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
               Operational pipelines
             </h2>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-[11px] text-foreground/60">
               Real-time counts from the domain tables.
             </span>
           </div>
@@ -290,7 +320,7 @@ export default async function DashboardPage({
       <FadeUp delay={0.12}>
         <section aria-label="Attention needed" className="mb-8">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
               Attention needed
             </h2>
           </div>
@@ -401,7 +431,7 @@ export default async function DashboardPage({
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             <div className="xl:col-span-2">
               <div className="mb-3">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
                   Drill down
                 </h2>
               </div>
@@ -409,10 +439,10 @@ export default async function DashboardPage({
             </div>
             <div>
               <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
                   Recent activity
                 </h2>
-                <span className="text-[11px] text-muted-foreground">audit-backed</span>
+                <span className="text-[11px] text-foreground/60">audit-backed</span>
               </div>
               <ActivityFeed rows={activity} />
             </div>

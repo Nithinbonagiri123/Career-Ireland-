@@ -2,14 +2,20 @@ import { Coins, LayoutDashboard, UserPlus, Users } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { requirePermission } from '@/lib/auth/session';
+import { fetchDashboardRevenue, fetchRevenueTrendBySource } from '@/modules/dashboard/revenue';
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
+import { RevenueBusinessChart } from '../revenue-business-chart';
 import { StatChip } from '../stat-chip';
 
 export const dynamic = 'force-dynamic';
 
 export default async function CandidateServicesDashboard() {
   await requirePermission('candidate_services', 'dashboard', 'view');
-  const m = await fetchDashboardMetrics();
+  const [m, revenue, revenueTrend] = await Promise.all([
+    fetchDashboardMetrics(),
+    fetchDashboardRevenue(),
+    fetchRevenueTrendBySource(),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
@@ -64,6 +70,23 @@ export default async function CandidateServicesDashboard() {
             tone="warning"
           />
         </div>
+      </FadeUp>
+      <FadeUp delay={0.08} className="mt-8">
+        <section aria-label="Candidate services revenue" className="mb-8">
+          <div className="mb-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
+              Revenue this month
+            </h2>
+            <p className="mt-0.5 text-[11px] text-foreground/60">
+              Service mix + daily trend for candidate services.
+            </p>
+          </div>
+          <RevenueBusinessChart
+            source="candidate_services"
+            services={revenue.services}
+            trend={revenueTrend}
+          />
+        </section>
       </FadeUp>
     </div>
   );
