@@ -123,7 +123,11 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       minio:
-        image: minio/minio:latest
+        # Quay-hosted image — the Docker Hub mirror (`minio/minio`) now
+        # requires auth for anonymous pulls (rate-limited from GitHub
+        # runners). Quay.io is the official upstream and doesn't have
+        # the same limit.
+        image: quay.io/minio/minio:latest
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
