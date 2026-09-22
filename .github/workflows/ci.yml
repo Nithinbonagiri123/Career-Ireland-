@@ -122,24 +122,12 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      minio:
-        # Bitnami's image auto-starts `minio server` on container boot,
-        # so it works as a GitHub Actions service (which can't pass a
-        # `command:` to the container — only image/env/ports/options).
-        # The vanilla `minio/minio` image needs `server /data` as its
-        # command and exits immediately without it.
-        image: bitnami/minio:latest
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-          MINIO_DEFAULT_BUCKETS: ci-e2e-documents
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 30
+      # MinIO is NOT in `services:` — GitHub Actions services can't
+      # pass a container `command:`, and the vanilla `minio/minio`
+      # image needs `server /data` to actually launch. Instead we run
+      # it as a background docker container in a step below, which
+      # lets us give it the right command explicitly. See the
+      # "Start MinIO" step further down.
 
     env:
       # Point uploads at the MinIO service (path-style is required for MinIO).
@@ -174,6 +162,37 @@ jobs:
       - name: Install Playwright browsers (chromium only)
         # `--with-deps` pulls the shared libs Chromium needs on ubuntu runners.
         run: pnpm exec playwright install --with-deps chromium
+
+      - name: Start MinIO container (background)
+        # Ran as a plain docker container instead of a service so we can
+        # pass `server /data` as the command — GitHub Actions services
+        # can't do that. quay.io is the vendor-official mirror and pulls
+        # without auth from GitHub-hosted runners.
+        run: |
+          docker run -d \
+            --name minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            quay.io/minio/minio:latest \
+            server /data
+          # Wait up to 60s for the health endpoint. Fails fast if the
+          # container exited without becoming healthy.
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9000/minio/health/live; then
+              echo "✓ MinIO ready after ${i} attempts"
+              exit 0
+            fi
+            if ! docker ps -q -f name=minio | grep -q .; then
+              echo "✗ MinIO container exited early — logs:"
+              docker logs minio
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "✗ MinIO never became healthy within 60s"
+          docker logs minio
+          exit 1
 
       - name: Apply migrations to CI Postgres
         run: pnpm db:migrate
