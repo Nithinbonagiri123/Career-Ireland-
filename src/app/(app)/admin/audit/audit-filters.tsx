@@ -60,7 +60,7 @@ export function AuditFilters({
   };
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3">
+    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg glass-panel p-3">
       <div className="mr-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <Filter className="size-3.5" aria-hidden />
         Filter

@@ -56,7 +56,7 @@ function DrilldownCard({
         </CardTitle>
         <Link
           href={seeAllHref}
-          className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-0.5 text-[11px] text-foreground/60 hover:text-foreground"
         >
           {seeAllLabel} <ArrowRight className="size-3" />
         </Link>
@@ -90,7 +90,7 @@ export function DashboardDrilldownsSection({ data }: { data: DashboardDrilldowns
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{r.title}</p>
-                <p className="truncate text-[11px] text-muted-foreground">
+                <p className="truncate text-[11px] text-foreground/60">
                   {r.employerName} · {r.status.replace(/_/g, ' ').toLowerCase()} · open {r.ageDays}d
                 </p>
               </div>
@@ -117,12 +117,12 @@ export function DashboardDrilldownsSection({ data }: { data: DashboardDrilldowns
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-mono text-[11px] text-muted-foreground">
+                  <span className="font-mono text-[11px] text-foreground/60">
                     {format(iv.scheduledAt, 'EEE HH:mm')}
                   </span>
                   <span className="truncate font-medium">{iv.candidateName}</span>
                 </div>
-                <p className="truncate text-[11px] text-muted-foreground">
+                <p className="truncate text-[11px] text-foreground/60">
                   {iv.jobLabel} · {MODE_LABEL[iv.mode]}
                 </p>
               </div>
@@ -158,7 +158,7 @@ export function DashboardDrilldownsSection({ data }: { data: DashboardDrilldowns
                   <AlertTriangle className="size-3 text-destructive" />
                   <span className="truncate font-medium">{t.title}</span>
                 </div>
-                <p className="truncate text-[11px] text-muted-foreground">
+                <p className="truncate text-[11px] text-foreground/60">
                   {t.assignedName}
                   {t.dueAt && (
                     <>
@@ -196,7 +196,7 @@ export function DashboardDrilldownsSection({ data }: { data: DashboardDrilldowns
                 <p className="truncate font-medium">
                   {CASE_TYPE_LABEL[c.caseType]} · {c.beneficiaryName}
                 </p>
-                <p className="truncate text-[11px] text-muted-foreground">
+                <p className="truncate text-[11px] text-foreground/60">
                   {format(new Date(c.expiresOn), 'PP')}
                 </p>
               </div>

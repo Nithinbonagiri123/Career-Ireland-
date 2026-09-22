@@ -53,7 +53,7 @@ export function BillingSection({
             description="Invoices issued to this payer will appear here."
           />
         ) : (
-          <ul className="divide-y rounded-lg border bg-card">
+          <ul className="divide-y rounded-lg glass-panel">
             {invoices.map(({ invoice, serviceName }) => {
               const overdue = isInvoiceOverdue(invoice);
               return (
@@ -133,7 +133,7 @@ export function BillingSection({
             description="A receipt is auto-issued when a payment against an invoice is marked verified."
           />
         ) : (
-          <ul className="divide-y rounded-lg border bg-card">
+          <ul className="divide-y rounded-lg glass-panel">
             {receipts.map(({ receipt, invoiceNumber }) => (
               <li
                 key={receipt.id}

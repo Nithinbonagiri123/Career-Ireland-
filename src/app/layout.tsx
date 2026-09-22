@@ -49,10 +49,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full bg-background antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      {/* Body is transparent so the ::before photo + ::after bokeh
+          gradient (defined in globals.css) actually paint through.
+          The <html> element carries the solid fallback so there's
+          never an unpainted gap. Print mode restores an opaque body
+          for the invoice/receipt surfaces via globals.css. */}
+      <body className="min-h-full flex flex-col bg-transparent text-foreground print:bg-white">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

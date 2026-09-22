@@ -29,7 +29,10 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-border/70 bg-muted/20 px-6 py-14 text-center',
+        // glass-panel so description text always has a frosted surface
+        // behind it, not raw photo. Dashed border kept as a hint that
+        // this is an intentional placeholder, not real content.
+        'glass-panel flex flex-col items-center justify-center gap-4 rounded-lg border-dashed px-6 py-14 text-center',
         className,
       )}
     >
@@ -53,9 +56,9 @@ export function EmptyState({
         </span>
       </div>
       <div className="space-y-1.5">
-        <p className="text-sm font-medium">{title}</p>
+        <p className="text-sm font-medium text-foreground">{title}</p>
         {description && (
-          <p className="mx-auto max-w-sm text-xs leading-relaxed text-muted-foreground">
+          <p className="mx-auto max-w-sm text-xs leading-relaxed text-foreground/65">
             {description}
           </p>
         )}

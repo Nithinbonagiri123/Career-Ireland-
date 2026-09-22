@@ -130,12 +130,12 @@ export function PipelineWall({
   return (
     <div className="space-y-4">
       {/* ── Stepper strip ─────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-border/60 bg-card/80 p-2 backdrop-blur">
+      <div className="glass-panel flex flex-wrap items-center gap-1.5 rounded-2xl p-2">
         {totals.map(({ stage, count }, i) => (
           <div key={stage} className="flex items-center gap-1.5">
             <PipelineChip stage={stage} count={count} />
             {i < totals.length - 1 && (
-              <ChevronRight className="size-3 shrink-0 text-muted-foreground/50" />
+              <ChevronRight className="size-3 shrink-0 text-foreground/40" />
             )}
           </div>
         ))}
@@ -232,7 +232,7 @@ function PipelineCard({
   return (
     <article
       className={cn(
-        'flex w-64 shrink-0 snap-start flex-col gap-2 rounded-xl bg-card p-3 shadow-sm ring-1 ring-black/5 transition-shadow hover:shadow-md',
+        'glass-panel flex w-64 shrink-0 snap-start flex-col gap-2 rounded-xl p-3 transition-shadow',
         disabled && 'pointer-events-none opacity-60',
       )}
     >

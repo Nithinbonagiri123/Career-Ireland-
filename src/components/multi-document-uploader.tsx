@@ -186,7 +186,7 @@ export function MultiDocumentUploader({
 
       {rows.length > 0 && (
         <div className="space-y-2">
-          <ul className="divide-y rounded-lg border bg-card">
+          <ul className="divide-y rounded-lg glass-panel">
             {rows.map((r) => (
               <li key={r.key} className="grid grid-cols-1 gap-2 px-3 py-3 sm:grid-cols-[1fr_180px_1fr_auto]">
                 <div className="min-w-0">

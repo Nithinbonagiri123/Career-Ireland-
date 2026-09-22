@@ -61,7 +61,7 @@ export function TopBar({
     setMobileNavOpen(false);
   }, [pathname]);
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur-md">
+    <header className="glass-panel-strong sticky top-0 z-30 flex h-14 items-center gap-2 rounded-none px-4">
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         <SheetTrigger
           render={

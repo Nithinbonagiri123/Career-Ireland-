@@ -300,7 +300,7 @@ export function CaseDocumentsSection({
               description="Add the documents this case needs — passport, medical, police clearance, etc."
             />
           ) : (
-            <ul className="divide-y rounded-lg border bg-card">
+            <ul className="divide-y rounded-lg glass-panel">
               {requirements.map((req) => (
                 <li key={req.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
@@ -368,7 +368,7 @@ export function CaseDocumentsSection({
               description="Upload against a requirement above, or attach an existing document from the beneficiary's profile."
             />
           ) : (
-            <ul className="divide-y rounded-lg border bg-card">
+            <ul className="divide-y rounded-lg glass-panel">
               {attachedDocs.map((d) => (
                 <li key={d.documentInstanceId} className="flex items-center gap-3 px-4 py-3">
                   <FileText className="size-4 text-muted-foreground" />

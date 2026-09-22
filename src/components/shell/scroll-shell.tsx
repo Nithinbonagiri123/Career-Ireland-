@@ -35,10 +35,8 @@ export function ScrollShell({ children }: { children: ReactNode }) {
 
   return (
     <main ref={ref} className="relative flex-1 overflow-y-auto">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 z-0 h-64 bg-[radial-gradient(ellipse_100%_100%_at_50%_0%,oklch(0.94_0.012_60/0.6),transparent)] dark:bg-[radial-gradient(ellipse_100%_100%_at_50%_0%,oklch(0.24_0.014_60/0.35),transparent)]"
-      />
+      {/* No opaque overlays — the workspace photo shows through, and
+          the frosted card/table surfaces provide the readability. */}
       <div className="relative z-10">{children}</div>
     </main>
   );

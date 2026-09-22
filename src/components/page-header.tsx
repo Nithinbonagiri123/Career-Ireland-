@@ -126,9 +126,9 @@ export function PageHeader({
                 </Badge>
               </div>
             )}
-            <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
             {description && (
-              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p>
+              <p className="mt-1 max-w-2xl text-sm text-foreground/70">{description}</p>
             )}
             {meta && <div className="mt-3">{meta}</div>}
           </div>

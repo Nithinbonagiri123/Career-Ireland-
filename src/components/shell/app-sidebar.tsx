@@ -70,9 +70,14 @@ export function AppSidebar({
   return (
     <aside
       className={cn(
+        // Shared Apple-glass rail. `.glass-panel-strong` = a heavier tint
+        // than cards so nav labels stay readable when the photo scrolls
+        // past busy content. `h-full` on desktop is critical — without
+        // it the aside collapses to its content height and stops half-
+        // way down the viewport, exposing raw photo below.
         variant === 'desktop'
-          ? 'hidden md:flex md:w-64 md:flex-col md:border-r md:border-sidebar-border md:bg-sidebar'
-          : 'flex h-full w-full flex-col bg-sidebar',
+          ? 'glass-panel-strong hidden md:flex md:h-full md:w-64 md:flex-col'
+          : 'glass-panel-strong flex h-full w-full flex-col',
       )}
     >
       <Link

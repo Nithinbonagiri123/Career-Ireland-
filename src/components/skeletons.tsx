@@ -57,7 +57,7 @@ export function TableSkeleton({
   columnWidths?: string[];
 }) {
   return (
-    <div className="rounded-lg border bg-card">
+    <div className="rounded-lg glass-panel">
       <div className="border-b px-4 py-3">
         <div className="flex gap-4">
           {columnWidths.map((w, i) => (

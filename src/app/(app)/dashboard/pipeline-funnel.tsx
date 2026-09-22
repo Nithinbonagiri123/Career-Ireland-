@@ -27,7 +27,7 @@ export function PipelineFunnel({
   return (
     <Link
       href={href}
-      className="group block rounded-lg border bg-card transition-all hover:border-foreground/20 hover:shadow-[0_8px_20px_-10px_oklch(0.185_0.012_60/0.14)]"
+      className="group block rounded-lg glass-panel transition-all hover:border-foreground/20 hover:shadow-[0_8px_20px_-10px_oklch(0.185_0.012_60/0.14)]"
     >
       <div className="flex items-center justify-between border-b px-4 py-2.5">
         <div className="flex items-center gap-2">

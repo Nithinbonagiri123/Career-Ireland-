@@ -18,7 +18,7 @@ export function AttendanceTable({ rows }: { rows: AttendanceRow[] }) {
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border bg-card px-4 py-8 text-center text-xs text-muted-foreground">
+      <div className="rounded-lg glass-panel px-4 py-8 text-center text-xs text-muted-foreground">
         No attendance in the recent window.
       </div>
     );
@@ -26,7 +26,7 @@ export function AttendanceTable({ rows }: { rows: AttendanceRow[] }) {
 
   return (
     <>
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="overflow-hidden rounded-lg glass-panel">
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/20 text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>

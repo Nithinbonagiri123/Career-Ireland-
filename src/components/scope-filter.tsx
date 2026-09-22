@@ -34,7 +34,7 @@ export function ScopeFilter({
     <div
       role="tablist"
       aria-label="Assignment filter"
-      className={cn('inline-flex rounded-md border bg-card p-0.5 text-xs', className)}
+      className={cn('inline-flex rounded-md glass-panel p-0.5 text-xs', className)}
     >
       {ALL_SCOPES.map((s) => {
         const active = s === current;

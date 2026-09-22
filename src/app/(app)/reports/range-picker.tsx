@@ -27,7 +27,7 @@ export function ReportRangePicker({ currentDays }: { currentDays: number }) {
     <div
       role="tablist"
       aria-label="Report date range"
-      className="inline-flex rounded-md border bg-card p-0.5 text-xs"
+      className="inline-flex rounded-md glass-panel p-0.5 text-xs"
     >
       {PRESETS.map((p) => {
         const active = currentDays === p.days;

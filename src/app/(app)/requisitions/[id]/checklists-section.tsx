@@ -102,7 +102,7 @@ export function ChecklistsSection({
           description="Create one per candidate the moment a job offer is being finalised. Prints to A4 for the file."
         />
       ) : (
-        <ul className="divide-y rounded-lg border bg-card">
+        <ul className="divide-y rounded-lg glass-panel">
           {existing.map((row) => (
             <li key={row.id} className="flex items-center justify-between px-4 py-3">
               <div className="min-w-0 space-y-0.5">

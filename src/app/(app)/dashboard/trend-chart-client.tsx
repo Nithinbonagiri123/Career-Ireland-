@@ -12,7 +12,7 @@ const TrendChartInner = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="rounded-lg border bg-card p-4">
+      <div className="rounded-lg glass-panel p-4">
         <div className="mb-2 flex items-center justify-between">
           <div className="h-4 w-24 rounded bg-muted/60" />
           <div className="h-4 w-8 rounded bg-muted/60" />

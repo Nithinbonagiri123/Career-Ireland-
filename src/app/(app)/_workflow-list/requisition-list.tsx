@@ -28,7 +28,7 @@ export function WorkflowRequisitionList({
         <li key={r.id}>
           <Link
             href={`/requisitions/${r.id}`}
-            className="group flex items-start justify-between gap-4 rounded-lg border bg-card px-4 py-3 transition-colors hover:bg-muted/50"
+            className="glass-panel group flex items-start justify-between gap-4 rounded-lg px-4 py-3 transition-all hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_0_oklch(1_0_0/0.8),0_2px_4px_-1px_oklch(0.185_0.012_60/0.06),0_14px_32px_-12px_oklch(0.185_0.012_60/0.16)]"
           >
             <div className="min-w-0">
               <div className="flex items-center gap-2">

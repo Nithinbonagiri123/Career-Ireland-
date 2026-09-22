@@ -150,7 +150,7 @@ export function RequestDocumentsPanel({
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Link history
           </p>
-          <ul className="divide-y rounded-md border bg-card text-sm">
+          <ul className="divide-y rounded-md glass-panel text-sm">
             {requests.map((r) => {
               const label: string = r.revokedAt
                 ? 'REVOKED'

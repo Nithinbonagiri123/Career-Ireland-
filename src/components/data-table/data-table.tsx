@@ -273,7 +273,7 @@ export function DataTable<TData, TValue>({
   return (
     <div className={cn('space-y-3', className)}>
       {toolbar}
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="glass-panel overflow-hidden rounded-lg">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((group) => (

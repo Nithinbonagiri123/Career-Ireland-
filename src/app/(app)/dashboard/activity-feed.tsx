@@ -79,14 +79,14 @@ function humaniseEntity(entityType: string): string {
 export function ActivityFeed({ rows }: { rows: ActivityRow[] }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border bg-card px-4 py-8 text-center text-xs text-muted-foreground">
+      <div className="rounded-lg glass-panel px-4 py-8 text-center text-xs text-muted-foreground">
         Nothing has happened yet. Activity from the whole workspace shows up here.
       </div>
     );
   }
 
   return (
-    <ol className="relative rounded-lg border bg-card">
+    <ol className="relative rounded-lg glass-panel">
       {rows.map((r, idx) => {
         const meta = ACTION_META[r.action] ?? {
           icon: Pencil,

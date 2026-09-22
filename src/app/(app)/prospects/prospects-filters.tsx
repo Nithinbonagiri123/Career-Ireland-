@@ -130,7 +130,7 @@ export function ProspectsFilters({
       <div
         role="tablist"
         aria-label="Filter by status"
-        className="flex flex-wrap items-center gap-1.5"
+        className="glass-panel inline-flex w-fit flex-wrap items-center gap-1 rounded-full p-1"
       >
         {STATUS_CHIPS.map((chip) => {
           const on =
@@ -145,10 +145,10 @@ export function ProspectsFilters({
                 setParam('status', chip.value === 'all' ? undefined : (chip.value as string))
               }
               className={cn(
-                'rounded-full border px-2.5 py-0.5 text-[11px] transition-colors',
+                'rounded-full px-3 py-1 text-[11px] font-medium transition-colors',
                 on
-                  ? 'border-foreground/40 bg-foreground/10 text-foreground'
-                  : 'border-border text-muted-foreground hover:text-foreground',
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-foreground/70 hover:bg-foreground/8 hover:text-foreground',
               )}
             >
               {chip.label}

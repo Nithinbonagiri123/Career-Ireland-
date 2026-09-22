@@ -37,7 +37,7 @@ export function AttentionCard({
     >
       <div
         className={cn(
-          'relative flex flex-col overflow-hidden rounded-lg border bg-card transition-all duration-200 ease-out',
+          'relative flex flex-col overflow-hidden rounded-lg glass-panel transition-all duration-200 ease-out',
           'group-hover:-translate-y-0.5 group-hover:bg-card/95 group-hover:shadow-[0_8px_24px_-10px_oklch(0.185_0.012_60/0.18)]',
           !isEmpty &&
             tone === 'danger' &&

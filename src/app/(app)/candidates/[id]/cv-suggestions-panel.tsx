@@ -280,7 +280,7 @@ function Section({
         <span className="text-[10px] text-muted-foreground">{rows.length}</span>
       </div>
       <p className="mb-2 text-[11px] text-muted-foreground">{hint}</p>
-      <ul className="divide-y rounded-md border bg-card">
+      <ul className="divide-y rounded-md glass-panel">
         {rows.map((r) => (
           <li key={r.key}>
             <label className="flex cursor-pointer items-start gap-3 px-3 py-2 transition-colors hover:bg-muted/40">
@@ -332,7 +332,7 @@ function EmploymentSection({
         Parsed from the CV's Employment / Work Experience section. Dates are
         best-effort — edit them after accepting if the CV used an unusual format.
       </p>
-      <ul className="divide-y rounded-md border bg-card">
+      <ul className="divide-y rounded-md glass-panel">
         {candidates.map((c) => {
           const selected = picked.has(c.key);
           return (

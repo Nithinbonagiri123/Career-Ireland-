@@ -59,12 +59,15 @@ export function StatChip({
     >
       <div
         className={cn(
-          'relative flex flex-col justify-between overflow-hidden rounded-2xl px-4 py-3.5 shadow-sm ring-1 transition-all duration-200 ease-out',
+          // Extra vertical breathing so the four rows (label, value,
+          // hint, hover underline) don't feel packed. Was py-3.5.
+          'relative flex flex-col justify-between overflow-hidden rounded-2xl px-4 py-5 shadow-sm ring-1 transition-all duration-200 ease-out',
           noteClass
             ? [noteClass, 'group-hover:-translate-y-0.5 group-hover:shadow-md']
             : [
-                'border bg-card ring-transparent',
-                'group-hover:-translate-y-0.5 group-hover:border-foreground/25 group-hover:bg-card/95 group-hover:shadow-[0_8px_20px_-10px_oklch(0.185_0.012_60/0.15)]',
+                // Neutral fallback tile uses the shared glass surface.
+                'glass-panel ring-transparent',
+                'group-hover:-translate-y-0.5 group-hover:shadow-[0_10px_28px_-12px_oklch(0.19_0.02_245/0.2)]',
               ],
           !noteTone && showTone && tone === 'warning' && 'ring-1 ring-inset ring-status-warning/30',
           !noteTone && showTone && tone === 'danger' && 'ring-1 ring-inset ring-status-danger/30',

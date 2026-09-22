@@ -81,7 +81,7 @@ export function AgingSection({ report }: { report: AgingReport }) {
                 return (
                   <div
                     key={bucket}
-                    className="rounded-lg border bg-card px-3 py-3"
+                    className="rounded-lg glass-panel px-3 py-3"
                     data-overdue={isOverdue ? 'true' : undefined}
                   >
                     <p

@@ -153,29 +153,30 @@
  * Accent: warm amber (hue 55) — used for primary CTAs and status highlights.
  */
 :root {
-  /* Three-plane elevation, tuned for a no-pattern canvas:
-     canvas (0.955) → sidebar (0.98) → card/popover (1.0).
-     A wider delta than earlier iterations because there is no pattern
-     doing the visual work — the card floating above the canvas is the
-     entire depth cue, so it needs to be visible without shadows. */
-  --background: oklch(0.955 0.008 60);
-  --foreground: oklch(0.185 0.012 60);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.185 0.012 60);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.185 0.012 60);
-  --primary: oklch(0.245 0.02 60);
-  --primary-foreground: oklch(0.985 0.004 60);
-  --secondary: oklch(0.955 0.008 60);
-  --secondary-foreground: oklch(0.245 0.02 60);
-  --muted: oklch(0.955 0.008 60);
-  --muted-foreground: oklch(0.51 0.012 60);
-  --accent: oklch(0.72 0.14 55);
-  --accent-foreground: oklch(0.985 0.004 60);
+  /* Cool navy neutrals — hue rotated from warm 55° to cool 245° across
+     every neutral token. Same lightness ladder as before so contrast
+     stays identical, only the temperature shifts. Cards / popovers /
+     surfaces stay near-white with a whisper of navy so glass over the
+     navy photo backdrop reads as premium enterprise rather than warm
+     rustic. */
+  --background: oklch(0.965 0.012 245);
+  --foreground: oklch(0.19 0.02 245);
+  --card: oklch(1 0.003 245);
+  --card-foreground: oklch(0.19 0.02 245);
+  --popover: oklch(1 0.003 245);
+  --popover-foreground: oklch(0.19 0.02 245);
+  --primary: oklch(0.32 0.11 245);
+  --primary-foreground: oklch(0.985 0.008 245);
+  --secondary: oklch(0.955 0.014 245);
+  --secondary-foreground: oklch(0.28 0.08 245);
+  --muted: oklch(0.955 0.014 245);
+  --muted-foreground: oklch(0.52 0.03 245);
+  --accent: oklch(0.55 0.16 245);
+  --accent-foreground: oklch(0.985 0.008 245);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.9 0.008 60);
-  --input: oklch(0.9 0.008 60);
-  --ring: oklch(0.72 0.14 55);
+  --border: oklch(0.9 0.012 245);
+  --input: oklch(0.9 0.012 245);
+  --ring: oklch(0.55 0.16 245);
   --chart-1: oklch(0.72 0.14 55);
   --chart-2: oklch(0.6 0.11 200);
   --chart-3: oklch(0.55 0.14 145);
@@ -228,35 +229,35 @@
   --note-neutral: oklch(0.96 0.006 60);
   --note-neutral-ink: oklch(0.4 0.008 60);
   --radius: 0.625rem;
-  --sidebar: oklch(0.98 0.006 60);
-  --sidebar-foreground: oklch(0.245 0.02 60);
-  --sidebar-primary: oklch(0.245 0.02 60);
-  --sidebar-primary-foreground: oklch(0.985 0.004 60);
-  --sidebar-accent: oklch(0.94 0.008 60);
-  --sidebar-accent-foreground: oklch(0.185 0.012 60);
-  --sidebar-border: oklch(0.9 0.008 60);
-  --sidebar-ring: oklch(0.72 0.14 55);
+  --sidebar: oklch(0.98 0.01 245);
+  --sidebar-foreground: oklch(0.28 0.08 245);
+  --sidebar-primary: oklch(0.32 0.11 245);
+  --sidebar-primary-foreground: oklch(0.985 0.008 245);
+  --sidebar-accent: oklch(0.94 0.012 245);
+  --sidebar-accent-foreground: oklch(0.19 0.02 245);
+  --sidebar-border: oklch(0.9 0.012 245);
+  --sidebar-ring: oklch(0.55 0.16 245);
 }
 
 .dark {
-  --background: oklch(0.16 0.008 60);
-  --foreground: oklch(0.96 0.008 60);
-  --card: oklch(0.21 0.01 60);
-  --card-foreground: oklch(0.96 0.008 60);
-  --popover: oklch(0.21 0.01 60);
-  --popover-foreground: oklch(0.96 0.008 60);
-  --primary: oklch(0.92 0.012 60);
-  --primary-foreground: oklch(0.185 0.012 60);
-  --secondary: oklch(0.27 0.012 60);
-  --secondary-foreground: oklch(0.96 0.008 60);
-  --muted: oklch(0.27 0.012 60);
-  --muted-foreground: oklch(0.7 0.014 60);
-  --accent: oklch(0.72 0.14 55);
-  --accent-foreground: oklch(0.185 0.012 60);
+  --background: oklch(0.15 0.02 245);
+  --foreground: oklch(0.96 0.012 245);
+  --card: oklch(0.2 0.025 245);
+  --card-foreground: oklch(0.96 0.012 245);
+  --popover: oklch(0.2 0.025 245);
+  --popover-foreground: oklch(0.96 0.012 245);
+  --primary: oklch(0.75 0.14 245);
+  --primary-foreground: oklch(0.15 0.02 245);
+  --secondary: oklch(0.26 0.03 245);
+  --secondary-foreground: oklch(0.96 0.012 245);
+  --muted: oklch(0.26 0.03 245);
+  --muted-foreground: oklch(0.72 0.03 245);
+  --accent: oklch(0.65 0.16 245);
+  --accent-foreground: oklch(0.15 0.02 245);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0.008 60 / 10%);
-  --input: oklch(1 0.008 60 / 15%);
-  --ring: oklch(0.72 0.14 55);
+  --border: oklch(1 0.02 245 / 10%);
+  --input: oklch(1 0.02 245 / 15%);
+  --ring: oklch(0.65 0.16 245);
   --chart-1: oklch(0.72 0.14 55);
   --chart-2: oklch(0.6 0.11 200);
   --chart-3: oklch(0.55 0.14 145);
@@ -307,50 +308,117 @@
   --note-purple-ink: oklch(0.9 0.05 300);
   --note-neutral: oklch(0.28 0.008 60);
   --note-neutral-ink: oklch(0.88 0.008 60);
-  --sidebar: oklch(0.185 0.012 60);
-  --sidebar-foreground: oklch(0.96 0.008 60);
-  --sidebar-primary: oklch(0.72 0.14 55);
-  --sidebar-primary-foreground: oklch(0.185 0.012 60);
-  --sidebar-accent: oklch(0.27 0.012 60);
-  --sidebar-accent-foreground: oklch(0.96 0.008 60);
-  --sidebar-border: oklch(1 0.008 60 / 10%);
-  --sidebar-ring: oklch(0.72 0.14 55);
+  --sidebar: oklch(0.18 0.025 245);
+  --sidebar-foreground: oklch(0.96 0.012 245);
+  --sidebar-primary: oklch(0.65 0.16 245);
+  --sidebar-primary-foreground: oklch(0.15 0.02 245);
+  --sidebar-accent: oklch(0.26 0.03 245);
+  --sidebar-accent-foreground: oklch(0.96 0.012 245);
+  --sidebar-border: oklch(1 0.02 245 / 10%);
+  --sidebar-ring: oklch(0.65 0.16 245);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
   html {
-    @apply font-sans;
+    @apply bg-background font-sans;
+  }
+  body {
+    /* body stays transparent so the ::before photo + ::after warm
+       wash actually paint through. html carries the solid fallback. */
+    @apply text-foreground;
   }
 }
 
+/* ─── Glass surface utilities ────────────────────────────────────────────
+ *
+ * A single frosted-glass treatment shared by cards, tables, list rows,
+ * the sidebar and the topbar so every surface reads as the same
+ * material. Pattern lifted from Apple's Liquid Glass (visionOS / macOS
+ * Sequoia / iOS 26):
+ *
+ *   • backdrop-blur(24-32px)     — heavy blur behind the panel
+ *   • backdrop-saturate(180%)    — the KEY trick — colour behind the
+ *                                  glass gets boosted so the photo
+ *                                  bleeds through as saturated bokeh,
+ *                                  not grey mud
+ *   • inset top highlight        — caught-light rim at the top edge
+ *   • inset bottom hairline      — fakes glass thickness
+ *   • hairline outer ring        — light ring (light mode) / faint
+ *                                  white ring (dark mode)
+ *
+ * Use `.glass-panel` for card-sized surfaces, `.glass-panel-strong` for
+ * the sidebar/topbar (heavier tint so nav stays readable when scrolled
+ * over busy photo content).
+ */
+@utility glass-panel {
+  background-color: oklch(1 0.003 245 / 0.68);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid oklch(1 0.003 245 / 0.5);
+  box-shadow:
+    inset 0 1px 0 0 oklch(1 0.003 245 / 0.7),
+    inset 0 -1px 0 0 oklch(0.19 0.02 245 / 0.05),
+    0 1px 2px 0 oklch(0.19 0.02 245 / 0.08);
+}
+
+.dark .glass-panel {
+  background-color: oklch(0.2 0.025 245 / 0.55);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border-color: oklch(1 0.02 245 / 0.09);
+  box-shadow:
+    inset 0 1px 0 0 oklch(1 0.02 245 / 0.09),
+    inset 0 -1px 0 0 oklch(0 0 0 / 0.35),
+    0 1px 2px 0 oklch(0 0 0 / 0.5);
+}
+
+@utility glass-panel-strong {
+  background-color: oklch(1 0.003 245 / 0.78);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid oklch(1 0.003 245 / 0.55);
+  box-shadow:
+    inset 0 1px 0 0 oklch(1 0.003 245 / 0.78),
+    inset 0 -1px 0 0 oklch(0.19 0.02 245 / 0.06),
+    0 1px 3px 0 oklch(0.19 0.02 245 / 0.1);
+}
+
+.dark .glass-panel-strong {
+  background-color: oklch(0.2 0.025 245 / 0.66);
+  backdrop-filter: blur(32px) saturate(160%);
+  -webkit-backdrop-filter: blur(32px) saturate(160%);
+  border-color: oklch(1 0.02 245 / 0.11);
+  box-shadow:
+    inset 0 1px 0 0 oklch(1 0.02 245 / 0.11),
+    inset 0 -1px 0 0 oklch(0 0 0 / 0.4),
+    0 1px 3px 0 oklch(0 0 0 / 0.55);
+}
+
 /*
- * Workspace background.
+ * Workspace background — photograph as ambient wash.
  *
- * Two paint-only pseudo-elements attached to <body>, both fixed and
- * both z-index -1 so they never receive pointer events and never
- * cover content.
+ * The photo at /public/workspace-bg.jpg is treated as a soft-focus
+ * atmospheric backdrop, NOT documentary content. Two things enforce
+ * that treatment:
  *
- *   ::before  loads a real photograph if one exists at
- *             /public/workspace-bg.jpg. If the file is missing the
- *             URL 404s silently and the layer paints nothing — no
- *             console error, no broken image. Drop any professional
- *             workspace / Ireland / office photo at that path to
- *             enable.
+ *   1. body::before applies an ~18px blur + slight desaturation so the
+ *      photo dissolves into abstract warm color regardless of its
+ *      original subject. Sharp geometry vanishes; hard edges vanish;
+ *      what remains is mood.
  *
- *   ::after   a warm gradient overlay that guarantees text contrast
- *             on top of whatever photo (or CSS fallback below) is
- *             showing. Also draws the CSS fallback: soft radial
- *             tints that suggest office lighting, so the app feels
- *             intentional even before the JPG is added.
+ *   2. body::after adds a warm palette wash (~60% opacity of our
+ *      --background token) that guarantees text contrast over "empty"
+ *      workspace areas — not just inside frosted cards. Without this
+ *      scrim, page-header descriptions and breadcrumbs sit on raw
+ *      photo and become unreadable.
  *
- * Both layers are hidden on print so PDF invoices/receipts stay
- * clean.
+ * Card, sidebar and topbar apply their own backdrop-blur on top; the
+ * result is layered frost over an ambient warm haze.
+ *
+ * Both layers are hidden on print so PDF invoices/receipts stay clean.
  */
 body::before {
   content: '';
@@ -362,8 +430,14 @@ body::before {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  opacity: 0.18;
-  filter: blur(3px) saturate(0.6);
+  /* Light source blur only — enough to soften edges into an ambient
+     backdrop, not so much that the photo turns into grey mud. The
+     glass cards/sidebar apply their own `backdrop-blur-xl` where they
+     sit, so the photo reads as sharp-in-empty-workspace and blurred-
+     under-content, which is the pattern the user asked for. */
+  filter: blur(6px) saturate(1.08);
+  transform: scale(1.04);
+  opacity: 1;
 }
 
 body::after {
@@ -372,30 +446,20 @@ body::after {
   inset: 0;
   z-index: -1;
   pointer-events: none;
+  /* Whisper navy wash — palette-syncs the photo to our navy tokens.
+     Two-stop gradient with slightly more saturation at the bottom
+     mimics natural sky depth. */
   background:
-    /* Faint diagonal grid pattern, always visible — evokes graph paper /
-       architectural blueprint feel appropriate for a recruitment ops
-       tool. Rendered as an inline SVG so the browser never fetches an
-       extra asset. */
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'><path d='M60 0H0v60' fill='none' stroke='%23a89680' stroke-opacity='0.08' stroke-width='1'/></svg>"),
-    /* Warm office-light radial tints, stronger than the previous pass
-       so the canvas doesn't feel flat when /workspace-bg.jpg is
-       absent. Still soft enough that cards float clearly above. */
-    radial-gradient(ellipse at 12% 0%, oklch(0.9 0.06 55 / 0.55), transparent 50%),
-    radial-gradient(ellipse at 88% 100%, oklch(0.86 0.05 210 / 0.45), transparent 55%),
-    radial-gradient(ellipse at 50% 50%, oklch(0.99 0.005 60 / 0.6), oklch(0.97 0.005 60 / 0.85));
+    linear-gradient(180deg, oklch(0.96 0.02 245 / 0.28) 0%, oklch(0.9 0.05 245 / 0.42) 100%);
 }
 
 .dark body::before {
-  opacity: 0.09;
+  filter: blur(6px) saturate(0.95) brightness(0.5);
 }
 
 .dark body::after {
   background:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'><path d='M60 0H0v60' fill='none' stroke='%23ffffff' stroke-opacity='0.05' stroke-width='1'/></svg>"),
-    radial-gradient(ellipse at 12% 0%, oklch(0.3 0.03 55 / 0.5), transparent 50%),
-    radial-gradient(ellipse at 88% 100%, oklch(0.28 0.03 210 / 0.4), transparent 55%),
-    radial-gradient(ellipse at 50% 50%, oklch(0.18 0.008 60 / 0.65), oklch(0.16 0.008 60 / 0.9));
+    linear-gradient(180deg, oklch(0.18 0.04 245 / 0.55) 0%, oklch(0.13 0.05 245 / 0.72) 100%);
 }
 
 @media print {

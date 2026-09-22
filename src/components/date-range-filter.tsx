@@ -103,7 +103,7 @@ export function DateRangeFilter({ className }: { className?: string }) {
       <div
         role="tablist"
         aria-label="Created date filter"
-        className="inline-flex items-center gap-0.5 rounded-md border bg-card p-0.5 text-xs"
+        className="inline-flex items-center gap-0.5 rounded-md glass-panel p-0.5 text-xs"
       >
         <span className="inline-flex items-center gap-1 px-2 text-muted-foreground">
           <CalendarClock className="size-3.5" aria-hidden />

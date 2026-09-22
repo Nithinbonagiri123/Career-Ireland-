@@ -108,7 +108,7 @@ export function NotificationsList({ notifications }: { notifications: Notificati
           <CheckCheck className="mr-1.5 size-3.5" /> Mark all read
         </Button>
       </div>
-      <ul className="divide-y rounded-lg border bg-card">
+      <ul className="divide-y rounded-lg glass-panel">
         {items.map((n) => {
           const Icon = ICONS[n.category] ?? Bell;
           const dismissBtn = !n.readAt && (

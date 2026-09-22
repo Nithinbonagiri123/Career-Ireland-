@@ -36,7 +36,7 @@ export function ClientFolders({ folders }: { folders: ClientFolder[] }) {
           <Link
             key={`${f.ownerKind}-${f.ownerId}`}
             href={href}
-            className="group flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/40"
+            className="group flex flex-col gap-2 rounded-xl glass-panel p-4 shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/40"
           >
             <div className="flex items-start justify-between">
               <div className="rounded-lg bg-emerald-900/10 p-2 text-emerald-900 group-hover:bg-emerald-900/15">

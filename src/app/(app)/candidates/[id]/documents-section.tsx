@@ -68,7 +68,7 @@ export function DocumentsSection({
           description="Click Refresh to derive requirements from this candidate's occupation and global rules."
         />
       ) : (
-        <ul className="divide-y rounded-lg border bg-card">
+        <ul className="divide-y rounded-lg glass-panel">
           {requirements.map((req) => (
             <li key={req.id} className="flex items-center justify-between px-4 py-3">
               <div className="min-w-0">
@@ -122,7 +122,7 @@ export function DocumentsSection({
             description="Files uploaded from the CRM or the candidate portal appear here."
           />
         ) : (
-          <ul className="divide-y rounded-lg border bg-card">
+          <ul className="divide-y rounded-lg glass-panel">
             {documents.map((d) => (
               <li key={d.id} className="flex items-center justify-between px-4 py-3">
                 <div className="min-w-0">

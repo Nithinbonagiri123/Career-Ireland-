@@ -60,7 +60,7 @@ export function TrendChartInner({
   const c = TONE_HEX[tone];
 
   const inner = (
-    <div className="rounded-lg border bg-card p-4 transition-colors hover:border-foreground/20">
+    <div className="rounded-lg glass-panel p-4 transition-colors hover:border-foreground/20">
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="flex size-6 items-center justify-center rounded-md bg-muted/50 text-muted-foreground [&_svg]:size-3.5">

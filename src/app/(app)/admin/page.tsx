@@ -151,7 +151,7 @@ export default async function AdminHubPage() {
                     <li key={item.href}>
                       <Link
                         href={item.href}
-                        className="group flex h-full flex-col gap-1 rounded-md border bg-card p-3 transition-colors hover:border-foreground/20 hover:bg-muted/40"
+                        className="group flex h-full flex-col gap-1 rounded-md glass-panel p-3 transition-colors hover:border-foreground/20 hover:bg-muted/40"
                       >
                         <div className="flex items-center gap-2">
                           <item.icon
