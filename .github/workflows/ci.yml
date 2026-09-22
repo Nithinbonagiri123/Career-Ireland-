@@ -123,23 +123,23 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       minio:
-        # Quay-hosted image — the Docker Hub mirror (`minio/minio`) now
-        # requires auth for anonymous pulls (rate-limited from GitHub
-        # runners). Quay.io is the official upstream and doesn't have
-        # the same limit.
-        image: quay.io/minio/minio:latest
+        # Bitnami's image auto-starts `minio server` on container boot,
+        # so it works as a GitHub Actions service (which can't pass a
+        # `command:` to the container — only image/env/ports/options).
+        # The vanilla `minio/minio` image needs `server /data` as its
+        # command and exits immediately without it.
+        image: bitnami/minio:latest
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
+          MINIO_DEFAULT_BUCKETS: ci-e2e-documents
         ports:
           - 9000:9000
-        # `mc ready` isn't installed in the minio image directly — probe the
-        # HTTP endpoint instead. `curl` is preinstalled in the runner image.
         options: >-
           --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
           --health-interval 5s
           --health-timeout 5s
-          --health-retries 20
+          --health-retries 30
 
     env:
       # Point uploads at the MinIO service (path-style is required for MinIO).
