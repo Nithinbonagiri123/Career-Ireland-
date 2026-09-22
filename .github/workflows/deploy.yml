@@ -121,7 +121,7 @@ jobs:
       - name: Install Vercel CLI
         # Pinned to a specific major so a Vercel CLI breaking change
         # can't fail this deploy without a deliberate bump here.
-        run: pnpm add -g vercel@34
+        run: pnpm add -g vercel@59
 
       - name: Pull Vercel project config (production env)
         # `vercel pull` writes `.vercel/project.json` + `.env.production`
