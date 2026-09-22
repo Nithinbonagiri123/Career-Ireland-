@@ -22,6 +22,7 @@ export default async function AdminSettingsPage() {
       <FadeUp>
         <PageHeader
           icon={Settings2}
+          iconTone="neutral"
           badge="Admin"
           title="Company settings"
           description="Letterhead + footer copy used on every invoice and receipt. Edits here take effect on the next printable render — no deploy needed."

@@ -18,6 +18,7 @@ export default async function MatchingPage() {
       <FadeUp>
         <PageHeader
           icon={SearchCheck}
+          iconTone="purple"
           title="Matching"
           description={
             <>

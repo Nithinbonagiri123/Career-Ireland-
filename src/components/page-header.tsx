@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import type { NoteTone } from '@/components/note';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +21,25 @@ export type PageHeaderProps = {
   breadcrumbs?: BreadcrumbTrail;
   /** Optional slot for summary chips / metadata below the description. */
   meta?: ReactNode;
+  /**
+   * Sticky-note tone for the icon medallion. When set, the icon is
+   * rendered in a rounded coloured square that anchors the page visually
+   * — this is the small but repeated cue that ties every page to the
+   * design system. When absent, the icon shows inline in muted grey
+   * (the previous default), so pages that pre-date this prop stay
+   * neutral until they opt in.
+   */
+  iconTone?: NoteTone;
   className?: string;
+};
+
+const NOTE_TONE_CLASS: Record<NoteTone, string> = {
+  yellow: 'bg-note-yellow text-note-yellow-ink',
+  blue: 'bg-note-blue text-note-blue-ink',
+  pink: 'bg-note-pink text-note-pink-ink',
+  green: 'bg-note-green text-note-green-ink',
+  purple: 'bg-note-purple text-note-purple-ink',
+  neutral: 'bg-note-neutral text-note-neutral-ink',
 };
 
 /**
@@ -40,6 +59,7 @@ export function PageHeader({
   action,
   breadcrumbs,
   meta,
+  iconTone,
   className,
 }: PageHeaderProps) {
   return (
@@ -82,22 +102,36 @@ export function PageHeader({
       )}
 
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          {(Icon || badge) && (
-            <div className="mb-1 flex items-center gap-2">
-              {Icon && <Icon className="size-4 text-muted-foreground" />}
-              {badge && (
+        <div className="flex min-w-0 items-start gap-3">
+          {Icon &&
+            (iconTone ? (
+              <span
+                className={cn(
+                  'grid size-11 shrink-0 place-items-center rounded-xl shadow-sm ring-1 ring-black/5',
+                  NOTE_TONE_CLASS[iconTone],
+                )}
+              >
+                <Icon className="size-5" aria-hidden />
+              </span>
+            ) : (
+              <span className="mt-0.5 shrink-0 text-muted-foreground">
+                <Icon className="size-4" aria-hidden />
+              </span>
+            ))}
+          <div className="min-w-0">
+            {badge && (
+              <div className="mb-1">
                 <Badge variant="secondary" className="rounded-full">
                   {badge}
                 </Badge>
-              )}
-            </div>
-          )}
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          {description && (
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p>
-          )}
-          {meta && <div className="mt-3">{meta}</div>}
+              </div>
+            )}
+            <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+            {description && (
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p>
+            )}
+            {meta && <div className="mt-3">{meta}</div>}
+          </div>
         </div>
         {action && <div className="shrink-0">{action}</div>}
       </div>

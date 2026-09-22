@@ -15,8 +15,8 @@ import {
 } from '@/modules/applications/service';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchEmployers } from '@/modules/employers/service';
-import { listMatches } from '@/modules/matching/service';
 import { fetchOccupations } from '@/modules/occupations/service';
+import { fetchRequisitionPipeline } from '@/modules/pipeline/service';
 import { fetchQualifications } from '@/modules/qualifications/service';
 import {
   fetchRequisition,
@@ -26,11 +26,12 @@ import {
 import { fetchSkills } from '@/modules/skills/service';
 import { listChecklistsForRequisition } from '@/modules/work-permit-checklists/service';
 import { RequisitionDialog } from '../requisition-dialog';
-import { ApplicationsSection } from './applications-section';
 import { ChecklistsSection } from './checklists-section';
-import { MatchesSection } from './matches-section';
-import { PromoteShortlistSection } from './promote-shortlist';
-import { RequisitionQualificationsSection, RequisitionSkillsSection } from './requirements-section';
+import { PipelineWall } from './pipeline-wall';
+import {
+  RequisitionQualificationsSection,
+  RequisitionSkillsSection,
+} from './requirements-section';
 import { RunMatchingButton } from './requisition-actions';
 import { RequisitionTabs } from './requisition-tabs';
 
@@ -43,7 +44,7 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
   if (!requisition) notFound();
 
   const [
-    matches,
+    pipelineData,
     applications,
     shortlistPromotions,
     requisitionSkillRows,
@@ -55,7 +56,7 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     occupationList,
     checklists,
   ] = await Promise.all([
-    listMatches(id),
+    fetchRequisitionPipeline(id),
     listApplicationsForRequisition(id),
     listShortlistPromotionCandidates(id),
     listRequisitionSkills(id),
@@ -67,6 +68,8 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     fetchOccupations(),
     listChecklistsForRequisition(id),
   ]);
+
+  const pipelineTotal = Object.values(pipelineData).reduce((sum, arr) => sum + arr.length, 0);
 
   // Pool of candidates the checklist dialog offers = applicants + shortlist,
   // deduped by personId.
@@ -187,50 +190,9 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     </div>
   );
 
-  const matchesTab = (
+  const pipelineTab = (
     <FadeUp>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Matches</CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Score: occupation +40 · available +15 · active +5 · location +5 · required skills up to
-            +25 (proportional) · required qualifications up to +10. Click "Why?" on any row for the
-            breakdown. Bucket: ≥70 HIGH · 40–69 MEDIUM · else LOW.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <MatchesSection requisitionId={id} matches={matches} />
-        </CardContent>
-      </Card>
-    </FadeUp>
-  );
-
-  const shortlistTab = (
-    <FadeUp>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Shortlist</CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Promote a shortlisted candidate into a formal Job Application.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <PromoteShortlistSection requisitionId={id} candidates={shortlistPromotions} />
-        </CardContent>
-      </Card>
-    </FadeUp>
-  );
-
-  const applicationsTab = (
-    <FadeUp>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Applications</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ApplicationsSection requisitionId={id} applications={applications} />
-        </CardContent>
-      </Card>
+      <PipelineWall requisition={requisition} data={pipelineData} />
     </FadeUp>
   );
 
@@ -289,14 +251,10 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
 
       <RequisitionTabs
         overview={overviewTab}
-        matches={matchesTab}
-        shortlist={shortlistTab}
-        applications={applicationsTab}
+        pipeline={pipelineTab}
         checklists={checklistsTab}
         counts={{
-          matches: matches.length,
-          shortlist: shortlistPromotions.length,
-          applications: applications.length,
+          pipeline: pipelineTotal,
           checklists: checklists.length,
         }}
       />

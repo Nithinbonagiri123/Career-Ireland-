@@ -5,6 +5,7 @@ import { db } from '@/lib/db/client';
 import { documentInstances } from '@/lib/db/schema/documents';
 import { persons } from '@/lib/db/schema/persons';
 import {
+  candidateMatches,
   type JobApplication,
   jobApplications,
   jobRequisitions,
@@ -107,6 +108,12 @@ export type ShortlistPromotionCandidate = {
   personId: string;
   personName: string;
   personEmail: string | null;
+  personPhone: string | null;
+  personLocation: string | null;
+  /** Postgres `date` type comes across the wire as ISO `YYYY-MM-DD`. */
+  personDateOfBirth: string | null;
+  /** Candidate-match score (0-100) against the current requisition, if any. */
+  matchScore: number | null;
   shortlistEntryId: string;
   alreadyApplied: boolean;
 };
@@ -116,6 +123,10 @@ export async function listShortlistPromotionCandidates(
   requisitionId: string,
 ): Promise<ShortlistPromotionCandidate[]> {
   await requireInternalStaff();
+  // Joins shortlist_entries → persons and left-joins candidate_matches so
+  // the card view can show the score alongside identity. `candidateMatchId`
+  // is nullable on shortlist_entries so we fall back to a name-key join
+  // when it's not stored (e.g. legacy rows shortlisted manually).
   const rows = await db
     .select({
       shortlistEntryId: shortlistEntries.id,
@@ -123,9 +134,21 @@ export async function listShortlistPromotionCandidates(
       firstName: persons.firstName,
       lastName: persons.lastName,
       email: persons.email,
+      phone: persons.phone,
+      currentCity: persons.currentCity,
+      currentCountry: persons.currentCountry,
+      dateOfBirth: persons.dateOfBirth,
+      matchScore: candidateMatches.score,
     })
     .from(shortlistEntries)
     .innerJoin(persons, eq(persons.id, shortlistEntries.personId))
+    .leftJoin(
+      candidateMatches,
+      and(
+        eq(candidateMatches.personId, shortlistEntries.personId),
+        eq(candidateMatches.jobRequisitionId, shortlistEntries.jobRequisitionId),
+      ),
+    )
     .where(
       and(
         eq(shortlistEntries.jobRequisitionId, requisitionId),
@@ -147,6 +170,10 @@ export async function listShortlistPromotionCandidates(
     personId: r.personId,
     personName: `${r.firstName} ${r.lastName}`,
     personEmail: r.email,
+    personPhone: r.phone,
+    personLocation: [r.currentCity, r.currentCountry].filter(Boolean).join(', ') || null,
+    personDateOfBirth: r.dateOfBirth,
+    matchScore: r.matchScore,
     shortlistEntryId: r.shortlistEntryId,
     alreadyApplied: appliedSet.has(r.personId),
   }));

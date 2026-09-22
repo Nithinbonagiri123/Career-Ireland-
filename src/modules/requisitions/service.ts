@@ -4,14 +4,18 @@ import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import {
+  candidateMatches,
   employers,
+  jobApplications,
   type JobRequisition,
   jobRequisitions,
   type RequisitionQualification,
   type RequisitionSkill,
   requisitionQualifications,
   requisitionSkills,
+  shortlistEntries,
 } from '@/lib/db/schema/recruitment';
+import { occupationCategories, occupations } from '@/lib/db/schema/occupations';
 import { qualifications, skills } from '@/lib/db/schema/reference';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { type AssignmentScope, assignmentCondition } from '@/lib/scope';
@@ -82,6 +86,88 @@ export async function fetchRequisitions(
     .where(and(...whereConds))
     .orderBy(desc(jobRequisitions.createdAt));
   return rows.map((r) => ({ ...r.requisition, employerName: r.employerName }));
+}
+
+/**
+ * Same shape as `RequisitionListRow`, plus per-requisition rollup counters
+ * used by the card grid view: how many candidates have been matched,
+ * shortlisted, and applied against this requisition.
+ *
+ * Kept as a separate type so the table view can stay on the leaner
+ * `RequisitionListRow` without paying for three extra sub-queries per
+ * requisition.
+ */
+export type RequisitionCardRow = RequisitionListRow & {
+  matchedCount: number;
+  shortlistedCount: number;
+  appliedCount: number;
+  /** Human-readable occupation name (e.g. "Plumber") — null when the requisition has no occupation set. */
+  occupationName: string | null;
+  /** Category the occupation lives under (e.g. "Construction") — null when unlinked. */
+  occupationCategory: string | null;
+};
+
+/**
+ * List requisitions with per-requisition rollup counters attached.
+ *
+ * Uses one row per requisition + three correlated `sql` sub-selects for
+ * the counters. On the current data volumes (< 1000 open requisitions)
+ * this is single-digit ms; if it grows we can materialise the counts
+ * into `job_requisitions` on write.
+ */
+export async function fetchRequisitionsWithCounts(
+  scope?: AssignmentScope,
+  createdRange?: DateRange,
+): Promise<RequisitionCardRow[]> {
+  const session = await requireInternalStaff();
+  const scopeCond = scope
+    ? assignmentCondition(scope, jobRequisitions.assignedUserId, session.user.id)
+    : undefined;
+  const createdCond = createdRange
+    ? dateRangeWhere(jobRequisitions.createdAt, createdRange)
+    : undefined;
+  const whereConds: SQL[] = [isNull(jobRequisitions.archivedAt)];
+  if (scopeCond) whereConds.push(scopeCond);
+  if (createdCond) whereConds.push(createdCond);
+
+  const rows = await db
+    .select({
+      requisition: jobRequisitions,
+      employerName: employers.legalName,
+      occupationName: occupations.name,
+      occupationCategory: occupationCategories.name,
+      matchedCount: sql<number>`(
+        SELECT COUNT(*)::int
+        FROM ${candidateMatches}
+        WHERE ${candidateMatches.jobRequisitionId} = ${jobRequisitions.id}
+      )`,
+      shortlistedCount: sql<number>`(
+        SELECT COUNT(*)::int
+        FROM ${shortlistEntries}
+        WHERE ${shortlistEntries.jobRequisitionId} = ${jobRequisitions.id}
+      )`,
+      appliedCount: sql<number>`(
+        SELECT COUNT(*)::int
+        FROM ${jobApplications}
+        WHERE ${jobApplications.jobRequisitionId} = ${jobRequisitions.id}
+      )`,
+    })
+    .from(jobRequisitions)
+    .innerJoin(employers, eq(employers.id, jobRequisitions.employerId))
+    .leftJoin(occupations, eq(occupations.id, jobRequisitions.occupationId))
+    .leftJoin(occupationCategories, eq(occupationCategories.id, occupations.categoryId))
+    .where(and(...whereConds))
+    .orderBy(desc(jobRequisitions.createdAt));
+
+  return rows.map((r) => ({
+    ...r.requisition,
+    employerName: r.employerName,
+    occupationName: r.occupationName,
+    occupationCategory: r.occupationCategory,
+    matchedCount: r.matchedCount,
+    shortlistedCount: r.shortlistedCount,
+    appliedCount: r.appliedCount,
+  }));
 }
 
 export async function fetchRequisition(id: string): Promise<RequisitionListRow | null> {

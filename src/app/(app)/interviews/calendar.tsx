@@ -15,8 +15,10 @@ import { CalendarClock, ExternalLink, MapPin, Users, Video } from 'lucide-react'
 import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SectionHeader } from '@/components/section-header';
+import { Card, CardContent } from '@/components/ui/card';
 import type { Interview } from '@/lib/db/schema/interviews_offers';
+import { statusTone } from '@/lib/ui/status-tone';
 import type { UpcomingInterview } from '@/modules/interviews/service';
 
 const MODE_ICON: Record<Interview['mode'], typeof CalendarClock> = {
@@ -31,14 +33,6 @@ const MODE_LABEL: Record<Interview['mode'], string> = {
   VIDEO: 'Video',
   IN_PERSON: 'In person',
   PANEL: 'Panel',
-};
-
-const STATUS_VARIANT: Record<Interview['status'], 'default' | 'secondary' | 'outline'> = {
-  SCHEDULED: 'default',
-  COMPLETED: 'secondary',
-  NO_SHOW: 'outline',
-  RESCHEDULED: 'secondary',
-  CANCELLED: 'outline',
 };
 
 type Bucket = {
@@ -146,7 +140,7 @@ function InterviewRow({ iv }: { iv: UpcomingInterview }) {
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <Badge variant={STATUS_VARIANT[iv.status]} className="rounded-full text-[10px]">
+          <Badge variant={statusTone(iv.status)} className="rounded-full text-[10px]">
             {iv.status.replace(/_/g, ' ')}
           </Badge>
           {iv.status !== 'SCHEDULED' && iv.outcome !== 'PENDING' && (
@@ -182,25 +176,23 @@ export function InterviewsCalendar({ interviews }: { interviews: UpcomingIntervi
     <div className="space-y-6">
       {buckets.map((b) => (
         <Card key={b.key}>
-          <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">
-              {b.label}
-              <span className="ml-2 text-xs font-normal text-muted-foreground">
-                {b.items.length}
-              </span>
-            </CardTitle>
-            {b.items[0] && !isSameDay(new Date(b.items[0].scheduledAt), new Date()) && (
-              <span className="text-xs text-muted-foreground">
-                {format(new Date(b.items[0].scheduledAt), 'EEE d MMM')}
-                {b.items.length > 1 &&
-                  !isSameDay(
-                    new Date(b.items[0].scheduledAt),
-                    new Date(b.items[b.items.length - 1]?.scheduledAt ?? b.items[0].scheduledAt),
-                  ) &&
-                  ` – ${format(new Date(b.items[b.items.length - 1]?.scheduledAt ?? b.items[0].scheduledAt), 'EEE d MMM')}`}
-              </span>
-            )}
-          </CardHeader>
+          <SectionHeader
+            title={b.label}
+            count={b.items.length}
+            action={
+              b.items[0] && !isSameDay(new Date(b.items[0].scheduledAt), new Date()) ? (
+                <span className="text-xs text-muted-foreground">
+                  {format(new Date(b.items[0].scheduledAt), 'EEE d MMM')}
+                  {b.items.length > 1 &&
+                    !isSameDay(
+                      new Date(b.items[0].scheduledAt),
+                      new Date(b.items[b.items.length - 1]?.scheduledAt ?? b.items[0].scheduledAt),
+                    ) &&
+                    ` – ${format(new Date(b.items[b.items.length - 1]?.scheduledAt ?? b.items[0].scheduledAt), 'EEE d MMM')}`}
+                </span>
+              ) : undefined
+            }
+          />
           <CardContent className="p-0">
             <ul className="divide-y">
               {b.items.map((iv) => (

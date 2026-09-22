@@ -36,6 +36,7 @@ export default async function CandidatesPage({
       <FadeUp>
         <PageHeader
           icon={Users}
+          iconTone="blue"
           title="Candidates"
           description={`${settings.legalName}'s active talent pool. Shared across Candidate Services and Recruitment — each person is a single record. Click any row for the full timeline.`}
           action={

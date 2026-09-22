@@ -18,20 +18,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { statusTone } from '@/lib/ui/status-tone';
 import {
   archivePlacementAction,
   restoreCandidateAvailabilityAction,
   updatePlacementStatusAction,
 } from '@/modules/placements/actions';
 import type { PlacementListRow } from '@/modules/placements/service';
-
-const STATUS_VARIANT: Record<PlacementListRow['status'], 'default' | 'secondary' | 'outline'> = {
-  PROPOSED: 'secondary',
-  CONFIRMED: 'default',
-  STARTED: 'default',
-  COMPLETED: 'outline',
-  TERMINATED_EARLY: 'outline',
-};
 
 export function PlacementsTable({ placements }: { placements: PlacementListRow[] }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -114,7 +107,7 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
       accessorKey: 'status',
       size: 150,
       cell: ({ row }) => (
-        <Badge variant={STATUS_VARIANT[row.original.status]} className="rounded-full">
+        <Badge variant={statusTone(row.original.status)} className="rounded-full">
           {row.original.status.replace(/_/g, ' ')}
         </Badge>
       ),

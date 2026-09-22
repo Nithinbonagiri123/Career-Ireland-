@@ -7,7 +7,8 @@ import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosug
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SectionHeader } from '@/components/section-header';
+import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -231,21 +232,20 @@ export function SkillsSection({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Award className="size-4" /> Skills
-          <Badge variant="secondary" className="ml-1 rounded-full">
-            {rows.length}
-          </Badge>
-        </CardTitle>
-        <SkillDialog
-          personId={personId}
-          allSkills={allSkills}
-          existing={existing}
-          onDone={refresh}
-          key={`add-${tick}`}
-        />
-      </CardHeader>
+      <SectionHeader
+        icon={Award}
+        title="Skills"
+        count={rows.length}
+        action={
+          <SkillDialog
+            personId={personId}
+            allSkills={allSkills}
+            existing={existing}
+            onDone={refresh}
+            key={`add-${tick}`}
+          />
+        }
+      />
       <CardContent>
         {rows.length === 0 ? (
           <EmptyState
@@ -477,21 +477,20 @@ export function QualificationsSection({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <GraduationCap className="size-4" /> Qualifications
-          <Badge variant="secondary" className="ml-1 rounded-full">
-            {rows.length}
-          </Badge>
-        </CardTitle>
-        <QualificationDialog
-          personId={personId}
-          allQuals={allQualifications}
-          existing={existing}
-          onDone={refresh}
-          key={`add-${tick}`}
-        />
-      </CardHeader>
+      <SectionHeader
+        icon={GraduationCap}
+        title="Qualifications"
+        count={rows.length}
+        action={
+          <QualificationDialog
+            personId={personId}
+            allQuals={allQualifications}
+            existing={existing}
+            onDone={refresh}
+            key={`add-${tick}`}
+          />
+        }
+      />
       <CardContent>
         {rows.length === 0 ? (
           <EmptyState
@@ -705,15 +704,12 @@ export function EmploymentHistorySection({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Briefcase className="size-4" /> Employment history
-          <Badge variant="secondary" className="ml-1 rounded-full">
-            {rows.length}
-          </Badge>
-        </CardTitle>
-        <EmploymentDialog personId={personId} onDone={refresh} key={`add-${tick}`} />
-      </CardHeader>
+      <SectionHeader
+        icon={Briefcase}
+        title="Employment history"
+        count={rows.length}
+        action={<EmploymentDialog personId={personId} onDone={refresh} key={`add-${tick}`} />}
+      />
       <CardContent>
         {rows.length === 0 ? (
           <EmptyState

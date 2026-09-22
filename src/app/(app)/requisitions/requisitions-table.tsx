@@ -17,18 +17,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { statusTone } from '@/lib/ui/status-tone';
 import { archiveRequisitionAction } from '@/modules/requisitions/actions';
 import type { RequisitionListRow } from '@/modules/requisitions/service';
-
-const STATUS_VARIANT: Record<RequisitionListRow['status'], 'default' | 'secondary' | 'outline'> = {
-  DRAFT: 'outline',
-  OPEN: 'default',
-  IN_PROGRESS: 'default',
-  PARTIALLY_FILLED: 'secondary',
-  FILLED: 'outline',
-  CLOSED: 'outline',
-  CANCELLED: 'outline',
-};
 
 export function RequisitionsTable({ requisitions }: { requisitions: RequisitionListRow[] }) {
   const [archiveTarget, setArchiveTarget] = useState<RequisitionListRow | null>(null);
@@ -88,7 +79,7 @@ export function RequisitionsTable({ requisitions }: { requisitions: RequisitionL
         accessorKey: 'status',
         size: 140,
         cell: ({ row }) => (
-          <Badge variant={STATUS_VARIANT[row.original.status]} className="rounded-full">
+          <Badge variant={statusTone(row.original.status)} className="rounded-full">
             {row.original.status.replace(/_/g, ' ')}
           </Badge>
         ),

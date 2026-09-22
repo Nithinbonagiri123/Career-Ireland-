@@ -24,6 +24,7 @@ export default async function NotificationsPage({
       <FadeUp>
         <PageHeader
           icon={Bell}
+          iconTone="pink"
           title="Notifications"
           description="Generated daily at 06:00 UTC. Ad expiries, immigration expiries, overdue tasks. Configurable thresholds live in the notifications service."
           action={

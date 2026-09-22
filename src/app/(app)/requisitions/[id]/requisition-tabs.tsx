@@ -4,52 +4,37 @@ import type { ReactNode } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 /**
- * Client boundary for the requisition detail page's tab state. The
- * server component still fetches all data; each tab's content is passed
- * in as a ReactNode. Match badges are optional trailing counts.
+ * Client boundary for the requisition detail page's tab state.
+ *
+ * The tab set was collapsed from four surface tabs (Matches / Shortlist
+ * / Applications / Checklists) to three, replacing the first three with
+ * the unified **Pipeline** tab (the Pipeline Wall). Overview and
+ * Checklists stay as they were.
  */
 export function RequisitionTabs({
   overview,
-  matches,
-  shortlist,
-  applications,
+  pipeline,
   checklists,
   counts,
 }: {
   overview: ReactNode;
-  matches: ReactNode;
-  shortlist: ReactNode;
-  applications: ReactNode;
+  pipeline: ReactNode;
   checklists: ReactNode;
   counts: {
-    matches: number;
-    shortlist: number;
-    applications: number;
+    pipeline: number;
     checklists: number;
   };
 }) {
   return (
-    <Tabs defaultValue="overview">
+    <Tabs defaultValue="pipeline">
       <TabsList>
+        <TabsTrigger value="pipeline">
+          Pipeline
+          <span className="ml-1 rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">
+            {counts.pipeline}
+          </span>
+        </TabsTrigger>
         <TabsTrigger value="overview">Overview</TabsTrigger>
-        <TabsTrigger value="matches">
-          Matches
-          <span className="ml-1 rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">
-            {counts.matches}
-          </span>
-        </TabsTrigger>
-        <TabsTrigger value="shortlist">
-          Shortlist
-          <span className="ml-1 rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">
-            {counts.shortlist}
-          </span>
-        </TabsTrigger>
-        <TabsTrigger value="applications">
-          Applications
-          <span className="ml-1 rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">
-            {counts.applications}
-          </span>
-        </TabsTrigger>
         <TabsTrigger value="checklists">
           Checklists
           <span className="ml-1 rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">
@@ -57,10 +42,8 @@ export function RequisitionTabs({
           </span>
         </TabsTrigger>
       </TabsList>
+      <TabsContent value="pipeline">{pipeline}</TabsContent>
       <TabsContent value="overview">{overview}</TabsContent>
-      <TabsContent value="matches">{matches}</TabsContent>
-      <TabsContent value="shortlist">{shortlist}</TabsContent>
-      <TabsContent value="applications">{applications}</TabsContent>
       <TabsContent value="checklists">{checklists}</TabsContent>
     </Tabs>
   );

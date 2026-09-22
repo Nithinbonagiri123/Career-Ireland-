@@ -31,6 +31,7 @@ export default async function CommunicationsPage({
       <FadeUp>
         <PageHeader
           icon={MessagesSquare}
+          iconTone="blue"
           title="Communications"
           description="Every recorded touchpoint. Attach to at least one subject so it appears in that record's timeline."
           action={

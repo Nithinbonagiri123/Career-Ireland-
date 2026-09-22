@@ -131,6 +131,7 @@ export default async function AdminHubPage() {
       <FadeUp>
         <PageHeader
           icon={UserCog}
+          iconTone="neutral"
           title="Admin"
           description="System-wide configuration, reference data, and the audit log. Only admins reach these pages."
         />

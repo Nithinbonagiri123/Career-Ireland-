@@ -37,6 +37,7 @@ export default async function LeadsPage({
       <FadeUp>
         <PageHeader
           icon={UserPlus}
+          iconTone="yellow"
           title="Leads"
           description="Every candidate begins as a Lead. Convert via verified payment or a staff manual override (audited)."
           action={

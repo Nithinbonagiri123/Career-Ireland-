@@ -4,22 +4,13 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { useRouter } from 'next/navigation';
 import { DataTable } from '@/components/data-table/data-table';
 import { Badge } from '@/components/ui/badge';
+import { statusTone } from '@/lib/ui/status-tone';
 import type { CaseListRow } from '@/modules/immigration/service';
 
 const TYPE_LABEL: Record<CaseListRow['caseType'], string> = {
   EMPLOYMENT_PERMIT: 'Permit',
   VISA: 'Visa',
   VISA_EXTENSION: 'Extension',
-};
-
-const STATUS_VARIANT: Record<CaseListRow['status'], 'default' | 'secondary' | 'outline'> = {
-  OPEN: 'secondary',
-  DOCUMENTS_PENDING: 'secondary',
-  SUBMITTED: 'default',
-  UNDER_AUTHORITY_REVIEW: 'default',
-  APPROVED: 'outline',
-  REJECTED: 'outline',
-  CLOSED: 'outline',
 };
 
 const columns: ColumnDef<CaseListRow>[] = [
@@ -60,7 +51,7 @@ const columns: ColumnDef<CaseListRow>[] = [
     accessorKey: 'status',
     size: 190,
     cell: ({ row }) => (
-      <Badge variant={STATUS_VARIANT[row.original.status]} className="rounded-full">
+      <Badge variant={statusTone(row.original.status)} className="rounded-full">
         {row.original.status.replace(/_/g, ' ')}
       </Badge>
     ),

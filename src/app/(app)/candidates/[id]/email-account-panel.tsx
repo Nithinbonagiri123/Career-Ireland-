@@ -6,7 +6,8 @@ import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SectionHeader } from '@/components/section-header';
+import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -288,20 +289,18 @@ export function EmailAccountPanel({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <AtSign className="size-4" /> Candidate email account
-          </CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Shared inbox managed by both staff and the candidate. Password encrypted at rest.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {account && <RevealButton personId={personId} />}
-          <AccountDialog personId={personId} existing={account} />
-        </div>
-      </CardHeader>
+      <SectionHeader
+        icon={AtSign}
+        title="Candidate email account"
+        action={
+          <div className="flex gap-2">
+            {account && <RevealButton personId={personId} />}
+            <AccountDialog personId={personId} existing={account} />
+          </div>
+        }
+      >
+        Shared inbox managed by both staff and the candidate. Password encrypted at rest.
+      </SectionHeader>
       <CardContent>
         {!account ? (
           <EmptyState

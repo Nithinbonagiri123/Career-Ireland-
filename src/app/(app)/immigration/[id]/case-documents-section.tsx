@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
 import type { DocumentType } from '@/lib/db/schema/reference';
+import { statusTone } from '@/lib/ui/status-tone';
 import {
   addCaseDocumentRequirementAction,
   attachCaseDocumentAction,
@@ -31,16 +32,6 @@ import {
   updateCaseDocumentRequirementAction,
 } from '@/modules/immigration/actions';
 import type { CaseDocumentRequirementRow, CaseDocumentRow } from '@/modules/immigration/service';
-
-const STATUS_VARIANT: Record<
-  CaseDocumentRequirementRow['status'],
-  'default' | 'secondary' | 'outline'
-> = {
-  MISSING: 'outline',
-  PROVIDED: 'secondary',
-  ACCEPTED: 'default',
-  REJECTED: 'outline',
-};
 
 // ─── Add requirement dialog ───────────────────────────────────────────────────
 
@@ -333,7 +324,7 @@ export function CaseDocumentsSection({
                     <option value="ACCEPTED">ACCEPTED</option>
                     <option value="REJECTED">REJECTED</option>
                   </Select>
-                  <Badge variant={STATUS_VARIANT[req.status]} className="rounded-full">
+                  <Badge variant={statusTone(req.status)} className="rounded-full">
                     {req.status}
                   </Badge>
                   <DocumentUploader

@@ -35,6 +35,7 @@ export default async function EngagementsPage({
       <FadeUp>
         <PageHeader
           icon={Coins}
+          iconTone="green"
           title="Service engagements"
           description={`Commercial orders for ${settings.legalName} services. Create an engagement first, then record payments against it.`}
           action={

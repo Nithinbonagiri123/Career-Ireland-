@@ -11,16 +11,9 @@ import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import type { Employer } from '@/lib/db/schema/recruitment';
+import { statusTone } from '@/lib/ui/status-tone';
 import { archiveEmployerAction } from '@/modules/employers/actions';
 import { EmployerDialog } from './employer-dialog';
-
-const STATUS_VARIANT: Record<Employer['relationshipStatus'], 'default' | 'secondary' | 'outline'> =
-  {
-    PROSPECT: 'secondary',
-    ACTIVE: 'default',
-    ON_HOLD: 'outline',
-    ARCHIVED: 'outline',
-  };
 
 export function EmployersTable({ employers }: { employers: Employer[] }) {
   const [archiveTarget, setArchiveTarget] = useState<Employer | null>(null);
@@ -79,7 +72,7 @@ export function EmployersTable({ employers }: { employers: Employer[] }) {
       accessorKey: 'relationshipStatus',
       size: 120,
       cell: ({ row }) => (
-        <Badge variant={STATUS_VARIANT[row.original.relationshipStatus]} className="rounded-full">
+        <Badge variant={statusTone(row.original.relationshipStatus)} className="rounded-full">
           {row.original.relationshipStatus.replace(/_/g, ' ')}
         </Badge>
       ),

@@ -20,14 +20,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import type { Payment } from '@/lib/db/schema/commerce';
 import type { UserRole } from '@/lib/db/schema/users';
+import { statusTone } from '@/lib/ui/status-tone';
 import { rejectPaymentAction, verifyPaymentAction } from '@/modules/commerce/actions';
-
-const STATUS_VARIANT: Record<Payment['status'], 'default' | 'secondary' | 'outline'> = {
-  PENDING: 'secondary',
-  PROOF_UPLOADED: 'secondary',
-  VERIFIED: 'default',
-  REJECTED: 'outline',
-};
 
 type Row = Payment & { serviceName: string };
 
@@ -93,7 +87,7 @@ export function PaymentsTable({ payments, role }: { payments: Row[]; role: UserR
       accessorKey: 'status',
       size: 140,
       cell: ({ row }) => (
-        <Badge variant={STATUS_VARIANT[row.original.status]} className="rounded-full">
+        <Badge variant={statusTone(row.original.status)} className="rounded-full">
           {row.original.status.replace(/_/g, ' ')}
         </Badge>
       ),

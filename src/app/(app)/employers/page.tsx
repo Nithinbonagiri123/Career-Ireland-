@@ -34,6 +34,7 @@ export default async function EmployersPage({
       <FadeUp>
         <PageHeader
           icon={Building2}
+          iconTone="neutral"
           title="Employers"
           description={`Employers ${settings.legalName} recruits for. Each employer has multiple contacts and can raise multiple Job Requisitions.`}
           action={

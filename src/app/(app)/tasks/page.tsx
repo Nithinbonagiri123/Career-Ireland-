@@ -33,6 +33,7 @@ export default async function TasksPage({
       <FadeUp>
         <PageHeader
           icon={CheckSquare}
+          iconTone="yellow"
           title="Tasks & follow-ups"
           description="Sorted by status → due date. Communications with 'follow-up required' auto-create a task assigned to the logger."
           action={

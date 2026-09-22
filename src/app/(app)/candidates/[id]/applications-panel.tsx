@@ -9,7 +9,8 @@ import { CvPicker } from '@/components/cv-picker';
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SectionHeader } from '@/components/section-header';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
+import { statusTone } from '@/lib/ui/status-tone';
 import { createExternalApplicationAction } from '@/modules/applications/actions';
 import type { CandidateApplicationRow } from '@/modules/applications/service';
 
@@ -45,20 +47,6 @@ const EXTERNAL_SOURCES = [
   'REFERRAL',
   'OTHER',
 ] as const;
-
-const STATUS_VARIANT: Record<
-  CandidateApplicationRow['status'],
-  'default' | 'secondary' | 'outline'
-> = {
-  APPLIED: 'secondary',
-  UNDER_REVIEW: 'secondary',
-  SHORTLISTED: 'default',
-  INTERVIEW: 'default',
-  OFFER: 'default',
-  ACCEPTED: 'default',
-  REJECTED: 'outline',
-  WITHDRAWN: 'outline',
-};
 
 function AddExternalDialog({ personId }: { personId: string }) {
   const [open, setOpen] = useState(false);
@@ -213,20 +201,14 @@ export function ApplicationsPanel({
 }) {
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Send className="size-4" /> Applications
-            <Badge variant="secondary" className="ml-1 rounded-full">
-              {rows.length}
-            </Badge>
-          </CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Both internal (in-house requisitions) and external (IrishJobs, Indeed, JobsIreland).
-          </p>
-        </div>
-        <AddExternalDialog personId={personId} />
-      </CardHeader>
+      <SectionHeader
+        icon={Send}
+        title="Applications"
+        count={rows.length}
+        action={<AddExternalDialog personId={personId} />}
+      >
+        Both internal (in-house requisitions) and external (IrishJobs, Indeed, JobsIreland).
+      </SectionHeader>
       <CardContent>
         {rows.length === 0 ? (
           <EmptyState
@@ -274,7 +256,7 @@ export function ApplicationsPanel({
                     </a>
                   )}
                 </div>
-                <Badge variant={STATUS_VARIANT[r.status]} className="rounded-full">
+                <Badge variant={statusTone(r.status)} className="rounded-full">
                   {r.status.replace(/_/g, ' ')}
                 </Badge>
               </li>

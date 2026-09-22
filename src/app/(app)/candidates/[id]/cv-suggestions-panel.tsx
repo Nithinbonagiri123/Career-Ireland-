@@ -7,7 +7,8 @@ import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SectionHeader } from '@/components/section-header';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   acceptCvSuggestionsAction,
   buildCvSuggestionsAction,
@@ -132,27 +133,25 @@ export function CvSuggestionsPanel({ personId }: { personId: string }) {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <FileScan className="size-4" /> Suggestions from CV
-          </CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Deterministic scan of the latest uploaded CV — matches against Skills /
-            Qualifications catalogs, picks free-text candidates from typical CV
-            sections, and parses the Employment History block. No LLM, no external
-            calls.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={scan} disabled={pending}>
-          {pending ? (
-            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-          ) : (
-            <ScanLine className="mr-1.5 size-3.5" />
-          )}
-          {suggestions ? 'Rescan CV' : 'Scan CV'}
-        </Button>
-      </CardHeader>
+      <SectionHeader
+        icon={FileScan}
+        title="Suggestions from CV"
+        action={
+          <Button variant="outline" size="sm" onClick={scan} disabled={pending}>
+            {pending ? (
+              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+            ) : (
+              <ScanLine className="mr-1.5 size-3.5" />
+            )}
+            {suggestions ? 'Rescan CV' : 'Scan CV'}
+          </Button>
+        }
+      >
+        Deterministic scan of the latest uploaded CV — matches against Skills /
+        Qualifications catalogs, picks free-text candidates from typical CV
+        sections, and parses the Employment History block. No LLM, no external
+        calls.
+      </SectionHeader>
       <CardContent>
         {!suggestions ? (
           <EmptyState

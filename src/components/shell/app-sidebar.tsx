@@ -25,6 +25,7 @@ export function AppSidebar({
   workspace,
   reachable,
   visibleModules,
+  variant = 'desktop',
 }: {
   workspace: Business;
   reachable: Business[];
@@ -35,6 +36,11 @@ export function AppSidebar({
    * the `bypassPermissions` flag below).
    */
   visibleModules: Set<string>;
+  /**
+   * `desktop` = fixed side rail hidden under md breakpoint.
+   * `sheet` = full-height fill inside the mobile drawer.
+   */
+  variant?: 'desktop' | 'sheet';
 }) {
   const pathname = usePathname();
   const navRef = useRef<HTMLElement>(null);
@@ -62,7 +68,13 @@ export function AppSidebar({
     .filter((section) => section.items.length > 0);
 
   return (
-    <aside className="hidden md:flex md:w-64 md:flex-col md:border-r md:border-sidebar-border md:bg-sidebar">
+    <aside
+      className={cn(
+        variant === 'desktop'
+          ? 'hidden md:flex md:w-64 md:flex-col md:border-r md:border-sidebar-border md:bg-sidebar'
+          : 'flex h-full w-full flex-col bg-sidebar',
+      )}
+    >
       <Link
         href={config.landingPath}
         className="flex h-14 items-center gap-2 border-b border-sidebar-border px-5"

@@ -15,17 +15,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { statusTone } from '@/lib/ui/status-tone';
 import { archiveEngagementAction } from '@/modules/commerce/actions';
 import type { EngagementListRow } from '@/modules/commerce/repository';
-
-const STATUS_VARIANT: Record<EngagementListRow['status'], 'default' | 'secondary' | 'outline'> = {
-  REQUESTED: 'secondary',
-  PENDING_PAYMENT: 'secondary',
-  ACTIVE: 'default',
-  ON_HOLD: 'outline',
-  COMPLETED: 'outline',
-  CANCELLED: 'outline',
-};
 
 export function EngagementsTable({ engagements }: { engagements: EngagementListRow[] }) {
   const [archiveTarget, setArchiveTarget] = useState<EngagementListRow | null>(null);
@@ -86,7 +78,7 @@ export function EngagementsTable({ engagements }: { engagements: EngagementListR
         accessorKey: 'status',
         size: 140,
         cell: ({ row }) => (
-          <Badge variant={STATUS_VARIANT[row.original.status]} className="rounded-full">
+          <Badge variant={statusTone(row.original.status)} className="rounded-full">
             {row.original.status.replace(/_/g, ' ')}
           </Badge>
         ),

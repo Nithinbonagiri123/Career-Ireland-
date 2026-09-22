@@ -21,21 +21,12 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import type { Currency } from '@/lib/db/schema/currencies';
 import type { Offer } from '@/lib/db/schema/interviews_offers';
+import { statusTone } from '@/lib/ui/status-tone';
 import {
   createOfferAction,
   removeOfferAction,
   updateOfferStatusAction,
 } from '@/modules/offers/actions';
-
-const STATUS_VARIANT: Record<Offer['status'], 'default' | 'secondary' | 'outline'> = {
-  DRAFT: 'outline',
-  SENT: 'secondary',
-  NEGOTIATING: 'secondary',
-  ACCEPTED: 'default',
-  REJECTED: 'outline',
-  WITHDRAWN: 'outline',
-  EXPIRED: 'outline',
-};
 
 const PERIOD_LABEL: Record<Offer['period'], string> = {
   ANNUAL: '/yr',
@@ -226,7 +217,7 @@ function OfferRow({ offer, applicationId }: { offer: Offer; applicationId: strin
             {offer.currencyCode}
             <span className="text-xs text-muted-foreground">{PERIOD_LABEL[offer.period]}</span>
           </span>
-          <Badge variant={STATUS_VARIANT[offer.status]} className="rounded-full text-[10px]">
+          <Badge variant={statusTone(offer.status)} className="rounded-full text-[10px]">
             {offer.status}
           </Badge>
         </div>

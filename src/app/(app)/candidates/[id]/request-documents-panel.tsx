@@ -132,11 +132,11 @@ export function RequestDocumentsPanel({
                   ? 'Email delivery failed. Share this URL manually:'
                   : 'Link sent. If they lose the email, share this URL again:'}
               </p>
-              <p className="mt-1 truncate font-mono text-[11px] text-slate-700">{freshUrl}</p>
+              <p className="mt-1 truncate font-mono text-[11px] text-foreground">{freshUrl}</p>
             </div>
             <button
               type="button"
-              className="ml-2 inline-flex items-center gap-1 rounded border bg-white px-2 py-0.5 text-[11px] hover:bg-slate-50"
+              className="ml-2 inline-flex items-center gap-1 rounded border bg-background px-2 py-0.5 text-[11px] hover:bg-muted"
               onClick={() => copy(freshUrl)}
             >
               <Copy className="size-3" /> Copy

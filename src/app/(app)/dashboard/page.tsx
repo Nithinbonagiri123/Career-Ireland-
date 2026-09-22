@@ -97,6 +97,7 @@ export default async function DashboardPage({
               hint={`${m.candidates.available} available`}
               href="/candidates"
               icon={Users}
+              noteTone="blue"
             />
             <StatChip
               label="New leads (7d)"
@@ -104,6 +105,7 @@ export default async function DashboardPage({
               hint={`${m.leads.awaitingPayment} awaiting payment`}
               href="/leads"
               icon={UserPlus}
+              noteTone="yellow"
             />
             <StatChip
               label="Employers"
@@ -111,6 +113,7 @@ export default async function DashboardPage({
               hint={`${m.employers.active} active`}
               href="/employers"
               icon={Building2}
+              noteTone="neutral"
             />
             <StatChip
               label="Open requisitions"
@@ -118,6 +121,7 @@ export default async function DashboardPage({
               hint={`${m.requisitions.totalPositionsOpen} positions open`}
               href="/requisitions"
               icon={Briefcase}
+              noteTone="purple"
             />
             <StatChip
               label="Active placements"
@@ -125,6 +129,7 @@ export default async function DashboardPage({
               hint={`${m.placements.createdLast30Days} new · 30d`}
               href="/placements"
               icon={Trophy}
+              noteTone="green"
             />
             <StatChip
               label="Ads expiring (30d)"
@@ -132,7 +137,7 @@ export default async function DashboardPage({
               hint={`${m.ads.active} active · ${m.ads.expired} expired`}
               href="/campaigns"
               icon={Sparkles}
-              tone="warning"
+              noteTone="pink"
             />
           </div>
         </section>
@@ -166,6 +171,7 @@ export default async function DashboardPage({
               hint="Across the internal team"
               href="/hr/admin"
               icon={LogIn}
+              noteTone="green"
             />
             <StatChip
               label="Sessions today"
@@ -173,6 +179,7 @@ export default async function DashboardPage({
               hint="Since midnight"
               href="/hr/admin"
               icon={Clock}
+              noteTone="blue"
             />
             <StatChip
               label="Missing clock-outs"
@@ -180,7 +187,7 @@ export default async function DashboardPage({
               hint="Open past yesterday"
               href="/hr/admin"
               icon={AlertCircle}
-              tone="warning"
+              noteTone="pink"
             />
             <StatChip
               label="Late today"
@@ -188,7 +195,7 @@ export default async function DashboardPage({
               hint="Clock-in after 09:15"
               href="/hr/admin"
               icon={Clock}
-              tone="warning"
+              noteTone="yellow"
             />
           </div>
 

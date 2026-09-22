@@ -18,6 +18,7 @@ export default async function ShortlistsPage() {
       <FadeUp>
         <PageHeader
           icon={ListChecks}
+          iconTone="pink"
           title="Shortlists"
           description={
             <>

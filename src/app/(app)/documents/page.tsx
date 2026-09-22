@@ -70,6 +70,7 @@ export default async function DocumentsPage({
         <FadeUp>
           <PageHeader
             icon={FileText}
+          iconTone="neutral"
             title={ownerName ?? 'Client folder'}
             description={`Every file, invoice, and receipt for this ${ownerKind === 'PERSON' ? 'candidate' : 'employer'}.`}
             breadcrumbs={[

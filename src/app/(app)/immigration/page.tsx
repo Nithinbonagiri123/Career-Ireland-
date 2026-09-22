@@ -33,6 +33,7 @@ export default async function ImmigrationPage({
       <FadeUp>
         <PageHeader
           icon={PlaneTakeoff}
+          iconTone="pink"
           title="Immigration cases"
           description="Employment Permits, Visas, and Visa Extensions. Independent of placements — can run for any employer / person combination."
           action={

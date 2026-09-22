@@ -9,15 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { Task } from '@/lib/db/schema/activities';
+import { statusTone } from '@/lib/ui/status-tone';
 import { updateTaskStatusAction } from '@/modules/activities/actions';
 import type { TaskRow } from '@/modules/activities/service';
-
-const PRIORITY_VARIANT: Record<Task['priority'], 'default' | 'secondary' | 'outline'> = {
-  LOW: 'outline',
-  NORMAL: 'secondary',
-  HIGH: 'default',
-  URGENT: 'default',
-};
 
 const STATUS_ICON: Record<Task['status'], typeof Circle> = {
   OPEN: Circle,
@@ -121,7 +115,7 @@ export function CaseTasksSection({ caseId, rows }: { caseId: string; rows: TaskR
                   </div>
                   <div className="flex flex-wrap items-center gap-1">
                     <Badge
-                      variant={PRIORITY_VARIANT[task.priority]}
+                      variant={statusTone(task.priority)}
                       className="rounded-full text-[10px]"
                     >
                       {task.priority}

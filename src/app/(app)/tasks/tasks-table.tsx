@@ -26,24 +26,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { statusTone } from '@/lib/ui/status-tone';
 import { archiveTaskAction, updateTaskStatusAction } from '@/modules/activities/actions';
 import type { TaskRow } from '@/modules/activities/service';
 import type { UserListRow } from '@/modules/users/repository';
 import { EditTaskDialog } from './edit-task-dialog';
-
-const STATUS_VARIANT: Record<TaskRow['status'], 'default' | 'secondary' | 'outline'> = {
-  OPEN: 'secondary',
-  IN_PROGRESS: 'default',
-  DONE: 'outline',
-  CANCELLED: 'outline',
-};
-
-const PRIORITY_VARIANT: Record<TaskRow['priority'], 'default' | 'secondary' | 'outline'> = {
-  LOW: 'outline',
-  NORMAL: 'secondary',
-  HIGH: 'default',
-  URGENT: 'default',
-};
 
 export function TasksTable({ tasks, staffUsers }: { tasks: TaskRow[]; staffUsers: UserListRow[] }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -106,7 +93,7 @@ export function TasksTable({ tasks, staffUsers }: { tasks: TaskRow[]; staffUsers
         size: 100,
         cell: ({ row }) => (
           <Badge
-            variant={PRIORITY_VARIANT[row.original.priority]}
+            variant={statusTone(row.original.priority)}
             className="rounded-full text-[10px]"
           >
             {row.original.priority}
@@ -118,7 +105,7 @@ export function TasksTable({ tasks, staffUsers }: { tasks: TaskRow[]; staffUsers
         accessorKey: 'status',
         size: 130,
         cell: ({ row }) => (
-          <Badge variant={STATUS_VARIANT[row.original.status]} className="rounded-full">
+          <Badge variant={statusTone(row.original.status)} className="rounded-full">
             {row.original.status.replace(/_/g, ' ')}
           </Badge>
         ),

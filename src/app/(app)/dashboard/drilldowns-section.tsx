@@ -11,6 +11,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { statusTone } from '@/lib/ui/status-tone';
 import type { DashboardDrilldowns } from '@/modules/dashboard/drilldowns';
 
 const MODE_LABEL: Record<'PHONE' | 'VIDEO' | 'IN_PERSON' | 'PANEL', string> = {
@@ -24,16 +25,6 @@ const CASE_TYPE_LABEL: Record<'EMPLOYMENT_PERMIT' | 'VISA' | 'VISA_EXTENSION', s
   EMPLOYMENT_PERMIT: 'Permit',
   VISA: 'Visa',
   VISA_EXTENSION: 'Extension',
-};
-
-const PRIORITY_VARIANT: Record<
-  'LOW' | 'NORMAL' | 'HIGH' | 'URGENT',
-  'default' | 'secondary' | 'outline'
-> = {
-  LOW: 'outline',
-  NORMAL: 'secondary',
-  HIGH: 'default',
-  URGENT: 'default',
 };
 
 function DrilldownCard({
@@ -180,7 +171,7 @@ export function DashboardDrilldownsSection({ data }: { data: DashboardDrilldowns
                   )}
                 </p>
               </div>
-              <Badge variant={PRIORITY_VARIANT[t.priority]} className="rounded-full text-[10px]">
+              <Badge variant={statusTone(t.priority)} className="rounded-full text-[10px]">
                 {t.priority}
               </Badge>
             </Link>

@@ -30,6 +30,7 @@ export default async function CampaignsPage({
       <FadeUp>
         <PageHeader
           icon={Sparkles}
+          iconTone="pink"
           title="Recruitment campaigns"
           description="Advertising campaigns for requisitions the existing pool cannot fill. Ads can be per country (Ireland, South Africa)."
           action={

@@ -49,6 +49,7 @@ export default async function ReportsPage({
       <FadeUp>
         <PageHeader
           icon={BarChart3}
+          iconTone="neutral"
           title="Reports"
           description="Operational reports scoped to the selected time window. Download any as CSV."
           action={<ReportRangePicker currentDays={days} />}

@@ -18,6 +18,7 @@ export default async function ApplicationsPage() {
       <FadeUp>
         <PageHeader
           icon={ClipboardList}
+          iconTone="purple"
           title="Applications"
           description={
             <>

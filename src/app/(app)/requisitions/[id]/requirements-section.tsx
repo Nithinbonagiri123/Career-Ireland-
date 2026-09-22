@@ -7,7 +7,8 @@ import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosug
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SectionHeader } from '@/components/section-header';
+import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -183,24 +184,20 @@ export function RequisitionSkillsSection({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Award className="size-4" /> Required skills
-            <Badge variant="secondary" className="ml-1 rounded-full">
-              {rows.length}
-            </Badge>
-          </CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Structured skill requirements — used by matching to score candidates.
-          </p>
-        </div>
-        <AttachSkillDialog
-          requisitionId={requisitionId}
-          allSkills={allSkills}
-          existing={existing}
-        />
-      </CardHeader>
+      <SectionHeader
+        icon={Award}
+        title="Required skills"
+        count={rows.length}
+        action={
+          <AttachSkillDialog
+            requisitionId={requisitionId}
+            allSkills={allSkills}
+            existing={existing}
+          />
+        }
+      >
+        Structured skill requirements — used by matching to score candidates.
+      </SectionHeader>
       <CardContent>
         {rows.length === 0 ? (
           <EmptyState
@@ -372,24 +369,20 @@ export function RequisitionQualificationsSection({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <GraduationCap className="size-4" /> Required qualifications
-            <Badge variant="secondary" className="ml-1 rounded-full">
-              {rows.length}
-            </Badge>
-          </CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Certifications or diplomas the candidate must have.
-          </p>
-        </div>
-        <AttachQualDialog
-          requisitionId={requisitionId}
-          allQuals={allQualifications}
-          existing={existing}
-        />
-      </CardHeader>
+      <SectionHeader
+        icon={GraduationCap}
+        title="Required qualifications"
+        count={rows.length}
+        action={
+          <AttachQualDialog
+            requisitionId={requisitionId}
+            allQuals={allQualifications}
+            existing={existing}
+          />
+        }
+      >
+        Certifications or diplomas the candidate must have.
+      </SectionHeader>
       <CardContent>
         {rows.length === 0 ? (
           <EmptyState

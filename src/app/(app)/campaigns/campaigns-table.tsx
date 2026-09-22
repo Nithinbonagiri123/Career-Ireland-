@@ -17,15 +17,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { statusTone } from '@/lib/ui/status-tone';
 import { archiveCampaignAction } from '@/modules/campaigns/actions';
 import type { CampaignListRow } from '@/modules/campaigns/service';
-
-const STATUS_VARIANT: Record<CampaignListRow['status'], 'default' | 'secondary' | 'outline'> = {
-  DRAFT: 'outline',
-  ACTIVE: 'default',
-  COMPLETED: 'outline',
-  CANCELLED: 'outline',
-};
 
 export function CampaignsTable({ campaigns }: { campaigns: CampaignListRow[] }) {
   const [archiveTarget, setArchiveTarget] = useState<CampaignListRow | null>(null);
@@ -67,7 +61,7 @@ export function CampaignsTable({ campaigns }: { campaigns: CampaignListRow[] }) 
         accessorKey: 'status',
         size: 130,
         cell: ({ row }) => (
-          <Badge variant={STATUS_VARIANT[row.original.status]} className="rounded-full">
+          <Badge variant={statusTone(row.original.status)} className="rounded-full">
             {row.original.status}
           </Badge>
         ),

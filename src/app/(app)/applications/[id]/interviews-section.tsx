@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import type { Interview } from '@/lib/db/schema/interviews_offers';
+import { statusTone } from '@/lib/ui/status-tone';
 import {
   removeInterviewAction,
   scheduleInterviewAction,
@@ -31,21 +32,6 @@ const MODE_LABEL: Record<Interview['mode'], string> = {
   VIDEO: 'Video',
   IN_PERSON: 'In person',
   PANEL: 'Panel',
-};
-
-const STATUS_VARIANT: Record<Interview['status'], 'default' | 'secondary' | 'outline'> = {
-  SCHEDULED: 'default',
-  COMPLETED: 'secondary',
-  NO_SHOW: 'outline',
-  RESCHEDULED: 'secondary',
-  CANCELLED: 'outline',
-};
-
-const OUTCOME_VARIANT: Record<Interview['outcome'], 'default' | 'secondary' | 'outline'> = {
-  PENDING: 'outline',
-  PASS: 'default',
-  FAIL: 'outline',
-  HOLD: 'secondary',
 };
 
 /** Format a Date to the local `YYYY-MM-DDTHH:mm` value that `<input type="datetime-local">` expects. */
@@ -228,12 +214,12 @@ function InterviewRow({
           <span className="font-medium">
             Round {interview.round} · {MODE_LABEL[interview.mode]}
           </span>
-          <Badge variant={STATUS_VARIANT[interview.status]} className="rounded-full text-[10px]">
+          <Badge variant={statusTone(interview.status)} className="rounded-full text-[10px]">
             {interview.status.replace(/_/g, ' ')}
           </Badge>
           {interview.status !== 'SCHEDULED' && (
             <Badge
-              variant={OUTCOME_VARIANT[interview.outcome]}
+              variant={statusTone(interview.outcome)}
               className="rounded-full text-[10px]"
             >
               {interview.outcome}

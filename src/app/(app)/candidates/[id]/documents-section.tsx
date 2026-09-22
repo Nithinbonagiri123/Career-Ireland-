@@ -12,16 +12,9 @@ import { MultiDocumentUploader } from '@/components/multi-document-uploader';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
+import { statusTone } from '@/lib/ui/status-tone';
 import { materialiseRequirementsAction } from '@/modules/documents/actions';
 import type { PersonRequirementRow } from '@/modules/documents/service';
-
-const STATUS_VARIANT: Record<PersonRequirementRow['status'], 'default' | 'secondary' | 'outline'> =
-  {
-    MISSING: 'outline',
-    PROVIDED: 'secondary',
-    ACCEPTED: 'default',
-    REJECTED: 'outline',
-  };
 
 export function DocumentsSection({
   personId,
@@ -86,7 +79,7 @@ export function DocumentsSection({
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <Badge variant={STATUS_VARIANT[req.status]} className="rounded-full">
+                <Badge variant={statusTone(req.status)} className="rounded-full">
                   {req.status}
                 </Badge>
                 {(req.status === 'MISSING' || req.status === 'REJECTED') && (

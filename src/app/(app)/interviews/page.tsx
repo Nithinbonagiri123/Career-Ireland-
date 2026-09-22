@@ -27,6 +27,7 @@ export default async function InterviewsPage({
       <FadeUp>
         <PageHeader
           icon={CalendarClock}
+          iconTone="purple"
           title="Interviews"
           description="Upcoming and recent interviews across every application. Click a row to open the application and log the outcome. Interviews are always scheduled from an application — pick one to start."
           action={

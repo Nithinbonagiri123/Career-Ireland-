@@ -32,21 +32,13 @@ import { Label } from '@/components/ui/label';
 import { assignEntityAction } from '@/modules/assignments/actions';
 import type { InvoiceableService } from '@/modules/billing/read';
 import { ensurePaymentProofTypeAction } from '@/modules/document-types/actions';
+import { statusTone } from '@/lib/ui/status-tone';
 import {
   archiveLeadAction,
   convertLeadAction,
   updateLeadStatusAction,
 } from '@/modules/leads/actions';
 import type { LeadListRow } from '@/modules/leads/repository';
-
-const STATUS_VARIANT: Record<LeadListRow['status'], 'default' | 'secondary' | 'outline'> = {
-  NEW: 'default',
-  CONTACTED: 'secondary',
-  AWAITING_PAYMENT: 'secondary',
-  CONVERTED: 'outline',
-  LOST: 'outline',
-  REJECTED: 'outline',
-};
 
 type Props = {
   leads: LeadListRow[];
@@ -185,7 +177,7 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
         const readyToConvert = lead.hasVerifiedPayment && lead.status !== 'CONVERTED';
         return (
           <div className="flex flex-wrap items-center gap-1.5">
-            <Badge variant={STATUS_VARIANT[lead.status]} className="rounded-full">
+            <Badge variant={statusTone(lead.status)} className="rounded-full">
               {lead.status.replace(/_/g, ' ')}
             </Badge>
             {readyToConvert && (

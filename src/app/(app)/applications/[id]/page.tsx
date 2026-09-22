@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireInternalStaff } from '@/lib/auth/session';
+import { statusTone } from '@/lib/ui/status-tone';
 import { fetchApplication } from '@/modules/applications/service';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { listInterviewsForApplication } from '@/modules/interviews/service';
@@ -15,17 +16,6 @@ import { InterviewsSection } from './interviews-section';
 import { OffersSection } from './offers-section';
 
 export const dynamic = 'force-dynamic';
-
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'outline'> = {
-  APPLIED: 'secondary',
-  UNDER_REVIEW: 'secondary',
-  SHORTLISTED: 'default',
-  INTERVIEW: 'default',
-  OFFER: 'default',
-  ACCEPTED: 'default',
-  REJECTED: 'outline',
-  WITHDRAWN: 'outline',
-};
 
 const SOURCE_LABEL: Record<string, string> = {
   INTERNAL: 'Internal',
@@ -96,7 +86,7 @@ export default async function ApplicationDetail({ params }: { params: Promise<{ 
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Status</span>
-                <Badge variant={STATUS_VARIANT[app.status] ?? 'secondary'} className="rounded-full">
+                <Badge variant={statusTone(app.status)} className="rounded-full">
                   {app.status.replace(/_/g, ' ')}
                 </Badge>
               </div>

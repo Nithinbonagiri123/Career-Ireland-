@@ -44,6 +44,56 @@
   --color-status-danger-soft: var(--status-danger-soft);
   --color-status-neutral: var(--status-neutral);
   --color-status-neutral-soft: var(--status-neutral-soft);
+  /*
+   * Pipeline palette — one token per recruitment stage. Applied
+   * consistently everywhere a candidate's position in the funnel is
+   * shown (Kanban bands, chips, the requisition card counters). Each
+   * token has a solid base + a soft tinted-background variant so
+   * chips and bands share a family.
+   *
+   *   source     — matches suggested by the engine (SUGGESTED)
+   *   review     — under staff review (REVIEWED)
+   *   shortlist  — presented to employer (SHORTLISTED)
+   *   apply      — internal application filed (APPLIED)
+   *   interview  — interview scheduled (INTERVIEW)
+   *   offer      — offer extended (OFFER)
+   *   placed     — placement confirmed (PLACED)
+   *   blocked    — attention needed (permit expiring, docs missing)
+   */
+  --color-pipeline-source: var(--pipeline-source);
+  --color-pipeline-source-soft: var(--pipeline-source-soft);
+  --color-pipeline-review: var(--pipeline-review);
+  --color-pipeline-review-soft: var(--pipeline-review-soft);
+  --color-pipeline-shortlist: var(--pipeline-shortlist);
+  --color-pipeline-shortlist-soft: var(--pipeline-shortlist-soft);
+  --color-pipeline-apply: var(--pipeline-apply);
+  --color-pipeline-apply-soft: var(--pipeline-apply-soft);
+  --color-pipeline-interview: var(--pipeline-interview);
+  --color-pipeline-interview-soft: var(--pipeline-interview-soft);
+  --color-pipeline-offer: var(--pipeline-offer);
+  --color-pipeline-offer-soft: var(--pipeline-offer-soft);
+  --color-pipeline-placed: var(--pipeline-placed);
+  --color-pipeline-placed-soft: var(--pipeline-placed-soft);
+  --color-pipeline-blocked: var(--pipeline-blocked);
+  --color-pipeline-blocked-soft: var(--pipeline-blocked-soft);
+  /*
+   * Note palette — the "sticky-note" tones used for card headers,
+   * dashboard widgets, timeline entries. Each is intentionally soft
+   * so text on top stays readable without a wash. Never use for
+   * primary data surfaces.
+   */
+  --color-note-yellow: var(--note-yellow);
+  --color-note-yellow-ink: var(--note-yellow-ink);
+  --color-note-blue: var(--note-blue);
+  --color-note-blue-ink: var(--note-blue-ink);
+  --color-note-pink: var(--note-pink);
+  --color-note-pink-ink: var(--note-pink-ink);
+  --color-note-green: var(--note-green);
+  --color-note-green-ink: var(--note-green-ink);
+  --color-note-purple: var(--note-purple);
+  --color-note-purple-ink: var(--note-purple-ink);
+  --color-note-neutral: var(--note-neutral);
+  --color-note-neutral-ink: var(--note-neutral-ink);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -143,6 +193,40 @@
   --status-danger-soft: oklch(0.95 0.04 27);
   --status-neutral: oklch(0.5 0.008 60);
   --status-neutral-soft: oklch(0.94 0.006 60);
+  /* Pipeline stage palette — light mode. Solid is used for text +
+     chip fill; -soft is the band background. Chroma kept moderate
+     so 7 stages sit next to each other without feeling like a
+     rainbow — tone-shift only within the warm→cool arc. */
+  --pipeline-source: oklch(0.6 0.11 200);        /* teal */
+  --pipeline-source-soft: oklch(0.95 0.03 200);
+  --pipeline-review: oklch(0.68 0.14 75);        /* amber */
+  --pipeline-review-soft: oklch(0.96 0.04 75);
+  --pipeline-shortlist: oklch(0.66 0.17 55);     /* warm orange */
+  --pipeline-shortlist-soft: oklch(0.96 0.05 55);
+  --pipeline-apply: oklch(0.6 0.13 250);         /* indigo */
+  --pipeline-apply-soft: oklch(0.95 0.03 250);
+  --pipeline-interview: oklch(0.58 0.15 300);    /* violet */
+  --pipeline-interview-soft: oklch(0.95 0.03 300);
+  --pipeline-offer: oklch(0.58 0.14 340);        /* magenta-pink */
+  --pipeline-offer-soft: oklch(0.95 0.03 340);
+  --pipeline-placed: oklch(0.58 0.14 145);       /* emerald */
+  --pipeline-placed-soft: oklch(0.94 0.05 145);
+  --pipeline-blocked: oklch(0.6 0.19 25);        /* rose */
+  --pipeline-blocked-soft: oklch(0.95 0.04 25);
+  /* Note tones — light mode. Each has a bg + ink text token so the
+     writing on top of the sticky note stays legible. */
+  --note-yellow: oklch(0.96 0.07 90);
+  --note-yellow-ink: oklch(0.4 0.09 75);
+  --note-blue: oklch(0.95 0.04 230);
+  --note-blue-ink: oklch(0.38 0.11 240);
+  --note-pink: oklch(0.95 0.04 20);
+  --note-pink-ink: oklch(0.42 0.14 20);
+  --note-green: oklch(0.95 0.05 150);
+  --note-green-ink: oklch(0.38 0.1 150);
+  --note-purple: oklch(0.95 0.04 300);
+  --note-purple-ink: oklch(0.4 0.11 300);
+  --note-neutral: oklch(0.96 0.006 60);
+  --note-neutral-ink: oklch(0.4 0.008 60);
   --radius: 0.625rem;
   --sidebar: oklch(0.98 0.006 60);
   --sidebar-foreground: oklch(0.245 0.02 60);
@@ -191,6 +275,38 @@
   --status-danger-soft: oklch(0.3 0.05 22);
   --status-neutral: oklch(0.7 0.014 60);
   --status-neutral-soft: oklch(0.28 0.008 60);
+  /* Pipeline palette — dark mode. Base tones brightened so they stay
+     legible on the dark canvas; -soft values are low-lightness so
+     bands don't punch out. */
+  --pipeline-source: oklch(0.72 0.12 200);
+  --pipeline-source-soft: oklch(0.28 0.05 200);
+  --pipeline-review: oklch(0.78 0.14 75);
+  --pipeline-review-soft: oklch(0.3 0.05 75);
+  --pipeline-shortlist: oklch(0.76 0.16 55);
+  --pipeline-shortlist-soft: oklch(0.3 0.06 55);
+  --pipeline-apply: oklch(0.7 0.13 250);
+  --pipeline-apply-soft: oklch(0.28 0.05 250);
+  --pipeline-interview: oklch(0.7 0.14 300);
+  --pipeline-interview-soft: oklch(0.28 0.05 300);
+  --pipeline-offer: oklch(0.7 0.14 340);
+  --pipeline-offer-soft: oklch(0.28 0.05 340);
+  --pipeline-placed: oklch(0.72 0.14 145);
+  --pipeline-placed-soft: oklch(0.28 0.05 145);
+  --pipeline-blocked: oklch(0.72 0.18 25);
+  --pipeline-blocked-soft: oklch(0.3 0.06 25);
+  /* Note tones — dark mode. */
+  --note-yellow: oklch(0.32 0.06 75);
+  --note-yellow-ink: oklch(0.92 0.09 90);
+  --note-blue: oklch(0.28 0.05 240);
+  --note-blue-ink: oklch(0.88 0.06 230);
+  --note-pink: oklch(0.3 0.06 20);
+  --note-pink-ink: oklch(0.9 0.05 20);
+  --note-green: oklch(0.28 0.05 150);
+  --note-green-ink: oklch(0.9 0.07 150);
+  --note-purple: oklch(0.3 0.05 300);
+  --note-purple-ink: oklch(0.9 0.05 300);
+  --note-neutral: oklch(0.28 0.008 60);
+  --note-neutral-ink: oklch(0.88 0.008 60);
   --sidebar: oklch(0.185 0.012 60);
   --sidebar-foreground: oklch(0.96 0.008 60);
   --sidebar-primary: oklch(0.72 0.14 55);
@@ -210,5 +326,81 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+/*
+ * Workspace background.
+ *
+ * Two paint-only pseudo-elements attached to <body>, both fixed and
+ * both z-index -1 so they never receive pointer events and never
+ * cover content.
+ *
+ *   ::before  loads a real photograph if one exists at
+ *             /public/workspace-bg.jpg. If the file is missing the
+ *             URL 404s silently and the layer paints nothing — no
+ *             console error, no broken image. Drop any professional
+ *             workspace / Ireland / office photo at that path to
+ *             enable.
+ *
+ *   ::after   a warm gradient overlay that guarantees text contrast
+ *             on top of whatever photo (or CSS fallback below) is
+ *             showing. Also draws the CSS fallback: soft radial
+ *             tints that suggest office lighting, so the app feels
+ *             intentional even before the JPG is added.
+ *
+ * Both layers are hidden on print so PDF invoices/receipts stay
+ * clean.
+ */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image: url('/workspace-bg.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.18;
+  filter: blur(3px) saturate(0.6);
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    /* Faint diagonal grid pattern, always visible — evokes graph paper /
+       architectural blueprint feel appropriate for a recruitment ops
+       tool. Rendered as an inline SVG so the browser never fetches an
+       extra asset. */
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'><path d='M60 0H0v60' fill='none' stroke='%23a89680' stroke-opacity='0.08' stroke-width='1'/></svg>"),
+    /* Warm office-light radial tints, stronger than the previous pass
+       so the canvas doesn't feel flat when /workspace-bg.jpg is
+       absent. Still soft enough that cards float clearly above. */
+    radial-gradient(ellipse at 12% 0%, oklch(0.9 0.06 55 / 0.55), transparent 50%),
+    radial-gradient(ellipse at 88% 100%, oklch(0.86 0.05 210 / 0.45), transparent 55%),
+    radial-gradient(ellipse at 50% 50%, oklch(0.99 0.005 60 / 0.6), oklch(0.97 0.005 60 / 0.85));
+}
+
+.dark body::before {
+  opacity: 0.09;
+}
+
+.dark body::after {
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'><path d='M60 0H0v60' fill='none' stroke='%23ffffff' stroke-opacity='0.05' stroke-width='1'/></svg>"),
+    radial-gradient(ellipse at 12% 0%, oklch(0.3 0.03 55 / 0.5), transparent 50%),
+    radial-gradient(ellipse at 88% 100%, oklch(0.28 0.03 210 / 0.4), transparent 55%),
+    radial-gradient(ellipse at 50% 50%, oklch(0.18 0.008 60 / 0.65), oklch(0.16 0.008 60 / 0.9));
+}
+
+@media print {
+  body::before,
+  body::after {
+    display: none;
   }
 }

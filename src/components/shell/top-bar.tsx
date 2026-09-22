@@ -2,8 +2,8 @@
 
 import { Bell, KeyRound, LogOut, Menu, User as UserIcon } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useTransition } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState, useTransition } from 'react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -54,10 +54,15 @@ export function TopBar({
   visibleModules: Set<string>;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [signingOut, startSignOut] = useTransition();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur-md">
-      <Sheet>
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         <SheetTrigger
           render={
             <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu" />
@@ -67,7 +72,12 @@ export function TopBar({
         </SheetTrigger>
         <SheetContent side="left" className="w-72 p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <AppSidebar workspace={workspace} reachable={reachable} visibleModules={visibleModules} />
+          <AppSidebar
+            workspace={workspace}
+            reachable={reachable}
+            visibleModules={visibleModules}
+            variant="sheet"
+          />
         </SheetContent>
       </Sheet>
 

@@ -25,6 +25,7 @@ export default async function PlacementsPage({
       <FadeUp>
         <PageHeader
           icon={Trophy}
+          iconTone="green"
           title="Placements"
           description="Successful Candidate ↔ Employer outcomes. Confirming a placement immediately flips candidate availability to PLACED and advances the requisition's fill count."
           action={

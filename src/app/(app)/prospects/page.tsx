@@ -51,6 +51,7 @@ export default async function ProspectsPage({
       <FadeUp>
         <PageHeader
           icon={Sparkles}
+          iconTone="yellow"
           title="Prospects"
           description="Everyone who responded to a campaign advertisement. Convert warm prospects into candidates as they clear screening."
           action={

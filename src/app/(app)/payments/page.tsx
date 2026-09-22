@@ -34,6 +34,7 @@ export default async function PaymentsPage({
       <FadeUp>
         <PageHeader
           icon={Coins}
+          iconTone="green"
           title="Payments"
           description="Record incoming payments and verify proof. Only ADMIN can verify or reject."
           action={
