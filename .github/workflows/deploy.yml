@@ -96,31 +96,59 @@ jobs:
         run: pnpm exec drizzle-kit push
 
   deploy:
-    name: Deploy application
+    name: Deploy to Vercel
     needs: db-push
     runs-on: ubuntu-latest
     # Environment guard — GitHub will show any protection rules
     # (required reviewers, wait timer) attached to the "production"
     # environment before this job runs.
-    environment: production
+    environment:
+      name: production
+      url: ${{ steps.vercel.outputs.preview-url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      # TODO: replace with the actual deploy step for your host.
-      # Vercel example:
-      #   - uses: amondnet/vercel-action@v25
-      #     with:
-      #       vercel-token: ${{ secrets.VERCEL_TOKEN }}
-      #       vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-      #       vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-      #       vercel-args: '--prod'
-      # Fly.io example:
-      #   - uses: superfly/flyctl-actions/setup-flyctl@master
-      #   - run: flyctl deploy --remote-only
-      #     env:
-      #       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-      - name: Placeholder deploy
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install Vercel CLI
+        # Pinned to a specific major so a Vercel CLI breaking change
+        # can't fail this deploy without a deliberate bump here.
+        run: pnpm add -g vercel@34
+
+      - name: Pull Vercel project config (production env)
+        # `vercel pull` writes `.vercel/project.json` + `.env.production`
+        # so the build step below uses the exact env vars configured in
+        # the Vercel dashboard for the production environment.
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build for production
+        # Runs `next build` under Vercel's build environment, producing
+        # `.vercel/output` in the form Vercel expects for deploy-prebuilt.
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy pre-built artifact to Vercel (production)
+        id: vercel
+        # `--prebuilt` skips redoing the build on Vercel's side; we
+        # already built above so nothing needs to happen there but the
+        # promote-to-prod alias. `--yes` skips the CLI's confirmation.
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          echo "CI + DB push both green — plug the platform deploy command in here."
-          echo "SHA: ${{ github.sha }}"
+          url=$(vercel deploy --prebuilt --prod --yes --token=${{ secrets.VERCEL_TOKEN }})
+          echo "preview-url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed: $url"
