@@ -24,7 +24,7 @@ export default async function ReceiptPrintPage({
   const person = data.payer.person;
 
   return (
-    <div className="min-h-screen bg-slate-50 print:bg-white">
+    <div className="min-h-screen bg-muted/40 print:bg-white">
       <div className="mx-auto flex max-w-3xl items-center justify-between px-6 pt-6 print:hidden">
         <Link
           href={`/candidates/${id}`}
