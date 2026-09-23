@@ -17,7 +17,7 @@ import { expect, test } from '@playwright/test';
 test('dashboard revenue section renders and responds to the date filter', async ({ page }) => {
   await page.goto('/dashboard');
 
-  const section = page.getByRole('region', { name: /revenue/i });
+  const section = page.getByRole('region', { name: 'Revenue', exact: true });
   await expect(section).toBeVisible();
 
   // The header line always includes "Verified payments · <range>". The
@@ -38,7 +38,7 @@ test('dashboard revenue section renders and responds to the date filter', async 
 
 test('revenue CSV export button forwards the current date range', async ({ page }) => {
   await page.goto('/dashboard?from=2026-01-01&to=2026-12-31');
-  const section = page.getByRole('region', { name: /revenue/i });
+  const section = page.getByRole('region', { name: 'Revenue', exact: true });
   await expect(section).toBeVisible();
 
   // The button only appears when there's data to export. If we're on
