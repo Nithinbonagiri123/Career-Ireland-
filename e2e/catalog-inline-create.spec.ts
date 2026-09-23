@@ -23,12 +23,10 @@ test('requisition: Add required skill dialog shows autosuggest + inline-create',
   page,
 }) => {
   await page.goto('/requisitions');
-  // The Open link is what navigates — rows themselves aren't clickable.
+  // Requires the E2E minimal seed (scripts/seed-e2e-minimal.ts) to
+  // have run so at least one requisition exists.
   const firstOpen = page.getByRole('link', { name: /open/i }).first();
-  if (!(await firstOpen.isVisible().catch(() => false))) {
-    test.skip(true, 'no requisitions in DB — cannot exercise dialog');
-    return;
-  }
+  await expect(firstOpen).toBeVisible({ timeout: 10_000 });
   await firstOpen.click();
   await page.waitForURL(/\/requisitions\/[0-9a-f-]+/i);
 
@@ -60,10 +58,7 @@ test('requisition: Add required qualification dialog shows autosuggest + inline-
 }) => {
   await page.goto('/requisitions');
   const firstOpen = page.getByRole('link', { name: /open/i }).first();
-  if (!(await firstOpen.isVisible().catch(() => false))) {
-    test.skip(true, 'no requisitions in DB — cannot exercise dialog');
-    return;
-  }
+  await expect(firstOpen).toBeVisible({ timeout: 10_000 });
   await firstOpen.click();
   await page.waitForURL(/\/requisitions\/[0-9a-f-]+/i);
   await page

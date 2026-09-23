@@ -74,21 +74,20 @@ test('sign-out redirects to /login and future protected requests are unauthentic
   await page.goto('/dashboard');
   await expect(page).toHaveURL(/\/dashboard/);
 
-  // Open the account dropdown by clicking the avatar trigger.
-  // Wait for the network to go quiet first — dashboard fires several
-  // parallel data-loaders and a click before they settle can be swallowed
-  // by React's suspense boundary re-render, leaving the DropdownMenu
-  // portal never opened. Then dispatch via keyboard which base-ui
-  // reliably picks up (a bare .click() sometimes hits the wrong element
-  // under the glass-panel-strong stacking context).
+  // Wait for dashboard load to settle — several parallel data-loaders
+  // fire on hydration and a click that races them can be swallowed by
+  // React's Suspense re-render, so the DropdownMenu portal never opens.
   await page.waitForLoadState('networkidle');
+
+  // Open the account dropdown. Base UI's DropdownMenuTrigger is behind
+  // a portal + custom event bridge — plain .click() works when we've
+  // waited for the page to stabilise first. Then explicitly wait for
+  // the menu to be present before hitting Sign out.
   const accountBtn = page.getByRole('button', { name: 'Account' });
   await expect(accountBtn).toBeVisible();
-  await accountBtn.focus();
-  await accountBtn.press('Enter');
-  const signOut = page.getByRole('menuitem', { name: /sign out/i });
-  await expect(signOut).toBeVisible({ timeout: 10_000 });
-  await signOut.click();
+  await accountBtn.click();
+  await expect(page.getByRole('menu')).toBeVisible({ timeout: 5_000 });
+  await page.getByRole('menuitem', { name: /sign out/i }).click();
 
   await page.waitForURL(/\/login/, { timeout: 15_000 });
 

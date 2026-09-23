@@ -9,50 +9,35 @@ test.describe('/immigration', () => {
     await expect(page.getByRole('heading', { name: /immigration/i, level: 1 })).toBeVisible();
   });
 
-  test('primary action button (Open case) is present', async ({ page }) => {
-    // Button label is "Open case" per the header action wiring.
-    const btn = page.getByRole('button', { name: /open case|new case/i }).first();
-    if (await btn.isVisible().catch(() => false)) {
-      await expect(btn).toBeVisible();
-    }
+  test('Open case button is present in the header action bar', async ({ page }) => {
+    // Actual button label in immigration/page.tsx is "Open case".
+    await expect(page.getByRole('button', { name: /^open case$/i })).toBeVisible();
   });
 
-  test('date-range filter is present', async ({ page }) => {
+  test('date-range filter defaults to Anytime', async ({ page }) => {
     const anytime = page.getByRole('tab', { name: /anytime/i });
-    if (
-      await anytime
-        .first()
-        .isVisible()
-        .catch(() => false)
-    ) {
-      await expect(anytime.first()).toHaveAttribute('aria-selected', 'true');
-    }
+    await expect(anytime.first()).toBeVisible();
+    await expect(anytime.first()).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('table or empty state renders', async ({ page }) => {
+  test('table renders with expected columns or empty state fallback', async ({ page }) => {
+    // Immigration cases aren't in the minimal seed, so both branches
+    // are valid: a table with columns, or the empty-state message.
     const hasTable = await page
       .locator('table')
       .first()
       .isVisible()
       .catch(() => false);
-    const hasEmpty = await page
-      .getByText(/no cases|no immigration/i)
-      .first()
-      .isVisible()
-      .catch(() => false);
-    // Skip if the DB has neither seeded cases nor a rendered empty state —
-    // just verify the heading rendered.
-    expect(hasTable || hasEmpty || (await page.locator('h1').isVisible())).toBe(true);
+    if (hasTable) {
+      await expect(page.getByRole('columnheader', { name: /type/i })).toBeVisible();
+      await expect(page.getByRole('columnheader', { name: /beneficiary/i })).toBeVisible();
+    } else {
+      await expect(page.getByText(/no cases|no immigration/i).first()).toBeVisible();
+    }
   });
 
-  test('following a case row opens the detail page', async ({ page }) => {
-    const firstLink = page.locator('a[href^="/immigration/"]').first();
-    if (await firstLink.isVisible().catch(() => false)) {
-      await firstLink.click();
-      await expect(page).toHaveURL(/\/immigration\/[^/]+/);
-      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    } else {
-      test.skip(true, 'no immigration cases');
-    }
+  test('clicking Open case opens the new-case dialog', async ({ page }) => {
+    await page.getByRole('button', { name: /^open case$/i }).click();
+    await expect(page.getByRole('dialog').first()).toBeVisible();
   });
 });

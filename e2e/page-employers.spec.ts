@@ -5,25 +5,18 @@ test.describe('/employers', () => {
     await page.goto('/employers');
   });
 
-  test('page header shows title + Add employer', async ({ page }) => {
+  test('page header shows title + Add employer button', async ({ page }) => {
     await expect(page.getByRole('heading', { name: /employers/i, level: 1 })).toBeVisible();
     await expect(
       page.getByRole('button', { name: /add employer|new employer/i }).first(),
     ).toBeVisible();
   });
 
-  test('table renders with a Name / Company column', async ({ page }) => {
-    const hasTable = await page
-      .locator('table')
-      .first()
-      .isVisible()
-      .catch(() => false);
-    const hasEmpty = await page
-      .getByText(/no employers/i)
-      .first()
-      .isVisible()
-      .catch(() => false);
-    expect(hasTable || hasEmpty).toBe(true);
+  test('table renders with a Name/Legal name column', async ({ page }) => {
+    await expect(page.locator('table')).toBeVisible();
+    // Column header labelled either "Name" or "Legal name" depending on
+    // the DataTable configuration — accept either.
+    await expect(page.getByRole('columnheader', { name: /name|legal/i }).first()).toBeVisible();
   });
 
   test('date-range filter defaults to Anytime', async ({ page }) => {
@@ -36,14 +29,12 @@ test.describe('/employers', () => {
     await expect(page.getByRole('link', { name: /download csv|export/i }).first()).toBeVisible();
   });
 
-  test('following the first employer row navigates to its detail page', async ({ page }) => {
+  test('following the seeded employer row navigates to its detail page', async ({ page }) => {
+    // Minimal seed guarantees at least one employer exists.
     const firstLink = page.locator('a[href^="/employers/"]').first();
-    if (!(await firstLink.isVisible().catch(() => false))) {
-      test.skip(true, 'no employers seeded');
-      return;
-    }
+    await expect(firstLink).toBeVisible();
     await firstLink.click();
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(page).toHaveURL(/\/employers\/[^/]+/);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
 });

@@ -78,6 +78,18 @@ jobs:
         # interviews/conflict.test.ts read this row.
         run: pnpm db:seed:e2e-admin
 
+      - name: Seed baseline services + docs + currencies
+        # Some vitest/integration tests reference specific service
+        # catalog items (Work Permit, Immigration Services). Match the
+        # real onboarding order: currencies → doc types → services.
+        run: |
+          pnpm db:seed:currencies
+          pnpm db:seed:document-types
+          pnpm db:seed:services
+
+      - name: Seed E2E minimal fixtures
+        run: pnpm db:seed:e2e-minimal
+
       - name: Test
         run: pnpm test
 
@@ -206,6 +218,21 @@ jobs:
 
       - name: Seed E2E admin user
         run: pnpm db:seed:e2e-admin
+
+      - name: Seed baseline services + docs + currencies
+        # qa-billing-e2e picks a service by name from the CatalogAutosuggest;
+        # needs the "Work Permit" catalog item to exist.
+        run: |
+          pnpm db:seed:currencies
+          pnpm db:seed:document-types
+          pnpm db:seed:services
+
+      - name: Seed E2E minimal fixtures (1 employer, 1 requisition, 2 candidates, 1 lead)
+        # Gives the Playwright suite something to click on. Tests like
+        # catalog-inline-create, qa-supplement, and the per-page detail-
+        # navigation checks fail on a bare DB because the page has zero
+        # rows to interact with.
+        run: pnpm db:seed:e2e-minimal
 
       - name: Create MinIO bucket for uploads
         # AWS CLI is preinstalled on ubuntu runners. `mb` is idempotent for our

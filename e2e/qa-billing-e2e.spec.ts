@@ -64,10 +64,7 @@ test('03 · New lead + first invoice atomic flow', async ({ page }) => {
   await page.goto('/leads', { waitUntil: 'networkidle' });
 
   const newLead = page.getByRole('button', { name: /^new lead$/i });
-  if (!(await newLead.isVisible().catch(() => false))) {
-    test.skip(true, 'New lead button not present — dialog trigger may have changed');
-    return;
-  }
+  await expect(newLead).toBeVisible();
   await newLead.click();
   await expect(page.getByRole('heading', { name: /create a new lead/i })).toBeVisible();
   await fullShot(page, 'e2e__new-lead-dialog-empty');
@@ -82,17 +79,22 @@ test('03 · New lead + first invoice atomic flow', async ({ page }) => {
   await page.locator('#cl-country').fill('Ireland');
   await page.locator('#cl-city').fill('Dublin');
 
-  // Fill in the first-invoice section — pick a service, then a package,
-  // then override the QTY to 2 to prove the qty column really is
-  // editable (was hardcoded before).
-  //
-  // NOTE: the service picker was refactored from <select> to a
-  // CatalogAutosuggest <input>. selectOption() no longer works. Skip
-  // the invoice sub-flow until this spec is rewritten against the new
-  // autosuggest — the lead-creation half of the atomic flow is
-  // exercised by qa-audit-detail.spec.ts already.
-  test.skip(true, 'service picker refactored — needs autosuggest-aware rewrite');
-  await page.locator('#cl-svc').selectOption({ index: 1 });
+  // Pick a service via the CatalogAutosuggest — it's an <input> with
+  // a dropdown of <button> options, NOT a <select>. Focus the input,
+  // type enough to narrow the list, then click the first suggestion.
+  // The service catalog is seeded by db:seed:services in CI so at
+  // least "Work Permit" is guaranteed to exist.
+  const svcInput = page.locator('#cl-svc');
+  await svcInput.click();
+  await svcInput.fill('work permit');
+  // The suggestions dropdown renders each option as a button with the
+  // service name — pick the first one that contains "work permit".
+  await page
+    .getByRole('button', { name: /work permit/i })
+    .first()
+    .click();
+
+  // Optional package selector — kept as a <select> for now.
   const pkgSelect = page.locator('#cl-pkg');
   if (await pkgSelect.count()) {
     const opts = await pkgSelect.locator('option').all();

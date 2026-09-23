@@ -9,30 +9,18 @@ test.describe('/shortlists', () => {
     await expect(page.getByRole('heading', { name: /shortlists/i, level: 1 })).toBeVisible();
   });
 
-  test('main region renders', async ({ page }) => {
-    await expect(page.locator('main').first()).toBeVisible();
+  test('description explains the per-requisition workflow', async ({ page }) => {
+    await expect(page.getByText(/pick a requisition|per requisition|shortlist/i)).toBeVisible();
   });
 
-  test('requisition list renders or empty state shows', async ({ page }) => {
-    const anyReq = await page
-      .locator('a[href^="/requisitions/"]')
-      .first()
-      .isVisible()
-      .catch(() => false);
-    const empty = await page
-      .getByText(/no requisitions/i)
-      .first()
-      .isVisible()
-      .catch(() => false);
-    expect(anyReq || empty || (await page.locator('h1').isVisible())).toBe(true);
+  test('requisition list renders (from the seed)', async ({ page }) => {
+    // Minimal seed guarantees at least one requisition.
+    await expect(page.locator('a[href^="/requisitions/"]').first()).toBeVisible();
   });
 
   test('picking a requisition opens its detail', async ({ page }) => {
     const firstReq = page.locator('a[href^="/requisitions/"]').first();
-    if (!(await firstReq.isVisible().catch(() => false))) {
-      test.skip(true, 'no requisitions');
-      return;
-    }
+    await expect(firstReq).toBeVisible();
     await firstReq.click();
     await expect(page).toHaveURL(/\/requisitions\/[^/]+/);
   });

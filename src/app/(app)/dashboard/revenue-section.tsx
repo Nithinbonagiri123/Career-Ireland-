@@ -98,7 +98,7 @@ export function RevenueSection({ data }: { data: DashboardRevenue }) {
   const topServices = services.slice(0, 8);
 
   return (
-    <section aria-label="Revenue" className="mb-8">
+    <section aria-label="Revenue" data-testid="revenue-section" className="mb-8">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">

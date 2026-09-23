@@ -25,19 +25,18 @@ test.describe('/candidates', () => {
     await expect(page).toHaveURL(/view=table/);
   });
 
-  test('grid view page loads and shows the primary action', async ({ page }) => {
+  test('grid view renders at least one candidate card (from the E2E seed)', async ({ page }) => {
     await page.goto('/candidates?view=grid');
-    // Assert the page skeleton renders — the specific content (a card
-    // vs the empty state) depends on seeded data which the CI DB
-    // doesn't have. The header + Add button prove the route works.
-    await expect(page.getByRole('heading', { name: /candidates/i, level: 1 })).toBeVisible();
-    await expect(page.getByRole('link', { name: /add candidate/i })).toBeVisible();
+    // Minimal seed inserts 2 candidates — at least one card link must render.
+    const firstCard = page
+      .locator('a[href^="/candidates/"]')
+      .filter({ has: page.locator('h3') })
+      .first();
+    await expect(firstCard).toBeVisible();
   });
 
   test('table view renders the DataTable wrapper', async ({ page }) => {
     await page.goto('/candidates?view=table');
-    // DataTable renders <table> element; the column headers "Candidate",
-    // "Availability", "Lifecycle" are stable and defined in candidates-table.tsx.
     await expect(page.locator('table')).toBeVisible();
     await expect(page.getByRole('columnheader', { name: /candidate/i })).toBeVisible();
   });

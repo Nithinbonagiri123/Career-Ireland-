@@ -13,35 +13,19 @@ test.describe('/matching', () => {
     await expect(page.getByText(/pick a requisition|choose a requisition/i)).toBeVisible();
   });
 
-  test('requisition list renders or empty state shows', async ({ page }) => {
-    const anyReq = await page
-      .locator('a[href^="/requisitions/"]')
-      .first()
-      .isVisible()
-      .catch(() => false);
-    const empty = await page
-      .getByText(/no requisitions/i)
-      .first()
-      .isVisible()
-      .catch(() => false);
-    expect(anyReq || empty).toBe(true);
+  test('requisition list renders (from the seed)', async ({ page }) => {
+    // Minimal seed inserts one requisition.
+    await expect(page.locator('a[href^="/requisitions/"]').first()).toBeVisible();
   });
 
-  test('picking a requisition navigates into its detail (with matching tab)', async ({ page }) => {
+  test('picking a requisition navigates into its detail', async ({ page }) => {
     const firstReq = page.locator('a[href^="/requisitions/"]').first();
-    if (!(await firstReq.isVisible().catch(() => false))) {
-      test.skip(true, 'no requisitions');
-      return;
-    }
     await firstReq.click();
     await expect(page).toHaveURL(/\/requisitions\/[^/]+/);
   });
 
   test('list items show employer + fill count', async ({ page }) => {
     const firstReq = page.locator('a[href^="/requisitions/"]').first();
-    if (await firstReq.isVisible().catch(() => false)) {
-      // Shared WorkflowRequisitionList shows "Employer · X of Y filled".
-      await expect(firstReq).toContainText(/of|filled|·/);
-    }
+    await expect(firstReq).toContainText(/of|filled|·/);
   });
 });

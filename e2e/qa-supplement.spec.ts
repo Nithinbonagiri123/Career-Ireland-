@@ -66,7 +66,7 @@ test('permissions editor: non-owner staff', async ({ page }) => {
 test('revenue: MTD default', async ({ page }) => {
   await page.goto('/dashboard', { waitUntil: 'networkidle' });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  const revenue = page.getByRole('region', { name: 'Revenue', exact: true }).first();
+  const revenue = page.locator('[data-testid="revenue-section"]');
   await expect(revenue).toBeVisible();
   await revenue.scrollIntoViewIfNeeded().catch(() => {});
   await shoot(page, 'supp__revenue-mtd');
@@ -75,7 +75,7 @@ test('revenue: MTD default', async ({ page }) => {
 test('revenue: 30-day preset', async ({ page }) => {
   await page.goto('/dashboard?created=30d', { waitUntil: 'networkidle' });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  const revenue = page.getByRole('region', { name: 'Revenue', exact: true }).first();
+  const revenue = page.locator('[data-testid="revenue-section"]');
   await expect(revenue).toBeVisible();
   await revenue.scrollIntoViewIfNeeded().catch(() => {});
   await shoot(page, 'supp__revenue-30d');
@@ -88,7 +88,7 @@ test('revenue: empty range', async ({ page }) => {
   // Use .first() to hold a stable reference — otherwise a FadeUp
   // re-render between locate and scroll can detach the element and
   // fail with "Element is not attached to the DOM".
-  const region = page.getByRole('region', { name: 'Revenue', exact: true }).first();
+  const region = page.locator('[data-testid="revenue-section"]');
   await expect(region).toBeVisible();
   await region.scrollIntoViewIfNeeded().catch(() => {});
   await shoot(page, 'supp__revenue-empty');
