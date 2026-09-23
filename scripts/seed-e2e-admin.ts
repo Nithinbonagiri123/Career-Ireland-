@@ -24,10 +24,19 @@ const E2E_ADMIN = {
 };
 
 async function main() {
-  const { eq } = await import('drizzle-orm');
+  const { and, eq, ne } = await import('drizzle-orm');
   const argon2 = (await import('argon2')).default;
   const { db } = await import('../src/lib/db/client');
   const { users } = await import('../src/lib/db/schema/users');
+
+  // The schema enforces a single-owner unique index. Demote any OTHER
+  // owner before promoting the E2E admin so this seed stays idempotent
+  // even on a DB that already has an owner. Safe because this script
+  // is E2E-only ("Never use on any real user-facing environment").
+  await db
+    .update(users)
+    .set({ isOwner: false })
+    .where(and(eq(users.isOwner, true), ne(users.email, E2E_ADMIN.email)));
 
   // Mirror src/modules/auth/service.ts's ARGON2_OPTIONS so the hash format
   // matches what the login flow expects.
@@ -47,6 +56,11 @@ async function main() {
       .set({
         passwordHash,
         isActive: true,
+        // isOwner bypasses every permission check — required for the
+        // E2E admin because Playwright pages hit every route without
+        // any per-business grant setup. Safe on the CI scratch DB
+        // (no other users) and idempotent locally.
+        isOwner: true,
         sessionsInvalidatedAfter: new Date(),
       })
       .where(eq(users.id, existing.id));
@@ -61,6 +75,7 @@ async function main() {
       fullName: E2E_ADMIN.fullName,
       passwordHash,
       role: 'ADMIN',
+      isOwner: true,
     })
     .returning({ id: users.id });
   if (!created) throw new Error('failed to insert E2E admin');
