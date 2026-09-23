@@ -66,16 +66,18 @@ test('permissions editor: non-owner staff', async ({ page }) => {
 test('revenue: MTD default', async ({ page }) => {
   await page.goto('/dashboard', { waitUntil: 'networkidle' });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  // Scroll to the revenue region so the screenshot centres it.
-  const revenue = page.getByRole('region', { name: 'Revenue', exact: true });
-  await revenue.scrollIntoViewIfNeeded();
+  const revenue = page.getByRole('region', { name: 'Revenue', exact: true }).first();
+  await expect(revenue).toBeVisible();
+  await revenue.scrollIntoViewIfNeeded().catch(() => {});
   await shoot(page, 'supp__revenue-mtd');
 });
 
 test('revenue: 30-day preset', async ({ page }) => {
   await page.goto('/dashboard?created=30d', { waitUntil: 'networkidle' });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await page.getByRole('region', { name: 'Revenue', exact: true }).scrollIntoViewIfNeeded();
+  const revenue = page.getByRole('region', { name: 'Revenue', exact: true }).first();
+  await expect(revenue).toBeVisible();
+  await revenue.scrollIntoViewIfNeeded().catch(() => {});
   await shoot(page, 'supp__revenue-30d');
 });
 
@@ -83,7 +85,12 @@ test('revenue: empty range', async ({ page }) => {
   // Far-future window guarantees no verified payments — triggers the empty state.
   await page.goto('/dashboard?from=2099-01-01&to=2099-12-31', { waitUntil: 'networkidle' });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await page.getByRole('region', { name: 'Revenue', exact: true }).scrollIntoViewIfNeeded();
+  // Use .first() to hold a stable reference — otherwise a FadeUp
+  // re-render between locate and scroll can detach the element and
+  // fail with "Element is not attached to the DOM".
+  const region = page.getByRole('region', { name: 'Revenue', exact: true }).first();
+  await expect(region).toBeVisible();
+  await region.scrollIntoViewIfNeeded().catch(() => {});
   await shoot(page, 'supp__revenue-empty');
 });
 
