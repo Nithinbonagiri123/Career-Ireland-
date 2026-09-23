@@ -107,60 +107,58 @@ jobs:
         # generator, not a schema mismatch.
         run: pnpm exec drizzle-kit push
 
-  deploy:
-    name: Deploy to Vercel
+  # Deploy is handled by Vercel's native GitHub integration — every push
+  # to main triggers a build+deploy on Vercel's side, using the env vars
+  # configured in the Vercel dashboard. That flow was set up when the
+  # project was first linked via `vercel link`.
+  #
+  # This workflow owns the two things Vercel's integration doesn't:
+  #   1. wait-for-ci — deploy only proceeds if CI has passed for the SHA
+  #   2. db-push — drizzle-kit push against the prod DB before the app
+  #      picks up the new schema
+  #
+  # If you ever want CI-driven deploys (e.g. more control over the
+  # promote step, or to run more pre-deploy scripts), disable the
+  # Vercel-side integration in Project Settings → Git and re-add the
+  # `deploy: needs: db-push` job here that runs `vercel deploy --prod`.
+  post-deploy-check:
+    name: Confirm Vercel deploy is live
     needs: db-push
     runs-on: ubuntu-latest
-    # Environment guard — GitHub will show any protection rules
-    # (required reviewers, wait timer) attached to the "production"
-    # environment before this job runs.
-    environment:
-      name: production
-      url: ${{ steps.vercel.outputs.preview-url }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install Vercel CLI
-        # Pinned to a specific major so a Vercel CLI breaking change
-        # can't fail this deploy without a deliberate bump here.
-        run: pnpm add -g vercel@59
-
-      - name: Pull Vercel project config (production env)
-        # `vercel pull` writes `.vercel/project.json` + `.env.production`
-        # so the build step below uses the exact env vars configured in
-        # the Vercel dashboard for the production environment.
+      - name: Wait for Vercel's own deploy to reach READY
+        # Poll Vercel's API for the latest production deployment on this
+        # SHA. Exit successfully once readyState=READY or fail if it
+        # reaches ERROR/CANCELED. 5-minute total budget.
         env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Build for production
-        # Runs `next build` under Vercel's build environment, producing
-        # `.vercel/output` in the form Vercel expects for deploy-prebuilt.
-        env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Deploy pre-built artifact to Vercel (production)
-        id: vercel
-        # `--prebuilt` skips redoing the build on Vercel's side; we
-        # already built above so nothing needs to happen there but the
-        # promote-to-prod alias. `--yes` skips the CLI's confirmation.
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          url=$(vercel deploy --prebuilt --prod --yes --token=${{ secrets.VERCEL_TOKEN }})
-          echo "preview-url=$url" >> "$GITHUB_OUTPUT"
-          echo "Deployed: $url"
+          set -euo pipefail
+          SHA="${{ github.sha }}"
+          echo "Watching Vercel for prod deploy of $SHA…"
+          for i in $(seq 1 30); do
+            resp=$(curl -sf -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID&target=production&limit=5")
+            match=$(echo "$resp" | python3 -c "
+import json,sys,os
+d=json.load(sys.stdin)
+sha=os.environ['SHA']
+for dep in d.get('deployments',[]):
+  meta=dep.get('meta',{})
+  if meta.get('githubCommitSha')==sha:
+    print(dep.get('readyState',''))
+    break
+")
+            case "$match" in
+              READY)     echo "✓ Vercel deploy READY"; exit 0;;
+              ERROR)     echo "✗ Vercel deploy ERROR";  exit 1;;
+              CANCELED)  echo "✗ Vercel deploy CANCELED"; exit 1;;
+              "")        echo "  [$i/30] no matching deployment yet for $SHA";;
+              *)         echo "  [$i/30] state=$match";;
+            esac
+            sleep 10
+          done
+          echo "✗ Timed out waiting for Vercel deploy"
+          exit 1
