@@ -22,7 +22,11 @@ test('add-candidate lands on /candidates/new with a draft id and renders all sec
 }) => {
   await page.goto('/candidates');
   await page.getByRole('link', { name: /add candidate/i }).click();
-  await page.waitForURL(/\/candidates\/new\?draft=[0-9a-f-]+/i);
+  // 60s timeout — /candidates/new is a Server Component that runs
+  // createDraft() (a DB insert + audit log) then server-side
+  // redirects. On a cold CI runner the first Turbopack compile of
+  // that route + the redirect can eat 20-30s.
+  await page.waitForURL(/\/candidates\/new\?draft=[0-9a-f-]+/i, { timeout: 60_000 });
 
   await expect(page.getByRole('heading', { name: /add candidate/i })).toBeVisible();
   await expect(page.getByText(/personal & contact/i)).toBeVisible();

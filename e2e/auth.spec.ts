@@ -75,7 +75,12 @@ test('sign-out redirects to /login and future protected requests are unauthentic
   await expect(page).toHaveURL(/\/dashboard/);
 
   // Open the account dropdown by clicking the avatar trigger.
-  await page.getByRole('button', { name: 'Account' }).click();
+  // Force-click because the glass-panel-strong topbar has a
+  // backdrop-filter that can intercept hit-testing under Playwright's
+  // default click implementation.
+  const accountBtn = page.getByRole('button', { name: 'Account' });
+  await expect(accountBtn).toBeVisible();
+  await accountBtn.click({ force: true });
   await page.getByRole('menuitem', { name: /sign out/i }).click();
 
   await page.waitForURL(/\/login/, { timeout: 15_000 });
