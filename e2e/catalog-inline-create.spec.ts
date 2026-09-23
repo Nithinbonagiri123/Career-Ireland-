@@ -22,7 +22,7 @@ import { expect, test } from '@playwright/test';
 test('requisition: Add required skill dialog shows autosuggest + inline-create', async ({
   page,
 }) => {
-  await page.goto('/requisitions');
+  await page.goto('/requisitions?view=table');
   // Requires the E2E minimal seed (scripts/seed-e2e-minimal.ts) to
   // have run so at least one requisition exists.
   const firstOpen = page.getByRole('link', { name: /open/i }).first();
@@ -30,7 +30,9 @@ test('requisition: Add required skill dialog shows autosuggest + inline-create',
   await firstOpen.click();
   await page.waitForURL(/\/requisitions\/[0-9a-f-]+/i);
 
-  // Scroll to the requirements section + open the Add skill dialog.
+  // Pipeline is the default tab now — switch to Overview to reach
+  // the requirements section that owns the Add skill dialog.
+  await page.getByRole('tab', { name: /overview/i }).click();
   await page
     .getByRole('button', { name: /add skill/i })
     .first()
@@ -56,11 +58,13 @@ test('requisition: Add required skill dialog shows autosuggest + inline-create',
 test('requisition: Add required qualification dialog shows autosuggest + inline-create', async ({
   page,
 }) => {
-  await page.goto('/requisitions');
+  await page.goto('/requisitions?view=table');
   const firstOpen = page.getByRole('link', { name: /open/i }).first();
   await expect(firstOpen).toBeVisible({ timeout: 10_000 });
   await firstOpen.click();
   await page.waitForURL(/\/requisitions\/[0-9a-f-]+/i);
+  // Overview tab holds the requirements section.
+  await page.getByRole('tab', { name: /overview/i }).click();
   await page
     .getByRole('button', { name: /add qualification/i })
     .first()

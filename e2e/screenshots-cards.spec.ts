@@ -19,7 +19,9 @@ test('requisitions grid view renders vacancy tiles', async ({ page }) => {
   if (await errorTitle.isVisible().catch(() => false)) {
     throw new Error(`/requisitions crashed:\n${await page.content()}`);
   }
-  await expect(page.getByRole('heading', { name: /job requisitions/i }).first()).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: /^requisitions$/i, level: 1 }).first(),
+  ).toBeVisible();
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.screenshot({
     path: path.join(SHOTS, 'e2e__requisitions-grid.png'),
@@ -29,50 +31,36 @@ test('requisitions grid view renders vacancy tiles', async ({ page }) => {
 
 test('requisitions table view still works via ?view=table', async ({ page }) => {
   await page.goto('/requisitions?view=table', { waitUntil: 'networkidle' });
-  await expect(page.getByRole('heading', { name: /job requisitions/i }).first()).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: /^requisitions$/i, level: 1 }).first(),
+  ).toBeVisible();
   await page.screenshot({
     path: path.join(SHOTS, 'e2e__requisitions-table.png'),
     fullPage: false,
   });
 });
 
-test('requisition detail Shortlist tab shows the card view', async ({ page }) => {
-  // Land on the first requisition. If its shortlist is empty, hop over
-  // to Matches and shortlist the top-scoring row so the card grid has
-  // real data for the screenshot.
+test('requisition detail Pipeline tab shows the horizontal bands', async ({ page }) => {
+  // The old Shortlist tab was replaced by the Pipeline Wall in the
+  // design refresh (see commit 5adbbf2). Now the requisition detail
+  // has 3 tabs: Pipeline (default), Overview, Checklists. This test
+  // screenshots the Pipeline tab's horizontal-band layout instead.
   await page.setViewportSize({ width: 1400, height: 900 });
-  await page.goto('/requisitions', { waitUntil: 'networkidle' });
+  await page.goto('/requisitions?view=grid', { waitUntil: 'networkidle' });
+
+  // Grid card footer has a "manage" link into the detail page.
   const firstManage = page.getByRole('link', { name: /^manage$/i }).first();
-  if (!(await firstManage.isVisible().catch(() => false))) {
-    test.skip(true, 'No requisitions in this environment — nothing to screenshot');
-  }
+  await expect(firstManage).toBeVisible({ timeout: 10_000 });
   await firstManage.click();
   await page.waitForURL(/\/requisitions\/[0-9a-f-]+/i);
   await page.waitForLoadState('networkidle');
 
-  const shortlistTab = page.getByRole('tab', { name: /shortlist/i });
-  await expect(shortlistTab).toBeVisible({ timeout: 15_000 });
-  await shortlistTab.click();
-  await page.waitForSelector('text=/candidate.*shortlisted|No shortlisted candidates yet/i', {
-    timeout: 15_000,
-  });
-
-  // Bootstrap a shortlist entry if none exists.
-  const emptyState = page.getByText(/no shortlisted candidates yet/i);
-  if (await emptyState.isVisible().catch(() => false)) {
-    await page.getByRole('tab', { name: /matches/i }).click();
-    const firstShortlistBtn = page.getByRole('button', { name: /^shortlist$/i }).first();
-    await expect(firstShortlistBtn).toBeVisible({ timeout: 15_000 });
-    await firstShortlistBtn.click();
-    await page.waitForTimeout(1200);
-    await shortlistTab.click();
-    await page.waitForLoadState('networkidle');
-    await page.waitForSelector('text=/1 candidate.*shortlisted/i', { timeout: 15_000 });
-  }
-
+  // Pipeline is the default tab — the stepper strip should be visible
+  // showing the stages (Source / Review / Shortlist / Apply / …).
+  await expect(page.getByText(/source/i).first()).toBeVisible({ timeout: 10_000 });
   await page.waitForTimeout(500);
   await page.screenshot({
-    path: path.join(SHOTS, 'e2e__requisition-shortlist-cards.png'),
+    path: path.join(SHOTS, 'e2e__requisition-pipeline-wall.png'),
     fullPage: true,
   });
 });

@@ -80,19 +80,19 @@ test('03 · New lead + first invoice atomic flow', async ({ page }) => {
   await page.locator('#cl-city').fill('Dublin');
 
   // Pick a service via the CatalogAutosuggest — it's an <input> with
-  // a dropdown of <button> options, NOT a <select>. Focus the input,
-  // type enough to narrow the list, then click the first suggestion.
-  // The service catalog is seeded by db:seed:services in CI so at
-  // least "Work Permit" is guaranteed to exist.
+  // a dropdown of <button> options, NOT a <select>. Use keyboard flow
+  // (type → ArrowDown → Enter) because a bare .click() on a suggestion
+  // races the input's blur handler and closes the dropdown before the
+  // click lands. The autosuggest listens to ArrowDown/Enter directly.
   const svcInput = page.locator('#cl-svc');
   await svcInput.click();
-  await svcInput.fill('work permit');
-  // The suggestions dropdown renders each option as a button with the
-  // service name — pick the first one that contains "work permit".
-  await page
-    .getByRole('button', { name: /work permit/i })
-    .first()
-    .click();
+  await svcInput.pressSequentially('work permit', { delay: 20 });
+  // Suggestion list should now be populated with Work Permit variants.
+  await svcInput.press('ArrowDown');
+  await svcInput.press('Enter');
+  // Confirm the selection stuck — the input value should be the
+  // full catalog name.
+  await expect(svcInput).toHaveValue(/work permit/i);
 
   // Optional package selector — kept as a <select> for now.
   const pkgSelect = page.locator('#cl-pkg');

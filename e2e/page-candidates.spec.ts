@@ -27,12 +27,14 @@ test.describe('/candidates', () => {
 
   test('grid view renders at least one candidate card (from the E2E seed)', async ({ page }) => {
     await page.goto('/candidates?view=grid');
-    // Minimal seed inserts 2 candidates — at least one card link must render.
-    const firstCard = page
-      .locator('a[href^="/candidates/"]')
-      .filter({ has: page.locator('h3') })
-      .first();
-    await expect(firstCard).toBeVisible();
+    // The card body is a <Card> (not a link) with the candidate name in
+    // an h3. Assert that at least one candidate-name heading renders —
+    // the seed guarantees "E2E-Fixture CandidateOne" / "CandidateTwo".
+    await expect(
+      page
+        .getByRole('heading', { level: 3, name: /CandidateOne|CandidateTwo|E2E-Fixture/i })
+        .first(),
+    ).toBeVisible();
   });
 
   test('table view renders the DataTable wrapper', async ({ page }) => {

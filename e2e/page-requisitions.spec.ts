@@ -26,12 +26,10 @@ test.describe('/requisitions', () => {
 
   test('grid view renders at least one requisition card (from the E2E seed)', async ({ page }) => {
     await page.goto('/requisitions?view=grid');
-    // Minimal seed inserts "E2E Fixture Junior Engineer" — the card
-    // must show up as a link into the detail page.
-    const firstCard = page
-      .locator('a[href^="/requisitions/"]')
-      .filter({ has: page.locator('h3') })
-      .first();
-    await expect(firstCard).toBeVisible();
+    // The card body is a <Card> (not a link) with the requisition title
+    // in an h3. Seed inserts "E2E Fixture Junior Engineer".
+    await expect(
+      page.getByRole('heading', { level: 3, name: /E2E Fixture Junior Engineer/i }),
+    ).toBeVisible();
   });
 });

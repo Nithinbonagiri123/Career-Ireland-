@@ -12,11 +12,10 @@ test.describe('/employers', () => {
     ).toBeVisible();
   });
 
-  test('table renders with a Name/Legal name column', async ({ page }) => {
+  test('table renders with the Employer column', async ({ page }) => {
     await expect(page.locator('table')).toBeVisible();
-    // Column header labelled either "Name" or "Legal name" depending on
-    // the DataTable configuration — accept either.
-    await expect(page.getByRole('columnheader', { name: /name|legal/i }).first()).toBeVisible();
+    // Column header is literally "Employer" (see employers-table.tsx).
+    await expect(page.getByRole('columnheader', { name: /^employer$/i })).toBeVisible();
   });
 
   test('date-range filter defaults to Anytime', async ({ page }) => {

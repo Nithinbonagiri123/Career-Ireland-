@@ -14,10 +14,10 @@ test.describe('/immigration', () => {
     await expect(page.getByRole('button', { name: /^open case$/i })).toBeVisible();
   });
 
-  test('date-range filter defaults to Anytime', async ({ page }) => {
-    const anytime = page.getByRole('tab', { name: /anytime/i });
-    await expect(anytime.first()).toBeVisible();
-    await expect(anytime.first()).toHaveAttribute('aria-selected', 'true');
+  test('scope filter is present (All / Assigned to me / Unassigned)', async ({ page }) => {
+    // Immigration uses ScopeFilter, not DateRangeFilter.
+    await expect(page.getByRole('tab', { name: /^all$/i }).first()).toBeVisible();
+    await expect(page.getByText(/assigned to me/i).first()).toBeVisible();
   });
 
   test('table renders with expected columns or empty state fallback', async ({ page }) => {

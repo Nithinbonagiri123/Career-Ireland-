@@ -10,7 +10,9 @@ test.describe('/shortlists', () => {
   });
 
   test('description explains the per-requisition workflow', async ({ page }) => {
-    await expect(page.getByText(/pick a requisition|per requisition|shortlist/i)).toBeVisible();
+    // Use exact substring to avoid strict-mode collision with the
+    // matching emptyDescription line that also contains "shortlist".
+    await expect(page.getByText(/curated per requisition from your matches/i)).toBeVisible();
   });
 
   test('requisition list renders (from the seed)', async ({ page }) => {
