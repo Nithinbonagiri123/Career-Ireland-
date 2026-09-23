@@ -168,12 +168,19 @@ jobs:
         # pass `server /data` as the command — GitHub Actions services
         # can't do that. quay.io is the vendor-official mirror and pulls
         # without auth from GitHub-hosted runners.
+        #
+        # MINIO_API_CORS_ALLOW_ORIGIN=* — MinIO doesn't implement the
+        # per-bucket PutBucketCors S3 API, so CORS has to be set at the
+        # server level. Playwright's chromium hits presigned PUT URLs
+        # from a page origin different from the S3 endpoint, so without
+        # this the browser blocks the upload.
         run: |
           docker run -d \
             --name minio \
             -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
+            -e MINIO_API_CORS_ALLOW_ORIGIN='*' \
             quay.io/minio/minio:latest \
             server /data
           # Wait up to 60s for the health endpoint. Fails fast if the
@@ -203,11 +210,11 @@ jobs:
       - name: Create MinIO bucket for uploads
         # AWS CLI is preinstalled on ubuntu runners. `mb` is idempotent for our
         # purposes — a second run returns an error we swallow.
+        # PutBucketCors intentionally NOT called — MinIO doesn't implement
+        # that S3 API. CORS is handled by MINIO_API_CORS_ALLOW_ORIGIN=*
+        # on the container instead (see Start MinIO step above).
         run: |
           aws --endpoint-url http://localhost:9000 s3 mb s3://ci-e2e-documents || true
-          aws --endpoint-url http://localhost:9000 s3api put-bucket-cors \
-            --bucket ci-e2e-documents \
-            --cors-configuration '{"CORSRules":[{"AllowedOrigins":["*"],"AllowedMethods":["GET","PUT","POST","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"]}]}'
 
       - name: Run Playwright
         env:
