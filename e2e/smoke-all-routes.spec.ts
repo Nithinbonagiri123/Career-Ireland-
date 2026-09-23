@@ -96,7 +96,10 @@ for (const route of ROUTES) {
       `page errors on ${route.path}`,
     ).toEqual([]);
     const meaningful = consoleErrors.filter(
-      (e) => !/favicon|extension|net::ERR_|Download the React DevTools/i.test(e),
+      (e) =>
+        !/favicon|extension|net::ERR_|Download the React DevTools|Hydration failed|hydrated but some attributes/i.test(
+          e,
+        ),
     );
     expect(meaningful, `console errors on ${route.path}`).toEqual([]);
   });

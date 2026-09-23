@@ -37,6 +37,11 @@ async function ensureAdminUser() {
       .set({
         passwordHash,
         isActive: true,
+        // isOwner bypasses every requirePermission() check — see
+        // scripts/seed-e2e-admin.ts for the reasoning. Kept in sync
+        // here so `pnpm test:e2e` works on a DB that only ever ran
+        // this global-setup (skipping the seed script).
+        isOwner: true,
         sessionsInvalidatedAfter: new Date(),
       })
       .where(eq(users.id, existing.id));
@@ -50,6 +55,7 @@ async function ensureAdminUser() {
       fullName: E2E_ADMIN.fullName,
       passwordHash,
       role: 'ADMIN',
+      isOwner: true,
     })
     .returning({ id: users.id });
   if (!created) throw new Error('failed to seed e2e admin');

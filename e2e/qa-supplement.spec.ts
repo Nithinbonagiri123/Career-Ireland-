@@ -67,7 +67,7 @@ test('revenue: MTD default', async ({ page }) => {
   await page.goto('/dashboard', { waitUntil: 'networkidle' });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   // Scroll to the revenue region so the screenshot centres it.
-  const revenue = page.getByRole('region', { name: /revenue/i });
+  const revenue = page.getByRole('region', { name: 'Revenue', exact: true });
   await revenue.scrollIntoViewIfNeeded();
   await shoot(page, 'supp__revenue-mtd');
 });
@@ -75,7 +75,7 @@ test('revenue: MTD default', async ({ page }) => {
 test('revenue: 30-day preset', async ({ page }) => {
   await page.goto('/dashboard?created=30d', { waitUntil: 'networkidle' });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await page.getByRole('region', { name: /revenue/i }).scrollIntoViewIfNeeded();
+  await page.getByRole('region', { name: 'Revenue', exact: true }).scrollIntoViewIfNeeded();
   await shoot(page, 'supp__revenue-30d');
 });
 
@@ -83,7 +83,7 @@ test('revenue: empty range', async ({ page }) => {
   // Far-future window guarantees no verified payments — triggers the empty state.
   await page.goto('/dashboard?from=2099-01-01&to=2099-12-31', { waitUntil: 'networkidle' });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await page.getByRole('region', { name: /revenue/i }).scrollIntoViewIfNeeded();
+  await page.getByRole('region', { name: 'Revenue', exact: true }).scrollIntoViewIfNeeded();
   await shoot(page, 'supp__revenue-empty');
 });
 

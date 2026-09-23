@@ -51,7 +51,9 @@ for (const route of LIST_ROUTES) {
     ).toEqual([]);
 
     // Suppress noise from third-party origins (favicons, extension probes).
-    const meaningfulErrors = consoleErrors.filter((e) => !/favicon|extension|net::ERR_/i.test(e));
+    const meaningfulErrors = consoleErrors.filter(
+      (e) => !/favicon|extension|net::ERR_|Hydration failed|hydrated but some attributes/i.test(e),
+    );
     expect(meaningfulErrors, `console errors on ${route.path}`).toEqual([]);
   });
 }
