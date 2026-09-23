@@ -75,13 +75,20 @@ test('sign-out redirects to /login and future protected requests are unauthentic
   await expect(page).toHaveURL(/\/dashboard/);
 
   // Open the account dropdown by clicking the avatar trigger.
-  // Force-click because the glass-panel-strong topbar has a
-  // backdrop-filter that can intercept hit-testing under Playwright's
-  // default click implementation.
+  // Wait for the network to go quiet first — dashboard fires several
+  // parallel data-loaders and a click before they settle can be swallowed
+  // by React's suspense boundary re-render, leaving the DropdownMenu
+  // portal never opened. Then dispatch via keyboard which base-ui
+  // reliably picks up (a bare .click() sometimes hits the wrong element
+  // under the glass-panel-strong stacking context).
+  await page.waitForLoadState('networkidle');
   const accountBtn = page.getByRole('button', { name: 'Account' });
   await expect(accountBtn).toBeVisible();
-  await accountBtn.click({ force: true });
-  await page.getByRole('menuitem', { name: /sign out/i }).click();
+  await accountBtn.focus();
+  await accountBtn.press('Enter');
+  const signOut = page.getByRole('menuitem', { name: /sign out/i });
+  await expect(signOut).toBeVisible({ timeout: 10_000 });
+  await signOut.click();
 
   await page.waitForURL(/\/login/, { timeout: 15_000 });
 
