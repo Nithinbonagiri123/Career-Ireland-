@@ -12,20 +12,26 @@ import { expect, test } from '@playwright/test';
  * global setup writes to playwright/.auth/admin.json.
  */
 
-test('add-candidate button is visible on /candidates', async ({ page }) => {
-  await page.goto('/candidates');
-  await expect(page.getByRole('link', { name: /add candidate/i })).toBeVisible();
-});
-
-test('add-candidate lands on /candidates/new with a draft id and renders all sections', async ({
+test('add-candidate button is visible on /candidates and points at /candidates/new', async ({
   page,
 }) => {
-  // The overall test budget defaults to 30s but the cold-runner path
-  // through Turbopack compile + createDraft + redirect can eat 25-40s.
-  // Bump both the test-level budget AND the waitForURL timeout.
-  test.setTimeout(90_000);
+  // Covers both "button is there" and "clicking it will land on /candidates/new"
+  // without triggering the click itself. The URL-with-draft path is exercised
+  // by the "renders all sections" and "full happy path" tests below via a
+  // direct goto('/candidates/new'), which avoids stacking two cold Turbopack
+  // compiles (/candidates + /candidates/new) inside a single test budget.
   await page.goto('/candidates');
-  await page.getByRole('link', { name: /add candidate/i }).click();
+  const link = page.getByRole('link', { name: /add candidate/i });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute('href', /\/candidates\/new/);
+});
+
+test('/candidates/new redirects to a draft and renders all sections', async ({ page }) => {
+  // Direct goto — /candidates/new is a server route that inserts a draft
+  // and 302s to ?draft=<uuid>. Skipping the /candidates → click hop keeps
+  // the test to one Turbopack cold-compile instead of two.
+  test.setTimeout(90_000);
+  await page.goto('/candidates/new');
   await page.waitForURL(/\/candidates\/new\?draft=[0-9a-f-]+/i, { timeout: 60_000 });
 
   await expect(page.getByRole('heading', { name: /add candidate/i })).toBeVisible();
