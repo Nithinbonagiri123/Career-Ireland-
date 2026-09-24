@@ -80,19 +80,21 @@ test('03 · New lead + first invoice atomic flow', async ({ page }) => {
   await page.locator('#cl-city').fill('Dublin');
 
   // Pick a service via the CatalogAutosuggest — it's an <input> with
-  // a dropdown of <button> options, NOT a <select>. Use keyboard flow
-  // (type → ArrowDown → Enter) because a bare .click() on a suggestion
-  // races the input's blur handler and closes the dropdown before the
-  // click lands. The autosuggest listens to ArrowDown/Enter directly.
+  // a dropdown of <button> options, NOT a <select>. Keyboard flow:
+  //   1. Click the input (focus + setOpen(true) via onFocus)
+  //   2. pressSequentially to type — each char sets open=true again
+  //   3. Press Enter (highlight defaults to 0 = first CATALOG match;
+  //      ArrowDown would move to index 1 which is the "Add custom"
+  //      row when the typed text isn't an exact match)
   const svcInput = page.locator('#cl-svc');
   await svcInput.click();
-  await svcInput.pressSequentially('work permit', { delay: 20 });
-  // Suggestion list should now be populated with Work Permit variants.
-  await svcInput.press('ArrowDown');
+  await svcInput.pressSequentially('work permit', { delay: 30 });
+  // Give the suggestion list a beat to render + highlight to settle.
+  await page.waitForTimeout(200);
   await svcInput.press('Enter');
-  // Confirm the selection stuck — the input value should be the
-  // full catalog name.
-  await expect(svcInput).toHaveValue(/work permit/i);
+  // Confirm the input value is the full catalog service name — proves
+  // the commit propagated to the parent form's serviceSelection state.
+  await expect(svcInput).toHaveValue(/Work Permit/i);
 
   // Optional package selector — kept as a <select> for now.
   const pkgSelect = page.locator('#cl-pkg');

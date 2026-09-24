@@ -19,9 +19,7 @@ test('requisitions grid view renders vacancy tiles', async ({ page }) => {
   if (await errorTitle.isVisible().catch(() => false)) {
     throw new Error(`/requisitions crashed:\n${await page.content()}`);
   }
-  await expect(
-    page.getByRole('heading', { name: /^requisitions$/i, level: 1 }).first(),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: /job requisitions/i }).first()).toBeVisible();
   await page.setViewportSize({ width: 1400, height: 900 });
   await page.screenshot({
     path: path.join(SHOTS, 'e2e__requisitions-grid.png'),
@@ -31,9 +29,7 @@ test('requisitions grid view renders vacancy tiles', async ({ page }) => {
 
 test('requisitions table view still works via ?view=table', async ({ page }) => {
   await page.goto('/requisitions?view=table', { waitUntil: 'networkidle' });
-  await expect(
-    page.getByRole('heading', { name: /^requisitions$/i, level: 1 }).first(),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: /job requisitions/i }).first()).toBeVisible();
   await page.screenshot({
     path: path.join(SHOTS, 'e2e__requisitions-table.png'),
     fullPage: false,
