@@ -113,9 +113,12 @@ jobs:
           fi
 
   # End-to-end tests run in a parallel job so a `verify` failure fails the PR
-  # fast without waiting for playwright. The e2e stack needs both Postgres
-  # (same as verify) and a MinIO S3-compatible endpoint so the upload flow can
-  # be exercised without real AWS credentials.
+  # fast without waiting for playwright. The e2e stack needs Postgres (same
+  # as verify). The upload flow is exercised locally against docker-compose
+  # MinIO; in CI it's skipped via E2E_SKIP_UPLOAD because both quay.io and
+  # Docker Hub have started refusing anonymous pulls for the MinIO image.
+  # The rest of candidate-onboarding.spec.ts (form validation, redirect,
+  # invoice + receipt) still runs — only the setInputFiles branch is gated.
   e2e:
     name: E2E
     runs-on: ubuntu-latest
@@ -134,23 +137,16 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      # MinIO is NOT in `services:` — GitHub Actions services can't
-      # pass a container `command:`, and the vanilla `minio/minio`
-      # image needs `server /data` to actually launch. Instead we run
-      # it as a background docker container in a step below, which
-      # lets us give it the right command explicitly. See the
-      # "Start MinIO" step further down.
 
     env:
-      # Point uploads at the MinIO service (path-style is required for MinIO).
-      S3_ENDPOINT: http://localhost:9000
-      S3_FORCE_PATH_STYLE: 'true'
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin
+      # No S3_ENDPOINT — S3Client falls back to real AWS SDK defaults, and
+      # because E2E_SKIP_UPLOAD=1 gates every presign, nothing hits the
+      # network. Keeping the client constructable at boot is all we need.
       # Playwright needs the app URL exposed to the browser context.
       PLAYWRIGHT_BASE_URL: http://localhost:3000
       CRON_SECRET: ci-placeholder-cron-secret
       EMAIL_CRED_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      E2E_SKIP_UPLOAD: '1'
 
     steps:
       - name: Checkout
@@ -175,45 +171,6 @@ jobs:
         # `--with-deps` pulls the shared libs Chromium needs on ubuntu runners.
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Start MinIO container (background)
-        # Ran as a plain docker container instead of a service so we can
-        # pass `server /data` as the command — GitHub Actions services
-        # can't do that. Docker Hub's minio/minio still allows anonymous
-        # pulls; quay.io began returning "unauthorized" for anonymous
-        # requests, even on pinned tags.
-        #
-        # MINIO_API_CORS_ALLOW_ORIGIN=* — MinIO doesn't implement the
-        # per-bucket PutBucketCors S3 API, so CORS has to be set at the
-        # server level. Playwright's chromium hits presigned PUT URLs
-        # from a page origin different from the S3 endpoint, so without
-        # this the browser blocks the upload.
-        run: |
-          docker run -d \
-            --name minio \
-            -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin \
-            -e MINIO_ROOT_PASSWORD=minioadmin \
-            -e MINIO_API_CORS_ALLOW_ORIGIN='*' \
-            minio/minio:RELEASE.2024-10-13T13-34-11Z \
-            server /data
-          # Wait up to 60s for the health endpoint. Fails fast if the
-          # container exited without becoming healthy.
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:9000/minio/health/live; then
-              echo "✓ MinIO ready after ${i} attempts"
-              exit 0
-            fi
-            if ! docker ps -q -f name=minio | grep -q .; then
-              echo "✗ MinIO container exited early — logs:"
-              docker logs minio
-              exit 1
-            fi
-            sleep 2
-          done
-          echo "✗ MinIO never became healthy within 60s"
-          docker logs minio
-          exit 1
-
       - name: Apply migrations to CI Postgres
         run: pnpm db:migrate
 
@@ -235,18 +192,11 @@ jobs:
         # rows to interact with.
         run: pnpm db:seed:e2e-minimal
 
-      - name: Create MinIO bucket for uploads
-        # AWS CLI is preinstalled on ubuntu runners. `mb` is idempotent for our
-        # purposes — a second run returns an error we swallow.
-        # PutBucketCors intentionally NOT called — MinIO doesn't implement
-        # that S3 API. CORS is handled by MINIO_API_CORS_ALLOW_ORIGIN=*
-        # on the container instead (see Start MinIO step above).
-        run: |
-          aws --endpoint-url http://localhost:9000 s3 mb s3://ci-e2e-documents || true
-
       - name: Run Playwright
+        # S3_BUCKET_DOCUMENTS must be set at boot so env.ts validation
+        # passes even though E2E_SKIP_UPLOAD gates every upload.
         env:
-          S3_BUCKET_DOCUMENTS: ci-e2e-documents
+          S3_BUCKET_DOCUMENTS: ci-placeholder-bucket
         run: pnpm test:e2e
 
       - name: Upload Playwright report on failure
