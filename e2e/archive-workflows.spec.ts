@@ -36,6 +36,10 @@ test.describe('archive UI wiring', () => {
   test('employers list: row surfaces an Archive icon button when rows exist', async ({ page }) => {
     await page.goto('/employers');
     await expect(page.getByRole('heading', { name: /employers/i, level: 1 })).toBeVisible();
+    // Let the table finish rendering + hydrating before hunting for
+    // per-row action buttons — a click that races the DataTable's
+    // client-side sort/filter setup gets swallowed by the re-render.
+    await page.waitForLoadState('networkidle');
 
     // aria-label is `Archive <legal name>` — one per row when rows exist.
     const archiveButtons = page.getByRole('button', { name: /^archive /i });
@@ -45,7 +49,9 @@ test.describe('archive UI wiring', () => {
     }
 
     await archiveButtons.first().click();
-    await expect(page.getByRole('dialog')).toBeVisible();
+    // Dialog renders in a portal — bump timeout so a slow first-mount
+    // has time to attach.
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: /^archive$/i })).toBeVisible();
   });
 

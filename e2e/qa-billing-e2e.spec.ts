@@ -80,21 +80,21 @@ test('03 · New lead + first invoice atomic flow', async ({ page }) => {
   await page.locator('#cl-city').fill('Dublin');
 
   // Pick a service via the CatalogAutosuggest — it's an <input> with
-  // a dropdown of <button> options, NOT a <select>. Keyboard flow:
-  //   1. Click the input (focus + setOpen(true) via onFocus)
-  //   2. pressSequentially to type — each char sets open=true again
-  //   3. Press Enter (highlight defaults to 0 = first CATALOG match;
-  //      ArrowDown would move to index 1 which is the "Add custom"
-  //      row when the typed text isn't an exact match)
+  // a dropdown, NOT a <select>. Keyboard flow: focus → type → Enter
+  // selects the first catalog match at highlight=0.
+  //
+  // Important: use "Info Session", not "Work Permit". Work Permit's
+  // seed has an empty packages: [] array, so no package selector
+  // renders, unitPrice never gets auto-filled, and invoiceIsValid
+  // stays false — the submit button title never flips to include
+  // "+ issue invoice". Info Session has EUR + ZAR packages that
+  // populate unitPrice on selection.
   const svcInput = page.locator('#cl-svc');
   await svcInput.click();
-  await svcInput.pressSequentially('work permit', { delay: 30 });
-  // Give the suggestion list a beat to render + highlight to settle.
+  await svcInput.pressSequentially('info session', { delay: 30 });
   await page.waitForTimeout(200);
   await svcInput.press('Enter');
-  // Confirm the input value is the full catalog service name — proves
-  // the commit propagated to the parent form's serviceSelection state.
-  await expect(svcInput).toHaveValue(/Work Permit/i);
+  await expect(svcInput).toHaveValue(/Info Session/i);
 
   // Optional package selector — kept as a <select> for now.
   const pkgSelect = page.locator('#cl-pkg');
