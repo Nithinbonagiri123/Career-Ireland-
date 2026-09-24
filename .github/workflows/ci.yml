@@ -178,8 +178,9 @@ jobs:
       - name: Start MinIO container (background)
         # Ran as a plain docker container instead of a service so we can
         # pass `server /data` as the command — GitHub Actions services
-        # can't do that. quay.io is the vendor-official mirror and pulls
-        # without auth from GitHub-hosted runners.
+        # can't do that. Docker Hub's minio/minio still allows anonymous
+        # pulls; quay.io began returning "unauthorized" for anonymous
+        # requests, even on pinned tags.
         #
         # MINIO_API_CORS_ALLOW_ORIGIN=* — MinIO doesn't implement the
         # per-bucket PutBucketCors S3 API, so CORS has to be set at the
@@ -193,7 +194,7 @@ jobs:
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
             -e MINIO_API_CORS_ALLOW_ORIGIN='*' \
-            quay.io/minio/minio:RELEASE.2024-10-13T13-34-11Z \
+            minio/minio:RELEASE.2024-10-13T13-34-11Z \
             server /data
           # Wait up to 60s for the health endpoint. Fails fast if the
           # container exited without becoming healthy.
