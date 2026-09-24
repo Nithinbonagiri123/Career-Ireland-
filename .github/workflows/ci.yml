@@ -193,7 +193,7 @@ jobs:
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
             -e MINIO_API_CORS_ALLOW_ORIGIN='*' \
-            quay.io/minio/minio:latest \
+            quay.io/minio/minio:RELEASE.2024-10-13T13-34-11Z \
             server /data
           # Wait up to 60s for the health endpoint. Fails fast if the
           # container exited without becoming healthy.
