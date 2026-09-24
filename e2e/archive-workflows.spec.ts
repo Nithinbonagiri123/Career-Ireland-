@@ -20,6 +20,10 @@ test.describe('archive UI wiring', () => {
   }) => {
     await page.goto('/leads');
     await expect(page.getByRole('heading', { name: /leads/i, level: 1 })).toBeVisible();
+    // Same pattern as auth signout — wait for the DataTable's client-
+    // side hydration to settle before clicking the Actions trigger,
+    // otherwise Base UI's DropdownMenu portal doesn't open reliably.
+    await page.waitForLoadState('networkidle');
 
     // If the list has zero leads, the actions dropdown is not rendered.
     // Skip the assertion body cleanly rather than failing on an empty DB.
@@ -30,6 +34,8 @@ test.describe('archive UI wiring', () => {
     }
 
     await anyAction.first().click();
+    // Wait for the portal to attach before asserting the menuitem.
+    await expect(page.getByRole('menu')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByRole('menuitem', { name: /archive lead/i })).toBeVisible();
   });
 
