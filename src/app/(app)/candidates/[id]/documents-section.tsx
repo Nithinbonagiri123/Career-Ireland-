@@ -1,19 +1,20 @@
 'use client';
 
 import { format, formatDistanceToNow } from 'date-fns';
-import { FileText, RefreshCw } from 'lucide-react';
+import { FileText, RefreshCw, Trash2 } from 'lucide-react';
 import Link from 'next/link';
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import type { DocumentTypeOption } from '@/components/document-type-picker';
 import { DocumentUploader } from '@/components/document-uploader';
 import { EmptyState } from '@/components/empty-state';
 import { MultiDocumentUploader } from '@/components/multi-document-uploader';
+import { PromptDialog } from '@/components/prompt-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
 import { statusTone } from '@/lib/ui/status-tone';
-import { materialiseRequirementsAction } from '@/modules/documents/actions';
+import { materialiseRequirementsAction, voidDocumentAction } from '@/modules/documents/actions';
 import type { PersonRequirementRow } from '@/modules/documents/service';
 
 export function DocumentsSection({
@@ -28,6 +29,8 @@ export function DocumentsSection({
   documentTypes: DocumentTypeOption[];
 }) {
   const [pending, startTransition] = useTransition();
+  const [voidTarget, setVoidTarget] = useState<DocumentInstance | null>(null);
+  const [voidBusy, setVoidBusy] = useState(false);
 
   const refresh = () => {
     startTransition(async () => {
@@ -38,6 +41,22 @@ export function DocumentsSection({
             ? `${r.data.created} new requirement(s) added from occupation/global rules`
             : 'No new requirements — all applicable rules already covered',
         );
+      } else {
+        toast.error(r.error.message);
+      }
+    });
+  };
+
+  const confirmVoid = (reason: string) => {
+    if (!voidTarget) return;
+    const target = voidTarget;
+    setVoidBusy(true);
+    startTransition(async () => {
+      const r = await voidDocumentAction({ documentInstanceId: target.id, reason });
+      setVoidBusy(false);
+      if (r.ok) {
+        toast.success('Document deleted');
+        setVoidTarget(null);
       } else {
         toast.error(r.error.message);
       }
@@ -140,7 +159,7 @@ export function DocumentsSection({
                     </time>
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="rounded-full text-[10px]">
                     {d.status.replace(/_/g, ' ')}
                   </Badge>
@@ -151,12 +170,34 @@ export function DocumentsSection({
                   >
                     Download
                   </Link>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Delete ${d.displayName ?? d.originalFilename}`}
+                    onClick={() => setVoidTarget(d)}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
                 </div>
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      <PromptDialog
+        open={voidTarget !== null}
+        onCancel={() => setVoidTarget(null)}
+        onConfirm={confirmVoid}
+        title={`Delete ${voidTarget?.displayName ?? voidTarget?.originalFilename ?? ''}?`}
+        description="The file is hidden from every list and export, but the row + the underlying S3 object stay for the audit trail. Re-uploading the same document type creates a fresh version."
+        label="Reason (audited)"
+        placeholder="e.g. Wrong file uploaded"
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        pending={voidBusy}
+      />
     </div>
   );
 }
