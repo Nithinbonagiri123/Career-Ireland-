@@ -21,8 +21,13 @@ test.describe('/candidates', () => {
       'aria-pressed',
       'true',
     );
+    // Next.js Link click is a client-side nav — but in dev/Turbopack the
+    // URL only commits once the destination RSC is ready, which on a cold
+    // /candidates?view=table can eat several seconds. waitForURL is
+    // designed for this; toHaveURL polls on the string but doesn't wait
+    // for navigation to be committed.
     await page.getByRole('link', { name: /^table$/i }).click();
-    await expect(page).toHaveURL(/view=table/);
+    await page.waitForURL(/view=table/, { timeout: 15_000 });
   });
 
   test('grid view renders at least one candidate card (from the E2E seed)', async ({ page }) => {

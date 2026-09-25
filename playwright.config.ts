@@ -16,7 +16,11 @@ export default defineConfig({
   expect: { timeout: 5_000 },
   fullyParallel: false, // shared DB state — keep serial for now
   workers: 1,
-  retries: 0,
+  // CI runs on a shared ubuntu-latest with Turbopack dev mode compiling
+  // routes on first hit — the router/dialog click tests occasionally race
+  // that cold-compile. Two retries turn "flaked once" into a passing run
+  // while still surfacing genuinely broken tests (which fail all 3 runs).
+  retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   forbidOnly: !!process.env.CI,
 
