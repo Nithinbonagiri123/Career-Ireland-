@@ -42,10 +42,6 @@ test.describe('archive UI wiring', () => {
   test('employers list: row surfaces an Archive icon button when rows exist', async ({ page }) => {
     await page.goto('/employers');
     await expect(page.getByRole('heading', { name: /employers/i, level: 1 })).toBeVisible();
-    // Let the table finish rendering + hydrating before hunting for
-    // per-row action buttons — a click that races the DataTable's
-    // client-side sort/filter setup gets swallowed by the re-render.
-    await page.waitForLoadState('networkidle');
 
     // aria-label is `Archive <legal name>` — one per row when rows exist.
     const archiveButtons = page.getByRole('button', { name: /^archive /i });
@@ -54,10 +50,23 @@ test.describe('archive UI wiring', () => {
       return;
     }
 
-    await archiveButtons.first().click();
-    // Dialog renders in a portal — bump timeout so a slow first-mount
-    // has time to attach.
-    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 });
+    const firstArchive = archiveButtons.first();
+    // Match the passing admin/persons pattern — no networkidle wait,
+    // but ensure the button is fully mounted + enabled before clicking.
+    // The employers row action bar has three interactive elements next
+    // to each other (Edit / Archive / Open), and on CI cold-mount the
+    // Archive button briefly renders disabled while its onClick is being
+    // wired up, so a raw click can silently no-op.
+    await firstArchive.waitFor({ state: 'visible' });
+    await expect(firstArchive).toBeEnabled();
+    await firstArchive.click();
+
+    // Assert on the specific archive-employer dialog title instead of
+    // the bare role="dialog" locator, which can flake if any other
+    // Base UI dialog root ever leaks a data-open attr on the page.
+    await expect(page.getByRole('heading', { name: /^archive .+\?$/i })).toBeVisible({
+      timeout: 10_000,
+    });
     await expect(page.getByRole('button', { name: /^archive$/i })).toBeVisible();
   });
 
