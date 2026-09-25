@@ -45,17 +45,17 @@ async function fetchObjectBuffer(objectKey: string): Promise<Buffer> {
 
 async function parseBufferToText(buffer: Buffer, mimeType: string): Promise<string> {
   if (mimeType === 'application/pdf') {
-    // Dynamic import — pdf-parse v2 exports a PDFParse class and touches
-    // Node-only APIs at import time. Class API: `new PDFParse({ data })`
-    // then `getText()` returns `{ text: string }`.
-    const { PDFParse } = await import('pdf-parse');
-    const parser = new PDFParse({ data: new Uint8Array(buffer) });
-    try {
-      const result = await parser.getText();
-      return (result.text ?? '').trim();
-    } finally {
-      await parser.destroy();
-    }
+    // pdf-parse v1's default export is a function that takes a Buffer and
+    // returns { text: string, ... }. We import from the deep path to skip
+    // v1's index.js self-test that tries to open a bundled sample PDF —
+    // that path fails inside Vercel's serverless bundle. Version pinned
+    // to 1.1.1 for Node-only pdfjs (no DOMMatrix requirement); v2 needs
+    // browser DOM globals that Vercel's Node runtime doesn't provide.
+    const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default as (
+      buf: Buffer,
+    ) => Promise<{ text: string }>;
+    const { text } = await pdfParse(buffer);
+    return (text ?? '').trim();
   }
   if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
     const { value } = await mammoth.extractRawText({ buffer });
