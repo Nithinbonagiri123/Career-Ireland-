@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { DOCUMENTS_BUCKET, IS_LOCAL_S3, s3 } from './client';
+import { DOCUMENTS_BUCKET, s3 } from './client';
 
 // Re-export upload constants from the leaf module so existing callers
 // (documents/service.ts, tests) keep working. Client-safe modules
@@ -29,16 +29,18 @@ export async function presignUpload(args: {
   mimeType: string;
   fileSizeBytes: number;
 }): Promise<{ url: string; expiresInSeconds: number }> {
-  // SSE-S3 signing on the presigned URL adds x-amz-server-side-encryption
-  // to the signed headers list, which MinIO rejects unless the browser also
-  // sends it verbatim. Skip it for local S3 backends — real AWS S3 buckets
-  // that need SSE should enforce it via a bucket policy instead.
+  // Don't request ServerSideEncryption on the presign. If we did, S3
+  // adds x-amz-server-side-encryption to the SignedHeaders list, and
+  // the browser PUT (which only sends Content-Type) would then mismatch
+  // the signature → 403. AWS S3 has applied SSE-S3 to all new object
+  // writes by default since Jan 2023, so we get encryption at rest
+  // regardless. Buckets that need a stricter algorithm (SSE-KMS) should
+  // enforce it via bucket policy.
   const command = new PutObjectCommand({
     Bucket: DOCUMENTS_BUCKET,
     Key: args.key,
     ContentType: args.mimeType,
     ContentLength: args.fileSizeBytes,
-    ...(IS_LOCAL_S3 ? {} : { ServerSideEncryption: 'AES256' }),
   });
   const expiresInSeconds = 300;
   const url = await getSignedUrl(s3, command, { expiresIn: expiresInSeconds });

@@ -25,7 +25,4 @@ export const s3 = new S3Client({
     : {}),
 });
 
-/** True when we're talking to a non-AWS S3 (MinIO etc.). */
-export const IS_LOCAL_S3 = Boolean(env.S3_ENDPOINT);
-
 export const DOCUMENTS_BUCKET = env.S3_BUCKET_DOCUMENTS;
