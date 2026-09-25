@@ -141,16 +141,9 @@ jobs:
           for i in $(seq 1 30); do
             resp=$(curl -sf -H "Authorization: Bearer $VERCEL_TOKEN" \
               "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID&target=production&limit=5")
-            match=$(echo "$resp" | python3 -c "
-import json,sys,os
-d=json.load(sys.stdin)
-sha=os.environ['SHA']
-for dep in d.get('deployments',[]):
-  meta=dep.get('meta',{})
-  if meta.get('githubCommitSha')==sha:
-    print(dep.get('readyState',''))
-    break
-")
+            # jq extracts readyState of the first deployment whose meta
+            # commit SHA matches ours. Empty string when no match yet.
+            match=$(echo "$resp" | jq -r --arg sha "$SHA" 'first(.deployments[]? | select(.meta.githubCommitSha == $sha) | .readyState) // ""')
             case "$match" in
               READY)     echo "✓ Vercel deploy READY"; exit 0;;
               ERROR)     echo "✗ Vercel deploy ERROR";  exit 1;;
