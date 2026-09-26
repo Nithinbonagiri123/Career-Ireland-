@@ -14,25 +14,25 @@ test.describe('/immigration', () => {
     await expect(page.getByRole('button', { name: /^open case$/i })).toBeVisible();
   });
 
-  test('scope filter is present (All / Assigned to me / Unassigned)', async ({ page }) => {
-    // Immigration uses ScopeFilter, not DateRangeFilter.
-    await expect(page.getByRole('tab', { name: /^all$/i }).first()).toBeVisible();
-    await expect(page.getByText(/assigned to me/i).first()).toBeVisible();
+  test('My Cases / Global Cases tabs are present', async ({ page }) => {
+    // Immigration uses CaseScopeTabs (spec §1: don't say 'All Cases' — use
+    // 'Global Cases'). Both labels come from src/components/case-scope-tabs.tsx.
+    await expect(page.getByRole('tab', { name: /my cases/i }).first()).toBeVisible();
+    await expect(page.getByRole('tab', { name: /global cases/i }).first()).toBeVisible();
   });
 
-  test('table renders with expected columns or empty state fallback', async ({ page }) => {
-    // Immigration cases aren't in the minimal seed, so both branches
-    // are valid: a table with columns, or the empty-state message.
-    const hasTable = await page
-      .locator('table')
+  test('card grid renders (with rows or empty-state fallback)', async ({ page }) => {
+    // Immigration cases aren't in the minimal seed. Cards are the default view
+    // (spec §11); the grid renders either at least one card heading (h3 with
+    // the beneficiary name) or the specific card-grid empty state text.
+    await page.waitForLoadState('networkidle');
+    const anyCard = await page
+      .locator('h3')
       .first()
       .isVisible()
       .catch(() => false);
-    if (hasTable) {
-      await expect(page.getByRole('columnheader', { name: /type/i })).toBeVisible();
-      await expect(page.getByRole('columnheader', { name: /beneficiary/i })).toBeVisible();
-    } else {
-      await expect(page.getByText(/no cases|no immigration/i).first()).toBeVisible();
+    if (!anyCard) {
+      await expect(page.getByText(/no immigration cases yet/i).first()).toBeVisible();
     }
   });
 

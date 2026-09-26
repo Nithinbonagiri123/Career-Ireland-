@@ -15,7 +15,7 @@ export const E2E_ADMIN = {
 };
 
 async function ensureAdminUser() {
-  const { eq } = await import('drizzle-orm');
+  const { and, eq, ne, sql } = await import('drizzle-orm');
   const { db } = await import('../src/lib/db/client');
   const { users } = await import('../src/lib/db/schema/users');
   // Import argon2 directly — src/modules/auth/service uses the @/ alias which
@@ -30,6 +30,26 @@ async function ensureAdminUser() {
   const hash = (pw: string) => argon2.hash(pw, ARGON2_OPTIONS);
 
   const [existing] = await db.select().from(users).where(eq(users.email, E2E_ADMIN.email)).limit(1);
+  // Is there ALREADY a different user marked is_owner? The DB constraint
+  // `users_single_owner` only allows one — CI's ephemeral Postgres has none,
+  // but a local dev DB usually does (the real business owner). If we
+  // blindly set isOwner=true on the E2E admin the update fails and every
+  // test run crashes at global-setup. Detect the situation and leave the
+  // E2E admin as plain ADMIN — that role covers ~everything the specs
+  // exercise; the tiny minority that rely on the is_owner bypass will just
+  // be a fixable warning rather than a hard blocker.
+  const [otherOwner] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.isOwner, true), existing ? ne(users.id, existing.id) : sql`TRUE`))
+    .limit(1);
+  const shouldClaimOwner = !otherOwner;
+  if (otherOwner) {
+    console.warn(
+      '  ⚠ Another user is already is_owner=true in this DB — leaving the E2E admin as plain ADMIN. Tests that rely on the owner bypass may need a demoted owner locally.',
+    );
+  }
+
   if (existing) {
     const passwordHash = await hash(E2E_ADMIN.password);
     await db
@@ -38,10 +58,9 @@ async function ensureAdminUser() {
         passwordHash,
         isActive: true,
         // isOwner bypasses every requirePermission() check — see
-        // scripts/seed-e2e-admin.ts for the reasoning. Kept in sync
-        // here so `pnpm test:e2e` works on a DB that only ever ran
-        // this global-setup (skipping the seed script).
-        isOwner: true,
+        // scripts/seed-e2e-admin.ts for the reasoning. Only claim it when
+        // no one else already holds it; else leave the existing value.
+        ...(shouldClaimOwner ? { isOwner: true } : {}),
         sessionsInvalidatedAfter: new Date(),
       })
       .where(eq(users.id, existing.id));
@@ -55,7 +74,7 @@ async function ensureAdminUser() {
       fullName: E2E_ADMIN.fullName,
       passwordHash,
       role: 'ADMIN',
-      isOwner: true,
+      isOwner: shouldClaimOwner,
     })
     .returning({ id: users.id });
   if (!created) throw new Error('failed to seed e2e admin');

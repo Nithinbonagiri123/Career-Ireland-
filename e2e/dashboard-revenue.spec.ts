@@ -21,8 +21,10 @@ test('dashboard revenue section renders and responds to the date filter', async 
   await expect(section).toBeVisible();
 
   // The header line always includes "Verified payments · <range>". The
-  // range text is dynamic, so we only assert the fixed prefix.
-  await expect(section.getByText(/verified payments/i)).toBeVisible();
+  // range text is dynamic, so we only assert the fixed prefix. Multiple
+  // matches can exist inside the section once data is present (per-business
+  // tile hints read like "30 verified payments"), so pin to the first.
+  await expect(section.getByText(/verified payments/i).first()).toBeVisible();
 
   // Either the totals grid renders OR we see the "no verified revenue"
   // empty state. Fail only if neither is present.
