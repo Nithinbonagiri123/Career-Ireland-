@@ -10,6 +10,7 @@ import {
   Search,
   User,
   UserCheck,
+  UserPlus,
   X,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -25,6 +26,7 @@ const KIND_ICON: Record<SearchResultKind, typeof Search> = {
   employer: Building2,
   requisition: Briefcase,
   immigration: PlaneTakeoff,
+  lead: UserPlus,
 };
 
 const KIND_LABEL: Record<SearchResultKind, string> = {
@@ -33,10 +35,12 @@ const KIND_LABEL: Record<SearchResultKind, string> = {
   employer: 'Employers',
   requisition: 'Requisitions',
   immigration: 'Immigration cases',
+  lead: 'Leads',
 };
 
 const GROUP_ORDER: SearchResultKind[] = [
   'candidate',
+  'lead',
   'employer',
   'requisition',
   'immigration',
@@ -52,10 +56,11 @@ const GROUP_ORDER: SearchResultKind[] = [
 const KIND_CHIPS: Array<{ kind: SearchResultKind | 'all'; label: string; hotkey?: string }> = [
   { kind: 'all', label: 'All' },
   { kind: 'candidate', label: 'Candidates', hotkey: '1' },
-  { kind: 'employer', label: 'Employers', hotkey: '2' },
-  { kind: 'requisition', label: 'Requisitions', hotkey: '3' },
-  { kind: 'immigration', label: 'Cases', hotkey: '4' },
-  { kind: 'person', label: 'People', hotkey: '5' },
+  { kind: 'lead', label: 'Leads', hotkey: '2' },
+  { kind: 'employer', label: 'Employers', hotkey: '3' },
+  { kind: 'requisition', label: 'Requisitions', hotkey: '4' },
+  { kind: 'immigration', label: 'Cases', hotkey: '5' },
+  { kind: 'person', label: 'People', hotkey: '6' },
 ];
 
 const RECENTS_STORAGE_KEY = 'global-search-recent-v1';

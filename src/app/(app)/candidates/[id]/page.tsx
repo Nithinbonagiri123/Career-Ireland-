@@ -19,6 +19,7 @@ import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
+import { RelatedWorkPanel } from '@/components/related-work-panel';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusDot } from '@/components/ui/status-dot';
@@ -246,6 +247,9 @@ export default async function CandidateDetail({
       </FadeUp>
 
       <div className="space-y-6 lg:col-span-2">
+        <FadeUp delay={0.07}>
+          <RelatedWorkPanel personId={id} timeline={timeline} />
+        </FadeUp>
         <FadeUp delay={0.08}>
           <CvSuggestionsPanel personId={id} />
         </FadeUp>

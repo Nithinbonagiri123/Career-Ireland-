@@ -6,6 +6,7 @@ import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
+import { RelatedWorkPanel } from '@/components/related-work-panel';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireInternalStaff } from '@/lib/auth/session';
@@ -19,6 +20,7 @@ import {
   listCaseDocumentRequirements,
   listCaseDocuments,
 } from '@/modules/immigration/service';
+import { fetchPersonDetail } from '@/modules/persons/detail';
 import { fetchStaffUserOptions } from '@/modules/users/service';
 import { ArchiveCaseButton } from './archive-button';
 import { CaseDocumentsSection } from './case-documents-section';
@@ -44,6 +46,7 @@ export default async function ImmigrationCaseDetail({
     beneficiaryDocuments,
     caseTasks,
     staffUsers,
+    beneficiaryDetail,
   ] = await Promise.all([
     listCaseDocumentRequirements(id),
     listCaseDocuments(id),
@@ -51,6 +54,7 @@ export default async function ImmigrationCaseDetail({
     fetchPersonDocuments(c.beneficiaryPersonId),
     fetchTasksForImmigrationCase(id),
     fetchStaffUserOptions(),
+    fetchPersonDetail(c.beneficiaryPersonId),
   ]);
   const currentOwner = c.assignedUserId
     ? (staffUsers.find((u) => u.id === c.assignedUserId) ?? null)
@@ -146,6 +150,14 @@ export default async function ImmigrationCaseDetail({
       </FadeUp>
 
       <div className="space-y-6 lg:col-span-2">
+        {beneficiaryDetail && (
+          <FadeUp delay={0.08}>
+            <RelatedWorkPanel
+              personId={c.beneficiaryPersonId}
+              timeline={beneficiaryDetail.timeline}
+            />
+          </FadeUp>
+        )}
         <FadeUp delay={0.1}>
           <Card>
             <CardHeader>

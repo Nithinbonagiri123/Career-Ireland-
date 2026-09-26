@@ -2,10 +2,17 @@ import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { immigrationCases } from '@/lib/db/schema/immigration';
+import { leads } from '@/lib/db/schema/leads';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import { employers, jobRequisitions } from '@/lib/db/schema/recruitment';
 
-export type SearchResultKind = 'candidate' | 'person' | 'employer' | 'requisition' | 'immigration';
+export type SearchResultKind =
+  | 'candidate'
+  | 'person'
+  | 'employer'
+  | 'requisition'
+  | 'immigration'
+  | 'lead';
 
 export type SearchResult = {
   kind: SearchResultKind;
@@ -113,6 +120,29 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult[]> {
     )
     .limit(PER_GROUP_LIMIT);
 
+  const leadRows = await db
+    .select({
+      id: leads.id,
+      status: leads.status,
+      firstName: persons.firstName,
+      lastName: persons.lastName,
+      email: persons.email,
+      startsWith: sql<boolean>`(${persons.firstName} ILIKE ${startsWith} OR ${persons.lastName} ILIKE ${startsWith})`,
+    })
+    .from(leads)
+    .innerJoin(persons, eq(persons.id, leads.personId))
+    .where(
+      and(
+        isNull(leads.archivedAt),
+        or(
+          ilike(persons.firstName, like),
+          ilike(persons.lastName, like),
+          ilike(persons.email, like),
+        ),
+      ),
+    )
+    .limit(PER_GROUP_LIMIT);
+
   const results: SearchResult[] = [];
 
   for (const p of personRows) {
@@ -173,6 +203,18 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult[]> {
       subtitle: subtitleParts.join(' · '),
       href: `/immigration/${c.id}`,
       score: 10,
+    });
+  }
+
+  for (const l of leadRows) {
+    const subtitleParts = [l.email, l.status.replace(/_/g, ' ')].filter(Boolean);
+    results.push({
+      kind: 'lead',
+      id: l.id,
+      title: `${l.firstName} ${l.lastName}`,
+      subtitle: subtitleParts.join(' · '),
+      href: `/leads`,
+      score: l.startsWith ? 20 : 10,
     });
   }
 
