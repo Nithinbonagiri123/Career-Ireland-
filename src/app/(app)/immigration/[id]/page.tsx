@@ -13,6 +13,7 @@ import { statusTone } from '@/lib/ui/status-tone';
 import { fetchTasksForImmigrationCase } from '@/modules/activities/service';
 import { fetchDocumentTypes } from '@/modules/document-types/service';
 import { fetchPersonDocuments } from '@/modules/documents/service';
+import { CASE_STAGE_LABEL, CASE_TYPE_LABEL } from '@/modules/immigration/labels';
 import {
   fetchCase,
   listCaseDocumentRequirements,
@@ -55,12 +56,12 @@ export default async function ImmigrationCaseDetail({
     ? (staffUsers.find((u) => u.id === c.assignedUserId) ?? null)
     : null;
 
-  const humanType = c.caseType.replace(/_/g, ' ');
+  const humanType = CASE_TYPE_LABEL[c.caseType];
 
   const metaStrip = (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
       <Badge variant={statusTone(c.status)} className="rounded-full">
-        {c.status.replace(/_/g, ' ')}
+        {CASE_STAGE_LABEL[c.status]}
       </Badge>
       <Link
         href={`/candidates/${c.beneficiaryPersonId}`}
@@ -104,7 +105,7 @@ export default async function ImmigrationCaseDetail({
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Status</span>
               <Badge variant={statusTone(c.status)} className="rounded-full text-[10px]">
-                {c.status.replace(/_/g, ' ')}
+                {CASE_STAGE_LABEL[c.status]}
               </Badge>
             </div>
             <div className="flex items-center justify-between">

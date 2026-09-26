@@ -8,6 +8,7 @@ import {
   type ImmigrationCase,
   type ImmigrationCaseDocument,
   type ImmigrationCaseDocumentRequirement,
+  immigrationApplicationTypes,
   immigrationCaseDocumentRequirements,
   immigrationCaseDocuments,
   immigrationCases,
@@ -15,6 +16,7 @@ import {
 import { persons } from '@/lib/db/schema/persons';
 import { employers } from '@/lib/db/schema/recruitment';
 import { type DocumentType, documentTypes } from '@/lib/db/schema/reference';
+import { users } from '@/lib/db/schema/users';
 import { BusinessRuleError, NotFoundError, ValidationError } from '@/lib/errors';
 import { type AssignmentScope, assignmentCondition } from '@/lib/scope';
 import { assertTransition, IMMIGRATION_CASE_TRANSITIONS } from '@/lib/state-machine';
@@ -56,6 +58,8 @@ function blankToUndef(v: string | undefined | null): string | undefined {
 export type CaseListRow = ImmigrationCase & {
   beneficiaryName: string;
   sponsorName: string | null;
+  ownerName: string | null;
+  applicationTypeName: string | null;
 };
 
 export async function fetchCase(id: string): Promise<CaseListRow | null> {
@@ -66,10 +70,17 @@ export async function fetchCase(id: string): Promise<CaseListRow | null> {
       firstName: persons.firstName,
       lastName: persons.lastName,
       sponsorName: employers.legalName,
+      ownerName: users.fullName,
+      applicationTypeName: immigrationApplicationTypes.name,
     })
     .from(immigrationCases)
     .innerJoin(persons, eq(persons.id, immigrationCases.beneficiaryPersonId))
     .leftJoin(employers, eq(employers.id, immigrationCases.sponsorEmployerId))
+    .leftJoin(users, eq(users.id, immigrationCases.assignedUserId))
+    .leftJoin(
+      immigrationApplicationTypes,
+      eq(immigrationApplicationTypes.id, immigrationCases.applicationTypeId),
+    )
     .where(eq(immigrationCases.id, id))
     .limit(1);
   return row
@@ -77,6 +88,8 @@ export async function fetchCase(id: string): Promise<CaseListRow | null> {
         ...row.c,
         beneficiaryName: `${row.firstName} ${row.lastName}`,
         sponsorName: row.sponsorName,
+        ownerName: row.ownerName,
+        applicationTypeName: row.applicationTypeName,
       }
     : null;
 }
@@ -92,10 +105,17 @@ export async function fetchCases(scope?: AssignmentScope): Promise<CaseListRow[]
       firstName: persons.firstName,
       lastName: persons.lastName,
       sponsorName: employers.legalName,
+      ownerName: users.fullName,
+      applicationTypeName: immigrationApplicationTypes.name,
     })
     .from(immigrationCases)
     .innerJoin(persons, eq(persons.id, immigrationCases.beneficiaryPersonId))
     .leftJoin(employers, eq(employers.id, immigrationCases.sponsorEmployerId))
+    .leftJoin(users, eq(users.id, immigrationCases.assignedUserId))
+    .leftJoin(
+      immigrationApplicationTypes,
+      eq(immigrationApplicationTypes.id, immigrationCases.applicationTypeId),
+    )
     .where(
       scopeCond
         ? and(isNull(immigrationCases.archivedAt), scopeCond)
@@ -106,6 +126,8 @@ export async function fetchCases(scope?: AssignmentScope): Promise<CaseListRow[]
     ...r.c,
     beneficiaryName: `${r.firstName} ${r.lastName}`,
     sponsorName: r.sponsorName,
+    ownerName: r.ownerName,
+    applicationTypeName: r.applicationTypeName,
   }));
 }
 

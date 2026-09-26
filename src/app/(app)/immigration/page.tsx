@@ -1,8 +1,8 @@
 import { PlaneTakeoff, Plus } from 'lucide-react';
+import { CaseScopeTabs } from '@/components/case-scope-tabs';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { ScopeFilter } from '@/components/scope-filter';
 import { Button } from '@/components/ui/button';
 import { requirePermission } from '@/lib/auth/session';
 import { parseAssignmentScope } from '@/lib/scope';
@@ -10,6 +10,7 @@ import { fetchEmployers } from '@/modules/employers/service';
 import { fetchApplicationTypes } from '@/modules/immigration/application-types';
 import { fetchCases } from '@/modules/immigration/service';
 import { fetchPersons } from '@/modules/persons/service';
+import { CasesCardGrid, CasesViewToggle } from './case-card';
 import { CaseDialog } from './case-dialog';
 import { CasesTable } from './cases-table';
 
@@ -18,11 +19,14 @@ export const dynamic = 'force-dynamic';
 export default async function ImmigrationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ assigned?: string }>;
+  searchParams: Promise<{ assigned?: string; view?: string }>;
 }) {
   await requirePermission('immigration', 'cases', 'view');
-  const { assigned } = await searchParams;
+  const { assigned, view } = await searchParams;
   const scope = parseAssignmentScope(assigned);
+  // Cards are the default because the spec (§11) wants owner + candidate name
+  // at a glance across the whole list — the table is the drill-down view.
+  const cardView = view !== 'table';
   const [cases, persons, employers, applicationTypes] = await Promise.all([
     fetchCases(scope),
     fetchPersons(),
@@ -39,15 +43,16 @@ export default async function ImmigrationPage({
           title="Immigration cases"
           description="Employment Permits, Visas, and Visa Extensions. Independent of placements — can run for any employer / person combination."
           action={
-            <div className="flex items-center gap-2">
-              <ScopeFilter current={scope} />
+            <div className="flex flex-wrap items-center gap-2">
+              <CaseScopeTabs current={scope} />
+              <CasesViewToggle current={cardView ? 'grid' : 'table'} />
               <CsvExportButton href="/api/export/immigration" />
               <CaseDialog
                 persons={persons}
                 employers={employers}
                 applicationTypes={applicationTypes}
                 trigger={
-                  <Button size="sm" disabled={persons.length === 0}>
+                  <Button size="sm">
                     <Plus className="mr-1.5 size-4" /> Open case
                   </Button>
                 }
@@ -57,7 +62,7 @@ export default async function ImmigrationPage({
         />
       </FadeUp>
       <FadeUp delay={0.05}>
-        <CasesTable cases={cases} />
+        {cardView ? <CasesCardGrid cases={cases} /> : <CasesTable cases={cases} />}
       </FadeUp>
     </div>
   );

@@ -5,23 +5,25 @@ import { useRouter } from 'next/navigation';
 import { DataTable } from '@/components/data-table/data-table';
 import { Badge } from '@/components/ui/badge';
 import { statusTone } from '@/lib/ui/status-tone';
+import { CASE_STAGE_LABEL, CASE_TYPE_LABEL } from '@/modules/immigration/labels';
 import type { CaseListRow } from '@/modules/immigration/service';
-
-const TYPE_LABEL: Record<CaseListRow['caseType'], string> = {
-  EMPLOYMENT_PERMIT: 'Permit',
-  VISA: 'Visa',
-  VISA_EXTENSION: 'Extension',
-};
 
 const columns: ColumnDef<CaseListRow>[] = [
   {
     header: 'Type',
     accessorKey: 'caseType',
-    size: 130,
+    size: 150,
     cell: ({ row }) => (
-      <Badge variant="secondary" className="rounded-full">
-        {TYPE_LABEL[row.original.caseType]}
-      </Badge>
+      <div className="flex flex-col">
+        <Badge variant="secondary" className="w-fit rounded-full text-[10px]">
+          {CASE_TYPE_LABEL[row.original.caseType]}
+        </Badge>
+        {row.original.applicationTypeName && (
+          <span className="mt-1 text-[10px] text-muted-foreground">
+            {row.original.applicationTypeName}
+          </span>
+        )}
+      </div>
     ),
   },
   {
@@ -37,9 +39,19 @@ const columns: ColumnDef<CaseListRow>[] = [
     ),
   },
   {
+    header: 'Owner',
+    accessorKey: 'ownerName',
+    size: 160,
+    cell: ({ row }) => (
+      <span className={row.original.ownerName ? 'text-xs' : 'text-xs text-muted-foreground/60'}>
+        {row.original.ownerName ?? 'Unassigned'}
+      </span>
+    ),
+  },
+  {
     header: 'Reference',
     accessorKey: 'authorityReference',
-    size: 160,
+    size: 140,
     cell: ({ row }) => (
       <span className="font-mono text-xs text-muted-foreground">
         {row.original.authorityReference ?? '—'}
@@ -47,29 +59,21 @@ const columns: ColumnDef<CaseListRow>[] = [
     ),
   },
   {
-    header: 'Status',
+    header: 'Stage',
     accessorKey: 'status',
-    size: 190,
+    size: 180,
     cell: ({ row }) => (
       <Badge variant={statusTone(row.original.status)} className="rounded-full">
-        {row.original.status.replace(/_/g, ' ')}
+        {CASE_STAGE_LABEL[row.original.status]}
       </Badge>
     ),
   },
   {
     header: 'Expires',
     accessorKey: 'expiresOn',
-    size: 130,
+    size: 120,
     cell: ({ row }) => (
       <span className="text-xs text-muted-foreground">{row.original.expiresOn ?? '—'}</span>
-    ),
-  },
-  {
-    header: 'Reminder',
-    accessorKey: 'reminderOn',
-    size: 130,
-    cell: ({ row }) => (
-      <span className="text-xs text-muted-foreground">{row.original.reminderOn ?? '—'}</span>
     ),
   },
 ];
