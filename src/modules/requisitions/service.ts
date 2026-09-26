@@ -17,6 +17,7 @@ import {
   shortlistEntries,
 } from '@/lib/db/schema/recruitment';
 import { qualifications, skills } from '@/lib/db/schema/reference';
+import { users } from '@/lib/db/schema/users';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { type AssignmentScope, assignmentCondition } from '@/lib/scope';
 import { assertTransition, REQUISITION_TRANSITIONS } from '@/lib/state-machine';
@@ -105,6 +106,8 @@ export type RequisitionCardRow = RequisitionListRow & {
   occupationName: string | null;
   /** Category the occupation lives under (e.g. "Construction") — null when unlinked. */
   occupationCategory: string | null;
+  /** Full name of the assigned recruiter — null when unassigned. Spec §11: card must show owner. */
+  ownerName: string | null;
 };
 
 /**
@@ -136,6 +139,7 @@ export async function fetchRequisitionsWithCounts(
       employerName: employers.legalName,
       occupationName: occupations.name,
       occupationCategory: occupationCategories.name,
+      ownerName: users.fullName,
       matchedCount: sql<number>`(
         SELECT COUNT(*)::int
         FROM ${candidateMatches}
@@ -156,6 +160,7 @@ export async function fetchRequisitionsWithCounts(
     .innerJoin(employers, eq(employers.id, jobRequisitions.employerId))
     .leftJoin(occupations, eq(occupations.id, jobRequisitions.occupationId))
     .leftJoin(occupationCategories, eq(occupationCategories.id, occupations.categoryId))
+    .leftJoin(users, eq(users.id, jobRequisitions.assignedUserId))
     .where(and(...whereConds))
     .orderBy(desc(jobRequisitions.createdAt));
 
@@ -164,6 +169,7 @@ export async function fetchRequisitionsWithCounts(
     employerName: r.employerName,
     occupationName: r.occupationName,
     occupationCategory: r.occupationCategory,
+    ownerName: r.ownerName,
     matchedCount: r.matchedCount,
     shortlistedCount: r.shortlistedCount,
     appliedCount: r.appliedCount,

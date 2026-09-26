@@ -10,6 +10,7 @@ import {
   Grid3x3,
   MapPin,
   Share2,
+  UserCheck,
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -90,6 +91,9 @@ export function RequisitionCard({ requisition }: { requisition: RequisitionCardR
         </MetaRow>
         <MetaRow icon={<Users className="text-pipeline-review" />}>
           {requisition.positionsFilled} of {requisition.positionsRequired} filled
+        </MetaRow>
+        <MetaRow icon={<UserCheck className="text-pipeline-review" />}>
+          Owner: {requisition.ownerName ?? 'Unassigned'}
         </MetaRow>
         {targetLabel && (
           <MetaRow icon={<Calendar className="text-pipeline-interview" />}>{targetLabel}</MetaRow>

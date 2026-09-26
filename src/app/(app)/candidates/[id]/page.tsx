@@ -18,6 +18,7 @@ import { BillingSection } from '@/components/billing/billing-section';
 import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
+import { ReassignButton } from '@/components/reassign-button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusDot } from '@/components/ui/status-dot';
@@ -42,6 +43,7 @@ import { getEmailAccountForCandidate } from '@/modules/email-accounts/service';
 import { fetchPersonDetail, type PersonTimelineItem } from '@/modules/persons/detail';
 import { fetchQualifications } from '@/modules/qualifications/service';
 import { fetchSkills } from '@/modules/skills/service';
+import { fetchStaffUserOptions } from '@/modules/users/service';
 import { ApplicationsPanel } from './applications-panel';
 import {
   EmploymentHistorySection,
@@ -107,6 +109,7 @@ export default async function CandidateDetail({
     billingHistory,
     uploadRequests,
     allDocumentTypes,
+    staffUsers,
   ] = await Promise.all([
     fetchPersonRequirements(id),
     fetchPersonDocuments(id),
@@ -120,7 +123,11 @@ export default async function CandidateDetail({
     fetchPersonBillingHistory(id),
     listUploadRequestsForPerson(id),
     fetchDocumentTypes(),
+    fetchStaffUserOptions(),
   ]);
+  const currentOwner = assignedUserId
+    ? (staffUsers.find((u) => u.id === assignedUserId) ?? null)
+    : null;
 
   const fullName = `${person.firstName} ${person.lastName}`;
   const location = [person.currentCity, person.currentCountry].filter(Boolean).join(', ');
@@ -404,12 +411,26 @@ export default async function CandidateDetail({
           meta={metaStrip}
           action={
             candidateProfile && (
-              <AssignToMeButton
-                entity="candidate"
-                id={person.id}
-                currentUserId={session.user.id}
-                currentAssignedUserId={assignedUserId}
-              />
+              <div className="flex items-center gap-2">
+                <AssignToMeButton
+                  entity="candidate"
+                  id={person.id}
+                  currentUserId={session.user.id}
+                  currentAssignedUserId={assignedUserId}
+                />
+                <ReassignButton
+                  entity="candidate"
+                  id={person.id}
+                  subjectLabel={fullName}
+                  currentAssignedUserId={assignedUserId}
+                  currentAssignedName={currentOwner?.fullName ?? null}
+                  staffUsers={staffUsers.map((u) => ({
+                    id: u.id,
+                    fullName: u.fullName,
+                    email: u.email,
+                  }))}
+                />
+              </div>
             )
           }
         />

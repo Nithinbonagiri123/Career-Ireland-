@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
+import { ReassignButton } from '@/components/reassign-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,6 +25,7 @@ import {
   listRequisitionSkills,
 } from '@/modules/requisitions/service';
 import { fetchSkills } from '@/modules/skills/service';
+import { fetchStaffUserOptions } from '@/modules/users/service';
 import { listChecklistsForRequisition } from '@/modules/work-permit-checklists/service';
 import { RequisitionDialog } from '../requisition-dialog';
 import { ChecklistsSection } from './checklists-section';
@@ -52,6 +54,7 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     currencies,
     occupationList,
     checklists,
+    staffUsers,
   ] = await Promise.all([
     fetchRequisitionPipeline(id),
     listApplicationsForRequisition(id),
@@ -64,7 +67,11 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     fetchCurrencies(),
     fetchOccupations(),
     listChecklistsForRequisition(id),
+    fetchStaffUserOptions(),
   ]);
+  const currentOwner = requisition.assignedUserId
+    ? (staffUsers.find((u) => u.id === requisition.assignedUserId) ?? null)
+    : null;
 
   const pipelineTotal = Object.values(pipelineData).reduce((sum, arr) => sum + arr.length, 0);
 
@@ -228,6 +235,18 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
                 id={id}
                 currentUserId={session.user.id}
                 currentAssignedUserId={requisition.assignedUserId}
+              />
+              <ReassignButton
+                entity="requisition"
+                id={id}
+                subjectLabel={`requisition ${requisition.title}`}
+                currentAssignedUserId={requisition.assignedUserId}
+                currentAssignedName={currentOwner?.fullName ?? null}
+                staffUsers={staffUsers.map((u) => ({
+                  id: u.id,
+                  fullName: u.fullName,
+                  email: u.email,
+                }))}
               />
               <RequisitionDialog
                 employers={employers}
