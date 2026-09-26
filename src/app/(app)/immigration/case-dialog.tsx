@@ -6,6 +6,7 @@ import { type ReactElement, useMemo } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';
+import { PersonPicker } from '@/components/person-picker';
 import { SubmitButton } from '@/components/submit-button';
 import { Button } from '@/components/ui/button';
 import {
@@ -142,19 +143,21 @@ export function CaseDialog({ trigger, persons, employers, applicationTypes, init
             id="ic-beneficiary"
             label="Beneficiary"
             error={errors.beneficiaryPersonId?.message}
+            hint="Search an existing candidate, or add a new one on the fly."
           >
-            <Select
+            <PersonPicker
               id="ic-beneficiary"
-              aria-invalid={Boolean(errors.beneficiaryPersonId)}
-              {...register('beneficiaryPersonId')}
-            >
-              <option value="">— select person —</option>
-              {persons.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.firstName} {p.lastName}
-                </option>
-              ))}
-            </Select>
+              persons={persons}
+              value={form.watch('beneficiaryPersonId')}
+              onChange={(id) =>
+                form.setValue('beneficiaryPersonId', id, {
+                  shouldValidate: true,
+                  shouldDirty: true,
+                })
+              }
+              invalid={Boolean(errors.beneficiaryPersonId)}
+              placeholder="Select or add candidate"
+            />
           </FormField>
 
           <FormField id="ic-sponsor" label="Sponsor employer (optional)">
