@@ -16,6 +16,7 @@ export async function assignEntityAction(input: {
   entity: AssignableEntity;
   id: string;
   userId: string | null;
+  reason?: string;
 }) {
   const r = await toActionResult(() => assignEntity(input));
   if (r.ok) {

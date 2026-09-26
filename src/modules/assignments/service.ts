@@ -64,11 +64,17 @@ const TARGETS: Record<AssignableEntity, TargetMeta> = {
 /**
  * Set (or clear) the assignedUserId on an entity. Idempotent — no-op if already
  * assigned to the same user. Records an audit event on every change.
+ *
+ * `reason` is optional: the "Assign to me" one-click flow doesn't collect one,
+ * but the dedicated Reassign dialog does (spec §18 — reassignments should carry
+ * a rationale in the audit trail). When provided, it's stamped into the audit
+ * event context so /admin/audit renders it.
  */
 export async function assignEntity(input: {
   entity: AssignableEntity;
   id: string;
   userId: string | null;
+  reason?: string;
 }): Promise<{ before: string | null; after: string | null } | null> {
   const session = await requireInternalStaff();
   const target = TARGETS[input.entity];
@@ -96,15 +102,22 @@ export async function assignEntity(input: {
       .set({ assignedUserId: input.userId, updatedAt: sql`NOW()` } as any)
       .where(eq(target.keyColumn, input.id));
 
+    // ASSIGNED / UNASSIGNED for one-click flows (no reason); OWNER_CHANGED when
+    // the caller supplied a reason (the Reassign dialog) so it reads clearly in
+    // the audit trail as a deliberate handoff rather than a quick claim.
+    const trimmedReason = input.reason?.trim();
+    const action = trimmedReason ? 'OWNER_CHANGED' : input.userId ? 'ASSIGNED' : 'UNASSIGNED';
+
     await recordAudit(tx, {
       actorUserId: session.user.id,
       entityType: target.auditType,
       entityId: input.id,
-      action: input.userId ? 'ASSIGNED' : 'UNASSIGNED',
+      action,
       before: { assignedUserId: beforeUserId },
       after: { assignedUserId: input.userId },
       context: {
         assignedToSelf: input.userId === session.user.id,
+        ...(trimmedReason ? { reason: trimmedReason } : {}),
       },
     });
 

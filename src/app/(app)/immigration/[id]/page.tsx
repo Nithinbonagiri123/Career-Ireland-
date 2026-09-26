@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
+import { ReassignButton } from '@/components/reassign-button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireInternalStaff } from '@/lib/auth/session';
@@ -17,6 +18,7 @@ import {
   listCaseDocumentRequirements,
   listCaseDocuments,
 } from '@/modules/immigration/service';
+import { fetchStaffUserOptions } from '@/modules/users/service';
 import { ArchiveCaseButton } from './archive-button';
 import { CaseDocumentsSection } from './case-documents-section';
 import { CaseTabs } from './case-tabs';
@@ -34,14 +36,24 @@ export default async function ImmigrationCaseDetail({
   const c = await fetchCase(id);
   if (!c) notFound();
 
-  const [requirements, attachedDocs, allDocumentTypes, beneficiaryDocuments, caseTasks] =
-    await Promise.all([
-      listCaseDocumentRequirements(id),
-      listCaseDocuments(id),
-      fetchDocumentTypes(),
-      fetchPersonDocuments(c.beneficiaryPersonId),
-      fetchTasksForImmigrationCase(id),
-    ]);
+  const [
+    requirements,
+    attachedDocs,
+    allDocumentTypes,
+    beneficiaryDocuments,
+    caseTasks,
+    staffUsers,
+  ] = await Promise.all([
+    listCaseDocumentRequirements(id),
+    listCaseDocuments(id),
+    fetchDocumentTypes(),
+    fetchPersonDocuments(c.beneficiaryPersonId),
+    fetchTasksForImmigrationCase(id),
+    fetchStaffUserOptions(),
+  ]);
+  const currentOwner = c.assignedUserId
+    ? (staffUsers.find((u) => u.id === c.assignedUserId) ?? null)
+    : null;
 
   const humanType = c.caseType.replace(/_/g, ' ');
 
@@ -220,6 +232,18 @@ export default async function ImmigrationCaseDetail({
                 id={id}
                 currentUserId={session.user.id}
                 currentAssignedUserId={c.assignedUserId}
+              />
+              <ReassignButton
+                entity="immigration_case"
+                id={id}
+                subjectLabel={`case for ${c.beneficiaryName}`}
+                currentAssignedUserId={c.assignedUserId}
+                currentAssignedName={currentOwner?.fullName ?? null}
+                staffUsers={staffUsers.map((u) => ({
+                  id: u.id,
+                  fullName: u.fullName,
+                  email: u.email,
+                }))}
               />
               <ArchiveCaseButton caseId={id} beneficiaryName={c.beneficiaryName} />
             </div>
