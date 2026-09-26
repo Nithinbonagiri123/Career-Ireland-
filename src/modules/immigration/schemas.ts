@@ -14,6 +14,9 @@ export const CaseStatusSchema = z.enum([
 export const UpsertCaseSchema = z.object({
   id: z.string().uuid().optional(),
   caseType: CaseTypeSchema,
+  /** Reusable sub-type from the immigration_application_types catalog. Optional
+   *  because legacy rows predate the column; new cases should pick a specific type. */
+  applicationTypeId: z.string().uuid().optional().or(z.literal('')),
   beneficiaryPersonId: z.string().uuid(),
   sponsorEmployerId: z.string().uuid().optional().or(z.literal('')),
   relatedPlacementId: z.string().uuid().optional().or(z.literal('')),

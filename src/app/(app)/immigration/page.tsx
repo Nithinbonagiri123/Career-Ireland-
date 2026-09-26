@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { requirePermission } from '@/lib/auth/session';
 import { parseAssignmentScope } from '@/lib/scope';
 import { fetchEmployers } from '@/modules/employers/service';
+import { fetchApplicationTypes } from '@/modules/immigration/application-types';
 import { fetchCases } from '@/modules/immigration/service';
 import { fetchPersons } from '@/modules/persons/service';
 import { CaseDialog } from './case-dialog';
@@ -22,10 +23,11 @@ export default async function ImmigrationPage({
   await requirePermission('immigration', 'cases', 'view');
   const { assigned } = await searchParams;
   const scope = parseAssignmentScope(assigned);
-  const [cases, persons, employers] = await Promise.all([
+  const [cases, persons, employers, applicationTypes] = await Promise.all([
     fetchCases(scope),
     fetchPersons(),
     fetchEmployers(),
+    fetchApplicationTypes(),
   ]);
 
   return (
@@ -43,6 +45,7 @@ export default async function ImmigrationPage({
               <CaseDialog
                 persons={persons}
                 employers={employers}
+                applicationTypes={applicationTypes}
                 trigger={
                   <Button size="sm" disabled={persons.length === 0}>
                     <Plus className="mr-1.5 size-4" /> Open case

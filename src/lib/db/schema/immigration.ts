@@ -1,4 +1,5 @@
 import {
+  boolean,
   date,
   index,
   pgTable,
@@ -18,6 +19,41 @@ import { documentTypes } from './reference';
 import { users } from './users';
 
 /**
+ * Reusable catalog of specific immigration application types (e.g. "Critical
+ * Skills Work Permit", "General Employment Permit", "Stamp 4"). Staff pick
+ * from this list on the case dialog, or "+ New" adds one inline.
+ *
+ * `category` slots the type under one of the top-level case_type enum values
+ * so filtering + reporting on "all Employment Permit cases" still works
+ * without a join. This is the sub-type-under-existing-enum shape locked in
+ * during the design pass; the enum stays authoritative for classification,
+ * the catalog table adds resolution.
+ */
+export const immigrationApplicationTypes = pgTable(
+  'immigration_application_types',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    category: text('category', {
+      enum: ['EMPLOYMENT_PERMIT', 'VISA', 'VISA_EXTENSION'],
+    }).notNull(),
+    name: varchar('name', { length: 160 }).notNull(),
+    description: text('description'),
+    isActive: boolean('is_active').notNull().default(true),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    unique('immigration_application_types_name_unique').on(t.name),
+    index('immigration_application_types_category_idx').on(t.category),
+    index('immigration_application_types_active_idx').on(t.isActive),
+  ],
+);
+
+export type ImmigrationApplicationType = typeof immigrationApplicationTypes.$inferSelect;
+export type NewImmigrationApplicationType = typeof immigrationApplicationTypes.$inferInsert;
+
+/**
  * Immigration cases — one entity, discriminated by case_type.
  * Independent capability: not required to reference a Placement (Scenario B).
  */
@@ -28,6 +64,9 @@ export const immigrationCases = pgTable(
     caseType: text('case_type', {
       enum: ['EMPLOYMENT_PERMIT', 'VISA', 'VISA_EXTENSION'],
     }).notNull(),
+    /** Specific application type from the reusable catalog. NULL for legacy
+     *  rows created before this column existed; new cases should populate it. */
+    applicationTypeId: uuid('application_type_id').references(() => immigrationApplicationTypes.id),
     beneficiaryPersonId: uuid('beneficiary_person_id')
       .notNull()
       .references(() => persons.id),

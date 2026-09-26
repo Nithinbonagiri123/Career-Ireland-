@@ -9,6 +9,7 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
+  Stamp,
   Tags,
   UserCog,
 } from 'lucide-react';
@@ -88,6 +89,12 @@ const SECTIONS: Array<{
         href: '/admin/document-rules',
         icon: FileText,
         description: 'Which documents each candidate must supply',
+      },
+      {
+        label: 'Immigration application types',
+        href: '/admin/immigration-types',
+        icon: Stamp,
+        description: 'Specific application types (Critical Skills Permit, Stamp 4, …)',
       },
     ],
   },

@@ -2,6 +2,13 @@
 
 import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
+import {
+  createApplicationTypeFromName,
+  type SetApplicationTypeActiveInput,
+  setApplicationTypeActive,
+  type UpsertApplicationTypeInput,
+  upsertApplicationType,
+} from './application-types';
 import type {
   AddCaseDocumentRequirementInput,
   ArchiveCaseInput,
@@ -88,5 +95,37 @@ export async function archiveCaseAction(input: ArchiveCaseInput) {
 export async function unarchiveCaseAction(input: UnarchiveCaseInput) {
   const r = await toActionResult(() => unarchiveCase(input));
   if (r.ok) revCase(input.caseId);
+  return r;
+}
+
+// ─── Application Type catalog ────────────────────────────────────────────────
+
+export async function upsertApplicationTypeAction(input: UpsertApplicationTypeInput) {
+  const r = await toActionResult(() => upsertApplicationType(input));
+  if (r.ok) {
+    revalidatePath('/admin/immigration-types');
+    rev();
+  }
+  return r;
+}
+
+export async function createApplicationTypeFromNameAction(
+  category: 'EMPLOYMENT_PERMIT' | 'VISA' | 'VISA_EXTENSION',
+  name: string,
+) {
+  const r = await toActionResult(() => createApplicationTypeFromName(category, name));
+  if (r.ok) {
+    revalidatePath('/admin/immigration-types');
+    rev();
+  }
+  return r;
+}
+
+export async function setApplicationTypeActiveAction(input: SetApplicationTypeActiveInput) {
+  const r = await toActionResult(() => setApplicationTypeActive(input));
+  if (r.ok) {
+    revalidatePath('/admin/immigration-types');
+    rev();
+  }
   return r;
 }

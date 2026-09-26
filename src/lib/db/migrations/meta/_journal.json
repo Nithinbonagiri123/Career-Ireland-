@@ -239,6 +239,13 @@
       "when": 1789766277964,
       "tag": "0033_lumpy_venom",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790453376517,
+      "tag": "0034_known_revanche",
+      "breakpoints": true
     }
   ]
 }

@@ -121,6 +121,7 @@ export async function upsertCase(input: UpsertCaseInput): Promise<ImmigrationCas
   const d = parsed.data;
   const values = {
     caseType: d.caseType,
+    applicationTypeId: blankToUndef(d.applicationTypeId),
     beneficiaryPersonId: d.beneficiaryPersonId,
     sponsorEmployerId: blankToUndef(d.sponsorEmployerId),
     relatedPlacementId: blankToUndef(d.relatedPlacementId),
