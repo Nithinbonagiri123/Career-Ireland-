@@ -7,6 +7,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';
 import { PersonPicker } from '@/components/person-picker';
+import { PersonPreviewCard } from '@/components/person-preview-card';
 import { SubmitButton } from '@/components/submit-button';
 import { Button } from '@/components/ui/button';
 import {
@@ -65,6 +66,13 @@ export function CaseDialog({ trigger, persons, employers, applicationTypes, init
   const filteredTypes = useMemo(
     () => applicationTypes.filter((t) => t.isActive && t.category === watchedCategory),
     [applicationTypes, watchedCategory],
+  );
+  // Preview the selected beneficiary inline so the operator can confirm at a
+  // glance that they picked the right person without leaving the dialog.
+  const watchedBeneficiaryId = useWatch({ control: form.control, name: 'beneficiaryPersonId' });
+  const selectedPerson = useMemo(
+    () => persons.find((p) => p.id === watchedBeneficiaryId) ?? null,
+    [persons, watchedBeneficiaryId],
   );
   const {
     register,
@@ -145,19 +153,22 @@ export function CaseDialog({ trigger, persons, employers, applicationTypes, init
             error={errors.beneficiaryPersonId?.message}
             hint="Search an existing candidate, or add a new one on the fly."
           >
-            <PersonPicker
-              id="ic-beneficiary"
-              persons={persons}
-              value={form.watch('beneficiaryPersonId')}
-              onChange={(id) =>
-                form.setValue('beneficiaryPersonId', id, {
-                  shouldValidate: true,
-                  shouldDirty: true,
-                })
-              }
-              invalid={Boolean(errors.beneficiaryPersonId)}
-              placeholder="Select or add candidate"
-            />
+            <div className="space-y-2">
+              <PersonPicker
+                id="ic-beneficiary"
+                persons={persons}
+                value={form.watch('beneficiaryPersonId')}
+                onChange={(id) =>
+                  form.setValue('beneficiaryPersonId', id, {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                  })
+                }
+                invalid={Boolean(errors.beneficiaryPersonId)}
+                placeholder="Select or add candidate"
+              />
+              {selectedPerson && <PersonPreviewCard person={selectedPerson} />}
+            </div>
           </FormField>
 
           <FormField id="ic-sponsor" label="Sponsor employer (optional)">
