@@ -1,11 +1,12 @@
 import { Building2, Plus } from 'lucide-react';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { ListSummaryStrip, type SummaryChip } from '@/components/list-summary-strip';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ScopeFilter } from '@/components/scope-filter';
 import { Button } from '@/components/ui/button';
-import { requirePermission } from '@/lib/auth/session';
+import { requireInternalStaff, requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { parseAssignmentScope } from '@/lib/scope';
 import { fetchEmployers } from '@/modules/employers/service';
@@ -21,6 +22,7 @@ export default async function EmployersPage({
   searchParams: Promise<{ assigned?: string; created?: string; from?: string; to?: string }>;
 }) {
   await requirePermission('recruitment', 'employers', 'view');
+  const session = await requireInternalStaff();
   const { assigned, created, from, to } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const createdRange = parseDateRangeParams({ created, from, to });
@@ -28,6 +30,19 @@ export default async function EmployersPage({
     fetchEmployers(scope, createdRange),
     fetchAppSettings(),
   ]);
+
+  const mineCount = employers.filter((e) => e.assignedUserId === session.user.id).length;
+  const unassignedCount = employers.filter((e) => e.assignedUserId === null).length;
+  const summaryChips: SummaryChip[] = [
+    { label: 'mine', value: mineCount, tone: 'info' },
+    { label: 'unassigned', value: unassignedCount, tone: 'warning' },
+  ];
+  const activeFilters =
+    scope === 'mine'
+      ? [{ label: 'scope: mine' }]
+      : scope === 'unassigned'
+        ? [{ label: 'scope: unassigned' }]
+        : [];
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
@@ -54,6 +69,14 @@ export default async function EmployersPage({
         />
       </FadeUp>
       <FadeUp delay={0.05}>
+        <ListSummaryStrip
+          total={employers.length}
+          totalLabel="employers"
+          chips={summaryChips}
+          filters={activeFilters}
+        />
+      </FadeUp>
+      <FadeUp delay={0.08}>
         <EmployersTable employers={employers} />
       </FadeUp>
     </div>

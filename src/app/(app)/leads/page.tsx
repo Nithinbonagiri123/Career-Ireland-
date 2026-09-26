@@ -1,6 +1,7 @@
 import { UserPlus } from 'lucide-react';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { ListSummaryStrip, type SummaryChip } from '@/components/list-summary-strip';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ScopeFilter } from '@/components/scope-filter';
@@ -32,6 +33,25 @@ export default async function LeadsPage({
     fetchCurrencies(),
   ]);
 
+  const mineCount = leads.filter((l) => l.assignedUserId === session.user.id).length;
+  const newCount = leads.filter((l) => l.status === 'NEW').length;
+  const contactedCount = leads.filter((l) => l.status === 'CONTACTED').length;
+  const awaitingPaymentCount = leads.filter((l) => l.status === 'AWAITING_PAYMENT').length;
+  const convertedCount = leads.filter((l) => l.status === 'CONVERTED').length;
+  const summaryChips: SummaryChip[] = [
+    { label: 'mine', value: mineCount, tone: 'info' },
+    { label: 'new', value: newCount },
+    { label: 'contacted', value: contactedCount },
+    { label: 'awaiting payment', value: awaitingPaymentCount, tone: 'warning' },
+    { label: 'converted', value: convertedCount, tone: 'success' },
+  ];
+  const activeFilters =
+    scope === 'mine'
+      ? [{ label: 'scope: mine' }]
+      : scope === 'unassigned'
+        ? [{ label: 'scope: unassigned' }]
+        : [];
+
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
       <FadeUp>
@@ -51,6 +71,14 @@ export default async function LeadsPage({
         />
       </FadeUp>
       <FadeUp delay={0.05}>
+        <ListSummaryStrip
+          total={leads.length}
+          totalLabel="leads"
+          chips={summaryChips}
+          filters={activeFilters}
+        />
+      </FadeUp>
+      <FadeUp delay={0.08}>
         <LeadsTable
           leads={leads}
           currentUserId={session.user.id}
