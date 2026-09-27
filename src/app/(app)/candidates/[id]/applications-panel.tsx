@@ -222,14 +222,18 @@ export function ApplicationsPanel({
               <li key={r.id} className="flex items-start justify-between gap-3 py-3 text-sm">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <Link
-                      href={`/applications/${r.id}`}
-                      className="truncate font-medium hover:underline"
-                    >
-                      {r.source === 'INTERNAL'
-                        ? (r.requisitionTitle ?? 'Requisition')
-                        : (r.externalJobTitle ?? r.displayCompany ?? 'External application')}
-                    </Link>
+                    {r.source === 'INTERNAL' && r.jobRequisitionId ? (
+                      <Link
+                        href={`/requisitions/${r.jobRequisitionId}`}
+                        className="truncate font-medium hover:underline"
+                      >
+                        {r.requisitionTitle ?? 'Requisition'}
+                      </Link>
+                    ) : (
+                      <span className="truncate font-medium">
+                        {r.externalJobTitle ?? r.displayCompany ?? 'External application'}
+                      </span>
+                    )}
                     <Badge variant="outline" className="rounded-full text-[10px]">
                       <Globe className="mr-0.5 size-2.5" />
                       {SOURCE_LABEL[r.source]}

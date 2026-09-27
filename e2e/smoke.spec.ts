@@ -37,7 +37,6 @@ test('every top-level route returns 200', async ({ page }) => {
     '/requisitions',
     '/immigration',
     '/interviews',
-    '/applications',
     '/placements',
     '/tasks',
     '/documents',

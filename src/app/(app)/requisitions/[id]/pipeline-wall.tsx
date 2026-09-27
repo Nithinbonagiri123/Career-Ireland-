@@ -32,6 +32,7 @@ import {
 } from '@/modules/applications/actions';
 import { dismissMatchAction, shortlistMatchAction } from '@/modules/matching/actions';
 import type { PipelineData, PipelineEntry, PipelineStageKey } from '@/modules/pipeline/service';
+import { markApplicationPlacedAction } from '@/modules/placements/actions';
 import type { RequisitionListRow } from '@/modules/requisitions/service';
 
 /**
@@ -103,11 +104,11 @@ export function PipelineWall({
           );
           toastResult(r, { success: `${entry.personName} moved to Offer` });
         } else if (stage === 'offer') {
-          const r = await updateApplicationStatusAction(
-            { applicationId: entry.entryId, status: 'ACCEPTED' },
-            requisition.id,
-          );
-          toastResult(r, { success: `${entry.personName} offer accepted — create a placement` });
+          // Atomically: mark application ACCEPTED + create a CONFIRMED
+          // placement + flip candidate availability to PLACED + recompute
+          // requisition fill count. One click, everything consistent.
+          const r = await markApplicationPlacedAction(entry.entryId);
+          toastResult(r, { success: `${entry.personName} placed` });
         }
       } finally {
         setBusyPersonId(null);

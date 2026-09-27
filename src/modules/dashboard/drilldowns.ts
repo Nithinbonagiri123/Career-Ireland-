@@ -1,9 +1,8 @@
-import { and, asc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { tasks } from '@/lib/db/schema/activities';
 import { immigrationCases } from '@/lib/db/schema/immigration';
-import { interviews } from '@/lib/db/schema/interviews_offers';
 import { persons } from '@/lib/db/schema/persons';
 import { employers, jobApplications, jobRequisitions } from '@/lib/db/schema/recruitment';
 import { users } from '@/lib/db/schema/users';
@@ -22,14 +21,19 @@ export type UnfilledRequisitionRow = {
   ageDays: number;
 };
 
-export type UpcomingInterviewRow = {
-  id: string;
+/**
+ * Represents a candidate currently at the Interview stage on a
+ * requisition pipeline. The CRM doesn't schedule the interview itself
+ * (the employer does) — this row is only "who's in the stage right now"
+ * for the dashboard "act on this" strip.
+ */
+export type InterviewStageRow = {
   applicationId: string;
   candidateName: string;
   candidatePersonId: string;
   jobLabel: string;
-  scheduledAt: Date;
-  mode: 'PHONE' | 'VIDEO' | 'IN_PERSON' | 'PANEL';
+  requisitionId: string | null;
+  promotedAt: Date;
 };
 
 export type OverdueTaskRow = {
@@ -52,7 +56,7 @@ export type ExpiringImmigrationCaseRow = {
 
 export type DashboardDrilldowns = {
   unfilledRequisitions: UnfilledRequisitionRow[];
-  interviewsThisWeek: UpcomingInterviewRow[];
+  interviewStageApplications: InterviewStageRow[];
   overdueTasks: OverdueTaskRow[];
   expiringImmigrationCases: ExpiringImmigrationCaseRow[];
 };
@@ -66,7 +70,6 @@ export async function fetchDashboardDrilldowns(): Promise<DashboardDrilldowns> {
 
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const inSevenDays = new Date(startOfToday.getTime() + 7 * 24 * 60 * 60 * 1000);
   const in60Days = new Date(startOfToday.getTime() + 60 * 24 * 60 * 60 * 1000);
   const in60DaysDateStr = in60Days.toISOString().slice(0, 10);
 
@@ -103,37 +106,30 @@ export async function fetchDashboardDrilldowns(): Promise<DashboardDrilldowns> {
     ),
   }));
 
-  // ─── Interviews this week (SCHEDULED, within 7 days) ──────────────────────
+  // ─── Interview stage (candidates currently at status='INTERVIEW') ─────────
+  // Preview of what /interviews shows — most-recently promoted first so the
+  // strip reflects "who just moved into Interview" as a nudge to follow up.
   const ivRows = await db
     .select({
-      id: interviews.id,
-      applicationId: interviews.jobApplicationId,
-      scheduledAt: interviews.scheduledAt,
-      mode: interviews.mode,
+      applicationId: jobApplications.id,
+      updatedAt: jobApplications.updatedAt,
       candidateFirst: persons.firstName,
       candidateLast: persons.lastName,
       candidatePersonId: persons.id,
+      requisitionId: jobRequisitions.id,
       requisitionTitle: jobRequisitions.title,
       applicationSource: jobApplications.source,
       externalJobTitle: jobApplications.externalJobTitle,
       externalCompany: jobApplications.externalCompanyName,
     })
-    .from(interviews)
-    .innerJoin(jobApplications, eq(jobApplications.id, interviews.jobApplicationId))
+    .from(jobApplications)
     .innerJoin(persons, eq(persons.id, jobApplications.personId))
     .leftJoin(jobRequisitions, eq(jobRequisitions.id, jobApplications.jobRequisitionId))
-    .where(
-      and(
-        eq(interviews.status, 'SCHEDULED'),
-        gte(interviews.scheduledAt, now),
-        lte(interviews.scheduledAt, inSevenDays),
-      ),
-    )
-    .orderBy(asc(interviews.scheduledAt))
+    .where(and(eq(jobApplications.status, 'INTERVIEW'), isNull(persons.archivedAt)))
+    .orderBy(desc(jobApplications.updatedAt))
     .limit(DRILLDOWN_LIMIT);
 
-  const interviewsThisWeek: UpcomingInterviewRow[] = ivRows.map((r) => ({
-    id: r.id,
+  const interviewStageApplications: InterviewStageRow[] = ivRows.map((r) => ({
     applicationId: r.applicationId,
     candidateName: `${r.candidateFirst} ${r.candidateLast}`,
     candidatePersonId: r.candidatePersonId,
@@ -141,8 +137,8 @@ export async function fetchDashboardDrilldowns(): Promise<DashboardDrilldowns> {
       r.applicationSource !== 'INTERNAL'
         ? (r.externalJobTitle ?? r.externalCompany ?? 'External application')
         : (r.requisitionTitle ?? 'Requisition'),
-    scheduledAt: r.scheduledAt,
-    mode: r.mode,
+    requisitionId: r.requisitionId,
+    promotedAt: r.updatedAt,
   }));
 
   // ─── Overdue tasks ────────────────────────────────────────────────────────
@@ -223,5 +219,10 @@ export async function fetchDashboardDrilldowns(): Promise<DashboardDrilldowns> {
       };
     });
 
-  return { unfilledRequisitions, interviewsThisWeek, overdueTasks, expiringImmigrationCases };
+  return {
+    unfilledRequisitions,
+    interviewStageApplications,
+    overdueTasks,
+    expiringImmigrationCases,
+  };
 }

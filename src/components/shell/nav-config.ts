@@ -139,12 +139,6 @@ export const WORKSPACES: Record<Business, WorkspaceConfig> = {
           { label: 'Leads', href: '/leads', icon: UserPlus, module: 'leads' },
           { label: 'Candidates', href: '/candidates', icon: Users, module: 'candidates' },
           { label: 'Documents', href: '/documents', icon: FileText, module: 'documents' },
-          {
-            label: 'Applications',
-            href: '/applications',
-            icon: ClipboardList,
-            module: 'applications',
-          },
         ],
       },
       {

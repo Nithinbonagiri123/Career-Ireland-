@@ -34,7 +34,6 @@ const ALL_ROUTES: string[] = [
   '/matching',
   '/shortlists',
   '/interviews',
-  '/applications',
   '/placements',
   '/engagements',
   '/immigration',

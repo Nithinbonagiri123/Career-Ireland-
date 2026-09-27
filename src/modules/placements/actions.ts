@@ -12,6 +12,7 @@ import type {
 import {
   archivePlacement,
   createPlacement,
+  markApplicationPlaced,
   restoreCandidateAvailability,
   unarchivePlacement,
   updatePlacementStatus,
@@ -26,6 +27,15 @@ const rev = () => {
 export async function createPlacementAction(input: CreatePlacementInput) {
   const r = await toActionResult(() => createPlacement(input));
   if (r.ok) rev();
+  return r;
+}
+
+export async function markApplicationPlacedAction(applicationId: string) {
+  const r = await toActionResult(() => markApplicationPlaced(applicationId));
+  if (r.ok) {
+    rev();
+    revalidatePath('/interviews');
+  }
   return r;
 }
 

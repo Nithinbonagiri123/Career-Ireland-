@@ -20,7 +20,6 @@ const LIST_ROUTES: Array<{ path: string; heading: RegExp }> = [
   { path: '/requisitions', heading: /requisitions/i },
   { path: '/immigration', heading: /immigration/i },
   { path: '/interviews', heading: /interviews/i },
-  { path: '/applications', heading: /applications/i },
   { path: '/placements', heading: /placements/i },
   { path: '/tasks', heading: /tasks/i },
   { path: '/documents', heading: /documents/i },

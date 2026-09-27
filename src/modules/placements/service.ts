@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNull, notExists, type SQL, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
@@ -63,77 +63,105 @@ export async function fetchPlacements(createdRange?: DateRange): Promise<Placeme
   }));
 }
 
-export type ApplicationAwaitingPlacement = {
-  applicationId: string;
-  candidatePersonId: string;
-  candidateName: string;
-  requisitionId: string | null;
-  requisitionTitle: string | null;
-  employerName: string | null;
-  acceptedAt: Date;
-};
-
 /**
- * Applications sitting at status='ACCEPTED' with no `placements` row yet.
- * These are candidates a recruiter clicked "Mark Placed" on from the
- * pipeline, which flips the application status but does NOT create a
- * placement — so they're invisible on /placements. Surfaces them at the
- * top of the page with a link to the application detail, where the
- * placement can be created.
+ * One-click "Mark Placed" from the requisition pipeline: flips the
+ * application to ACCEPTED AND creates a CONFIRMED placement in the same
+ * transaction. That's the shape the user actually wants — no separate
+ * placement dialog, no waiting-to-be-confirmed limbo. Availability flip
+ * on the candidate + requisition fill count recompute happen in the
+ * same transaction via the existing createPlacement path.
  *
- * External applications (source != INTERNAL) are excluded — no
- * requisition to place them against.
+ * Idempotent: if the application is already ACCEPTED with a placement,
+ * returns the existing placement rather than double-creating.
  */
-export async function listApplicationsAwaitingPlacement(): Promise<ApplicationAwaitingPlacement[]> {
-  await requireInternalStaff();
+export async function markApplicationPlaced(applicationId: string): Promise<Placement> {
+  const session = await requireInternalStaff();
+  return db.transaction(async (tx) => {
+    const [app] = await tx
+      .select({
+        id: jobApplications.id,
+        personId: jobApplications.personId,
+        jobRequisitionId: jobApplications.jobRequisitionId,
+        status: jobApplications.status,
+      })
+      .from(jobApplications)
+      .where(eq(jobApplications.id, applicationId))
+      .limit(1);
+    if (!app) throw new BusinessRuleError('APPLICATION_NOT_FOUND', 'Application not found');
+    if (!app.jobRequisitionId)
+      throw new BusinessRuleError(
+        'APPLICATION_EXTERNAL',
+        'External applications cannot be placed on our requisitions',
+      );
 
-  const noPlacementYet = notExists(
-    db
-      .select({ id: placements.id })
+    const [req] = await tx
+      .select({ employerId: jobRequisitions.employerId })
+      .from(jobRequisitions)
+      .where(eq(jobRequisitions.id, app.jobRequisitionId))
+      .limit(1);
+    if (!req) throw new BusinessRuleError('REQUISITION_NOT_FOUND', 'Requisition not found');
+
+    // Already placed? Return the existing row so the pipeline click stays
+    // idempotent (double-clicks, revalidate races, etc.).
+    const [existing] = await tx
+      .select()
       .from(placements)
       .where(
         and(
-          eq(placements.personId, jobApplications.personId),
-          eq(placements.jobRequisitionId, jobApplications.jobRequisitionId),
+          eq(placements.personId, app.personId),
+          eq(placements.jobRequisitionId, app.jobRequisitionId),
           isNull(placements.archivedAt),
         ),
-      ),
-  );
+      )
+      .limit(1);
+    if (existing) {
+      if (app.status !== 'ACCEPTED') {
+        await tx
+          .update(jobApplications)
+          .set({ status: 'ACCEPTED', updatedAt: sql`NOW()` })
+          .where(eq(jobApplications.id, applicationId));
+      }
+      return existing;
+    }
 
-  const rows = await db
-    .select({
-      applicationId: jobApplications.id,
-      candidatePersonId: persons.id,
-      candidateFirst: persons.firstName,
-      candidateLast: persons.lastName,
-      updatedAt: jobApplications.updatedAt,
-      requisitionId: jobRequisitions.id,
-      requisitionTitle: jobRequisitions.title,
-      employerName: employers.legalName,
-    })
-    .from(jobApplications)
-    .innerJoin(persons, eq(persons.id, jobApplications.personId))
-    .innerJoin(jobRequisitions, eq(jobRequisitions.id, jobApplications.jobRequisitionId))
-    .innerJoin(employers, eq(employers.id, jobRequisitions.employerId))
-    .where(
-      and(
-        eq(jobApplications.status, 'ACCEPTED'),
-        eq(jobApplications.source, 'INTERNAL'),
-        noPlacementYet,
-        isNull(persons.archivedAt),
-      ),
-    )
-    .orderBy(asc(jobApplications.updatedAt));
+    const [created] = await tx
+      .insert(placements)
+      .values({
+        personId: app.personId,
+        employerId: req.employerId,
+        jobRequisitionId: app.jobRequisitionId,
+        jobApplicationId: applicationId,
+        status: 'CONFIRMED',
+      })
+      .returning();
+    if (!created) throw new Error('placement insert returned no row');
 
-  return rows.map((r) => ({
-    applicationId: r.applicationId,
-    candidatePersonId: r.candidatePersonId,
-    candidateName: `${r.candidateFirst} ${r.candidateLast}`,
-    requisitionId: r.requisitionId,
-    requisitionTitle: r.requisitionTitle,
-    employerName: r.employerName,
-    acceptedAt: r.updatedAt,
-  }));
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'placement',
+      entityId: created.id,
+      action: 'CREATED',
+      after: {
+        personId: created.personId,
+        employerId: created.employerId,
+        jobRequisitionId: created.jobRequisitionId,
+        status: created.status,
+      },
+      context: { via: 'pipeline_mark_placed', applicationId },
+    });
+
+    // Flip the application status alongside the placement so the two
+    // tables agree.
+    await tx
+      .update(jobApplications)
+      .set({ status: 'ACCEPTED', updatedAt: sql`NOW()` })
+      .where(eq(jobApplications.id, applicationId));
+
+    await flipAvailabilityToPlaced(tx, session.user.id, created.personId, created.id);
+    await recomputeRequisitionFillCount(tx, session.user.id, created.jobRequisitionId);
+
+    return created;
+  });
 }
 
 export async function createPlacement(input: CreatePlacementInput): Promise<Placement> {

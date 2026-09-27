@@ -59,7 +59,7 @@ const ROW_ORDER: Array<{
   href: (personId: string) => string;
 }> = [
   { key: 'lead', label: 'leads', icon: UserPlus, href: () => '/leads' },
-  { key: 'application', label: 'applications', icon: Briefcase, href: () => '/applications' },
+  { key: 'application', label: 'applications', icon: Briefcase, href: () => '/requisitions' },
   { key: 'placement', label: 'placements', icon: Trophy, href: () => '/placements' },
   {
     key: 'immigration',

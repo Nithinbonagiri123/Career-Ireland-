@@ -13,7 +13,7 @@ export async function createApplicationAction(input: CreateApplicationInput) {
   const r = await toActionResult(() => createApplication(input));
   if (r.ok) {
     revalidatePath(`/requisitions/${input.jobRequisitionId}`);
-    revalidatePath('/applications');
+    revalidatePath('/interviews');
     revalidatePath(`/candidates/${input.personId}`);
   }
   return r;
@@ -22,7 +22,7 @@ export async function createApplicationAction(input: CreateApplicationInput) {
 export async function createExternalApplicationAction(input: CreateExternalApplicationInput) {
   const r = await toActionResult(() => createExternalApplication(input));
   if (r.ok) {
-    revalidatePath('/applications');
+    revalidatePath('/interviews');
     revalidatePath(`/candidates/${input.personId}`);
   }
   return r;
@@ -35,7 +35,7 @@ export async function updateApplicationStatusAction(
   const r = await toActionResult(() => updateApplicationStatus(input));
   if (r.ok) {
     if (requisitionId) revalidatePath(`/requisitions/${requisitionId}`);
-    revalidatePath('/applications');
+    revalidatePath('/interviews');
   }
   return r;
 }

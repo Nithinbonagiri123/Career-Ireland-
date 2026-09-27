@@ -28,7 +28,6 @@ const ROUTES: string[] = [
   '/matching',
   '/shortlists',
   '/interviews',
-  '/applications',
   '/placements',
   '/engagements',
   '/immigration',

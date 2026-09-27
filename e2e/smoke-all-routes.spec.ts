@@ -34,7 +34,6 @@ const ROUTES: Array<{ path: string; expectHeading?: RegExp }> = [
   { path: '/leads', expectHeading: /leads/i },
   { path: '/prospects', expectHeading: /prospects/i },
   { path: '/documents', expectHeading: /documents/i },
-  { path: '/applications', expectHeading: /applications/i },
 
   // ── Demand ─────────────────────────────────────────────────────────
   { path: '/employers', expectHeading: /employers/i },

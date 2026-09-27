@@ -14,13 +14,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { statusTone } from '@/lib/ui/status-tone';
 import type { DashboardDrilldowns } from '@/modules/dashboard/drilldowns';
 
-const MODE_LABEL: Record<'PHONE' | 'VIDEO' | 'IN_PERSON' | 'PANEL', string> = {
-  PHONE: 'Phone',
-  VIDEO: 'Video',
-  IN_PERSON: 'In person',
-  PANEL: 'Panel',
-};
-
 const CASE_TYPE_LABEL: Record<'EMPLOYMENT_PERMIT' | 'VISA' | 'VISA_EXTENSION', string> = {
   EMPLOYMENT_PERMIT: 'Permit',
   VISA: 'Visa',
@@ -103,36 +96,33 @@ export function DashboardDrilldownsSection({ data }: { data: DashboardDrilldowns
       </DrilldownCard>
 
       <DrilldownCard
-        title="Interviews this week"
+        title="At the Interview stage"
         icon={CalendarClock}
-        count={data.interviewsThisWeek.length}
+        count={data.interviewStageApplications.length}
         seeAllHref="/interviews"
-        emptyMessage="Nothing scheduled in the next 7 days."
+        emptyMessage="Nobody on the Interview stage right now."
       >
-        {data.interviewsThisWeek.map((iv) => (
-          <li key={iv.id}>
+        {data.interviewStageApplications.map((iv) => (
+          <li key={iv.applicationId}>
             <Link
-              href={`/applications/${iv.applicationId}`}
+              href={
+                iv.requisitionId
+                  ? `/requisitions/${iv.requisitionId}`
+                  : `/candidates/${iv.candidatePersonId}`
+              }
               className="flex items-center justify-between gap-3 py-2 text-sm transition-colors hover:bg-accent/40 -mx-6 px-6"
             >
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono text-[11px] text-foreground/60">
-                    {format(iv.scheduledAt, 'EEE HH:mm')}
-                  </span>
-                  <span className="truncate font-medium">{iv.candidateName}</span>
-                </div>
-                <p className="truncate text-[11px] text-foreground/60">
-                  {iv.jobLabel} · {MODE_LABEL[iv.mode]}
-                </p>
+                <span className="block truncate font-medium">{iv.candidateName}</span>
+                <p className="truncate text-[11px] text-foreground/60">{iv.jobLabel}</p>
               </div>
               <time
-                dateTime={iv.scheduledAt.toISOString()}
+                dateTime={iv.promotedAt.toISOString()}
                 className="flex shrink-0 flex-col items-end text-[10px] text-muted-foreground"
               >
-                <span>{formatDistanceToNow(iv.scheduledAt, { addSuffix: true })}</span>
+                <span>Moved {formatDistanceToNow(iv.promotedAt, { addSuffix: true })}</span>
                 <span className="tabular-nums text-muted-foreground/70">
-                  {format(iv.scheduledAt, 'dd MMM · HH:mm')}
+                  {format(iv.promotedAt, 'dd MMM · HH:mm')}
                 </span>
               </time>
             </Link>

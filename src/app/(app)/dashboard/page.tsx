@@ -278,7 +278,7 @@ export default async function DashboardPage({
               iconEl={<FileCheck2 aria-hidden />}
               data={trends.applications}
               tone="success"
-              href="/applications"
+              href="/requisitions"
             />
             <TrendChart
               title="Placements"
@@ -311,7 +311,7 @@ export default async function DashboardPage({
             />
             <PipelineFunnel
               title="Application funnel"
-              href="/applications"
+              href="/requisitions"
               icon={FileCheck2}
               stages={pipelines.application}
             />
@@ -420,19 +420,22 @@ export default async function DashboardPage({
               </ul>
             </AttentionCard>
             <AttentionCard
-              title="Interviews this week"
-              count={drilldowns.interviewsThisWeek.length}
+              title="At the Interview stage"
+              count={drilldowns.interviewStageApplications.length}
               href="/interviews"
               icon={Clock}
               tone="info"
-              emptyLabel="Nothing on the interview calendar this week."
+              emptyLabel="Nobody currently at the Interview stage."
             >
               <ul className="space-y-1.5 text-xs">
-                {drilldowns.interviewsThisWeek.slice(0, 3).map((i) => (
-                  <li key={i.id} className="flex items-baseline justify-between gap-2">
+                {drilldowns.interviewStageApplications.slice(0, 3).map((i) => (
+                  <li
+                    key={i.applicationId}
+                    className="flex items-baseline justify-between gap-2"
+                  >
                     <span className="truncate">{i.candidateName}</span>
                     <span className="shrink-0 text-[10px] text-muted-foreground">
-                      {format(i.scheduledAt, 'EEE HH:mm')}
+                      {format(i.promotedAt, 'dd MMM · HH:mm')}
                     </span>
                   </li>
                 ))}
