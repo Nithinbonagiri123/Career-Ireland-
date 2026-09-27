@@ -24,6 +24,11 @@ test('dashboard renders for authenticated admin', async ({ page }) => {
 });
 
 test('every top-level route returns 200', async ({ page }) => {
+  // Iterating 15 routes and cold-compiling each under Turbopack dev
+  // easily exceeds the default 30s budget. Bump to 120s so a single
+  // slow route can't tip the whole check over the edge; a real hang
+  // still shows up because navigation itself will time out first.
+  test.setTimeout(120_000);
   const routes = [
     '/dashboard',
     '/candidates',

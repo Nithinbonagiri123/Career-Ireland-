@@ -44,7 +44,12 @@ test('03 · Candidate profile has no "Invite to portal" button', async ({ page }
   test.skip((await firstPerson.count()) === 0, 'no leads');
   await firstPerson.click();
   await page.waitForURL(/\/candidates\/[0-9a-f-]+/i);
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  // Candidate detail is a heavy page — many Promise.all fetches +
+  // Turbopack cold compile of /candidates/[id] can push the initial
+  // paint past the 5s default. Bump the h1 assertion so this test
+  // reads what it's trying to read: 'no invite-to-portal button',
+  // not 'h1 appeared fast enough'.
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('button', { name: /invite to portal/i })).toHaveCount(0);
   await shot(page, 'e2e__cleanup-03-candidate-header');
 });
