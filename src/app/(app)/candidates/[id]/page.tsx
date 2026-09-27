@@ -15,6 +15,7 @@ import {
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
+import { EditPersonDialog } from '@/components/edit-person-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
@@ -414,28 +415,31 @@ export default async function CandidateDetail({
           breadcrumbs={[{ label: 'Candidates', href: '/candidates' }, { label: fullName }]}
           meta={metaStrip}
           action={
-            candidateProfile && (
-              <div className="flex items-center gap-2">
-                <AssignToMeButton
-                  entity="candidate"
-                  id={person.id}
-                  currentUserId={session.user.id}
-                  currentAssignedUserId={assignedUserId}
-                />
-                <ReassignButton
-                  entity="candidate"
-                  id={person.id}
-                  subjectLabel={fullName}
-                  currentAssignedUserId={assignedUserId}
-                  currentAssignedName={currentOwner?.fullName ?? null}
-                  staffUsers={staffUsers.map((u) => ({
-                    id: u.id,
-                    fullName: u.fullName,
-                    email: u.email,
-                  }))}
-                />
-              </div>
-            )
+            <div className="flex items-center gap-2">
+              <EditPersonDialog person={person} />
+              {candidateProfile && (
+                <>
+                  <AssignToMeButton
+                    entity="candidate"
+                    id={person.id}
+                    currentUserId={session.user.id}
+                    currentAssignedUserId={assignedUserId}
+                  />
+                  <ReassignButton
+                    entity="candidate"
+                    id={person.id}
+                    subjectLabel={fullName}
+                    currentAssignedUserId={assignedUserId}
+                    currentAssignedName={currentOwner?.fullName ?? null}
+                    staffUsers={staffUsers.map((u) => ({
+                      id: u.id,
+                      fullName: u.fullName,
+                      email: u.email,
+                    }))}
+                  />
+                </>
+              )}
+            </div>
           }
         />
       </FadeUp>

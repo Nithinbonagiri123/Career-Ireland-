@@ -8,6 +8,7 @@ import type {
   FindSimilarInput,
   MergePersonsInput,
   UnarchivePersonInput,
+  UpdatePersonInput,
 } from './schemas';
 import {
   archivePerson,
@@ -15,6 +16,7 @@ import {
   createPerson,
   mergePersons,
   unarchivePerson,
+  updatePerson,
 } from './service';
 
 const revalidateAll = () => {
@@ -30,6 +32,15 @@ export async function findSimilarPersonsAction(input: FindSimilarInput) {
 export async function createPersonAction(input: CreatePersonInput) {
   const result = await toActionResult(() => createPerson(input));
   if (result.ok) revalidateAll();
+  return result;
+}
+
+export async function updatePersonAction(input: UpdatePersonInput) {
+  const result = await toActionResult(() => updatePerson(input));
+  if (result.ok) {
+    revalidateAll();
+    revalidatePath(`/candidates/${input.personId}`);
+  }
   return result;
 }
 

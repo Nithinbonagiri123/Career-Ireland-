@@ -24,6 +24,8 @@ import {
   MergePersonsSchema,
   type UnarchivePersonInput,
   UnarchivePersonSchema,
+  type UpdatePersonInput,
+  UpdatePersonSchema,
 } from './schemas';
 
 /** Blank/empty-string → null for optional columns. */
@@ -89,6 +91,78 @@ export async function createPerson(input: CreatePersonInput): Promise<Person> {
       },
     });
     return created;
+  });
+}
+
+/**
+ * Update an existing person's editable details. Same field set as create
+ * except `source` — that classification is one-shot at intake and shouldn't
+ * be revised retroactively (would corrupt reporting on where candidates
+ * came from). Records a full before/after audit event so support can
+ * trace who changed what.
+ */
+export async function updatePerson(input: UpdatePersonInput): Promise<Person> {
+  const session = await requireInternalStaff();
+  const parsed = UpdatePersonSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid person data',
+      parsed.error.flatten().fieldErrors as Record<string, string>,
+    );
+  }
+  const d = parsed.data;
+
+  return db.transaction(async (tx) => {
+    const [before] = await tx.select().from(persons).where(eq(persons.id, d.personId)).limit(1);
+    if (!before) throw new BusinessRuleError('PERSON_NOT_FOUND', 'Person not found');
+
+    const [after] = await tx
+      .update(persons)
+      .set({
+        firstName: d.firstName.trim(),
+        lastName: d.lastName.trim(),
+        email: blankToNull(d.email),
+        phone: blankToNull(d.phone),
+        dateOfBirth: blankToNull(d.dateOfBirth),
+        nationality: blankToNull(d.nationality),
+        currentCountry: blankToNull(d.currentCountry),
+        currentCity: blankToNull(d.currentCity),
+        notes: blankToNull(d.notes),
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(persons.id, d.personId))
+      .returning();
+    if (!after) throw new Error('update returned no row');
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'person',
+      entityId: after.id,
+      action: 'UPDATED',
+      before: {
+        firstName: before.firstName,
+        lastName: before.lastName,
+        email: before.email,
+        phone: before.phone,
+        dateOfBirth: before.dateOfBirth,
+        nationality: before.nationality,
+        currentCountry: before.currentCountry,
+        currentCity: before.currentCity,
+        notes: before.notes,
+      },
+      after: {
+        firstName: after.firstName,
+        lastName: after.lastName,
+        email: after.email,
+        phone: after.phone,
+        dateOfBirth: after.dateOfBirth,
+        nationality: after.nationality,
+        currentCountry: after.currentCountry,
+        currentCity: after.currentCity,
+        notes: after.notes,
+      },
+    });
+    return after;
   });
 }
 

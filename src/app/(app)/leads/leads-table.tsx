@@ -1,7 +1,15 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { Archive, CheckCircle2, FileText, MoreHorizontal, UserCheck, UserX } from 'lucide-react';
+import {
+  Archive,
+  CheckCircle2,
+  FileText,
+  MoreHorizontal,
+  Pencil,
+  UserCheck,
+  UserX,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -329,6 +337,19 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
                 <DropdownMenuItem disabled={!canTransition} onClick={() => openConvert(lead)}>
                   <UserCheck className="mr-2 size-4" /> Convert to candidate…
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {/* Edit details opens the candidate profile — the underlying
+                    person record. Works for a lead even before conversion:
+                    fetchPersonDetail loads any person, and the profile page's
+                    'Edit details' button is unconditional (see the candidate
+                    detail page action bar). */}
+                <DropdownMenuItem
+                  render={
+                    <Link href={`/candidates/${lead.personId}`}>
+                      <Pencil className="mr-2 size-4" /> Edit details
+                    </Link>
+                  }
+                />
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => setArchiveTarget(lead)}

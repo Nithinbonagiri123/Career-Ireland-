@@ -87,6 +87,12 @@ export const WORKSPACES: Record<Business, WorkspaceConfig> = {
       {
         label: 'Business',
         items: [
+          // Leads live at the global level, not under any specific business —
+          // a lead can be for Candidate Services, Recruitment, or Immigration
+          // (the service_of_interest FK points at the shared services catalog,
+          // and invoice generation reads that field). Having them here means
+          // one entry point regardless of which workspace the operator is in.
+          { label: 'Leads', href: '/leads', icon: UserPlus, module: 'leads' },
           {
             label: 'Activities',
             href: '/communications',
@@ -125,7 +131,9 @@ export const WORKSPACES: Record<Business, WorkspaceConfig> = {
       {
         label: 'Pipeline',
         items: [
-          { label: 'Leads', href: '/leads', icon: UserPlus, module: 'leads' },
+          // Leads intentionally NOT here — they're a global entity under
+          // Main Dashboard (see WORKSPACES.main). A lead can be for any
+          // business, not just candidate services.
           { label: 'Candidates', href: '/candidates', icon: Users, module: 'candidates' },
           { label: 'Documents', href: '/documents', icon: FileText, module: 'documents' },
           {

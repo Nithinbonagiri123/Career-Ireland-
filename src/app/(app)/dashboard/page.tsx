@@ -19,6 +19,8 @@ import { Badge } from '@/components/ui/badge';
 import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchAgingReport } from '@/modules/billing/aging';
+import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
+import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchRecentActivity } from '@/modules/dashboard/activity';
 import { fetchDashboardDrilldowns } from '@/modules/dashboard/drilldowns';
 import { fetchDashboardPipelines } from '@/modules/dashboard/pipelines';
@@ -27,6 +29,7 @@ import { fetchDashboardMetrics } from '@/modules/dashboard/service';
 import { fetchDashboardTrends } from '@/modules/dashboard/trends';
 import { fetchHrDashboard, fetchStaffCurrentlyWorking } from '@/modules/hr/service';
 import { fetchAppSettings } from '@/modules/settings/service';
+import { CreateLeadDialog } from '../leads/create-lead-dialog';
 import { ActivityFeed } from './activity-feed';
 import { AgingSection } from './aging-section';
 import { AttentionCard } from './attention-card';
@@ -60,6 +63,8 @@ export default async function DashboardPage({
     workingNow,
     aging,
     settings,
+    invoiceableServices,
+    currencies,
   ] = await Promise.all([
     fetchDashboardMetrics(),
     fetchDashboardDrilldowns(),
@@ -72,6 +77,11 @@ export default async function DashboardPage({
     fetchStaffCurrentlyWorking(),
     fetchAgingReport(),
     fetchAppSettings(),
+    // Payer-type PERSON — Leads always bill an individual candidate; the
+    // service catalog filter matches what /leads uses so the same dialog
+    // renders the same set of pickable services.
+    fetchInvoiceableServicesFor('PERSON'),
+    fetchCurrencies(),
   ]);
 
   const today = new Date();
@@ -97,6 +107,11 @@ export default async function DashboardPage({
               What is happening, what needs attention, and what to do next.
             </p>
           </div>
+          {/* Leads are service-agnostic — you can raise one for Candidate
+              Services, Recruitment, or Immigration from anywhere. The
+              dashboard is the natural entry point, so the same dialog
+              /leads uses lives here too. */}
+          <CreateLeadDialog invoiceableServices={invoiceableServices} currencies={currencies} />
         </div>
       </FadeUp>
 
