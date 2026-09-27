@@ -146,34 +146,42 @@ export function PersonPicker({
         aria-haspopup="listbox"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex h-9 w-full items-center justify-between rounded-md border bg-background px-3 text-sm outline-none transition-colors',
+          // Right padding leaves room for the absolutely-positioned clear +
+          // chevron overlay below (pr-14 when a selection can be cleared,
+          // pr-8 otherwise so the chevron still has breathing room).
+          'flex h-9 w-full items-center rounded-md border bg-background pl-3 text-sm outline-none transition-colors',
           'hover:border-foreground/20 focus-visible:ring-2 focus-visible:ring-ring',
+          selected && !disabled ? 'pr-14' : 'pr-8',
           invalid && 'border-destructive',
           disabled && 'cursor-not-allowed opacity-60',
         )}
       >
         {/* min-w-0 + flex-1 is critical: without it, a long 'Name · long.email@domain'
-            label refuses to shrink and pushes the clear/chevron off the right edge,
-            which visually breaks the dialog on any candidate whose email is long. */}
+            label refuses to shrink and pushes the trailing overlay off the right edge. */}
         <span
           className={cn('min-w-0 flex-1 truncate text-left', !selected && 'text-muted-foreground')}
         >
           {selected ? personLabel(selected) : placeholder}
         </span>
-        <span className="ml-2 flex shrink-0 items-center gap-1">
-          {selected && !disabled && (
-            <button
-              type="button"
-              onClick={clear}
-              aria-label="Clear selection"
-              className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <X className="size-3.5" />
-            </button>
-          )}
-          <ChevronsUpDown className="size-3.5 text-muted-foreground" />
-        </span>
       </button>
+      {/* Trailing controls are siblings of the trigger button — nesting a
+          <button> inside a <button> is invalid HTML and blows up hydration.
+          pointer-events-none on the wrapper + pointer-events-auto on the
+          clear button means clicks on the chevron pass through to the
+          trigger below and toggle the dropdown as expected. */}
+      <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center gap-1">
+        {selected && !disabled && (
+          <button
+            type="button"
+            onClick={clear}
+            aria-label="Clear selection"
+            className="pointer-events-auto rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="size-3.5" />
+          </button>
+        )}
+        <ChevronsUpDown className="size-3.5 text-muted-foreground" />
+      </span>
 
       {open && (
         <motion.div
