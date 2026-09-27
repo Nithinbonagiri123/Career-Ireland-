@@ -3,9 +3,9 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { type ReactElement, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';
+import { type OccupationOption, OccupationPicker } from '@/components/occupation-picker';
 import { SubmitButton } from '@/components/submit-button';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,7 +24,6 @@ import type { Currency } from '@/lib/db/schema/currencies';
 import type { Occupation } from '@/lib/db/schema/occupations';
 import type { Employer, JobRequisition } from '@/lib/db/schema/recruitment';
 import { useFormDialog } from '@/lib/hooks/use-form-dialog';
-import { createOccupationFromNameAction } from '@/modules/occupations/actions';
 import { upsertRequisitionAction } from '@/modules/requisitions/actions';
 import {
   type UpsertRequisitionInput,
@@ -78,20 +77,15 @@ export function RequisitionDialog({
   } = form;
   const { open, onOpenChange, formError, submit } = useFormDialog(form);
 
-  const initialOccupation = initial?.occupationId
-    ? occupations.find((o) => o.id === initial.occupationId)
-    : null;
-  const [occupationSelection, setOccupationSelection] = useState<Selection>(
-    initialOccupation
-      ? { kind: 'catalog', id: initialOccupation.id, label: initialOccupation.name }
-      : null,
+  const [locallyCreatedOccupations, setLocallyCreatedOccupations] = useState<OccupationOption[]>(
+    [],
   );
   const occupationOptions = useMemo(
-    () =>
-      occupations
-        .filter((o) => o.isActive || o.id === initial?.occupationId)
-        .map((o) => ({ id: o.id, name: o.name, isActive: true })),
-    [occupations, initial?.occupationId],
+    () => [
+      ...locallyCreatedOccupations,
+      ...occupations.map((o) => ({ id: o.id, name: o.name, isActive: o.isActive })),
+    ],
+    [occupations, locallyCreatedOccupations],
   );
 
   const onSubmit = handleSubmit((data) =>
@@ -123,23 +117,15 @@ export function RequisitionDialog({
           <div className="grid grid-cols-3 gap-3">
             <FormField id="jr-occupation" label="Occupation">
               <input type="hidden" {...register('occupationId')} />
-              <CatalogAutosuggest
+              <OccupationPicker
                 inputId="jr-occupation"
                 options={occupationOptions}
-                value={occupationSelection}
-                onChange={(v) => {
-                  setOccupationSelection(v);
-                  setValue('occupationId', v?.kind === 'catalog' ? v.id : '', {
-                    shouldDirty: true,
-                  });
-                }}
-                placeholder="Type to search — or add new"
-                createLabel="Add occupation"
-                onCreateNew={async (name) => {
-                  const r = await createOccupationFromNameAction({ name });
-                  if (!r.ok) throw new Error(r.error.message);
-                  return { id: r.data.id, label: r.data.name };
-                }}
+                value={form.watch('occupationId') ?? ''}
+                onChange={(id) => setValue('occupationId', id, { shouldDirty: true })}
+                onOptionsChanged={(created) =>
+                  setLocallyCreatedOccupations((prev) => [created, ...prev])
+                }
+                placeholder="Select occupation…"
               />
             </FormField>
             <FormField id="jr-positions" label="Positions">

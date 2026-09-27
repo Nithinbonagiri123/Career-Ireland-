@@ -11,11 +11,11 @@ import {
   User,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { MultiDocumentUploader } from '@/components/multi-document-uploader';
+import { type OccupationOption, OccupationPicker } from '@/components/occupation-picker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -34,7 +34,6 @@ import {
   finaliseDraftAction,
   updateDraftPersonAction,
 } from '@/modules/candidates/onboarding-actions';
-import { createOccupationFromNameAction } from '@/modules/occupations/actions';
 
 type Draft = {
   personId: string;
@@ -163,10 +162,18 @@ export function OnboardingForm({
   // The candidate's primary occupation (Plumber, Electrician, etc.) —
   // set on candidate_profiles at finalise. Not auto-saved because there's
   // no candidate profile yet during draft; picked once at intake, and
-  // editable on the candidate detail page afterwards. `null` means
-  // "not chosen" (a valid state; you can add it later).
-  const [occupationSelection, setOccupationSelection] = useState<Selection>(null);
-  const primaryOccupationId = occupationSelection?.kind === 'catalog' ? occupationSelection.id : '';
+  // editable on the candidate detail page afterwards.
+  const [primaryOccupationId, setPrimaryOccupationId] = useState('');
+  const [locallyCreatedOccupations, setLocallyCreatedOccupations] = useState<OccupationOption[]>(
+    [],
+  );
+  const occupationOptions = useMemo(
+    () => [
+      ...locallyCreatedOccupations,
+      ...occupations.map((o) => ({ id: o.id, name: o.name, isActive: true })),
+    ],
+    [occupations, locallyCreatedOccupations],
+  );
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -294,18 +301,15 @@ export function OnboardingForm({
                   Used by the matching algorithm to score this candidate against requisitions.
                 </span>
               </Label>
-              <CatalogAutosuggest
+              <OccupationPicker
                 inputId="primaryOccupation"
-                options={occupations.map((o) => ({ id: o.id, name: o.name, isActive: true }))}
-                value={occupationSelection}
-                onChange={setOccupationSelection}
-                placeholder="Type to search — or add a new occupation"
-                createLabel="Add occupation"
-                onCreateNew={async (name) => {
-                  const r = await createOccupationFromNameAction({ name });
-                  if (!r.ok) throw new Error(r.error.message);
-                  return { id: r.data.id, label: r.data.name };
-                }}
+                options={occupationOptions}
+                value={primaryOccupationId}
+                onChange={setPrimaryOccupationId}
+                onOptionsChanged={(created) =>
+                  setLocallyCreatedOccupations((prev) => [created, ...prev])
+                }
+                placeholder="Select occupation…"
               />
             </div>
             <div className="md:col-span-2 space-y-1.5">
