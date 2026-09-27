@@ -48,14 +48,15 @@ export const appSettings = pgTable(
     // ── Tax ─────────────────────────────────────────────────────────
     /**
      * Standard VAT rate applied on every invoice line, as a percent.
-     * Owner default = 23.00 (Ireland's standard VAT rate). Editable
-     * from /admin/settings — set to 0 if not VAT-registered so the
-     * invoice shows "VAT €0.00". Never hardcoded per the
-     * no-hardcoded-document-content rule.
+     * Default = 0.00 (owner asked for VAT-off while the business is
+     * still small). Bump to 23.00 or another rate in /admin/settings
+     * when VAT registration kicks in — the invoice/receipt templates
+     * automatically re-show the VAT row when the rate is non-zero.
+     * Never hardcoded per the no-hardcoded-document-content rule.
      */
     vatRatePercent: numeric('vat_rate_percent', { precision: 5, scale: 2 })
       .notNull()
-      .default('23.00'),
+      .default('0.00'),
 
     // ── Editable copy on printables ────────────────────────────────
     /** Footer paragraph on invoices. `${contactEmail}` interpolated by
