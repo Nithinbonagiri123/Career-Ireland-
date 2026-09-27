@@ -80,6 +80,12 @@ export const ConvertLeadSchema = z.object({
   paymentProofDocumentInstanceId: z.string().uuid().optional().or(z.literal('')),
 });
 
+export const AcceptLeadSchema = z.object({
+  leadId: z.string().uuid(),
+  /** Free-text rationale ('payment cleared', 'client signed', 'manual accept'). Audited. */
+  reason: z.string().min(3).max(500),
+});
+
 export const ArchiveLeadSchema = z.object({
   leadId: z.string().uuid(),
   reason: z.string().min(3).max(500),
@@ -91,6 +97,7 @@ export const UnarchiveLeadSchema = z.object({
 });
 
 export type CreateLeadInput = z.infer<typeof CreateLeadSchema>;
+export type AcceptLeadInput = z.infer<typeof AcceptLeadSchema>;
 export type UpdateLeadStatusInput = z.infer<typeof UpdateLeadStatusSchema>;
 export type ConvertLeadInput = z.infer<typeof ConvertLeadSchema>;
 export type ArchiveLeadInput = z.infer<typeof ArchiveLeadSchema>;

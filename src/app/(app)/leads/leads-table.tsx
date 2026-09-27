@@ -11,6 +11,7 @@ import {
   UserX,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
@@ -42,6 +43,7 @@ import { assignEntityAction } from '@/modules/assignments/actions';
 import type { InvoiceableService } from '@/modules/billing/read';
 import { ensurePaymentProofTypeAction } from '@/modules/document-types/actions';
 import {
+  acceptLeadAction,
   archiveLeadAction,
   convertLeadAction,
   updateLeadStatusAction,
@@ -60,6 +62,7 @@ type Props = {
 export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [convertTarget, setConvertTarget] = useState<LeadListRow | null>(null);
+  const [acceptTarget, setAcceptTarget] = useState<LeadListRow | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<LeadListRow | null>(null);
   const [reason, setReason] = useState('');
   const [paymentProofTypeId, setPaymentProofTypeId] = useState<string | null>(null);
@@ -67,6 +70,38 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
   const [proofFilename, setProofFilename] = useState<string | null>(null);
   const [invoicingLead, setInvoicingLead] = useState<LeadListRow | null>(null);
   const [, startTransition] = useTransition();
+
+  const router = useRouter();
+  const confirmAccept = (acceptReason: string) => {
+    if (!acceptTarget) return;
+    const target = acceptTarget;
+    setBusyId(target.id);
+    startTransition(async () => {
+      const r = await acceptLeadAction({ leadId: target.id, reason: acceptReason });
+      setBusyId(null);
+      if (r.ok) {
+        toast.success(
+          r.data.targetBusiness === 'RECRUITMENT'
+            ? 'Requisition created — opening it'
+            : r.data.targetBusiness === 'IMMIGRATION'
+              ? 'Immigration case created — opening it'
+              : 'Candidate profile activated — opening it',
+        );
+        setAcceptTarget(null);
+        // Deep-link to the freshly-created entity so the operator lands in
+        // context (invoices + docs will already be attached).
+        if (r.data.targetBusiness === 'IMMIGRATION') {
+          router.push(`/immigration/${r.data.entityId}`);
+        } else if (r.data.targetBusiness === 'RECRUITMENT') {
+          router.push(`/requisitions/${r.data.entityId}`);
+        } else if (target.personId) {
+          router.push(`/candidates/${target.personId}`);
+        }
+      } else {
+        toast.error(r.error.message);
+      }
+    });
+  };
 
   const confirmArchive = (archiveReason: string) => {
     if (!archiveTarget) return;
@@ -76,7 +111,7 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
       const r = await archiveLeadAction({ leadId: target.id, reason: archiveReason });
       setBusyId(null);
       if (r.ok) {
-        toast.success(`${target.personName}'s lead archived`);
+        toast.success(`${target.displayName}'s lead archived`);
         setArchiveTarget(null);
       } else {
         toast.error(r.error.message);
@@ -150,7 +185,7 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
       });
       setBusyId(null);
       if (result.ok) {
-        toast.success(`${target.personName} is now an active candidate`);
+        toast.success(`${target.displayName} is now an active candidate`);
         closeConvert();
       } else {
         toast.error(result.error.message);
@@ -160,21 +195,30 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
 
   const columns: ColumnDef<LeadListRow>[] = [
     {
-      header: 'Person',
-      accessorKey: 'personName',
-      cell: ({ row }) => (
-        <Link
-          href={`/candidates/${row.original.personId}`}
-          className="group flex flex-col rounded-md -mx-2 px-2 py-0.5 hover:bg-muted/60"
-        >
-          <span className="text-sm font-medium group-hover:underline underline-offset-2">
-            {row.original.personName}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {row.original.personEmail ?? row.original.personPhone ?? '—'}
-          </span>
-        </Link>
-      ),
+      header: 'Person / Employer',
+      accessorKey: 'displayName',
+      cell: ({ row }) => {
+        // For CS/Immigration → deep-link to the candidate profile. For
+        // Recruitment (employer-payer) → link to the employer detail page.
+        const href = row.original.personId
+          ? `/candidates/${row.original.personId}`
+          : row.original.employerId
+            ? `/employers/${row.original.employerId}`
+            : '/leads';
+        return (
+          <Link
+            href={href}
+            className="group flex flex-col rounded-md -mx-2 px-2 py-0.5 hover:bg-muted/60"
+          >
+            <span className="text-sm font-medium group-hover:underline underline-offset-2">
+              {row.original.displayName}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {row.original.personEmail ?? row.original.personPhone ?? '—'}
+            </span>
+          </Link>
+        );
+      },
     },
     {
       header: 'Status',
@@ -334,8 +378,25 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
                 <DropdownMenuItem disabled={!canTransition} onClick={() => setInvoicingLead(lead)}>
                   <FileText className="mr-2 size-4" /> Add another invoice…
                 </DropdownMenuItem>
+                {/* Accept — universal handoff. Materialises the lead into
+                    its target business (CS → candidate profile, Immigration
+                    → immigration case, Recruitment → job requisition) and
+                    back-links every invoice raised on this lead. Replaces
+                    the classic 'Convert to candidate' flow for non-CS
+                    targets; for CS it does the same thing + a bit more. */}
+                <DropdownMenuItem disabled={!canTransition} onClick={() => setAcceptTarget(lead)}>
+                  <CheckCircle2 className="mr-2 size-4" />{' '}
+                  {lead.targetBusiness === 'RECRUITMENT'
+                    ? 'Accept → open requisition…'
+                    : lead.targetBusiness === 'IMMIGRATION'
+                      ? 'Accept → open case…'
+                      : 'Accept → activate candidate…'}
+                </DropdownMenuItem>
+                {/* Old CS-only convert flow kept as a fallback for the
+                    payment-proof-upload edge case; the new Accept flow
+                    doesn't require the operator to attach proof inline. */}
                 <DropdownMenuItem disabled={!canTransition} onClick={() => openConvert(lead)}>
-                  <UserCheck className="mr-2 size-4" /> Convert to candidate…
+                  <UserCheck className="mr-2 size-4" /> Convert (with payment proof)…
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {/* Edit details opens the candidate profile — the underlying
@@ -380,13 +441,37 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
         open={archiveTarget !== null}
         onCancel={() => setArchiveTarget(null)}
         onConfirm={confirmArchive}
-        title={`Archive ${archiveTarget?.personName ?? ''}'s lead?`}
+        title={`Archive ${archiveTarget?.displayName ?? ''}'s lead?`}
         description="Removes the lead from the active list. The record and its audit history are preserved and can be restored later. Underlying person is not archived."
         label="Reason (audited)"
         placeholder="e.g. Duplicate lead — kept the newer one"
         confirmLabel="Archive"
         confirmVariant="destructive"
         pending={busyId === archiveTarget?.id}
+      />
+      <PromptDialog
+        open={acceptTarget !== null}
+        onCancel={() => setAcceptTarget(null)}
+        onConfirm={confirmAccept}
+        title={
+          acceptTarget?.targetBusiness === 'RECRUITMENT'
+            ? `Accept lead for ${acceptTarget?.displayName ?? ''} → open requisition?`
+            : acceptTarget?.targetBusiness === 'IMMIGRATION'
+              ? `Accept lead for ${acceptTarget?.displayName ?? ''} → open immigration case?`
+              : `Accept lead for ${acceptTarget?.displayName ?? ''} → activate candidate?`
+        }
+        description={
+          acceptTarget?.targetBusiness === 'RECRUITMENT'
+            ? 'Creates a job requisition for this employer in DRAFT. Every invoice raised on the lead is linked to the new requisition automatically.'
+            : acceptTarget?.targetBusiness === 'IMMIGRATION'
+              ? "Creates an immigration case for this person. Every invoice raised on the lead is linked to the case, and the case's document section shows any docs the person already has."
+              : "Activates a candidate profile for this person. The person's existing invoices/receipts continue to show in their billing history."
+        }
+        label="Reason (audited)"
+        placeholder="e.g. Payment cleared, client signed"
+        confirmLabel="Accept"
+        confirmVariant="default"
+        pending={busyId === acceptTarget?.id}
       />
       <Dialog
         open={convertTarget !== null}
@@ -401,7 +486,7 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
           {convertTarget && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Activating <span className="font-medium">{convertTarget.personName}</span> as a
+                Activating <span className="font-medium">{convertTarget.displayName}</span> as a
                 candidate. Upload the payment proof to record method{' '}
                 <span className="font-mono text-[11px]">PAYMENT_VERIFIED</span> — or skip to record
                 a manual override. Both paths are audited.
@@ -497,7 +582,7 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
           }}
           payerMode="PERSON"
           payerId={invoicingLead.personId}
-          payerLabel={invoicingLead.personName ?? invoicingLead.displayName}
+          payerLabel={invoicingLead.displayName}
           services={invoiceableServices}
         />
       )}
