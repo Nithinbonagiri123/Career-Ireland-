@@ -2,6 +2,7 @@ import { Briefcase, Building2, MapPin, Pencil, Users } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
+import { BillingSection } from '@/components/billing/billing-section';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
@@ -14,6 +15,7 @@ import {
   listApplicationsForRequisition,
   listShortlistPromotionCandidates,
 } from '@/modules/applications/service';
+import { fetchRequisitionBillingHistory } from '@/modules/billing/read';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchEmployers } from '@/modules/employers/service';
 import { fetchOccupations } from '@/modules/occupations/service';
@@ -55,6 +57,7 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     occupationList,
     checklists,
     staffUsers,
+    requisitionBilling,
   ] = await Promise.all([
     fetchRequisitionPipeline(id),
     listApplicationsForRequisition(id),
@@ -68,6 +71,7 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     fetchOccupations(),
     listChecklistsForRequisition(id),
     fetchStaffUserOptions(),
+    fetchRequisitionBillingHistory(id),
   ]);
   const currentOwner = requisition.assignedUserId
     ? (staffUsers.find((u) => u.id === requisition.assignedUserId) ?? null)
@@ -187,6 +191,32 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
                   </p>
                 </>
               )}
+            </CardContent>
+          </Card>
+        </FadeUp>
+      )}
+      {/* Billing for THIS requisition — invoices tied via
+          invoices.job_requisition_id (populated when acceptLead
+          materialised the requisition from a recruitment lead, or by
+          any later manual invoice against the requisition). Only
+          renders when the requisition actually has billing rows. */}
+      {(requisitionBilling.invoices.length > 0 || requisitionBilling.receipts.length > 0) && (
+        <FadeUp delay={0.06}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Billing for this requisition</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Invoices and receipts linked to this requisition. Auto-populated when a recruitment
+                lead was Accepted; also updated on any subsequent invoice raised against it.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <BillingSection
+                profileHref={`/employers/${requisition.employerId}`}
+                invoices={requisitionBilling.invoices}
+                receipts={requisitionBilling.receipts}
+                canVerify={false}
+              />
             </CardContent>
           </Card>
         </FadeUp>

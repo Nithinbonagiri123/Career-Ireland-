@@ -3,6 +3,7 @@ import { Building2, CalendarClock, Fingerprint, PlaneTakeoff, User } from 'lucid
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
+import { BillingSection } from '@/components/billing/billing-section';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
@@ -12,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { statusTone } from '@/lib/ui/status-tone';
 import { fetchTasksForImmigrationCase } from '@/modules/activities/service';
+import { fetchImmigrationCaseBillingHistory } from '@/modules/billing/read';
 import { fetchDocumentTypes } from '@/modules/document-types/service';
 import { fetchPersonDocuments } from '@/modules/documents/service';
 import { CASE_STAGE_LABEL, CASE_TYPE_LABEL } from '@/modules/immigration/labels';
@@ -47,6 +49,7 @@ export default async function ImmigrationCaseDetail({
     caseTasks,
     staffUsers,
     beneficiaryDetail,
+    caseBilling,
   ] = await Promise.all([
     listCaseDocumentRequirements(id),
     listCaseDocuments(id),
@@ -55,6 +58,7 @@ export default async function ImmigrationCaseDetail({
     fetchTasksForImmigrationCase(id),
     fetchStaffUserOptions(),
     fetchPersonDetail(c.beneficiaryPersonId),
+    fetchImmigrationCaseBillingHistory(id),
   ]);
   const currentOwner = c.assignedUserId
     ? (staffUsers.find((u) => u.id === c.assignedUserId) ?? null)
@@ -204,6 +208,31 @@ export default async function ImmigrationCaseDetail({
             </CardContent>
           </Card>
         </FadeUp>
+        {/* Billing for THIS case — invoices raised on the source lead
+            (or later added manually against the case) end up here via
+            invoices.immigration_case_id. Renders nothing when empty so
+            we don't add a hollow card on every case. */}
+        {(caseBilling.invoices.length > 0 || caseBilling.receipts.length > 0) && (
+          <FadeUp delay={0.16}>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Billing for this case</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Invoices and receipts linked to this case. Raised automatically when a lead was
+                  Accepted into this case; also updated when new invoices are generated against it.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <BillingSection
+                  profileHref={`/candidates/${c.beneficiaryPersonId}`}
+                  invoices={caseBilling.invoices}
+                  receipts={caseBilling.receipts}
+                  canVerify={false}
+                />
+              </CardContent>
+            </Card>
+          </FadeUp>
+        )}
       </div>
     </div>
   );

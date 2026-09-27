@@ -229,6 +229,84 @@ export async function fetchPersonBillingHistory(personId: string): Promise<{
   };
 }
 
+/**
+ * Billing history scoped to a single immigration case. Powered by the
+ * Phase A back-link column: acceptLead + any manual case-tied invoice
+ * generation writes invoices.immigration_case_id, and receipts follow
+ * via the existing invoice_id join. Same row shape as
+ * fetchPersonBillingHistory so the BillingSection UI stays unchanged.
+ */
+export async function fetchImmigrationCaseBillingHistory(caseId: string): Promise<{
+  invoices: PersonBillingRow[];
+  receipts: PersonReceiptRow[];
+}> {
+  await requireInternalStaff();
+  const [invoiceRows, receiptRows] = await Promise.all([
+    db
+      .select({
+        invoice: invoices,
+        serviceName: serviceCatalogItems.name,
+      })
+      .from(invoices)
+      .innerJoin(serviceEngagements, eq(serviceEngagements.id, invoices.serviceEngagementId))
+      .innerJoin(
+        serviceCatalogItems,
+        eq(serviceCatalogItems.id, serviceEngagements.serviceCatalogItemId),
+      )
+      .where(eq(invoices.immigrationCaseId, caseId))
+      .orderBy(desc(invoices.issuedAt)),
+    db
+      .select({
+        receipt: receipts,
+        invoiceNumber: invoices.number,
+      })
+      .from(receipts)
+      .innerJoin(invoices, eq(invoices.id, receipts.invoiceId))
+      .where(eq(invoices.immigrationCaseId, caseId))
+      .orderBy(desc(receipts.issuedAt)),
+  ]);
+  return {
+    invoices: invoiceRows.map((r) => ({ invoice: r.invoice, serviceName: r.serviceName })),
+    receipts: receiptRows.map((r) => ({ receipt: r.receipt, invoiceNumber: r.invoiceNumber })),
+  };
+}
+
+/** Same shape for a specific requisition. Used on /requisitions/[id]. */
+export async function fetchRequisitionBillingHistory(requisitionId: string): Promise<{
+  invoices: PersonBillingRow[];
+  receipts: PersonReceiptRow[];
+}> {
+  await requireInternalStaff();
+  const [invoiceRows, receiptRows] = await Promise.all([
+    db
+      .select({
+        invoice: invoices,
+        serviceName: serviceCatalogItems.name,
+      })
+      .from(invoices)
+      .innerJoin(serviceEngagements, eq(serviceEngagements.id, invoices.serviceEngagementId))
+      .innerJoin(
+        serviceCatalogItems,
+        eq(serviceCatalogItems.id, serviceEngagements.serviceCatalogItemId),
+      )
+      .where(eq(invoices.jobRequisitionId, requisitionId))
+      .orderBy(desc(invoices.issuedAt)),
+    db
+      .select({
+        receipt: receipts,
+        invoiceNumber: invoices.number,
+      })
+      .from(receipts)
+      .innerJoin(invoices, eq(invoices.id, receipts.invoiceId))
+      .where(eq(invoices.jobRequisitionId, requisitionId))
+      .orderBy(desc(receipts.issuedAt)),
+  ]);
+  return {
+    invoices: invoiceRows.map((r) => ({ invoice: r.invoice, serviceName: r.serviceName })),
+    receipts: receiptRows.map((r) => ({ receipt: r.receipt, invoiceNumber: r.invoiceNumber })),
+  };
+}
+
 /** Same shape for employer-payer billing so the shared Billing UI can
     render either payer without branching. */
 export async function fetchEmployerBillingHistory(employerId: string): Promise<{
