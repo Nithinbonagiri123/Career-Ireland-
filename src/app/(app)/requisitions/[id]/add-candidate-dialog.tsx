@@ -13,6 +13,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import type { Person } from '@/lib/db/schema/persons';
 import { manuallyShortlistPersonAction } from '@/modules/matching/actions';
@@ -76,16 +77,20 @@ export function AddCandidateDialog({
         if (!next) reset();
       }}
     >
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        <UserPlus className="mr-1.5 size-4" /> Add candidate
-      </Button>
-      <DialogContent>
+      <DialogTrigger
+        render={
+          <Button size="sm" variant="outline">
+            <UserPlus className="mr-1.5 size-4" /> Add candidate
+          </Button>
+        }
+      />
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Add candidate to {requisitionTitle}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Search for a candidate by name or email — they'll land in the{' '}
+        <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Search by name or email — they'll land in the{' '}
             <span className="font-medium text-foreground">Shortlisted</span> lane straight away. Not
             in the system yet? Use{' '}
             <span className="whitespace-nowrap font-medium text-foreground">
@@ -93,12 +98,14 @@ export function AddCandidateDialog({
             </span>{' '}
             at the bottom of the search list.
           </p>
-          <PersonPicker
-            persons={persons}
-            value={personId}
-            onChange={setPersonId}
-            placeholder="Search candidate by name or email…"
-          />
+          <div className="space-y-1.5">
+            <PersonPicker
+              persons={persons}
+              value={personId}
+              onChange={setPersonId}
+              placeholder="Search candidate by name or email…"
+            />
+          </div>
           {formError && (
             <motion.div
               initial={{ opacity: 0, y: -4 }}
