@@ -38,6 +38,17 @@ export const UpdatePersonSchema = z.object({
   currentCountry: z.string().max(80).optional().or(z.literal('')),
   currentCity: z.string().max(120).optional().or(z.literal('')),
   notes: z.string().max(2000).optional().or(z.literal('')),
+  /**
+   * Optional candidate_profiles fields. Only applied when the person has an
+   * active candidate profile — the service silently ignores them for leads/
+   * prospects/unactivated persons so the same dialog can be shown to any
+   * person without runtime errors.
+   */
+  primaryOccupationId: z.string().uuid().optional().or(z.literal('')),
+  yearsOfExperience: z.string().max(60).optional().or(z.literal('')),
+  workEligibility: z.string().max(200).optional().or(z.literal('')),
+  preferredLocation: z.string().max(200).optional().or(z.literal('')),
+  profileSummary: z.string().max(4000).optional().or(z.literal('')),
 });
 
 export const FindSimilarSchema = z.object({

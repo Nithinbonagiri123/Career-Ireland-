@@ -2,7 +2,7 @@ import { eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
-import { type Person, persons } from '@/lib/db/schema/persons';
+import { candidateProfiles, type Person, persons } from '@/lib/db/schema/persons';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import {
   findSimilarPersons,
@@ -162,6 +162,61 @@ export async function updatePerson(input: UpdatePersonInput): Promise<Person> {
         notes: after.notes,
       },
     });
+
+    // Candidate-profile side: only fires when the person actually has a
+    // candidate_profile row AND at least one of the profile fields was
+    // supplied by the caller. Ignored for leads/prospects/unactivated
+    // persons so the same dialog can be reused everywhere.
+    const hasProfileEdits =
+      d.primaryOccupationId !== undefined ||
+      d.yearsOfExperience !== undefined ||
+      d.workEligibility !== undefined ||
+      d.preferredLocation !== undefined ||
+      d.profileSummary !== undefined;
+    if (hasProfileEdits) {
+      const [profileBefore] = await tx
+        .select()
+        .from(candidateProfiles)
+        .where(eq(candidateProfiles.personId, d.personId))
+        .limit(1);
+      if (profileBefore) {
+        const [profileAfter] = await tx
+          .update(candidateProfiles)
+          .set({
+            primaryOccupationId: blankToNull(d.primaryOccupationId),
+            yearsOfExperience: blankToNull(d.yearsOfExperience),
+            workEligibility: blankToNull(d.workEligibility),
+            preferredLocation: blankToNull(d.preferredLocation),
+            profileSummary: blankToNull(d.profileSummary),
+            updatedAt: sql`NOW()`,
+          })
+          .where(eq(candidateProfiles.id, profileBefore.id))
+          .returning();
+        if (profileAfter) {
+          await recordAudit(tx, {
+            actorUserId: session.user.id,
+            entityType: 'candidate_profile',
+            entityId: profileAfter.id,
+            action: 'UPDATED',
+            before: {
+              primaryOccupationId: profileBefore.primaryOccupationId,
+              yearsOfExperience: profileBefore.yearsOfExperience,
+              workEligibility: profileBefore.workEligibility,
+              preferredLocation: profileBefore.preferredLocation,
+              profileSummary: profileBefore.profileSummary,
+            },
+            after: {
+              primaryOccupationId: profileAfter.primaryOccupationId,
+              yearsOfExperience: profileAfter.yearsOfExperience,
+              workEligibility: profileAfter.workEligibility,
+              preferredLocation: profileAfter.preferredLocation,
+              profileSummary: profileAfter.profileSummary,
+            },
+          });
+        }
+      }
+    }
+
     return after;
   });
 }

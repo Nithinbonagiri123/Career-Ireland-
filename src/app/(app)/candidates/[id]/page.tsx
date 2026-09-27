@@ -42,6 +42,7 @@ import { fetchDocumentTypes } from '@/modules/document-types/service';
 import { listUploadRequestsForPerson } from '@/modules/document-upload-requests/service';
 import { fetchPersonDocuments, fetchPersonRequirements } from '@/modules/documents/service';
 import { getEmailAccountForCandidate } from '@/modules/email-accounts/service';
+import { fetchOccupations } from '@/modules/occupations/service';
 import { fetchPersonDetail, type PersonTimelineItem } from '@/modules/persons/detail';
 import { fetchQualifications } from '@/modules/qualifications/service';
 import { fetchSkills } from '@/modules/skills/service';
@@ -112,6 +113,7 @@ export default async function CandidateDetail({
     uploadRequests,
     allDocumentTypes,
     staffUsers,
+    allOccupations,
   ] = await Promise.all([
     fetchPersonRequirements(id),
     fetchPersonDocuments(id),
@@ -126,6 +128,7 @@ export default async function CandidateDetail({
     listUploadRequestsForPerson(id),
     fetchDocumentTypes(),
     fetchStaffUserOptions(),
+    fetchOccupations(),
   ]);
   const currentOwner = assignedUserId
     ? (staffUsers.find((u) => u.id === assignedUserId) ?? null)
@@ -416,7 +419,11 @@ export default async function CandidateDetail({
           meta={metaStrip}
           action={
             <div className="flex items-center gap-2">
-              <EditPersonDialog person={person} />
+              <EditPersonDialog
+                person={person}
+                candidateProfile={candidateProfile}
+                occupations={allOccupations.map((o) => ({ id: o.id, name: o.name }))}
+              />
               {candidateProfile && (
                 <>
                   <AssignToMeButton

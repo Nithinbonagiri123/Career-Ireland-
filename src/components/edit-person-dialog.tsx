@@ -18,21 +18,40 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { Person } from '@/lib/db/schema/persons';
+import type { Occupation } from '@/lib/db/schema/occupations';
+import type { CandidateProfile, Person } from '@/lib/db/schema/persons';
 import { updatePersonAction } from '@/modules/persons/actions';
 import { type UpdatePersonInput, UpdatePersonSchema } from '@/modules/persons/schemas';
 
 /**
- * Reusable edit dialog for the underlying `persons` row. Covers everything a
- * candidate or lead has: name, contact, DOB, nationality, address, notes.
- * Excludes `source` — that's the one-shot classification at intake and
- * shouldn't be revised (would corrupt "how did they come to us" reporting).
+ * Reusable edit dialog covering both the underlying persons row AND the
+ * candidate_profiles row (when the person has one). Fields:
+ *   - Person: firstName, lastName, email, phone, dateOfBirth, nationality,
+ *     currentCountry, currentCity, notes
+ *   - Candidate profile (optional section, only rendered when candidateProfile
+ *     is passed): primary occupation, years of experience, work eligibility,
+ *     preferred location, profile summary
  *
- * Passes through to `updatePersonAction`, which audits the change with a
- * full before/after snapshot so support can trace who edited what and
- * when.
+ * Excludes person.source — that's the one-shot classification at intake and
+ * shouldn't be revised (would corrupt 'how did they come to us' reporting).
+ *
+ * Passes through to updatePersonAction which audits both tables with a full
+ * before/after snapshot so support can trace who edited what and when.
  */
-export function EditPersonDialog({ person, trigger }: { person: Person; trigger?: ReactElement }) {
+export function EditPersonDialog({
+  person,
+  candidateProfile,
+  occupations,
+  trigger,
+}: {
+  person: Person;
+  /** Optional. Renders the extra candidate profile section. */
+  candidateProfile?: CandidateProfile | null;
+  /** Occupation list for the primary-occupation dropdown. Required when
+   *  candidateProfile is passed. */
+  occupations?: Pick<Occupation, 'id' | 'name'>[];
+  trigger?: ReactElement;
+}) {
   const [open, setOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -54,6 +73,11 @@ export function EditPersonDialog({ person, trigger }: { person: Person; trigger?
       currentCountry: person.currentCountry ?? '',
       currentCity: person.currentCity ?? '',
       notes: person.notes ?? '',
+      primaryOccupationId: candidateProfile?.primaryOccupationId ?? '',
+      yearsOfExperience: candidateProfile?.yearsOfExperience ?? '',
+      workEligibility: candidateProfile?.workEligibility ?? '',
+      preferredLocation: candidateProfile?.preferredLocation ?? '',
+      profileSummary: candidateProfile?.profileSummary ?? '',
     },
   });
 
@@ -163,6 +187,69 @@ export function EditPersonDialog({ person, trigger }: { person: Person; trigger?
               {...register('notes')}
             />
           </div>
+
+          {/* Candidate profile section — only renders when this person has an
+              active candidate profile. Same dialog, extra fields on top of the
+              person ones so the operator doesn't hunt between surfaces. */}
+          {candidateProfile && (
+            <div className="space-y-4 rounded-md border border-border/60 bg-muted/20 p-4">
+              <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Candidate profile
+              </h3>
+              <div className="space-y-1.5">
+                <Label htmlFor="ep-occupation">Primary occupation</Label>
+                <select
+                  id="ep-occupation"
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  {...register('primaryOccupationId')}
+                >
+                  <option value="">— not set —</option>
+                  {occupations?.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="ep-yoe">Years of experience</Label>
+                  <Input
+                    id="ep-yoe"
+                    placeholder="e.g. 5, 10+, entry-level"
+                    {...register('yearsOfExperience')}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ep-eligibility">Work eligibility</Label>
+                  <Input
+                    id="ep-eligibility"
+                    placeholder="e.g. Stamp 4, EU citizen"
+                    {...register('workEligibility')}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ep-pref-location">Preferred work location</Label>
+                <Input
+                  id="ep-pref-location"
+                  placeholder="e.g. Dublin, Cork, remote"
+                  {...register('preferredLocation')}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ep-summary">Profile summary</Label>
+                <textarea
+                  id="ep-summary"
+                  rows={3}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  placeholder="One-paragraph description shown on shortlists + candidate cards"
+                  {...register('profileSummary')}
+                />
+              </div>
+            </div>
+          )}
+
           {formError && (
             <motion.div
               initial={{ opacity: 0, y: -4 }}
