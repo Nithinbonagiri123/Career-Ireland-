@@ -448,7 +448,7 @@ export function CreateLeadDialog({
               </motion.div>
             )}
 
-            <DialogFooter>
+            <DialogFooter className="sticky bottom-0 z-10 -mx-4 mt-2 border-t border-border/60 bg-popover px-4 py-3 shadow-[0_-8px_16px_-8px_rgb(0_0_0_/_0.15)]">
               <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
               <Button type="button" onClick={submitAsNewEmployer} disabled={employerSubmitting}>
                 {employerSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
@@ -729,7 +729,7 @@ export function CreateLeadDialog({
               </motion.div>
             )}
 
-            <DialogFooter>
+            <DialogFooter className="sticky bottom-0 z-10 -mx-4 mt-2 border-t border-border/60 bg-popover px-4 py-3 shadow-[0_-8px_16px_-8px_rgb(0_0_0_/_0.15)]">
               <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
