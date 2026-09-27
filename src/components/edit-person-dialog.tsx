@@ -3,9 +3,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
 import { AlertCircle, Loader2, Pencil } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { type ReactElement, useMemo, useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
+import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -20,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Occupation } from '@/lib/db/schema/occupations';
 import type { CandidateProfile, Person } from '@/lib/db/schema/persons';
+import { createOccupationFromNameAction } from '@/modules/occupations/actions';
 import { updatePersonAction } from '@/modules/persons/actions';
 import { type UpdatePersonInput, UpdatePersonSchema } from '@/modules/persons/schemas';
 
@@ -47,18 +49,30 @@ export function EditPersonDialog({
   person: Person;
   /** Optional. Renders the extra candidate profile section. */
   candidateProfile?: CandidateProfile | null;
-  /** Occupation list for the primary-occupation dropdown. Required when
-   *  candidateProfile is passed. */
-  occupations?: Pick<Occupation, 'id' | 'name'>[];
+  /** Occupation list for the primary-occupation autosuggest. Required when
+   *  candidateProfile is passed. isActive is used so inactive entries can
+   *  still bind to existing profiles without being suggested as picks. */
+  occupations?: Pick<Occupation, 'id' | 'name' | 'isActive'>[];
   trigger?: ReactElement;
 }) {
   const [open, setOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Locally-created occupations get merged with the server-provided list so
+  // a just-inline-created one appears in suggestions without a page refresh.
+  const [locallyCreatedOccupations, setLocallyCreatedOccupations] = useState<
+    Pick<Occupation, 'id' | 'name' | 'isActive'>[]
+  >([]);
+  const allOccupations = useMemo(
+    () => [...locallyCreatedOccupations, ...(occupations ?? [])],
+    [occupations, locallyCreatedOccupations],
+  );
 
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
+    control,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<UpdatePersonInput>({
     resolver: zodResolver(UpdatePersonSchema),
@@ -80,6 +94,14 @@ export function EditPersonDialog({
       profileSummary: candidateProfile?.profileSummary ?? '',
     },
   });
+
+  const currentOccupationId = useWatch({ control, name: 'primaryOccupationId' });
+  const occupationSelection: Selection = useMemo(() => {
+    const id = currentOccupationId ?? '';
+    if (!id) return null;
+    const match = allOccupations.find((o) => o.id === id);
+    return match ? { kind: 'catalog', id: match.id, label: match.name } : null;
+  }, [currentOccupationId, allOccupations]);
 
   const onSubmit = handleSubmit(async (data) => {
     setFormError(null);
@@ -198,18 +220,36 @@ export function EditPersonDialog({
               </h3>
               <div className="space-y-1.5">
                 <Label htmlFor="ep-occupation">Primary occupation</Label>
-                <select
-                  id="ep-occupation"
-                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  {...register('primaryOccupationId')}
-                >
-                  <option value="">— not set —</option>
-                  {occupations?.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name}
-                    </option>
-                  ))}
-                </select>
+                <CatalogAutosuggest
+                  inputId="ep-occupation"
+                  options={allOccupations}
+                  value={occupationSelection}
+                  onChange={(sel) => {
+                    // Store the catalog id on the form. 'custom' shouldn't
+                    // reach here because onCreateNew is set — but guard for
+                    // completeness (leave the field blank in that edge case).
+                    setValue('primaryOccupationId', sel?.kind === 'catalog' ? sel.id : '', {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
+                  }}
+                  placeholder="Type to search — or type a new occupation to add it"
+                  createLabel="Add to occupations catalog"
+                  onCreateNew={async (name) => {
+                    const r = await createOccupationFromNameAction({ name });
+                    if (!r.ok) throw new Error(r.error.message);
+                    // Merge into local list so the picker sees it immediately.
+                    setLocallyCreatedOccupations((prev) => [
+                      { id: r.data.id, name: r.data.name, isActive: r.data.isActive },
+                      ...prev,
+                    ]);
+                    return { id: r.data.id, label: r.data.name };
+                  }}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Type any occupation. If it's not in the list, an "Add to catalog" row appears —
+                  saves to the DB and becomes reusable everywhere.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">

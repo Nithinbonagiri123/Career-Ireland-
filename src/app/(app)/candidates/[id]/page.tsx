@@ -422,7 +422,11 @@ export default async function CandidateDetail({
               <EditPersonDialog
                 person={person}
                 candidateProfile={candidateProfile}
-                occupations={allOccupations.map((o) => ({ id: o.id, name: o.name }))}
+                occupations={allOccupations.map((o) => ({
+                  id: o.id,
+                  name: o.name,
+                  isActive: o.isActive,
+                }))}
               />
               {candidateProfile && (
                 <>
