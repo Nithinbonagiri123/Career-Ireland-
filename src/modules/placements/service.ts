@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, notExists, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
@@ -6,6 +6,7 @@ import { db } from '@/lib/db/client';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import {
   employers,
+  jobApplications,
   jobRequisitions,
   type Placement,
   placements,
@@ -59,6 +60,79 @@ export async function fetchPlacements(createdRange?: DateRange): Promise<Placeme
     personName: `${r.firstName} ${r.lastName}`,
     employerName: r.employerName,
     requisitionTitle: r.requisitionTitle,
+  }));
+}
+
+export type ApplicationAwaitingPlacement = {
+  applicationId: string;
+  candidatePersonId: string;
+  candidateName: string;
+  requisitionId: string | null;
+  requisitionTitle: string | null;
+  employerName: string | null;
+  acceptedAt: Date;
+};
+
+/**
+ * Applications sitting at status='ACCEPTED' with no `placements` row yet.
+ * These are candidates a recruiter clicked "Mark Placed" on from the
+ * pipeline, which flips the application status but does NOT create a
+ * placement — so they're invisible on /placements. Surfaces them at the
+ * top of the page with a link to the application detail, where the
+ * placement can be created.
+ *
+ * External applications (source != INTERNAL) are excluded — no
+ * requisition to place them against.
+ */
+export async function listApplicationsAwaitingPlacement(): Promise<ApplicationAwaitingPlacement[]> {
+  await requireInternalStaff();
+
+  const noPlacementYet = notExists(
+    db
+      .select({ id: placements.id })
+      .from(placements)
+      .where(
+        and(
+          eq(placements.personId, jobApplications.personId),
+          eq(placements.jobRequisitionId, jobApplications.jobRequisitionId),
+          isNull(placements.archivedAt),
+        ),
+      ),
+  );
+
+  const rows = await db
+    .select({
+      applicationId: jobApplications.id,
+      candidatePersonId: persons.id,
+      candidateFirst: persons.firstName,
+      candidateLast: persons.lastName,
+      updatedAt: jobApplications.updatedAt,
+      requisitionId: jobRequisitions.id,
+      requisitionTitle: jobRequisitions.title,
+      employerName: employers.legalName,
+    })
+    .from(jobApplications)
+    .innerJoin(persons, eq(persons.id, jobApplications.personId))
+    .innerJoin(jobRequisitions, eq(jobRequisitions.id, jobApplications.jobRequisitionId))
+    .innerJoin(employers, eq(employers.id, jobRequisitions.employerId))
+    .where(
+      and(
+        eq(jobApplications.status, 'ACCEPTED'),
+        eq(jobApplications.source, 'INTERNAL'),
+        noPlacementYet,
+        isNull(persons.archivedAt),
+      ),
+    )
+    .orderBy(asc(jobApplications.updatedAt));
+
+  return rows.map((r) => ({
+    applicationId: r.applicationId,
+    candidatePersonId: r.candidatePersonId,
+    candidateName: `${r.candidateFirst} ${r.candidateLast}`,
+    requisitionId: r.requisitionId,
+    requisitionTitle: r.requisitionTitle,
+    employerName: r.employerName,
+    acceptedAt: r.updatedAt,
   }));
 }
 

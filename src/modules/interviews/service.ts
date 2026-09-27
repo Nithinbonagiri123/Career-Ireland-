@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, isNull, lte, notExists, or, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -108,6 +108,94 @@ export async function listUpcomingInterviews(opts?: {
       employerLabel: isExternal ? r.externalCompany : null,
       requisitionId: r.requisitionId,
       isExternal,
+    };
+  });
+}
+
+export type ApplicationAwaitingInterview = {
+  applicationId: string;
+  candidatePersonId: string;
+  candidateName: string;
+  jobLabel: string;
+  employerLabel: string | null;
+  requisitionId: string | null;
+  isExternal: boolean;
+  promotedAt: Date;
+};
+
+/**
+ * Applications sitting at status='INTERVIEW' that don't yet have a row in
+ * the `interviews` table. These are the candidates a recruiter moved to
+ * the Interview lane on the pipeline but never actually scheduled — so
+ * they were invisible on /interviews. Surfaces them at the top of the
+ * page with a "Schedule now" link so nothing slips through.
+ *
+ * The scope predicate matches listUpcomingInterviews so 'assigned to me'
+ * is consistent between the two sections.
+ */
+export async function listApplicationsAwaitingInterview(opts?: {
+  scope?: AssignmentScope;
+}): Promise<ApplicationAwaitingInterview[]> {
+  const session = await requireInternalStaff();
+  const scope = opts?.scope ?? 'all';
+
+  // NOT EXISTS on interviews — cheap indexed check that leaves the app
+  // in the "awaiting" bucket the moment its last scheduled interview is
+  // deleted (rescheduling doesn't delete, so no false positives).
+  const noInterviewsYet = notExists(
+    db
+      .select({ id: interviews.id })
+      .from(interviews)
+      .where(eq(interviews.jobApplicationId, jobApplications.id)),
+  );
+
+  let scopePredicate: ReturnType<typeof and> | undefined;
+  if (scope === 'mine') {
+    scopePredicate = eq(jobRequisitions.assignedUserId, session.user.id);
+  } else if (scope === 'unassigned') {
+    scopePredicate = isNull(jobRequisitions.assignedUserId);
+  }
+
+  const rows = await db
+    .select({
+      applicationId: jobApplications.id,
+      status: jobApplications.status,
+      updatedAt: jobApplications.updatedAt,
+      candidatePersonId: persons.id,
+      candidateFirst: persons.firstName,
+      candidateLast: persons.lastName,
+      requisitionId: jobRequisitions.id,
+      requisitionTitle: jobRequisitions.title,
+      applicationSource: jobApplications.source,
+      externalCompany: jobApplications.externalCompanyName,
+      externalJobTitle: jobApplications.externalJobTitle,
+    })
+    .from(jobApplications)
+    .innerJoin(persons, eq(persons.id, jobApplications.personId))
+    .leftJoin(jobRequisitions, eq(jobRequisitions.id, jobApplications.jobRequisitionId))
+    .where(
+      and(
+        eq(jobApplications.status, 'INTERVIEW'),
+        noInterviewsYet,
+        isNull(persons.archivedAt),
+        scopePredicate,
+      ),
+    )
+    .orderBy(asc(jobApplications.updatedAt));
+
+  return rows.map((r) => {
+    const isExternal = r.applicationSource !== 'INTERNAL';
+    return {
+      applicationId: r.applicationId,
+      candidatePersonId: r.candidatePersonId,
+      candidateName: `${r.candidateFirst} ${r.candidateLast}`,
+      jobLabel: isExternal
+        ? (r.externalJobTitle ?? r.externalCompany ?? 'External application')
+        : (r.requisitionTitle ?? 'Requisition'),
+      employerLabel: isExternal ? r.externalCompany : null,
+      requisitionId: r.requisitionId,
+      isExternal,
+      promotedAt: r.updatedAt,
     };
   });
 }
