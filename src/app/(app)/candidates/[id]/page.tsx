@@ -17,11 +17,13 @@ import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
 import { EditPersonDialog } from '@/components/edit-person-dialog';
 import { EmptyState } from '@/components/empty-state';
+import { ImmigrationCasesPanel } from '@/components/immigration-cases-panel';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
 import { RelatedWorkPanel } from '@/components/related-work-panel';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusDot } from '@/components/ui/status-dot';
 import { requireInternalStaff } from '@/lib/auth/session';
@@ -42,11 +44,15 @@ import { fetchDocumentTypes } from '@/modules/document-types/service';
 import { listUploadRequestsForPerson } from '@/modules/document-upload-requests/service';
 import { fetchPersonDocuments, fetchPersonRequirements } from '@/modules/documents/service';
 import { getEmailAccountForCandidate } from '@/modules/email-accounts/service';
+import { fetchEmployers } from '@/modules/employers/service';
+import { fetchApplicationTypes } from '@/modules/immigration/application-types';
+import { listCasesForPerson } from '@/modules/immigration/service';
 import { fetchOccupations } from '@/modules/occupations/service';
 import { fetchPersonDetail, type PersonTimelineItem } from '@/modules/persons/detail';
 import { fetchQualifications } from '@/modules/qualifications/service';
 import { fetchSkills } from '@/modules/skills/service';
 import { fetchStaffUserOptions } from '@/modules/users/service';
+import { CaseDialog } from '../../immigration/case-dialog';
 import { ApplicationsPanel } from './applications-panel';
 import {
   EmploymentHistorySection,
@@ -130,6 +136,13 @@ export default async function CandidateDetail({
     fetchStaffUserOptions(),
     fetchOccupations(),
   ]);
+  // Immigration cross-business hooks: preload employers + application
+  // types + this person's existing cases so we can render the Raise
+  // immigration case dialog and the cases panel without a second round
+  // trip. Persons list for the CaseDialog picker is scoped to this one
+  // candidate — the beneficiary is already known.
+  const [immigrationEmployers, immigrationApplicationTypes, immigrationCasesForPerson] =
+    await Promise.all([fetchEmployers(), fetchApplicationTypes(), listCasesForPerson(id)]);
   const currentOwner = assignedUserId
     ? (staffUsers.find((u) => u.id === assignedUserId) ?? null)
     : null;
@@ -253,6 +266,9 @@ export default async function CandidateDetail({
       <div className="space-y-6 lg:col-span-2">
         <FadeUp delay={0.07}>
           <RelatedWorkPanel personId={id} timeline={timeline} />
+        </FadeUp>
+        <FadeUp delay={0.075}>
+          <ImmigrationCasesPanel cases={immigrationCasesForPerson} />
         </FadeUp>
         <FadeUp delay={0.08}>
           <CvSuggestionsPanel personId={id} />
@@ -427,6 +443,17 @@ export default async function CandidateDetail({
                   name: o.name,
                   isActive: o.isActive,
                 }))}
+              />
+              <CaseDialog
+                trigger={
+                  <Button size="sm" variant="outline">
+                    <PlaneTakeoff className="mr-1.5 size-4" /> Raise immigration case
+                  </Button>
+                }
+                persons={[person]}
+                employers={immigrationEmployers}
+                applicationTypes={immigrationApplicationTypes}
+                prefill={{ beneficiaryPersonId: person.id }}
               />
               {candidateProfile && (
                 <>

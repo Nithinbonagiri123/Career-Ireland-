@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { Archive, ArrowRight, MoreHorizontal, Trophy } from 'lucide-react';
+import { Archive, ArrowRight, MoreHorizontal, PlaneTakeoff, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -171,6 +171,15 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
               <DropdownMenuItem disabled={!isTerminal} onClick={() => setRestoreTarget(p)}>
                 Restore candidate to AVAILABLE…
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                render={
+                  <Link href={`/immigration?raisePlacement=${p.id}`}>
+                    <PlaneTakeoff className="mr-2 size-4" />
+                    Raise immigration case…
+                  </Link>
+                }
+              />
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => setArchiveTarget(p)}>
                 <Archive className="mr-2 size-4" /> Archive placement…

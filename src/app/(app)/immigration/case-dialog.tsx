@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
-import { type ReactElement, useMemo } from 'react';
+import { type ReactElement, useEffect, useMemo } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';
@@ -30,15 +30,39 @@ import { useFormDialog } from '@/lib/hooks/use-form-dialog';
 import { upsertCaseAction } from '@/modules/immigration/actions';
 import { type UpsertCaseInput, UpsertCaseSchema } from '@/modules/immigration/schemas';
 
+/** Optional pre-fills used when the dialog is opened from Candidate,
+ *  Placement, or Requisition context instead of the global /immigration
+ *  page. Every key here is used as the initial form value; the user can
+ *  still change any of them before submitting. */
+export type CaseDialogPrefill = {
+  beneficiaryPersonId?: string;
+  sponsorEmployerId?: string;
+  relatedPlacementId?: string;
+  relatedJobRequisitionId?: string;
+  serviceEngagementId?: string;
+};
+
 type Props = {
   trigger: ReactElement;
   persons: Person[];
   employers: Employer[];
   applicationTypes: ImmigrationApplicationType[];
   initial?: ImmigrationCase;
+  prefill?: CaseDialogPrefill;
+  /** Auto-open the dialog on mount — used when routed to /immigration
+   *  with a raise-* query param from placement / requisition context. */
+  defaultOpen?: boolean;
 };
 
-export function CaseDialog({ trigger, persons, employers, applicationTypes, initial }: Props) {
+export function CaseDialog({
+  trigger,
+  persons,
+  employers,
+  applicationTypes,
+  initial,
+  prefill,
+  defaultOpen,
+}: Props) {
   const isEdit = Boolean(initial);
   const form = useForm<UpsertCaseInput>({
     resolver: zodResolver(UpsertCaseSchema),
@@ -46,11 +70,12 @@ export function CaseDialog({ trigger, persons, employers, applicationTypes, init
       id: initial?.id,
       caseType: initial?.caseType ?? 'EMPLOYMENT_PERMIT',
       applicationTypeId: initial?.applicationTypeId ?? '',
-      beneficiaryPersonId: initial?.beneficiaryPersonId ?? '',
-      sponsorEmployerId: initial?.sponsorEmployerId ?? '',
-      relatedPlacementId: initial?.relatedPlacementId ?? '',
-      relatedJobRequisitionId: initial?.relatedJobRequisitionId ?? '',
-      serviceEngagementId: initial?.serviceEngagementId ?? '',
+      beneficiaryPersonId: initial?.beneficiaryPersonId ?? prefill?.beneficiaryPersonId ?? '',
+      sponsorEmployerId: initial?.sponsorEmployerId ?? prefill?.sponsorEmployerId ?? '',
+      relatedPlacementId: initial?.relatedPlacementId ?? prefill?.relatedPlacementId ?? '',
+      relatedJobRequisitionId:
+        initial?.relatedJobRequisitionId ?? prefill?.relatedJobRequisitionId ?? '',
+      serviceEngagementId: initial?.serviceEngagementId ?? prefill?.serviceEngagementId ?? '',
       status: initial?.status ?? 'OPEN',
       authorityReference: initial?.authorityReference ?? '',
       submittedAt: initial?.submittedAt ?? '',
@@ -79,7 +104,15 @@ export function CaseDialog({ trigger, persons, employers, applicationTypes, init
     handleSubmit,
     formState: { errors, isSubmitting },
   } = form;
-  const { open, onOpenChange, formError, submit } = useFormDialog(form);
+  const { open, setOpen, onOpenChange, formError, submit } = useFormDialog(form);
+
+  // If the caller passed defaultOpen (e.g. from a /immigration?raisePlacement=X
+  // deep link), pop the dialog on mount. One-shot so a later programmatic
+  // close doesn't re-open it — intentionally empty deps.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally one-shot mount
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, []);
 
   const onSubmit = handleSubmit((data) =>
     submit(data, upsertCaseAction, {

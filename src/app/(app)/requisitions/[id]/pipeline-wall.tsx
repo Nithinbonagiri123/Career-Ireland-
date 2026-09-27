@@ -12,6 +12,7 @@ import {
   MapPin,
   MoreHorizontal,
   Phone,
+  PlaneTakeoff,
   Sparkles,
   User,
 } from 'lucide-react';
@@ -327,6 +328,14 @@ function PipelineCard({
         >
           <Ban className="size-3" /> Dismiss
         </button>
+      )}
+      {stage === 'placed' && (
+        <Link
+          href={`/immigration?raisePlacement=${entry.entryId}`}
+          className="flex items-center justify-center gap-1 rounded-md border border-border/60 py-1 text-[11px] font-medium text-muted-foreground hover:border-pipeline-placed/60 hover:text-pipeline-placed"
+        >
+          <PlaneTakeoff className="size-3" /> Raise immigration case
+        </Link>
       )}
     </article>
   );

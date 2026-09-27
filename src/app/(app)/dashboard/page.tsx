@@ -429,10 +429,7 @@ export default async function DashboardPage({
             >
               <ul className="space-y-1.5 text-xs">
                 {drilldowns.interviewStageApplications.slice(0, 3).map((i) => (
-                  <li
-                    key={i.applicationId}
-                    className="flex items-baseline justify-between gap-2"
-                  >
+                  <li key={i.applicationId} className="flex items-baseline justify-between gap-2">
                     <span className="truncate">{i.candidateName}</span>
                     <span className="shrink-0 text-[10px] text-muted-foreground">
                       {format(i.promotedAt, 'dd MMM · HH:mm')}

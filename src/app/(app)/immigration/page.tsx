@@ -10,10 +10,11 @@ import { parseAssignmentScope } from '@/lib/scope';
 import { fetchEmployers } from '@/modules/employers/service';
 import { fetchApplicationTypes } from '@/modules/immigration/application-types';
 import { CASE_STAGE_LABEL } from '@/modules/immigration/labels';
+import { resolveRaiseCasePrefill } from '@/modules/immigration/raise-prefill';
 import { fetchCases } from '@/modules/immigration/service';
 import { fetchPersons } from '@/modules/persons/service';
 import { CasesCardGrid, CasesViewToggle } from './case-card';
-import { CaseDialog } from './case-dialog';
+import { CaseDialog, type CaseDialogPrefill } from './case-dialog';
 import { CasesTable } from './cases-table';
 
 export const dynamic = 'force-dynamic';
@@ -21,12 +22,29 @@ export const dynamic = 'force-dynamic';
 export default async function ImmigrationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ assigned?: string; view?: string }>;
+  searchParams: Promise<{
+    assigned?: string;
+    view?: string;
+    raisePerson?: string;
+    raisePlacement?: string;
+    raiseRequisition?: string;
+  }>;
 }) {
   await requirePermission('immigration', 'cases', 'view');
   const session = await requireInternalStaff();
-  const { assigned, view } = await searchParams;
+  const { assigned, view, raisePerson, raisePlacement, raiseRequisition } = await searchParams;
   const scope = parseAssignmentScope(assigned);
+
+  // Deep-link support: /immigration?raisePlacement=X (or raisePerson /
+  // raiseRequisition) pre-fills the Open-case dialog and pops it on
+  // mount. Lets a placements table row or pipeline card jump straight
+  // into raising a case for that specific candidate + sponsor + related
+  // placement, without the operator having to re-pick the beneficiary.
+  const raisePrefill: CaseDialogPrefill | undefined = await resolveRaiseCasePrefill({
+    personId: raisePerson,
+    placementId: raisePlacement,
+    requisitionId: raiseRequisition,
+  });
   // Cards are the default because the spec (§11) wants owner + candidate name
   // at a glance across the whole list — the table is the drill-down view.
   const cardView = view !== 'table';
@@ -78,6 +96,8 @@ export default async function ImmigrationPage({
                 persons={persons}
                 employers={employers}
                 applicationTypes={applicationTypes}
+                prefill={raisePrefill}
+                defaultOpen={Boolean(raisePrefill)}
                 trigger={
                   <Button size="sm">
                     <Plus className="mr-1.5 size-4" /> Open case

@@ -6,7 +6,6 @@ import {
   Building2,
   CalendarClock,
   CheckSquare,
-  ClipboardList,
   Clock,
   Coins,
   FileText,

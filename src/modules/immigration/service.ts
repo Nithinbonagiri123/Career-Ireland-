@@ -131,6 +131,44 @@ export async function fetchCases(scope?: AssignmentScope): Promise<CaseListRow[]
   }));
 }
 
+/**
+ * All non-archived immigration cases where this person is the beneficiary.
+ * Powers the "Immigration cases" panel on the candidate profile so a CS
+ * operator can see every permit / visa the person has in-flight without
+ * hunting through /immigration.
+ */
+export async function listCasesForPerson(personId: string): Promise<CaseListRow[]> {
+  await requireInternalStaff();
+  const rows = await db
+    .select({
+      c: immigrationCases,
+      firstName: persons.firstName,
+      lastName: persons.lastName,
+      sponsorName: employers.legalName,
+      ownerName: users.fullName,
+      applicationTypeName: immigrationApplicationTypes.name,
+    })
+    .from(immigrationCases)
+    .innerJoin(persons, eq(persons.id, immigrationCases.beneficiaryPersonId))
+    .leftJoin(employers, eq(employers.id, immigrationCases.sponsorEmployerId))
+    .leftJoin(users, eq(users.id, immigrationCases.assignedUserId))
+    .leftJoin(
+      immigrationApplicationTypes,
+      eq(immigrationApplicationTypes.id, immigrationCases.applicationTypeId),
+    )
+    .where(
+      and(eq(immigrationCases.beneficiaryPersonId, personId), isNull(immigrationCases.archivedAt)),
+    )
+    .orderBy(desc(immigrationCases.createdAt));
+  return rows.map((r) => ({
+    ...r.c,
+    beneficiaryName: `${r.firstName} ${r.lastName}`,
+    sponsorName: r.sponsorName,
+    ownerName: r.ownerName,
+    applicationTypeName: r.applicationTypeName,
+  }));
+}
+
 export async function upsertCase(input: UpsertCaseInput): Promise<ImmigrationCase> {
   const session = await requireInternalStaff();
   const parsed = UpsertCaseSchema.safeParse(input);

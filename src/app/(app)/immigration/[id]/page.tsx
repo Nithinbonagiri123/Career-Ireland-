@@ -1,5 +1,14 @@
 import { format, formatDistanceToNow } from 'date-fns';
-import { Building2, CalendarClock, Fingerprint, PlaneTakeoff, User } from 'lucide-react';
+import {
+  Briefcase,
+  Building2,
+  CalendarClock,
+  Coins,
+  Fingerprint,
+  PlaneTakeoff,
+  Trophy,
+  User,
+} from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
@@ -98,6 +107,33 @@ export default async function ImmigrationCaseDetail({
           <Fingerprint className="size-3" aria-hidden />
           ref {c.authorityReference}
         </span>
+      )}
+      {c.relatedJobRequisitionId && (
+        <Link
+          href={`/requisitions/${c.relatedJobRequisitionId}`}
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <Briefcase className="size-3" aria-hidden />
+          Requisition
+        </Link>
+      )}
+      {c.relatedPlacementId && (
+        <Link
+          href="/placements"
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <Trophy className="size-3" aria-hidden />
+          Placement
+        </Link>
+      )}
+      {c.serviceEngagementId && (
+        <Link
+          href={`/engagements/${c.serviceEngagementId}`}
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <Coins className="size-3" aria-hidden />
+          CS engagement
+        </Link>
       )}
     </div>
   );
