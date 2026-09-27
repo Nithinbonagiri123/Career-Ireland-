@@ -131,9 +131,12 @@ export const WORKSPACES: Record<Business, WorkspaceConfig> = {
       {
         label: 'Pipeline',
         items: [
-          // Leads intentionally NOT here — they're a global entity under
-          // Main Dashboard (see WORKSPACES.main). A lead can be for any
-          // business, not just candidate services.
+          // Leads appears in every workspace sidebar because it's a
+          // service-agnostic entry point (see comment in WORKSPACES.main).
+          // The route + underlying page are shared; the entry here just
+          // saves an operator working in Candidate Services from having
+          // to switch to Main Dashboard to raise or find a lead.
+          { label: 'Leads', href: '/leads', icon: UserPlus, module: 'leads' },
           { label: 'Candidates', href: '/candidates', icon: Users, module: 'candidates' },
           { label: 'Documents', href: '/documents', icon: FileText, module: 'documents' },
           {
@@ -169,6 +172,9 @@ export const WORKSPACES: Record<Business, WorkspaceConfig> = {
             icon: LayoutDashboard,
             module: 'dashboard',
           },
+          // Leads is a global entry — recruitment operators need to raise
+          // and pick up leads for their business as much as CS does.
+          { label: 'Leads', href: '/leads', icon: UserPlus, module: 'leads' },
         ],
       },
       {
@@ -216,6 +222,9 @@ export const WORKSPACES: Record<Business, WorkspaceConfig> = {
             icon: LayoutDashboard,
             module: 'dashboard',
           },
+          // Leads is a global entry — immigration operators can raise
+          // 'critical skills work permit' leads from here without switching.
+          { label: 'Leads', href: '/leads', icon: UserPlus, module: 'leads' },
         ],
       },
       {

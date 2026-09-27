@@ -30,7 +30,13 @@ export type Verb = (typeof VERBS)[number];
  * matrix picks it up automatically.
  */
 export const MODULES = {
-  main: ['overview', 'activities', 'hr_board', 'admin', 'accounts'],
+  // 'leads' lives here in addition to candidate_services because Leads are
+  // business-wide (any service the catalog holds — Immigration, Recruitment,
+  // Candidate Services). Being in main lets it render on the Main Dashboard
+  // sidebar. `hasPermission(user, 'main', 'leads', 'view')` grants access
+  // from the global view; candidate_services.leads still exists for the CS
+  // workspace's own entry.
+  main: ['overview', 'activities', 'hr_board', 'admin', 'accounts', 'leads'],
   candidate_services: [
     'dashboard',
     'leads',
@@ -42,6 +48,7 @@ export const MODULES = {
   ],
   recruitment: [
     'dashboard',
+    'leads',
     'employers',
     'requisitions',
     'matching',
@@ -50,7 +57,7 @@ export const MODULES = {
     'prospects',
     'placements',
   ],
-  immigration: ['dashboard', 'cases', 'activities'],
+  immigration: ['dashboard', 'leads', 'cases', 'activities'],
 } as const satisfies Record<Business, readonly string[]>;
 
 export type ModuleOf<B extends Business> = (typeof MODULES)[B][number];
