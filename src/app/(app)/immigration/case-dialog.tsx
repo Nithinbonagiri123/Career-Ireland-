@@ -124,21 +124,40 @@ export function CaseDialog({ trigger, persons, employers, applicationTypes, init
             id="ic-apptype"
             label="Application type"
             hint={
-              <>
-                Specific type under the {watchedCategory.toLowerCase().replace('_', ' ')} category.{' '}
-                <Link
-                  href="/admin/immigration-types"
-                  className="underline hover:text-foreground"
-                  target="_blank"
-                >
-                  Manage types
-                </Link>
-                .
-              </>
+              filteredTypes.length === 0 ? (
+                <span className="text-amber-600 dark:text-amber-500">
+                  No active application types for the{' '}
+                  {watchedCategory.toLowerCase().replace('_', ' ')} category.{' '}
+                  <Link
+                    href="/admin/immigration-types"
+                    className="underline hover:text-foreground"
+                    target="_blank"
+                  >
+                    Add one
+                  </Link>{' '}
+                  (e.g. Critical Skills Work Permit, General Employment Permit), then reopen this
+                  dialog.
+                </span>
+              ) : (
+                <>
+                  Specific type under the {watchedCategory.toLowerCase().replace('_', ' ')}{' '}
+                  category.{' '}
+                  <Link
+                    href="/admin/immigration-types"
+                    className="underline hover:text-foreground"
+                    target="_blank"
+                  >
+                    Manage types
+                  </Link>
+                  .
+                </>
+              )
             }
           >
             <Select id="ic-apptype" {...register('applicationTypeId')}>
-              <option value="">— select —</option>
+              <option value="">
+                {filteredTypes.length === 0 ? '— none yet — add via Manage types →' : '— select —'}
+              </option>
               {filteredTypes.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}

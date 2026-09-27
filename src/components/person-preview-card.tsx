@@ -20,11 +20,11 @@ export function PersonPreviewCard({ person }: { person: Person }) {
   return (
     <div className="rounded-md border border-border/70 bg-muted/30 p-3 text-xs">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent/20 text-accent">
             <UserIcon className="size-3.5" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{fullName}</p>
             {person.email && (
               <p className="truncate text-[11px] text-muted-foreground">{person.email}</p>

@@ -152,10 +152,15 @@ export function PersonPicker({
           disabled && 'cursor-not-allowed opacity-60',
         )}
       >
-        <span className={cn('truncate text-left', !selected && 'text-muted-foreground')}>
+        {/* min-w-0 + flex-1 is critical: without it, a long 'Name · long.email@domain'
+            label refuses to shrink and pushes the clear/chevron off the right edge,
+            which visually breaks the dialog on any candidate whose email is long. */}
+        <span
+          className={cn('min-w-0 flex-1 truncate text-left', !selected && 'text-muted-foreground')}
+        >
           {selected ? personLabel(selected) : placeholder}
         </span>
-        <span className="flex items-center gap-1">
+        <span className="ml-2 flex shrink-0 items-center gap-1">
           {selected && !disabled && (
             <button
               type="button"
