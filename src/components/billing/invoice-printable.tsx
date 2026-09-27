@@ -80,7 +80,10 @@ export function InvoicePrintable({
   const currency = invoice.currencyCode;
   const money = (v: string) => formatCurrency(v, currency);
   const vatRate = Number.parseFloat(settings.vatRatePercent);
-  const showVatLine = true; // Template always shows VAT row; €0.00 when 0%.
+  // Hide the whole VAT row + label when the business isn't charging VAT
+  // yet (rate = 0, and the actual line has no tax component). Templates
+  // stay ready to bring it back — just set VAT rate > 0 in /admin/settings.
+  const showVatLine = vatRate > 0 || Number.parseFloat(invoice.taxAmount) > 0;
 
   const bankBlockVisible =
     Boolean(settings.bankName) && Boolean(settings.bankAccountName) && Boolean(settings.bankIban);

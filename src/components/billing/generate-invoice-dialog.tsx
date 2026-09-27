@@ -234,11 +234,11 @@ export function GenerateInvoiceDialog({
                 </Select>
               </div>
               <div className="col-span-3 text-[11px] text-muted-foreground">
-                Total = QTY × Unit price. VAT is applied per the rate set in{' '}
+                Total = QTY × Unit price. VAT is added on top per the rate set in{' '}
                 <a href="/admin/settings" className="underline">
                   /admin/settings
-                </a>
-                .
+                </a>{' '}
+                (0% = no VAT row on the printable).
               </div>
             </div>
 

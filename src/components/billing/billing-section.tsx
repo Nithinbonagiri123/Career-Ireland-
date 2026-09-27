@@ -86,7 +86,7 @@ export function BillingSection({
                         {formatCurrency(invoice.totalAmount, invoice.currencyCode)}
                       </p>
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Total (incl. VAT)
+                        {Number.parseFloat(invoice.taxAmount) > 0 ? 'Total (incl. VAT)' : 'Total'}
                       </p>
                     </div>
                     {invoice.status === 'ISSUED' && (
