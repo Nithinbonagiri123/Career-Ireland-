@@ -5,6 +5,7 @@ import type { DateRange } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import { type Lead, leads } from '@/lib/db/schema/leads';
 import { candidateProfiles } from '@/lib/db/schema/persons';
+import { employers } from '@/lib/db/schema/recruitment';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import type { AssignmentScope } from '@/lib/scope';
 import { assertTransition, LEAD_TRANSITIONS } from '@/lib/state-machine';
@@ -56,7 +57,9 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
   const data = parsed.data;
 
   return db.transaction(async (tx) => {
-    let personId: string;
+    let personId: string | null = null;
+    let employerId: string | null = null;
+
     if (data.mode === 'NEW_PERSON') {
       const p = data.person;
       const created = await insertPerson(tx, {
@@ -80,12 +83,43 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
         context: { via: 'lead_creation' },
       });
       personId = created.id;
-    } else {
+    } else if (data.mode === 'EXISTING_PERSON') {
       personId = data.personId;
+    } else if (data.mode === 'NEW_EMPLOYER') {
+      const e = data.employer;
+      const [created] = await tx
+        .insert(employers)
+        .values({
+          legalName: e.legalName.trim(),
+          tradingName: blankToNull(e.tradingName),
+          website: blankToNull(e.website),
+          industry: blankToNull(e.industry),
+          country: blankToNull(e.country),
+          city: blankToNull(e.city),
+          relationshipStatus: e.relationshipStatus,
+          assignedUserId: blankToNull(e.assignedUserId),
+          notes: blankToNull(e.notes),
+        })
+        .returning();
+      if (!created) throw new Error('employer insert returned no row');
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'employer',
+        entityId: created.id,
+        action: 'CREATED',
+        after: { legalName: created.legalName },
+        context: { via: 'lead_creation' },
+      });
+      employerId = created.id;
+    } else {
+      // EXISTING_EMPLOYER
+      employerId = data.employerId;
     }
 
     const lead = await insertLead(tx, {
+      targetBusiness: data.targetBusiness,
       personId,
+      employerId,
       status: 'NEW',
       serviceOfInterestId: data.serviceOfInterestId,
       assignedUserId: data.assignedUserId,
@@ -97,7 +131,7 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
       entityType: 'lead',
       entityId: lead.id,
       action: 'CREATED',
-      after: { personId, status: lead.status },
+      after: { targetBusiness: lead.targetBusiness, personId, employerId, status: lead.status },
     });
 
     return lead;

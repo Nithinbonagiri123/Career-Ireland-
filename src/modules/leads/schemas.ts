@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { UpsertEmployerSchema } from '@/modules/employers/schemas';
 import { CreatePersonSchema } from '@/modules/persons/schemas';
 
 export const LeadStatusSchema = z.enum([
@@ -10,13 +11,21 @@ export const LeadStatusSchema = z.enum([
   'REJECTED',
 ]);
 
+export const LeadTargetBusinessSchema = z.enum([
+  'CANDIDATE_SERVICES',
+  'RECRUITMENT',
+  'IMMIGRATION',
+]);
+
 /**
- * Two shapes for creating a Lead:
- *  - existingPerson: reuse an existing Person (typically after dedup match confirmation)
- *  - newPerson: create Person + Lead in one transaction
+ * Four shapes for creating a Lead. Person-payer for Candidate Services and
+ * Immigration (person can be existing or new); employer-payer for Recruitment
+ * (employer can be existing or new). Discriminated union so the server never
+ * has to guess which fields were provided.
  */
 export const CreateLeadForExistingPersonSchema = z.object({
   mode: z.literal('EXISTING_PERSON'),
+  targetBusiness: z.enum(['CANDIDATE_SERVICES', 'IMMIGRATION']),
   personId: z.string().uuid(),
   serviceOfInterestId: z.string().uuid().optional(),
   assignedUserId: z.string().uuid().optional(),
@@ -25,7 +34,26 @@ export const CreateLeadForExistingPersonSchema = z.object({
 
 export const CreateLeadForNewPersonSchema = z.object({
   mode: z.literal('NEW_PERSON'),
+  targetBusiness: z.enum(['CANDIDATE_SERVICES', 'IMMIGRATION']),
   person: CreatePersonSchema,
+  serviceOfInterestId: z.string().uuid().optional(),
+  assignedUserId: z.string().uuid().optional(),
+  notes: z.string().max(2000).optional().or(z.literal('')),
+});
+
+export const CreateLeadForExistingEmployerSchema = z.object({
+  mode: z.literal('EXISTING_EMPLOYER'),
+  targetBusiness: z.literal('RECRUITMENT'),
+  employerId: z.string().uuid(),
+  serviceOfInterestId: z.string().uuid().optional(),
+  assignedUserId: z.string().uuid().optional(),
+  notes: z.string().max(2000).optional().or(z.literal('')),
+});
+
+export const CreateLeadForNewEmployerSchema = z.object({
+  mode: z.literal('NEW_EMPLOYER'),
+  targetBusiness: z.literal('RECRUITMENT'),
+  employer: UpsertEmployerSchema.omit({ id: true }),
   serviceOfInterestId: z.string().uuid().optional(),
   assignedUserId: z.string().uuid().optional(),
   notes: z.string().max(2000).optional().or(z.literal('')),
@@ -34,6 +62,8 @@ export const CreateLeadForNewPersonSchema = z.object({
 export const CreateLeadSchema = z.discriminatedUnion('mode', [
   CreateLeadForExistingPersonSchema,
   CreateLeadForNewPersonSchema,
+  CreateLeadForExistingEmployerSchema,
+  CreateLeadForNewEmployerSchema,
 ]);
 
 export const UpdateLeadStatusSchema = z.object({
