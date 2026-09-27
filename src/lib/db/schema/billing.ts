@@ -88,6 +88,16 @@ export const invoices = pgTable(
     voidedAt: timestamp('voided_at', { withTimezone: true }),
     voidedByUserId: uuid('voided_by_user_id').references(() => users.id),
     voidReason: text('void_reason'),
+    /** When an invoice originates from (or is Accepted into) a specific case
+     *  the FKs below back-link it, so the case detail page can show "billing
+     *  for THIS case" without deriving from the payer + date + service.
+     *  Set at Accept time by leads.acceptLeadAction, or later via the
+     *  manual "generate invoice on this case" UI. Nullable — invoices not
+     *  tied to a case remain payer-scoped as today. */
+    immigrationCaseId: uuid('immigration_case_id'),
+    jobRequisitionId: uuid('job_requisition_id'),
+    /** Lead the invoice was born on (if any). Set on lead-side generation. */
+    sourceLeadId: uuid('source_lead_id'),
     createdAt,
     updatedAt,
   },
@@ -96,6 +106,9 @@ export const invoices = pgTable(
     index('invoices_payer_employer_idx').on(t.payerEmployerId),
     index('invoices_engagement_idx').on(t.serviceEngagementId),
     index('invoices_status_idx').on(t.status),
+    index('invoices_immigration_case_idx').on(t.immigrationCaseId),
+    index('invoices_job_requisition_idx').on(t.jobRequisitionId),
+    index('invoices_source_lead_idx').on(t.sourceLeadId),
     check('invoices_totals_positive', sql`${t.totalAmount} >= 0 AND ${t.subtotal} >= 0`),
     check('invoices_totals_add_up', sql`${t.totalAmount} = ${t.subtotal} + ${t.taxAmount}`),
     check('invoices_qty_positive', sql`${t.qty} > 0`),

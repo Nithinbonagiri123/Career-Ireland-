@@ -152,12 +152,22 @@ export async function convertLead(input: ConvertLeadInput) {
     if (lead.status === 'CONVERTED') {
       throw new BusinessRuleError('LEAD_ALREADY_CONVERTED', 'Lead is already converted');
     }
+    // convertLead is the classic CS-only 'become a candidate' handoff. A
+    // recruitment lead has no person, so this path can't apply — the new
+    // acceptLead flow (Phase D) handles all three targets uniformly.
+    if (lead.targetBusiness !== 'CANDIDATE_SERVICES' || !lead.personId) {
+      throw new BusinessRuleError(
+        'WRONG_LEAD_TARGET',
+        'convertLead only applies to CANDIDATE_SERVICES leads; use acceptLead for other targets',
+      );
+    }
+    const personId = lead.personId;
 
     // Check for existing candidate profile on this person
     const [existingProfile] = await tx
       .select()
       .from(candidateProfiles)
-      .where(eq(candidateProfiles.personId, lead.personId))
+      .where(eq(candidateProfiles.personId, personId))
       .limit(1);
 
     let profileId: string;
@@ -165,10 +175,7 @@ export async function convertLead(input: ConvertLeadInput) {
     if (existingProfile) {
       profileId = existingProfile.id;
     } else {
-      const [newProfile] = await tx
-        .insert(candidateProfiles)
-        .values({ personId: lead.personId })
-        .returning();
+      const [newProfile] = await tx.insert(candidateProfiles).values({ personId }).returning();
       if (!newProfile) throw new Error('candidate_profiles insert returned no row');
       profileId = newProfile.id;
       createdNewProfile = true;
@@ -178,7 +185,7 @@ export async function convertLead(input: ConvertLeadInput) {
         entityType: 'candidate_profile',
         entityId: newProfile.id,
         action: 'CREATED',
-        after: { personId: lead.personId },
+        after: { personId },
         context: { via: 'lead_conversion', leadId: lead.id, method: parsed.method },
       });
     }

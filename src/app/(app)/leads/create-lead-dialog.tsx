@@ -198,6 +198,13 @@ export function CreateLeadDialog({
       return;
     }
     toast.success('Lead created');
+    // NEW_PERSON path always creates a CANDIDATE_SERVICES lead → personId set.
+    // Recruitment leads (employer-payer) take a different code path (Phase B).
+    if (!result.data.personId) {
+      resetAll();
+      setOpen(false);
+      return;
+    }
     const personId = result.data.personId;
     await runInvoiceIfPresent(personId);
     resetAll();

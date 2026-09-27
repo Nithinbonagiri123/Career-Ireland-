@@ -429,7 +429,9 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
                 ) : paymentProofTypeId ? (
                   <DocumentUploader
                     ownerType="PERSON"
-                    ownerId={convertTarget.personId}
+                    // Convert flow is CS-only → personId always set for these
+                    // leads. `?? ''` keeps TS happy without changing behaviour.
+                    ownerId={convertTarget.personId ?? ''}
                     documentTypeId={paymentProofTypeId}
                     accept=".pdf,.png,.doc,.docx"
                     buttonLabel="Upload payment proof"
@@ -487,7 +489,7 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
           invoice…" item. Rendered once at the table level (not per-row)
           so the dropdown can close cleanly before the dialog takes
           focus. */}
-      {invoicingLead && (
+      {invoicingLead?.personId && (
         <GenerateInvoiceDialog
           open
           onOpenChange={(next) => {
@@ -495,7 +497,7 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
           }}
           payerMode="PERSON"
           payerId={invoicingLead.personId}
-          payerLabel={invoicingLead.personName}
+          payerLabel={invoicingLead.personName ?? invoicingLead.displayName}
           services={invoiceableServices}
         />
       )}

@@ -253,6 +253,13 @@
       "when": 1790459752152,
       "tag": "0035_sour_masque",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790531309517,
+      "tag": "0036_abandoned_hawkeye",
+      "breakpoints": true
     }
   ]
 }
