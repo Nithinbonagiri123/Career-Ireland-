@@ -325,6 +325,135 @@ export async function dismissMatch(matchId: string) {
 }
 
 /**
+ * Manually add a candidate to a requisition's shortlist — for when staff
+ * already know the right person and want to skip the scored matcher
+ * output. Idempotent + safe against a re-add of a previously dismissed
+ * candidate (flips the existing candidate_matches row back to
+ * SHORTLISTED). Score is left at 0 with source=MANUAL so pipeline UIs
+ * can distinguish these from ASSISTED matches if they want to.
+ *
+ * Guarantees post-condition:
+ *   - one candidate_matches row exists with status=SHORTLISTED
+ *   - one shortlist_entries row exists linking match → person → requisition
+ *   - both events audited
+ */
+export async function manuallyShortlistPerson(personId: string, requisitionId: string) {
+  const session = await requireInternalStaff();
+  return db.transaction(async (tx) => {
+    // Sanity: requisition + person exist, person is a live non-draft
+    // candidate. We only need to reject the truly-broken cases here —
+    // referential integrity is enforced by FKs.
+    const [reqRow] = await tx
+      .select({ id: jobRequisitions.id })
+      .from(jobRequisitions)
+      .where(eq(jobRequisitions.id, requisitionId))
+      .limit(1);
+    if (!reqRow) throw new BusinessRuleError('REQUISITION_NOT_FOUND', 'Requisition not found');
+
+    const [personRow] = await tx
+      .select({
+        id: persons.id,
+        isDraft: persons.isDraft,
+        archivedAt: persons.archivedAt,
+        mergedIntoPersonId: persons.mergedIntoPersonId,
+      })
+      .from(persons)
+      .where(eq(persons.id, personId))
+      .limit(1);
+    if (!personRow) throw new BusinessRuleError('PERSON_NOT_FOUND', 'Candidate not found');
+    if (personRow.isDraft)
+      throw new BusinessRuleError('PERSON_IS_DRAFT', 'Draft candidates cannot be shortlisted');
+    if (personRow.archivedAt)
+      throw new BusinessRuleError('PERSON_ARCHIVED', 'Archived candidates cannot be shortlisted');
+    if (personRow.mergedIntoPersonId)
+      throw new BusinessRuleError(
+        'PERSON_MERGED',
+        'Merged candidates cannot be shortlisted — use the canonical record',
+      );
+
+    // Upsert the candidate_matches row (unique on requisitionId + personId).
+    // If it already exists we flip status → SHORTLISTED and record the
+    // manual re-add; otherwise insert a fresh MANUAL row.
+    const [existingMatch] = await tx
+      .select()
+      .from(candidateMatches)
+      .where(
+        and(
+          eq(candidateMatches.jobRequisitionId, requisitionId),
+          eq(candidateMatches.personId, personId),
+        ),
+      )
+      .limit(1);
+
+    let matchId: string;
+    if (existingMatch) {
+      matchId = existingMatch.id;
+      if (existingMatch.status !== 'SHORTLISTED') {
+        await tx
+          .update(candidateMatches)
+          .set({ status: 'SHORTLISTED', updatedAt: sql`NOW()` })
+          .where(eq(candidateMatches.id, matchId));
+      }
+    } else {
+      const [inserted] = await tx
+        .insert(candidateMatches)
+        .values({
+          jobRequisitionId: requisitionId,
+          personId,
+          score: 0,
+          scoreBucket: 'LOW',
+          source: 'MANUAL',
+          status: 'SHORTLISTED',
+          reasons: [],
+          suggestedByUserId: session.user.id,
+        })
+        .returning({ id: candidateMatches.id });
+      if (!inserted) throw new Error('candidate_matches insert returned no row');
+      matchId = inserted.id;
+    }
+
+    // Insert the shortlist row if it doesn't already exist. Same
+    // idempotency guarantee as shortlistMatch.
+    const [existingShortlist] = await tx
+      .select()
+      .from(shortlistEntries)
+      .where(
+        and(
+          eq(shortlistEntries.jobRequisitionId, requisitionId),
+          eq(shortlistEntries.personId, personId),
+        ),
+      )
+      .limit(1);
+
+    if (!existingShortlist) {
+      const [entry] = await tx
+        .insert(shortlistEntries)
+        .values({ jobRequisitionId: requisitionId, personId, candidateMatchId: matchId })
+        .returning();
+      if (!entry) throw new Error('shortlist insert returned no row');
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'shortlist_entry',
+        entityId: entry.id,
+        action: 'CREATED',
+        after: { jobRequisitionId: entry.jobRequisitionId, personId: entry.personId },
+        context: { via: 'manual_add' },
+      });
+    }
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'candidate_match',
+      entityId: matchId,
+      action: existingMatch ? 'SHORTLISTED' : 'CREATED',
+      context: { source: 'MANUAL', via: 'manual_add' },
+    });
+
+    return { ok: true, matchId };
+  });
+}
+
+/**
  * Remove a shortlist entry — reverse of shortlistMatch. Deletes the
  * shortlistEntries row and flips the underlying match back to REVIEWED so
  * staff can decide again (rather than reappearing as fresh SUGGESTED).

@@ -2,7 +2,13 @@
 
 import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
-import { dismissMatch, removeFromShortlist, runAssistedMatching, shortlistMatch } from './service';
+import {
+  dismissMatch,
+  manuallyShortlistPerson,
+  removeFromShortlist,
+  runAssistedMatching,
+  shortlistMatch,
+} from './service';
 
 export async function runAssistedMatchingAction(requisitionId: string) {
   const r = await toActionResult(() => runAssistedMatching(requisitionId));
@@ -12,6 +18,12 @@ export async function runAssistedMatchingAction(requisitionId: string) {
 
 export async function shortlistMatchAction(matchId: string, requisitionId: string) {
   const r = await toActionResult(() => shortlistMatch(matchId));
+  if (r.ok) revalidatePath(`/requisitions/${requisitionId}`);
+  return r;
+}
+
+export async function manuallyShortlistPersonAction(personId: string, requisitionId: string) {
+  const r = await toActionResult(() => manuallyShortlistPerson(personId, requisitionId));
   if (r.ok) revalidatePath(`/requisitions/${requisitionId}`);
   return r;
 }

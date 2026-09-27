@@ -19,6 +19,7 @@ import { fetchRequisitionBillingHistory } from '@/modules/billing/read';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchEmployers } from '@/modules/employers/service';
 import { fetchOccupations } from '@/modules/occupations/service';
+import { fetchPersons } from '@/modules/persons/service';
 import { fetchRequisitionPipeline } from '@/modules/pipeline/service';
 import { fetchQualifications } from '@/modules/qualifications/service';
 import {
@@ -30,6 +31,7 @@ import { fetchSkills } from '@/modules/skills/service';
 import { fetchStaffUserOptions } from '@/modules/users/service';
 import { listChecklistsForRequisition } from '@/modules/work-permit-checklists/service';
 import { RequisitionDialog } from '../requisition-dialog';
+import { AddCandidateDialog } from './add-candidate-dialog';
 import { ChecklistsSection } from './checklists-section';
 import { PipelineWall } from './pipeline-wall';
 import { RequisitionQualificationsSection, RequisitionSkillsSection } from './requirements-section';
@@ -58,6 +60,7 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     checklists,
     staffUsers,
     requisitionBilling,
+    allPersons,
   ] = await Promise.all([
     fetchRequisitionPipeline(id),
     listApplicationsForRequisition(id),
@@ -72,6 +75,7 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     listChecklistsForRequisition(id),
     fetchStaffUserOptions(),
     fetchRequisitionBillingHistory(id),
+    fetchPersons(),
   ]);
   const currentOwner = requisition.assignedUserId
     ? (staffUsers.find((u) => u.id === requisition.assignedUserId) ?? null)
@@ -288,6 +292,11 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
                     <Pencil className="mr-1.5 size-4" /> Edit
                   </Button>
                 }
+              />
+              <AddCandidateDialog
+                requisitionId={id}
+                requisitionTitle={requisition.title}
+                persons={allPersons}
               />
               <RunMatchingButton requisitionId={id} />
             </div>
