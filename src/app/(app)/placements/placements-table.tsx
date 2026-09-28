@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { Archive, ArrowRight, MoreHorizontal, PlaneTakeoff, Trophy } from 'lucide-react';
+import { Archive, ArrowRight, FileText, MoreHorizontal, PlaneTakeoff, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -172,6 +172,16 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
                 Restore candidate to AVAILABLE…
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuItem
+                render={
+                  <Link
+                    href={`/employers/${p.employerId}?raisePlacement=${p.id}&raiseRequisition=${p.jobRequisitionId}`}
+                  >
+                    <FileText className="mr-2 size-4" />
+                    Raise placement fee invoice…
+                  </Link>
+                }
+              />
               <DropdownMenuItem
                 render={
                   <Link href={`/immigration?raisePlacement=${p.id}`}>

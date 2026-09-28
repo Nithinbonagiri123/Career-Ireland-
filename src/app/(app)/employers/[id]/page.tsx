@@ -25,9 +25,16 @@ import { ContactDialog } from './contact-dialog';
 
 export const dynamic = 'force-dynamic';
 
-export default async function EmployerDetail({ params }: { params: Promise<{ id: string }> }) {
+export default async function EmployerDetail({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ raisePlacement?: string; raiseRequisition?: string }>;
+}) {
   const session = await requireInternalStaff();
   const { id } = await params;
+  const { raisePlacement, raiseRequisition } = await searchParams;
   const employer = await fetchEmployer(id);
   if (!employer) notFound();
 
@@ -129,6 +136,11 @@ export default async function EmployerDetail({ params }: { params: Promise<{ id:
                 payerLabel={employer.legalName}
                 services={invoiceableServices}
                 triggerVariant="outline"
+                triggerLabel={raisePlacement ? 'Raise placement fee invoice' : 'Generate invoice'}
+                contextLinks={{
+                  placementId: raisePlacement || undefined,
+                  jobRequisitionId: raiseRequisition || undefined,
+                }}
               />
               <RequisitionDialog
                 employers={employersAll}
