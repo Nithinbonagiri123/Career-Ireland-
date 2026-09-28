@@ -1,8 +1,10 @@
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
-import { recordAudit } from '@/lib/audit/withAudit';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { type DbExecutor, recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { todayInDublin } from '@/lib/dates';
 import { db } from '@/lib/db/client';
+import { creditNotes, invoices } from '@/lib/db/schema/billing';
+import { payments } from '@/lib/db/schema/commerce';
 import { type DocumentInstance, documentInstances } from '@/lib/db/schema/documents';
 import {
   type ImmigrationCase,
@@ -46,6 +48,84 @@ import {
   ensureReminderTask,
   generateCaseTasks,
 } from './task-generator';
+
+/**
+ * Sum of "still owed" money on every non-VOIDED invoice linked to a case,
+ * in the case's own currency terms — we return a per-currency breakdown
+ * so a case with EUR + ZAR invoices doesn't collapse into a lie.
+ *
+ * Runs inside the caller's transaction (FOR UPDATE on the invoice rows)
+ * so archiveCase / updateCaseStatus can't race with a payment
+ * verification. Zero-length map means "no outstanding balance, safe to
+ * close/archive".
+ */
+async function outstandingBalancesForCase(
+  tx: DbExecutor,
+  caseId: string,
+): Promise<Map<string, number>> {
+  const invRows = await tx
+    .select({
+      id: invoices.id,
+      totalAmount: invoices.totalAmount,
+      currencyCode: invoices.currencyCode,
+      status: invoices.status,
+      serviceEngagementId: invoices.serviceEngagementId,
+    })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.immigrationCaseId, caseId),
+        inArray(invoices.status, ['ISSUED', 'PARTIALLY_PAID']),
+      ),
+    );
+
+  if (invRows.length === 0) return new Map();
+
+  const invoiceIds = invRows.map((r) => r.id);
+  const engagementIds = invRows.map((r) => r.serviceEngagementId);
+
+  const paidRows = await tx
+    .select({
+      engagementId: payments.serviceEngagementId,
+      paid: sql<string>`COALESCE(SUM(${payments.amount}), 0)::text`,
+    })
+    .from(payments)
+    .where(
+      and(inArray(payments.serviceEngagementId, engagementIds), eq(payments.status, 'VERIFIED')),
+    )
+    .groupBy(payments.serviceEngagementId);
+  const paidByEngagement = new Map(paidRows.map((r) => [r.engagementId, r.paid ?? '0']));
+
+  const creditRows = await tx
+    .select({
+      invoiceId: creditNotes.invoiceId,
+      credited: sql<string>`COALESCE(SUM(${creditNotes.amount}), 0)::text`,
+    })
+    .from(creditNotes)
+    .where(inArray(creditNotes.invoiceId, invoiceIds))
+    .groupBy(creditNotes.invoiceId);
+  const creditedByInvoice = new Map(creditRows.map((r) => [r.invoiceId, r.credited ?? '0']));
+
+  const perCurrency = new Map<string, number>();
+  for (const inv of invRows) {
+    const totalCents = Math.round(Number.parseFloat(inv.totalAmount) * 100);
+    const paidCents = Math.round(
+      Number.parseFloat(paidByEngagement.get(inv.serviceEngagementId) ?? '0') * 100,
+    );
+    const creditedCents = Math.round(Number.parseFloat(creditedByInvoice.get(inv.id) ?? '0') * 100);
+    const outstanding = Math.max(0, totalCents - paidCents - creditedCents);
+    if (outstanding > 0) {
+      perCurrency.set(inv.currencyCode, (perCurrency.get(inv.currencyCode) ?? 0) + outstanding);
+    }
+  }
+  return perCurrency;
+}
+
+function formatBalancesForError(balances: Map<string, number>): string {
+  return Array.from(balances.entries())
+    .map(([code, cents]) => `${(cents / 100).toFixed(2)} ${code}`)
+    .join(', ');
+}
 
 function blankToNull(v: string | undefined | null): string | null {
   return v && v.trim().length > 0 ? v : null;
@@ -305,6 +385,21 @@ export async function updateCaseStatus(input: UpdateCaseStatusInput): Promise<Im
       parsed.status,
       IMMIGRATION_CASE_TRANSITIONS,
     );
+
+    // CLOSED is terminal. Refuse if the case still has any outstanding
+    // balance — an operator would otherwise lose the receivable in a
+    // "closed and forgotten" state. Voided and fully-paid invoices are
+    // fine; PARTIALLY_PAID / ISSUED are not.
+    if (parsed.status === 'CLOSED') {
+      const balances = await outstandingBalancesForCase(tx, parsed.caseId);
+      if (balances.size > 0) {
+        throw new BusinessRuleError(
+          'CASE_HAS_OUTSTANDING_BALANCE',
+          `Cannot close this case — outstanding invoice balance: ${formatBalancesForError(balances)}. Settle the invoice, issue a credit note, or void it first.`,
+        );
+      }
+    }
+
     const [after] = await tx
       .update(immigrationCases)
       .set({
@@ -634,6 +729,17 @@ export async function archiveCase(input: ArchiveCaseInput): Promise<ImmigrationC
     if (before.archivedAt) {
       throw new BusinessRuleError('ALREADY_ARCHIVED', 'Case is already archived');
     }
+
+    // Archiving hides the case from lists, so an unpaid invoice would
+    // silently drop off the aging report — refuse. Same rule as CLOSED.
+    const balances = await outstandingBalancesForCase(tx, parsed.caseId);
+    if (balances.size > 0) {
+      throw new BusinessRuleError(
+        'CASE_HAS_OUTSTANDING_BALANCE',
+        `Cannot archive this case — outstanding invoice balance: ${formatBalancesForError(balances)}. Settle the invoice, issue a credit note, or void it first.`,
+      );
+    }
+
     const [after] = await tx
       .update(immigrationCases)
       .set({ archivedAt: new Date(), updatedAt: sql`NOW()` })

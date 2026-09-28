@@ -5,8 +5,11 @@ import {
   Briefcase,
   Building2,
   Clock,
+  FileText,
   Loader2,
   PlaneTakeoff,
+  Receipt,
+  ReceiptText,
   Search,
   User,
   UserCheck,
@@ -27,6 +30,9 @@ const KIND_ICON: Record<SearchResultKind, typeof Search> = {
   requisition: Briefcase,
   immigration: PlaneTakeoff,
   lead: UserPlus,
+  invoice: FileText,
+  receipt: Receipt,
+  credit_note: ReceiptText,
 };
 
 const KIND_LABEL: Record<SearchResultKind, string> = {
@@ -36,9 +42,20 @@ const KIND_LABEL: Record<SearchResultKind, string> = {
   requisition: 'Requisitions',
   immigration: 'Immigration cases',
   lead: 'Leads',
+  invoice: 'Invoices',
+  receipt: 'Receipts',
+  credit_note: 'Credit notes',
 };
 
 const GROUP_ORDER: SearchResultKind[] = [
+  // Financial docs surface first when the query looks like a number
+  // (INV-…, RCT-…, CRN-…). No special-casing needed — the score bump on
+  // exact-match sorts them above the fuzzy person/employer hits within
+  // the "all" view, and dedicated group headers below keep everything
+  // scannable.
+  'invoice',
+  'receipt',
+  'credit_note',
   'candidate',
   'lead',
   'employer',
@@ -60,7 +77,8 @@ const KIND_CHIPS: Array<{ kind: SearchResultKind | 'all'; label: string; hotkey?
   { kind: 'employer', label: 'Employers', hotkey: '3' },
   { kind: 'requisition', label: 'Requisitions', hotkey: '4' },
   { kind: 'immigration', label: 'Cases', hotkey: '5' },
-  { kind: 'person', label: 'People', hotkey: '6' },
+  { kind: 'invoice', label: 'Invoices', hotkey: '6' },
+  { kind: 'person', label: 'People' },
 ];
 
 const RECENTS_STORAGE_KEY = 'global-search-recent-v1';

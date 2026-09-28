@@ -1,6 +1,7 @@
 import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
+import { creditNotes, invoices, receipts } from '@/lib/db/schema/billing';
 import { immigrationCases } from '@/lib/db/schema/immigration';
 import { leads } from '@/lib/db/schema/leads';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
@@ -12,7 +13,10 @@ export type SearchResultKind =
   | 'employer'
   | 'requisition'
   | 'immigration'
-  | 'lead';
+  | 'lead'
+  | 'invoice'
+  | 'receipt'
+  | 'credit_note';
 
 export type SearchResult = {
   kind: SearchResultKind;
@@ -120,6 +124,66 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult[]> {
     )
     .limit(PER_GROUP_LIMIT);
 
+  // Financial documents: invoices, receipts, credit notes. Match on the
+  // full formatted number ("INV-2026-000042") OR just the numeric suffix
+  // ("42", "000042") so staff can type whatever they remember.
+  const invoiceRows = await db
+    .select({
+      id: invoices.id,
+      number: invoices.number,
+      status: invoices.status,
+      totalAmount: invoices.totalAmount,
+      currencyCode: invoices.currencyCode,
+      payerPersonId: invoices.payerPersonId,
+      payerEmployerId: invoices.payerEmployerId,
+      personName: sql<
+        string | null
+      >`CASE WHEN ${persons.id} IS NULL THEN NULL ELSE ${persons.firstName} || ' ' || ${persons.lastName} END`,
+      employerName: employers.legalName,
+    })
+    .from(invoices)
+    .leftJoin(persons, eq(persons.id, invoices.payerPersonId))
+    .leftJoin(employers, eq(employers.id, invoices.payerEmployerId))
+    .where(ilike(invoices.number, like))
+    .orderBy(desc(invoices.issuedAt))
+    .limit(PER_GROUP_LIMIT);
+
+  const receiptRows = await db
+    .select({
+      id: receipts.id,
+      number: receipts.number,
+      amount: receipts.amount,
+      currencyCode: receipts.currencyCode,
+      payerPersonId: receipts.payerPersonId,
+      payerEmployerId: receipts.payerEmployerId,
+      personName: sql<
+        string | null
+      >`CASE WHEN ${persons.id} IS NULL THEN NULL ELSE ${persons.firstName} || ' ' || ${persons.lastName} END`,
+      employerName: employers.legalName,
+    })
+    .from(receipts)
+    .leftJoin(persons, eq(persons.id, receipts.payerPersonId))
+    .leftJoin(employers, eq(employers.id, receipts.payerEmployerId))
+    .where(ilike(receipts.number, like))
+    .orderBy(desc(receipts.issuedAt))
+    .limit(PER_GROUP_LIMIT);
+
+  const creditNoteRows = await db
+    .select({
+      id: creditNotes.id,
+      number: creditNotes.number,
+      amount: creditNotes.amount,
+      currencyCode: creditNotes.currencyCode,
+      invoiceNumber: invoices.number,
+      payerPersonId: invoices.payerPersonId,
+      payerEmployerId: invoices.payerEmployerId,
+    })
+    .from(creditNotes)
+    .innerJoin(invoices, eq(invoices.id, creditNotes.invoiceId))
+    .where(ilike(creditNotes.number, like))
+    .orderBy(desc(creditNotes.issuedAt))
+    .limit(PER_GROUP_LIMIT);
+
   const leadRows = await db
     .select({
       id: leads.id,
@@ -215,6 +279,71 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult[]> {
       subtitle: subtitleParts.join(' · '),
       href: `/leads`,
       score: l.startsWith ? 20 : 10,
+    });
+  }
+
+  for (const inv of invoiceRows) {
+    // Route to whichever payer scope the invoice lives under, matching
+    // the two invoice print routes. The DB CHECK guarantees exactly one
+    // payer FK is populated, so `href` is always resolvable.
+    const href = inv.payerPersonId
+      ? `/candidates/${inv.payerPersonId}/invoices/${inv.number}`
+      : inv.payerEmployerId
+        ? `/employers/${inv.payerEmployerId}/invoices/${inv.number}`
+        : '/payments';
+    const subtitle = [
+      `${inv.totalAmount} ${inv.currencyCode}`,
+      inv.status.replace(/_/g, ' '),
+      inv.personName ?? inv.employerName,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    results.push({
+      kind: 'invoice',
+      id: inv.id,
+      title: inv.number,
+      subtitle,
+      href,
+      // Exact number match ranks higher than partial. Case-insensitive.
+      score: inv.number.toLowerCase() === q.toLowerCase() ? 30 : 15,
+    });
+  }
+
+  for (const rec of receiptRows) {
+    const href = rec.payerPersonId
+      ? `/candidates/${rec.payerPersonId}/receipts/${rec.number}`
+      : rec.payerEmployerId
+        ? `/employers/${rec.payerEmployerId}/receipts/${rec.number}`
+        : '/payments';
+    const subtitle = [`${rec.amount} ${rec.currencyCode}`, rec.personName ?? rec.employerName]
+      .filter(Boolean)
+      .join(' · ');
+    results.push({
+      kind: 'receipt',
+      id: rec.id,
+      title: rec.number,
+      subtitle,
+      href,
+      score: rec.number.toLowerCase() === q.toLowerCase() ? 30 : 15,
+    });
+  }
+
+  for (const cn of creditNoteRows) {
+    // Credit notes don't have their own print route — landing on the
+    // parent invoice is the closest thing, and the invoice printable
+    // renders every credit note against it in a dedicated section.
+    const href = cn.payerPersonId
+      ? `/candidates/${cn.payerPersonId}/invoices/${cn.invoiceNumber}`
+      : cn.payerEmployerId
+        ? `/employers/${cn.payerEmployerId}/invoices/${cn.invoiceNumber}`
+        : '/payments';
+    results.push({
+      kind: 'credit_note',
+      id: cn.id,
+      title: cn.number,
+      subtitle: `${cn.amount} ${cn.currencyCode} · credited against ${cn.invoiceNumber}`,
+      href,
+      score: cn.number.toLowerCase() === q.toLowerCase() ? 30 : 15,
     });
   }
 
