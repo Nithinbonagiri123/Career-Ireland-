@@ -54,64 +54,93 @@ export function BillingSection({
           />
         ) : (
           <ul className="divide-y rounded-lg glass-panel">
-            {invoices.map(({ invoice, serviceName }) => {
-              const overdue = isInvoiceOverdue(invoice);
-              return (
-                <li
-                  key={invoice.id}
-                  className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-mono text-sm font-medium">{invoice.number}</p>
-                      <Badge variant={statusTone(invoice.status)}>{invoice.status}</Badge>
-                      {overdue && (
-                        <Badge
-                          variant="danger"
-                          title={`Unpaid for ${OVERDUE_THRESHOLD_DAYS}+ days since issued`}
-                        >
-                          OVERDUE
+            {invoices.map(
+              ({ invoice, serviceName, paidAmount, outstandingAmount, creditedAmount }) => {
+                const overdue = isInvoiceOverdue(invoice);
+                const paidFloat = Number.parseFloat(paidAmount);
+                const outstandingFloat = Number.parseFloat(outstandingAmount);
+                const creditedFloat = Number.parseFloat(creditedAmount);
+                const acceptsMorePayments =
+                  invoice.status === 'ISSUED' || invoice.status === 'PARTIALLY_PAID';
+                return (
+                  <li
+                    key={invoice.id}
+                    className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-mono text-sm font-medium">{invoice.number}</p>
+                        <Badge variant={statusTone(invoice.status)}>
+                          {invoice.status.replace(/_/g, ' ')}
                         </Badge>
+                        {overdue && (
+                          <Badge
+                            variant="danger"
+                            title={`Unpaid for ${OVERDUE_THRESHOLD_DAYS}+ days since issued`}
+                          >
+                            OVERDUE
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="truncate text-sm text-muted-foreground">
+                        {invoice.qty} × {serviceName}
+                        <span className="mx-1.5 text-muted-foreground/60">·</span>
+                        {format(invoice.issuedAt, 'dd MMM yyyy · HH:mm')}
+                      </p>
+                      {(paidFloat > 0 || creditedFloat > 0) && invoice.status !== 'VOIDED' && (
+                        <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px]">
+                          <span className="tabular-nums text-status-success">
+                            {formatCurrency(paidAmount, invoice.currencyCode)} paid
+                          </span>
+                          {creditedFloat > 0 && (
+                            <span className="tabular-nums text-muted-foreground">
+                              {formatCurrency(creditedAmount, invoice.currencyCode)} credited
+                            </span>
+                          )}
+                          {outstandingFloat > 0 ? (
+                            <span className="tabular-nums font-medium text-status-warning">
+                              {formatCurrency(outstandingAmount, invoice.currencyCode)} outstanding
+                            </span>
+                          ) : (
+                            <span className="tabular-nums text-muted-foreground">Settled</span>
+                          )}
+                        </p>
                       )}
                     </div>
-                    <p className="truncate text-sm text-muted-foreground">
-                      {invoice.qty} × {serviceName}
-                      <span className="mx-1.5 text-muted-foreground/60">·</span>
-                      {format(invoice.issuedAt, 'dd MMM yyyy · HH:mm')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className="tabular-nums text-sm font-semibold">
-                        {formatCurrency(invoice.totalAmount, invoice.currencyCode)}
-                      </p>
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        {Number.parseFloat(invoice.taxAmount) > 0 ? 'Total (incl. VAT)' : 'Total'}
-                      </p>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="tabular-nums text-sm font-semibold">
+                          {formatCurrency(invoice.totalAmount, invoice.currencyCode)}
+                        </p>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          {Number.parseFloat(invoice.taxAmount) > 0 ? 'Total (incl. VAT)' : 'Total'}
+                        </p>
+                      </div>
+                      {acceptsMorePayments && (
+                        <RecordInvoicePaymentDialog
+                          invoice={{
+                            id: invoice.id,
+                            number: invoice.number,
+                            serviceEngagementId: invoice.serviceEngagementId,
+                            totalAmount: invoice.totalAmount,
+                            currencyCode: invoice.currencyCode,
+                            outstandingAmount,
+                          }}
+                          canVerify={canVerify}
+                        />
+                      )}
+                      <Link
+                        href={`${profileHref}/invoices/${invoice.number}`}
+                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                      >
+                        Open
+                        <ArrowUpRight className="ml-1 size-3.5" />
+                      </Link>
                     </div>
-                    {invoice.status === 'ISSUED' && (
-                      <RecordInvoicePaymentDialog
-                        invoice={{
-                          id: invoice.id,
-                          number: invoice.number,
-                          serviceEngagementId: invoice.serviceEngagementId,
-                          totalAmount: invoice.totalAmount,
-                          currencyCode: invoice.currencyCode,
-                        }}
-                        canVerify={canVerify}
-                      />
-                    )}
-                    <Link
-                      href={`${profileHref}/invoices/${invoice.number}`}
-                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                    >
-                      Open
-                      <ArrowUpRight className="ml-1 size-3.5" />
-                    </Link>
-                  </div>
-                </li>
-              );
-            })}
+                  </li>
+                );
+              },
+            )}
           </ul>
         )}
       </section>

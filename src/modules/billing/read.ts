@@ -1,7 +1,7 @@
-import { and, asc, desc, eq, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
-import { invoices, receipts } from '@/lib/db/schema/billing';
+import { creditNotes, invoices, receipts } from '@/lib/db/schema/billing';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { persons } from '@/lib/db/schema/persons';
 import { employers } from '@/lib/db/schema/recruitment';
@@ -187,7 +187,82 @@ export async function fetchLatestBillingLinksForPerson(personId: string): Promis
 export type PersonBillingRow = {
   invoice: typeof invoices.$inferSelect;
   serviceName: string;
+  /** Sum of VERIFIED payments settling this invoice — money string
+   *  ("0.00", "150.00"). Derived from the payments table via the
+   *  invoice's engagement. Never null; "0.00" when nothing paid yet. */
+  paidAmount: string;
+  /** total_amount - paidAmount - creditedAmount, floored at 0. */
+  outstandingAmount: string;
+  /** Sum of credit notes issued against this invoice. */
+  creditedAmount: string;
 };
+
+/**
+ * Attach payment + credit-note sums to a list of invoice rows in a
+ * single round-trip. Two GROUP-BY queries — one over payments (joined
+ * to the invoice's engagement, filtered to VERIFIED), one over credit
+ * notes — then merged into the row shape the UI expects.
+ *
+ * O(1) queries regardless of list length, so BillingSection stays cheap
+ * even as the invoice history grows.
+ */
+async function attachPaymentSums<T extends { invoice: typeof invoices.$inferSelect }>(
+  rows: T[],
+): Promise<Array<T & { paidAmount: string; outstandingAmount: string; creditedAmount: string }>> {
+  if (rows.length === 0) return [];
+  const invoiceIds = rows.map((r) => r.invoice.id);
+
+  const [paidRows, creditRows] = await Promise.all([
+    db
+      .select({
+        invoiceId: invoices.id,
+        paid: sql<string>`COALESCE(SUM(${payments.amount}), 0)::text`,
+      })
+      .from(invoices)
+      .leftJoin(
+        payments,
+        and(
+          eq(payments.serviceEngagementId, invoices.serviceEngagementId),
+          eq(payments.status, 'VERIFIED'),
+        ),
+      )
+      .where(inArray(invoices.id, invoiceIds))
+      .groupBy(invoices.id),
+    db
+      .select({
+        invoiceId: creditNotes.invoiceId,
+        credited: sql<string>`COALESCE(SUM(${creditNotes.amount}), 0)::text`,
+      })
+      .from(creditNotes)
+      .where(inArray(creditNotes.invoiceId, invoiceIds))
+      .groupBy(creditNotes.invoiceId),
+  ]);
+
+  const paidById = new Map(paidRows.map((r) => [r.invoiceId, r.paid ?? '0']));
+  const creditedById = new Map(creditRows.map((r) => [r.invoiceId, r.credited ?? '0']));
+
+  return rows.map((r) => {
+    const paid = paidById.get(r.invoice.id) ?? '0';
+    const credited = creditedById.get(r.invoice.id) ?? '0';
+    const totalCents = toCents(r.invoice.totalAmount);
+    const paidCents = toCents(paid);
+    const creditedCents = toCents(credited);
+    const outstandingCents = Math.max(0, totalCents - paidCents - creditedCents);
+    return {
+      ...r,
+      paidAmount: fromCents(paidCents),
+      creditedAmount: fromCents(creditedCents),
+      outstandingAmount: fromCents(outstandingCents),
+    };
+  });
+}
+
+function toCents(v: string): number {
+  return Math.round(Number.parseFloat(v || '0') * 100);
+}
+function fromCents(c: number): string {
+  return (c / 100).toFixed(2);
+}
 
 export type PersonReceiptRow = {
   receipt: typeof receipts.$inferSelect;
@@ -224,7 +299,9 @@ export async function fetchPersonBillingHistory(personId: string): Promise<{
       .orderBy(desc(receipts.issuedAt)),
   ]);
   return {
-    invoices: invoiceRows.map((r) => ({ invoice: r.invoice, serviceName: r.serviceName })),
+    invoices: await attachPaymentSums(
+      invoiceRows.map((r) => ({ invoice: r.invoice, serviceName: r.serviceName })),
+    ),
     receipts: receiptRows.map((r) => ({ receipt: r.receipt, invoiceNumber: r.invoiceNumber })),
   };
 }
@@ -266,7 +343,9 @@ export async function fetchImmigrationCaseBillingHistory(caseId: string): Promis
       .orderBy(desc(receipts.issuedAt)),
   ]);
   return {
-    invoices: invoiceRows.map((r) => ({ invoice: r.invoice, serviceName: r.serviceName })),
+    invoices: await attachPaymentSums(
+      invoiceRows.map((r) => ({ invoice: r.invoice, serviceName: r.serviceName })),
+    ),
     receipts: receiptRows.map((r) => ({ receipt: r.receipt, invoiceNumber: r.invoiceNumber })),
   };
 }
@@ -302,7 +381,9 @@ export async function fetchRequisitionBillingHistory(requisitionId: string): Pro
       .orderBy(desc(receipts.issuedAt)),
   ]);
   return {
-    invoices: invoiceRows.map((r) => ({ invoice: r.invoice, serviceName: r.serviceName })),
+    invoices: await attachPaymentSums(
+      invoiceRows.map((r) => ({ invoice: r.invoice, serviceName: r.serviceName })),
+    ),
     receipts: receiptRows.map((r) => ({ receipt: r.receipt, invoiceNumber: r.invoiceNumber })),
   };
 }
@@ -339,7 +420,9 @@ export async function fetchEmployerBillingHistory(employerId: string): Promise<{
       .orderBy(desc(receipts.issuedAt)),
   ]);
   return {
-    invoices: invoiceRows.map((r) => ({ invoice: r.invoice, serviceName: r.serviceName })),
+    invoices: await attachPaymentSums(
+      invoiceRows.map((r) => ({ invoice: r.invoice, serviceName: r.serviceName })),
+    ),
     receipts: receiptRows.map((r) => ({ receipt: r.receipt, invoiceNumber: r.invoiceNumber })),
   };
 }

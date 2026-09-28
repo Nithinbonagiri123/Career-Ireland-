@@ -49,6 +49,7 @@ export function GenerateInvoiceDialog({
   triggerVariant = 'default',
   open: externalOpen,
   onOpenChange: externalOnOpenChange,
+  contextLinks,
 }: {
   payerMode: 'PERSON' | 'EMPLOYER';
   payerId: string;
@@ -58,6 +59,15 @@ export function GenerateInvoiceDialog({
   triggerVariant?: 'default' | 'outline' | 'secondary';
   open?: boolean;
   onOpenChange?: (next: boolean) => void;
+  /** Optional back-links baked onto the generated invoice so the case /
+   *  requisition / placement detail pages can find it by FK rather than
+   *  by heuristic. Set by the caller when this dialog is opened from a
+   *  specific case or placement context. */
+  contextLinks?: {
+    immigrationCaseId?: string;
+    jobRequisitionId?: string;
+    placementId?: string;
+  };
 }) {
   const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -115,6 +125,9 @@ export function GenerateInvoiceDialog({
         unitPrice,
         currencyCode: currency,
         lineDescription: lineDescription.trim() || null,
+        immigrationCaseId: contextLinks?.immigrationCaseId ?? null,
+        jobRequisitionId: contextLinks?.jobRequisitionId ?? null,
+        placementId: contextLinks?.placementId ?? null,
       });
       if (!r.ok) {
         toast.error(r.error.message);

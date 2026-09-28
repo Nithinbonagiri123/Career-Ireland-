@@ -29,6 +29,11 @@ type InvoiceHandle = {
   serviceEngagementId: string;
   totalAmount: string;
   currencyCode: string;
+  /** Balance still owing — pre-fills the amount field so a second
+   *  partial payment auto-suggests the remaining amount instead of the
+   *  full total. Falls back to totalAmount when omitted so older
+   *  callers keep working. */
+  outstandingAmount?: string;
 };
 
 /**
@@ -65,7 +70,9 @@ export function RecordInvoicePaymentDialog({
     resolver: zodResolver(RecordPaymentSchema),
     defaultValues: {
       serviceEngagementId: invoice.serviceEngagementId,
-      amount: invoice.totalAmount,
+      // Pre-fill with the outstanding balance so a partial second
+      // payment doesn't accidentally re-request the full total.
+      amount: invoice.outstandingAmount ?? invoice.totalAmount,
       currencyCode: invoice.currencyCode,
       method: 'BANK_TRANSFER',
       proofReference: '',

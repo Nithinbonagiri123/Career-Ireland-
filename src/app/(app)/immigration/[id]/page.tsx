@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
+import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
@@ -22,7 +23,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { statusTone } from '@/lib/ui/status-tone';
 import { fetchTasksForImmigrationCase } from '@/modules/activities/service';
-import { fetchImmigrationCaseBillingHistory } from '@/modules/billing/read';
+import {
+  fetchImmigrationCaseBillingHistory,
+  fetchInvoiceableServicesFor,
+} from '@/modules/billing/read';
 import { fetchDocumentTypes } from '@/modules/document-types/service';
 import { fetchPersonDocuments } from '@/modules/documents/service';
 import { CASE_STAGE_LABEL, CASE_TYPE_LABEL } from '@/modules/immigration/labels';
@@ -59,6 +63,7 @@ export default async function ImmigrationCaseDetail({
     staffUsers,
     beneficiaryDetail,
     caseBilling,
+    invoiceableServices,
   ] = await Promise.all([
     listCaseDocumentRequirements(id),
     listCaseDocuments(id),
@@ -68,6 +73,12 @@ export default async function ImmigrationCaseDetail({
     fetchStaffUserOptions(),
     fetchPersonDetail(c.beneficiaryPersonId),
     fetchImmigrationCaseBillingHistory(id),
+    // Whichever party pays for immigration work varies by engagement.
+    // We load the person-scoped catalog because the beneficiary is
+    // always a person; if the employer sponsors, staff can switch
+    // payer type inside the invoice dialog. Keeping this narrow avoids
+    // showing recruitment-fee services on a permit case.
+    fetchInvoiceableServicesFor('PERSON'),
   ]);
   const currentOwner = c.assignedUserId
     ? (staffUsers.find((u) => u.id === c.assignedUserId) ?? null)
@@ -244,31 +255,48 @@ export default async function ImmigrationCaseDetail({
             </CardContent>
           </Card>
         </FadeUp>
-        {/* Billing for THIS case — invoices raised on the source lead
-            (or later added manually against the case) end up here via
-            invoices.immigration_case_id. Renders nothing when empty so
-            we don't add a hollow card on every case. */}
-        {(caseBilling.invoices.length > 0 || caseBilling.receipts.length > 0) && (
-          <FadeUp delay={0.16}>
-            <Card>
-              <CardHeader>
+        {/* Billing for THIS case — the section is ALWAYS visible now so
+            operators can raise an invoice from within the case without
+            hunting for the /candidates page. The invoice carries the
+            immigration_case_id back-link so it re-appears here on next
+            load. */}
+        <FadeUp delay={0.16}>
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between space-y-0">
+              <div>
                 <CardTitle className="text-base">Billing for this case</CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Invoices and receipts linked to this case. Raised automatically when a lead was
-                  Accepted into this case; also updated when new invoices are generated against it.
+                  Every invoice and receipt tied to this case via
+                  <span className="mx-1 font-mono">immigration_case_id</span>. Raise a new one here;
+                  the back-link is written automatically.
                 </p>
-              </CardHeader>
-              <CardContent>
+              </div>
+              <GenerateInvoiceDialog
+                payerMode="PERSON"
+                payerId={c.beneficiaryPersonId}
+                payerLabel={c.beneficiaryName}
+                services={invoiceableServices}
+                triggerLabel="Raise invoice for this case"
+                triggerVariant="outline"
+                contextLinks={{ immigrationCaseId: id }}
+              />
+            </CardHeader>
+            <CardContent>
+              {caseBilling.invoices.length > 0 || caseBilling.receipts.length > 0 ? (
                 <BillingSection
                   profileHref={`/candidates/${c.beneficiaryPersonId}`}
                   invoices={caseBilling.invoices}
                   receipts={caseBilling.receipts}
                   canVerify={false}
                 />
-              </CardContent>
-            </Card>
-          </FadeUp>
-        )}
+              ) : (
+                <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+                  Nothing invoiced yet against this case. Use "Raise invoice for this case" above.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </FadeUp>
       </div>
     </div>
   );

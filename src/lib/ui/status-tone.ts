@@ -88,6 +88,7 @@ const TONE_MAP: Record<string, StatusTone> = {
   PROOF_UPLOADED: 'info',
   VERIFIED: 'success',
   ISSUED: 'info',
+  PARTIALLY_PAID: 'warning',
   PAID: 'success',
   VOIDED: 'danger',
   FAILED: 'danger',
