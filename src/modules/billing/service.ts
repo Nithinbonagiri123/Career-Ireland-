@@ -376,6 +376,150 @@ export async function voidInvoice(invoiceId: string, reason: string): Promise<In
 }
 
 /**
+ * Issue a credit note against an existing invoice. Legal correction
+ * path for a paid or partially-paid invoice under Irish VAT rules — the
+ * original invoice row stays untouched.
+ *
+ * The amount can be any positive value up to the invoice's outstanding
+ * amount PLUS whatever's already been paid (so a full-reversal credit
+ * note on a fully-paid invoice is allowed — the operator issues a
+ * refund separately). Rejected if it would push the total credited
+ * over the invoice total.
+ *
+ * After the row lands, we call recomputeInvoiceStatus so the invoice
+ * flips back to PARTIALLY_PAID (or stays PAID) based on the new
+ * settled-vs-total math.
+ *
+ * ADMIN + FINANCE only. Audited.
+ */
+export async function issueCreditNote(input: {
+  invoiceId: string;
+  amount: string;
+  reason: string;
+}): Promise<{
+  id: string;
+  number: string;
+  invoiceId: string;
+  amount: string;
+  currencyCode: string;
+}> {
+  const session = await requireRole(['ADMIN', 'FINANCE']);
+  const trimmedReason = input.reason.trim();
+  if (trimmedReason.length < 3) {
+    throw new ValidationError('A credit-note reason of at least 3 characters is required.', {
+      reason: 'Explain what the credit corrects — the audit trail needs it.',
+    });
+  }
+  if (!/^\d+(\.\d{1,2})?$/.test(input.amount)) {
+    throw new ValidationError('Amount must be a decimal with up to 2 decimal places.', {
+      amount: 'Enter a valid amount like 150 or 150.00',
+    });
+  }
+  const amountCents = Math.round(Number.parseFloat(input.amount) * 100);
+  if (amountCents <= 0) {
+    throw new ValidationError('Credit-note amount must be greater than zero.', {
+      amount: 'Enter a positive amount',
+    });
+  }
+
+  return db.transaction(async (tx) => {
+    const [inv] = await tx
+      .select({
+        id: invoices.id,
+        totalAmount: invoices.totalAmount,
+        currencyCode: invoices.currencyCode,
+        status: invoices.status,
+      })
+      .from(invoices)
+      .where(eq(invoices.id, input.invoiceId))
+      .for('update')
+      .limit(1);
+    if (!inv) throw new BusinessRuleError('INVOICE_NOT_FOUND', 'Invoice not found');
+    if (inv.status === 'VOIDED') {
+      throw new BusinessRuleError(
+        'INVOICE_VOIDED',
+        'Cannot credit a voided invoice — the row is already reversed.',
+      );
+    }
+
+    // Ceiling: total_amount - already_credited. Existing verified
+    // payments don't affect this cap — a credit note against a paid
+    // invoice is legitimate (refund happens off-system).
+    const [{ credited }] = await tx
+      .select({
+        credited: sql<string>`COALESCE(SUM(${creditNotes.amount}), 0)::text`,
+      })
+      .from(creditNotes)
+      .where(eq(creditNotes.invoiceId, input.invoiceId));
+    const totalCents = Math.round(Number.parseFloat(inv.totalAmount) * 100);
+    const alreadyCreditedCents = Math.round(Number.parseFloat(credited) * 100);
+    if (alreadyCreditedCents + amountCents > totalCents) {
+      throw new BusinessRuleError(
+        'CREDIT_EXCEEDS_TOTAL',
+        `Total credit against this invoice would exceed the invoice total (${(totalCents / 100).toFixed(2)}). Existing credit: ${(alreadyCreditedCents / 100).toFixed(2)}; this credit: ${(amountCents / 100).toFixed(2)}.`,
+      );
+    }
+
+    const now = new Date();
+    const number = await allocateNextNumber(tx, 'CRN', now.getUTCFullYear());
+    const [row] = await tx
+      .insert(creditNotes)
+      .values({
+        number,
+        invoiceId: input.invoiceId,
+        amount: input.amount,
+        currencyCode: inv.currencyCode,
+        reason: trimmedReason,
+        issuedByUserId: session.user.id,
+      })
+      .returning();
+    if (!row) throw new Error('credit_notes insert returned no row');
+
+    // Recompute invoice status now that "settled" includes this
+    // credit. A previously PAID invoice may flip back to
+    // PARTIALLY_PAID if the credit brought (payments + credits) below
+    // total — that's the desired behaviour.
+    const change = await recomputeInvoiceStatus(tx, input.invoiceId);
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'credit_note',
+      entityId: row.id,
+      action: 'CREATED',
+      after: {
+        number: row.number,
+        invoiceId: row.invoiceId,
+        amount: row.amount,
+        reason: row.reason,
+      },
+      context: {
+        invoiceStatusBefore: change.before,
+        invoiceStatusAfter: change.after,
+      },
+    });
+    if (change.before !== change.after) {
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'invoice',
+        entityId: input.invoiceId,
+        action: 'STATUS_CHANGED',
+        before: { status: change.before },
+        after: { status: change.after },
+        context: { via: 'credit_note_issued', creditNoteId: row.id, creditNoteNumber: row.number },
+      });
+    }
+
+    return {
+      id: row.id,
+      number: row.number,
+      invoiceId: row.invoiceId,
+      amount: row.amount,
+      currencyCode: row.currencyCode,
+    };
+  });
+}
+
+/**
  * Fetch an invoice by its printable number (`INV-2026-000042`).
  */
 export async function findInvoiceByNumber(tx: DbExecutor, number: string): Promise<Invoice | null> {

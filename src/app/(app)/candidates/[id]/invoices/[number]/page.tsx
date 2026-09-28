@@ -5,8 +5,9 @@ import { InvoicePrintable } from '@/components/billing/invoice-printable';
 import { PrintButton } from '@/components/print-button';
 import { buttonVariants } from '@/components/ui/button';
 import { requireInternalStaff } from '@/lib/auth/session';
-import { fetchInvoiceForPrint } from '@/modules/billing/read';
+import { fetchCreditNotesForInvoice, fetchInvoiceForPrint } from '@/modules/billing/read';
 import { fetchAppSettings } from '@/modules/settings/service';
+import { CreditNoteControls } from './credit-note-controls';
 import { VoidInvoiceControls } from './void-invoice-controls';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,21 @@ export default async function InvoicePrintPage({
 
   const person = data.payer.person;
   const canVoid = session.user.role === 'ADMIN' && data.invoice.status === 'ISSUED';
+  const canCredit =
+    (session.user.role === 'ADMIN' || session.user.role === 'FINANCE') &&
+    data.invoice.status !== 'VOIDED';
+
+  // Load credit notes for this invoice — used both to render the
+  // "Credit notes" section on the printable and to compute the max
+  // credit-note amount available for the issue dialog.
+  const existingCreditNotes = await fetchCreditNotesForInvoice(data.invoice.id);
+  const alreadyCreditedCents = existingCreditNotes.reduce(
+    (sum, c) => sum + Math.round(Number.parseFloat(c.amount) * 100),
+    0,
+  );
+  const invoiceTotalCents = Math.round(Number.parseFloat(data.invoice.totalAmount) * 100);
+  const maxCreditCents = Math.max(0, invoiceTotalCents - alreadyCreditedCents);
+  const maxCreditAmount = (maxCreditCents / 100).toFixed(2);
 
   return (
     <div className="min-h-screen bg-muted/40 print:bg-white">
@@ -48,6 +64,15 @@ export default async function InvoicePrintPage({
               personId={id}
             />
           )}
+          {canCredit && maxCreditCents > 0 && (
+            <CreditNoteControls
+              invoiceId={data.invoice.id}
+              invoiceNumber={data.invoice.number}
+              profileHref={`/candidates/${id}`}
+              currencyCode={data.invoice.currencyCode}
+              maxCreditAmount={maxCreditAmount}
+            />
+          )}
           <PrintButton />
         </div>
       </div>
@@ -62,6 +87,7 @@ export default async function InvoicePrintPage({
             person.phone ? { label: 'Customer Telephone Contact', value: person.phone } : null,
           ].filter((r): r is { label: string; value: string } => r !== null),
         }}
+        creditNotes={existingCreditNotes}
       />
     </div>
   );

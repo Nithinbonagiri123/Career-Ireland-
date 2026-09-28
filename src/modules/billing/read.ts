@@ -6,6 +6,7 @@ import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { persons } from '@/lib/db/schema/persons';
 import { employers } from '@/lib/db/schema/recruitment';
 import { serviceCatalogItems, servicePackages } from '@/lib/db/schema/services';
+import { users } from '@/lib/db/schema/users';
 
 /**
  * Read helpers used by the print-friendly invoice / receipt pages.
@@ -184,6 +185,40 @@ export async function fetchLatestBillingLinksForPerson(personId: string): Promis
  * Ordered newest-first; small volumes (typical caseload is < 20 docs
  * per person) so no pagination.
  */
+export type CreditNoteRow = {
+  id: string;
+  number: string;
+  amount: string;
+  currencyCode: string;
+  reason: string;
+  issuedAt: Date;
+  issuedByName: string | null;
+};
+
+/**
+ * Every credit note ever issued against a specific invoice, newest
+ * first. Used by the invoice printable page to render the "Credit
+ * notes" section immediately below the totals block.
+ */
+export async function fetchCreditNotesForInvoice(invoiceId: string): Promise<CreditNoteRow[]> {
+  await requireInternalStaff();
+  const rows = await db
+    .select({
+      id: creditNotes.id,
+      number: creditNotes.number,
+      amount: creditNotes.amount,
+      currencyCode: creditNotes.currencyCode,
+      reason: creditNotes.reason,
+      issuedAt: creditNotes.issuedAt,
+      issuedByName: users.fullName,
+    })
+    .from(creditNotes)
+    .leftJoin(users, eq(users.id, creditNotes.issuedByUserId))
+    .where(eq(creditNotes.invoiceId, invoiceId))
+    .orderBy(desc(creditNotes.issuedAt));
+  return rows;
+}
+
 export type PersonBillingRow = {
   invoice: typeof invoices.$inferSelect;
   serviceName: string;

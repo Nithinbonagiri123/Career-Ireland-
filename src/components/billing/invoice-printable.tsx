@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { formatCurrency } from '@/lib/currency';
 import type { AppSettings } from '@/lib/db/schema/app_settings';
 import type { Invoice } from '@/lib/db/schema/billing';
+import type { CreditNoteRow } from '@/modules/billing/read';
 
 /**
  * Print-friendly invoice matching the ICG template exactly:
@@ -67,12 +68,17 @@ export function InvoicePrintable({
   payer,
   settings,
   lineDescription,
+  creditNotes,
 }: {
   invoice: Invoice;
   payer: InvoicePayerView;
   settings: AppSettings;
   /** Description shown on the QTY row. Falls back to invoice.lineDescription. */
   lineDescription?: string;
+  /** Credit notes already issued against this invoice. Renders a
+   *  "Credit notes" section below the totals — critical for the
+   *  audit trail on any invoice that's been partially reversed. */
+  creditNotes?: CreditNoteRow[];
 }) {
   const address = settings.addressLines.join(', ');
   const isVoided = invoice.status === 'VOIDED';
@@ -230,6 +236,53 @@ export function InvoicePrintable({
           </tr>
         </tfoot>
       </table>
+
+      {/* ── Credit notes (if any) ──────────────────────────────
+          Legal reversal path under Irish VAT rules. Shown even
+          on the printable so a scanned/printed copy carries the
+          full audit trail — recipients see exactly what was
+          credited and why. */}
+      {creditNotes && creditNotes.length > 0 && (
+        <>
+          <h2 className="mt-6 text-sm font-bold uppercase tracking-widest text-emerald-900">
+            Credit Notes
+          </h2>
+          <table className="mt-2 w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className="border border-slate-300 bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-700">
+                  Number
+                </th>
+                <th className="border border-slate-300 bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-700">
+                  Issued
+                </th>
+                <th className="border border-slate-300 bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-700">
+                  Reason
+                </th>
+                <th className="border border-slate-300 bg-slate-100 px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-slate-700">
+                  Amount
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {creditNotes.map((cn) => (
+                <tr key={cn.id}>
+                  <td className="border border-slate-300 px-3 py-2 font-mono text-xs">
+                    {cn.number}
+                  </td>
+                  <td className="border border-slate-300 px-3 py-2 text-xs">
+                    {format(cn.issuedAt, 'dd MMM yyyy · HH:mm')}
+                  </td>
+                  <td className="border border-slate-300 px-3 py-2 text-xs">{cn.reason}</td>
+                  <td className="border border-slate-300 px-3 py-2 text-right tabular-nums">
+                    -{money(cn.amount)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
 
       {/* ── Bank details (only if configured) ──────────────────── */}
       {!isVoided && bankBlockVisible && (
