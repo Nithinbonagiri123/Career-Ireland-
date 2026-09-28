@@ -45,6 +45,13 @@ export const GenerateInvoiceSchema = z.object({
   currencyCode: z.string().length(3),
   /** Optional line description override; falls back to the service name. */
   lineDescription: z.string().max(280).nullish(),
+  /** Optional cross-business back-links: set when the invoice is being
+      raised from a specific case / placement / requisition so the row
+      is discoverable from those detail pages without a heuristic
+      lookup. All nullish — a manual person-scoped invoice sets none. */
+  immigrationCaseId: z.string().uuid().nullish(),
+  jobRequisitionId: z.string().uuid().nullish(),
+  placementId: z.string().uuid().nullish(),
 });
 
 export type GenerateInvoiceInput = z.infer<typeof GenerateInvoiceSchema>;
@@ -163,6 +170,9 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
       currencyCode: data.currencyCode,
       lineDescription,
       issuedByUserId: session.user.id,
+      immigrationCaseId: data.immigrationCaseId ?? null,
+      jobRequisitionId: data.jobRequisitionId ?? null,
+      placementId: data.placementId ?? null,
     });
     await recordAudit(tx, {
       actorUserId: session.user.id,

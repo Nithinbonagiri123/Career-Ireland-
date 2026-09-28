@@ -48,7 +48,7 @@ export type DocumentsHubRow = {
   // Financial-only:
   amount?: string;
   currencyCode?: string;
-  financialStatus?: 'ISSUED' | 'PAID' | 'VOIDED';
+  financialStatus?: 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOIDED';
   number?: string;
 };
 

@@ -16,7 +16,7 @@ import { createdAt, updatedAt } from './_shared';
 import { payments, serviceEngagements } from './commerce';
 import { currencies } from './currencies';
 import { persons } from './persons';
-import { employers } from './recruitment';
+import { employers, placements } from './recruitment';
 import { users } from './users';
 
 /**
@@ -82,7 +82,15 @@ export const invoices = pgTable(
     issuedByUserId: uuid('issued_by_user_id')
       .notNull()
       .references(() => users.id),
-    status: text('status', { enum: ['ISSUED', 'PAID', 'VOIDED'] })
+    /**
+     * Invoice payment state. `PARTIALLY_PAID` is derived from the sum of
+     * verified payments: the service layer flips the row to
+     * PARTIALLY_PAID as soon as any payment lands and to PAID once the
+     * sum equals `total_amount`. Do NOT set this field manually from UI
+     * code — the invariant is `status` reflects the verified-payment
+     * sum, except for VOIDED which is a terminal admin action.
+     */
+    status: text('status', { enum: ['ISSUED', 'PARTIALLY_PAID', 'PAID', 'VOIDED'] })
       .notNull()
       .default('ISSUED'),
     voidedAt: timestamp('voided_at', { withTimezone: true }),
@@ -96,6 +104,11 @@ export const invoices = pgTable(
      *  tied to a case remain payer-scoped as today. */
     immigrationCaseId: uuid('immigration_case_id'),
     jobRequisitionId: uuid('job_requisition_id'),
+    /** Placement fee invoices: the specific placement being invoiced.
+     *  Lets the placements table show "invoiced ✔ €2000" without a joined
+     *  SUM query, and lets the requisition detail show placements + fees
+     *  side by side. */
+    placementId: uuid('placement_id').references(() => placements.id),
     /** Lead the invoice was born on (if any). Set on lead-side generation. */
     sourceLeadId: uuid('source_lead_id'),
     createdAt,
@@ -108,6 +121,7 @@ export const invoices = pgTable(
     index('invoices_status_idx').on(t.status),
     index('invoices_immigration_case_idx').on(t.immigrationCaseId),
     index('invoices_job_requisition_idx').on(t.jobRequisitionId),
+    index('invoices_placement_idx').on(t.placementId),
     index('invoices_source_lead_idx').on(t.sourceLeadId),
     check('invoices_totals_positive', sql`${t.totalAmount} >= 0 AND ${t.subtotal} >= 0`),
     check('invoices_totals_add_up', sql`${t.totalAmount} = ${t.subtotal} + ${t.taxAmount}`),
@@ -170,3 +184,44 @@ export const receipts = pgTable(
 
 export type Receipt = typeof receipts.$inferSelect;
 export type NewReceipt = typeof receipts.$inferInsert;
+
+/**
+ * Credit note — the legal way to correct an already-PAID invoice (Irish
+ * VAT rules disallow editing the original). Issued against a specific
+ * invoice, with its own immutable number sequence (`CRN-YYYY-NNNNNN`).
+ * Amount may be a partial credit (mistake on a line) or the full invoice
+ * total (full reversal). One invoice can have multiple credit notes over
+ * time — the audit trail must show the full sequence.
+ *
+ * The service layer treats a credit note as if it reduced the invoice's
+ * "amount owed" — so `outstanding = total_amount - sum(paid) - sum(credited)`.
+ */
+export const creditNotes = pgTable(
+  'credit_notes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    number: varchar('number', { length: 24 }).notNull().unique(),
+    invoiceId: uuid('invoice_id')
+      .notNull()
+      .references(() => invoices.id),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    currencyCode: char('currency_code', { length: 3 })
+      .notNull()
+      .references(() => currencies.code),
+    /** Free-text reason mandatory — Revenue expects an audit-friendly note. */
+    reason: text('reason').notNull(),
+    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
+    issuedByUserId: uuid('issued_by_user_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    index('credit_notes_invoice_idx').on(t.invoiceId),
+    check('credit_notes_amount_positive', sql`${t.amount} > 0`),
+  ],
+);
+
+export type CreditNote = typeof creditNotes.$inferSelect;
+export type NewCreditNote = typeof creditNotes.$inferInsert;

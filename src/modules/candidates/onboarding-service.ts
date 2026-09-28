@@ -7,7 +7,7 @@ import { currencies } from '@/lib/db/schema/currencies';
 import { candidateProfiles, type Person, persons } from '@/lib/db/schema/persons';
 import { serviceCatalogItems } from '@/lib/db/schema/services';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
-import { insertInvoice, insertReceipt, markInvoicePaid } from '@/modules/billing/service';
+import { insertInvoice, insertReceipt, recomputeInvoiceStatus } from '@/modules/billing/service';
 import { fetchAppSettings } from '@/modules/settings/service';
 import {
   type FinaliseDraftInput,
@@ -367,7 +367,11 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
       issuedByUserId: session.user.id,
     });
 
-    await markInvoicePaid(tx, invoice.id);
+    // Payment is booked as VERIFIED here (onboarding = paid-in-full up
+    // front), so the recompute will flip ISSUED → PAID. If someone
+    // later adjusts the payment flow to allow partial onboarding
+    // payments, the same call correctly reports PARTIALLY_PAID instead.
+    await recomputeInvoiceStatus(tx, invoice.id);
 
     // Audit trail — one row per business event.
     await recordAudit(tx, {

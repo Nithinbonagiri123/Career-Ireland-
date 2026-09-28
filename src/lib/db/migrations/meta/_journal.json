@@ -267,6 +267,13 @@
       "when": 1790535153384,
       "tag": "0037_serious_the_fury",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790615382497,
+      "tag": "0038_foamy_hairball",
+      "breakpoints": true
     }
   ]
 }

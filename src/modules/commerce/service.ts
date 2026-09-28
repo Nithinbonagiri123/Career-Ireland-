@@ -6,7 +6,11 @@ import { db } from '@/lib/db/client';
 import { invoices } from '@/lib/db/schema/billing';
 import { type Payment, type ServiceEngagement, serviceEngagements } from '@/lib/db/schema/commerce';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
-import { insertReceipt, markInvoicePaid } from '@/modules/billing/service';
+import {
+  assertNoOverpayment,
+  insertReceipt,
+  recomputeInvoiceStatus,
+} from '@/modules/billing/service';
 import {
   type EngagementListRow,
   getEngagement,
@@ -183,6 +187,21 @@ export async function verifyPayment(input: VerifyPaymentInput): Promise<Payment>
         'Rejected payments cannot be verified — record a new payment instead',
       );
     }
+
+    // Overpayment guard: if this payment would take the settled amount
+    // past the invoice total (existing verified payments + credit notes
+    // + this payment), refuse. Prevents accidental double-verification
+    // when staff record the same bank line twice.
+    const [invoiceOnEngagement] = await tx
+      .select({ id: invoices.id })
+      .from(invoices)
+      .where(eq(invoices.serviceEngagementId, before.serviceEngagementId))
+      .limit(1);
+    if (invoiceOnEngagement) {
+      const additional = Math.round(Number.parseFloat(before.amount) * 100);
+      await assertNoOverpayment(tx, invoiceOnEngagement.id, additional);
+    }
+
     const after = await updatePayment(tx, parsed.paymentId, {
       status: 'VERIFIED',
       verifiedByUserId: session.user.id,
@@ -262,16 +281,26 @@ export async function verifyPayment(input: VerifyPaymentInput): Promise<Payment>
       });
 
       if (issuedInvoice) {
-        await markInvoicePaid(tx, issuedInvoice.id);
-        await recordAudit(tx, {
-          actorUserId: session.user.id,
-          entityType: 'invoice',
-          entityId: issuedInvoice.id,
-          action: 'STATUS_CHANGED',
-          before: { status: 'ISSUED' },
-          after: { status: 'PAID' },
-          context: { via: 'payment_verified', paymentId: after.id },
-        });
+        // Recompute — flips ISSUED → PARTIALLY_PAID → PAID based on the
+        // actual sum of verified payments minus credit notes. Never
+        // blindly sets PAID like the old code did.
+        const change = await recomputeInvoiceStatus(tx, issuedInvoice.id);
+        if (change.before !== change.after) {
+          await recordAudit(tx, {
+            actorUserId: session.user.id,
+            entityType: 'invoice',
+            entityId: issuedInvoice.id,
+            action: 'STATUS_CHANGED',
+            before: { status: change.before },
+            after: { status: change.after },
+            context: {
+              via: 'payment_verified',
+              paymentId: after.id,
+              paidCents: change.paidCents,
+              totalCents: change.totalCents,
+            },
+          });
+        }
       }
     }
 

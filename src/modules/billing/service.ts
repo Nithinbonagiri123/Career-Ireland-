@@ -3,12 +3,14 @@ import { type DbExecutor, recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
+  creditNotes,
   documentSequences,
   type Invoice,
   invoices,
   type Receipt,
   receipts,
 } from '@/lib/db/schema/billing';
+import { payments } from '@/lib/db/schema/commerce';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 
 /**
@@ -22,7 +24,7 @@ import { BusinessRuleError, ValidationError } from '@/lib/errors';
  */
 export async function allocateNextNumber(
   tx: DbExecutor,
-  prefix: 'INV' | 'RCT',
+  prefix: 'INV' | 'RCT' | 'CRN',
   year: number,
 ): Promise<string> {
   // Take a row-level lock on the sequence row for this (prefix, year), or
@@ -75,6 +77,12 @@ export async function insertInvoice(
     currencyCode: string;
     lineDescription: string;
     issuedByUserId: string;
+    /** Optional cross-business back-links. When set, the invoice appears
+     *  on the corresponding case / requisition / placement detail page. */
+    immigrationCaseId?: string | null;
+    jobRequisitionId?: string | null;
+    placementId?: string | null;
+    sourceLeadId?: string | null;
   },
 ): Promise<Invoice> {
   const hasPerson = Boolean(args.payerPersonId);
@@ -114,6 +122,10 @@ export async function insertInvoice(
       lineDescription: args.lineDescription,
       issuedByUserId: args.issuedByUserId,
       status: 'ISSUED',
+      immigrationCaseId: args.immigrationCaseId ?? null,
+      jobRequisitionId: args.jobRequisitionId ?? null,
+      placementId: args.placementId ?? null,
+      sourceLeadId: args.sourceLeadId ?? null,
     })
     .returning();
   if (!row) throw new Error('invoices insert returned no row');
@@ -175,13 +187,129 @@ export async function insertReceipt(
 }
 
 /**
- * Mark an invoice as PAID. Called once its linked receipt is issued.
+ * Recompute an invoice's payment status from the sum of its VERIFIED
+ * payments (minus any credit notes) and flip the row accordingly. Called
+ * after every payment verification / rejection / credit-note issuance so
+ * the row's `status` reflects reality.
+ *
+ * Transitions:
+ *   ISSUED             — nothing paid yet, no credits
+ *   PARTIALLY_PAID     — 0 < paid + credited < total
+ *   PAID               — paid + credited ≥ total
+ *
+ * Never touches VOIDED rows (terminal). Returns the numbers used so the
+ * caller can log them.
  */
-export async function markInvoicePaid(tx: DbExecutor, invoiceId: string): Promise<void> {
-  await tx
-    .update(invoices)
-    .set({ status: 'PAID', updatedAt: sql`NOW()` })
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.status, 'ISSUED')));
+export async function recomputeInvoiceStatus(
+  tx: DbExecutor,
+  invoiceId: string,
+): Promise<{
+  before: 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOIDED';
+  after: 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOIDED';
+  paidCents: number;
+  creditedCents: number;
+  totalCents: number;
+}> {
+  const [row] = await tx
+    .select({
+      id: invoices.id,
+      totalAmount: invoices.totalAmount,
+      status: invoices.status,
+    })
+    .from(invoices)
+    .where(eq(invoices.id, invoiceId))
+    .for('update')
+    .limit(1);
+  if (!row) throw new Error(`recomputeInvoiceStatus: invoice ${invoiceId} not found`);
+  if (row.status === 'VOIDED') {
+    return {
+      before: row.status,
+      after: row.status,
+      paidCents: 0,
+      creditedCents: 0,
+      totalCents: parseCents(row.totalAmount),
+    };
+  }
+
+  const paid = await sumVerifiedPaymentsCents(tx, invoiceId);
+  const credited = await sumCreditNotesCents(tx, invoiceId);
+  const totalCents = parseCents(row.totalAmount);
+  const settledCents = paid + credited;
+
+  let next: 'ISSUED' | 'PARTIALLY_PAID' | 'PAID';
+  if (settledCents >= totalCents) next = 'PAID';
+  else if (settledCents > 0) next = 'PARTIALLY_PAID';
+  else next = 'ISSUED';
+
+  if (next !== row.status) {
+    await tx
+      .update(invoices)
+      .set({ status: next, updatedAt: sql`NOW()` })
+      .where(eq(invoices.id, invoiceId));
+  }
+  return {
+    before: row.status,
+    after: next,
+    paidCents: paid,
+    creditedCents: credited,
+    totalCents,
+  };
+}
+
+/**
+ * Sum of amounts on VERIFIED payments linked to this invoice — either
+ * directly through the invoice's engagement (the common case) or through
+ * a receipt with an explicit `invoice_id` back-link (for edge cases like
+ * multi-engagement payers). Never counts PENDING / PROOF_UPLOADED /
+ * REJECTED payments.
+ */
+async function sumVerifiedPaymentsCents(tx: DbExecutor, invoiceId: string): Promise<number> {
+  const [row] = await tx
+    .select({ paid: sql<string>`COALESCE(SUM(${payments.amount}), 0)::text` })
+    .from(payments)
+    .innerJoin(invoices, eq(invoices.serviceEngagementId, payments.serviceEngagementId))
+    .where(and(eq(invoices.id, invoiceId), eq(payments.status, 'VERIFIED')));
+  return parseCents(row?.paid ?? '0');
+}
+
+async function sumCreditNotesCents(tx: DbExecutor, invoiceId: string): Promise<number> {
+  const [row] = await tx
+    .select({ credited: sql<string>`COALESCE(SUM(${creditNotes.amount}), 0)::text` })
+    .from(creditNotes)
+    .where(eq(creditNotes.invoiceId, invoiceId));
+  return parseCents(row?.credited ?? '0');
+}
+
+/**
+ * Assert that the sum of already-verified payments PLUS this new payment
+ * amount does not exceed the invoice total (minus any credit notes).
+ * Called from verifyPayment before flipping PENDING → VERIFIED, so
+ * accidental double-entry or over-payment is caught up front.
+ *
+ * Throws OVERPAYMENT if it would overrun. Callers can catch and prompt
+ * "issue a refund / adjust the amount instead" — the CRM refuses to
+ * silently accept overpayment.
+ */
+export async function assertNoOverpayment(
+  tx: DbExecutor,
+  invoiceId: string,
+  additionalPaymentCents: number,
+): Promise<void> {
+  const [row] = await tx
+    .select({ totalAmount: invoices.totalAmount })
+    .from(invoices)
+    .where(eq(invoices.id, invoiceId))
+    .limit(1);
+  if (!row) return;
+  const paid = await sumVerifiedPaymentsCents(tx, invoiceId);
+  const credited = await sumCreditNotesCents(tx, invoiceId);
+  const totalCents = parseCents(row.totalAmount);
+  if (paid + credited + additionalPaymentCents > totalCents) {
+    throw new BusinessRuleError(
+      'OVERPAYMENT',
+      `Verifying this payment would exceed the invoice total. Already settled: ${centsToString(paid + credited)}. This payment: ${centsToString(additionalPaymentCents)}. Total: ${centsToString(totalCents)}. If this is intentional, adjust the amount or issue a refund on the excess.`,
+    );
+  }
 }
 
 /**
