@@ -3,6 +3,7 @@ import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
+import { invoices } from '@/lib/db/schema/billing';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import {
   employers,
@@ -34,6 +35,17 @@ export type PlacementListRow = Placement & {
   personName: string;
   employerName: string;
   requisitionTitle: string;
+  /** Most recent non-voided fee invoice raised for this placement, if
+   *  any. Powers the "Invoice" column on the placements table so staff
+   *  can see at a glance whether the placement has been billed. Null
+   *  when no invoice with placement_id === this row exists. */
+  latestInvoice: {
+    id: string;
+    number: string;
+    status: 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOIDED';
+    totalAmount: string;
+    currencyCode: string;
+  } | null;
 };
 
 export async function fetchPlacements(createdRange?: DateRange): Promise<PlacementListRow[]> {
@@ -55,11 +67,104 @@ export async function fetchPlacements(createdRange?: DateRange): Promise<Placeme
     .innerJoin(jobRequisitions, eq(jobRequisitions.id, placements.jobRequisitionId))
     .where(and(...whereConds))
     .orderBy(desc(placements.createdAt));
+
+  // Bulk-load the latest fee invoice for each placement in one query.
+  // Rank by issuedAt DESC so voided-then-reissued reads the reissue.
+  const placementIds = rows.map((r) => r.placement.id);
+  const invoiceById = new Map<string, PlacementListRow['latestInvoice']>();
+  if (placementIds.length > 0) {
+    const invoiceRows = await db
+      .select({
+        id: invoices.id,
+        number: invoices.number,
+        status: invoices.status,
+        totalAmount: invoices.totalAmount,
+        currencyCode: invoices.currencyCode,
+        placementId: invoices.placementId,
+        rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${invoices.placementId} ORDER BY ${invoices.issuedAt} DESC)`,
+      })
+      .from(invoices)
+      .where(inArray(invoices.placementId, placementIds));
+    for (const iv of invoiceRows) {
+      if (iv.rn !== 1 || !iv.placementId) continue;
+      invoiceById.set(iv.placementId, {
+        id: iv.id,
+        number: iv.number,
+        status: iv.status as 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOIDED',
+        totalAmount: iv.totalAmount,
+        currencyCode: iv.currencyCode,
+      });
+    }
+  }
+
   return rows.map((r) => ({
     ...r.placement,
     personName: `${r.firstName} ${r.lastName}`,
     employerName: r.employerName,
     requisitionTitle: r.requisitionTitle,
+    latestInvoice: invoiceById.get(r.placement.id) ?? null,
+  }));
+}
+
+/**
+ * Placements scoped to a single requisition, with their fee-invoice
+ * summary. Feeds the "Placements & Fees" card on the requisition
+ * detail page so staff can see who was placed, at what salary, and
+ * whether a fee invoice has been raised — all without leaving the
+ * requisition.
+ */
+export async function listPlacementsForRequisition(
+  requisitionId: string,
+): Promise<PlacementListRow[]> {
+  await requireInternalStaff();
+  const rows = await db
+    .select({
+      placement: placements,
+      firstName: persons.firstName,
+      lastName: persons.lastName,
+      employerName: employers.legalName,
+      requisitionTitle: jobRequisitions.title,
+    })
+    .from(placements)
+    .innerJoin(persons, eq(persons.id, placements.personId))
+    .innerJoin(employers, eq(employers.id, placements.employerId))
+    .innerJoin(jobRequisitions, eq(jobRequisitions.id, placements.jobRequisitionId))
+    .where(and(eq(placements.jobRequisitionId, requisitionId), isNull(placements.archivedAt)))
+    .orderBy(desc(placements.createdAt));
+
+  const placementIds = rows.map((r) => r.placement.id);
+  const invoiceById = new Map<string, PlacementListRow['latestInvoice']>();
+  if (placementIds.length > 0) {
+    const invoiceRows = await db
+      .select({
+        id: invoices.id,
+        number: invoices.number,
+        status: invoices.status,
+        totalAmount: invoices.totalAmount,
+        currencyCode: invoices.currencyCode,
+        placementId: invoices.placementId,
+        rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${invoices.placementId} ORDER BY ${invoices.issuedAt} DESC)`,
+      })
+      .from(invoices)
+      .where(inArray(invoices.placementId, placementIds));
+    for (const iv of invoiceRows) {
+      if (iv.rn !== 1 || !iv.placementId) continue;
+      invoiceById.set(iv.placementId, {
+        id: iv.id,
+        number: iv.number,
+        status: iv.status as 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOIDED',
+        totalAmount: iv.totalAmount,
+        currencyCode: iv.currencyCode,
+      });
+    }
+  }
+
+  return rows.map((r) => ({
+    ...r.placement,
+    personName: `${r.firstName} ${r.lastName}`,
+    employerName: r.employerName,
+    requisitionTitle: r.requisitionTitle,
+    latestInvoice: invoiceById.get(r.placement.id) ?? null,
   }));
 }
 

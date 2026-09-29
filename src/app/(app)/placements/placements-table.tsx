@@ -113,6 +113,40 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
       ),
     },
     {
+      header: 'Fee invoice',
+      id: 'latestInvoice',
+      size: 180,
+      cell: ({ row }) => {
+        const inv = row.original.latestInvoice;
+        if (!inv) {
+          return (
+            <Link
+              href={`/employers/${row.original.employerId}?raisePlacement=${row.original.id}&raiseRequisition=${row.original.jobRequisitionId}`}
+              className="inline-flex items-center gap-1 text-xs font-medium text-status-warning hover:underline"
+            >
+              Not invoiced <ArrowRight className="size-3" />
+            </Link>
+          );
+        }
+        return (
+          <Link
+            href={`/employers/${row.original.employerId}/invoices/${inv.number}`}
+            className="flex flex-col text-left transition-colors hover:text-foreground"
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="font-mono text-xs">{inv.number}</span>
+              <Badge variant={statusTone(inv.status)} className="rounded-full text-[10px]">
+                {inv.status.replace(/_/g, ' ')}
+              </Badge>
+            </span>
+            <span className="mt-0.5 tabular-nums text-[10px] text-muted-foreground">
+              {inv.totalAmount} {inv.currencyCode}
+            </span>
+          </Link>
+        );
+      },
+    },
+    {
       header: 'Start',
       accessorKey: 'startDate',
       size: 130,

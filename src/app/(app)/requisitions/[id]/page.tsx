@@ -21,6 +21,7 @@ import { fetchEmployers } from '@/modules/employers/service';
 import { fetchOccupations } from '@/modules/occupations/service';
 import { fetchPersons } from '@/modules/persons/service';
 import { fetchRequisitionPipeline } from '@/modules/pipeline/service';
+import { listPlacementsForRequisition } from '@/modules/placements/service';
 import { fetchQualifications } from '@/modules/qualifications/service';
 import {
   fetchRequisition,
@@ -34,6 +35,7 @@ import { RequisitionDialog } from '../requisition-dialog';
 import { AddCandidateDialog } from './add-candidate-dialog';
 import { ChecklistsSection } from './checklists-section';
 import { PipelineWall } from './pipeline-wall';
+import { PlacementsFeesSection } from './placements-fees-section';
 import { RequisitionQualificationsSection, RequisitionSkillsSection } from './requirements-section';
 import { RunMatchingButton } from './requisition-actions';
 import { RequisitionTabs } from './requisition-tabs';
@@ -61,6 +63,7 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     staffUsers,
     requisitionBilling,
     allPersons,
+    requisitionPlacements,
   ] = await Promise.all([
     fetchRequisitionPipeline(id),
     listApplicationsForRequisition(id),
@@ -76,6 +79,7 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     fetchStaffUserOptions(),
     fetchRequisitionBillingHistory(id),
     fetchPersons(),
+    listPlacementsForRequisition(id),
   ]);
   const currentOwner = requisition.assignedUserId
     ? (staffUsers.find((u) => u.id === requisition.assignedUserId) ?? null)
@@ -199,6 +203,14 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
           </Card>
         </FadeUp>
       )}
+      {/* Placements + their fee invoices. Renders even when empty so
+          the operator sees the placeholder before anyone is placed.
+          Each row links straight to the employer invoice printable
+          when a fee has been raised, or to the raise-fee flow when it
+          hasn't. */}
+      <FadeUp delay={0.055}>
+        <PlacementsFeesSection placements={requisitionPlacements} />
+      </FadeUp>
       {/* Billing for THIS requisition — invoices tied via
           invoices.job_requisition_id (populated when acceptLead
           materialised the requisition from a recruitment lead, or by
