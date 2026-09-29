@@ -32,6 +32,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   discardDraftAction,
   finaliseDraftAction,
+  finaliseDraftWithoutPaymentAction,
   updateDraftPersonAction,
 } from '@/modules/candidates/onboarding-actions';
 
@@ -192,6 +193,9 @@ export function OnboardingForm({
     payment.amount.trim().length > 0 &&
     payment.currencyCode.trim().length > 0 &&
     payment.receivedAt.trim().length > 0;
+  // Walk-in path only needs a name — payment happens later on the profile.
+  const canCreateWalkIn =
+    personal.firstName.trim().length > 0 && personal.lastName.trim().length > 0;
 
   async function handleCreate() {
     setFormError(null);
@@ -214,6 +218,28 @@ export function OnboardingForm({
     }
     toast.success(`Candidate created — ${result.data.invoiceNumber}`);
     router.replace(`/candidates/${result.data.personId}?just_created=1`);
+    router.refresh();
+  }
+
+  async function handleCreateWalkIn() {
+    setFormError(null);
+    setFieldErrors({});
+    setSubmitting(true);
+    await savePersonal(personal);
+    const result = await finaliseDraftWithoutPaymentAction({
+      personId: draft.personId,
+      coverLetter,
+      primaryOccupationId: primaryOccupationId || undefined,
+    });
+    setSubmitting(false);
+    if (!result.ok) {
+      if (result.error.fields) setFieldErrors(result.error.fields);
+      setFormError(result.error.message);
+      toast.error(result.error.message);
+      return;
+    }
+    toast.success('Candidate created — invoice later from the profile');
+    router.replace(`/candidates/${result.data.personId}`);
     router.refresh();
   }
 
@@ -502,7 +528,10 @@ export function OnboardingForm({
         )}
       </AnimatePresence>
 
-      {/* Sticky bottom action bar — Discard on the left, Create on the right. */}
+      {/* Sticky bottom action bar — Discard, walk-in path (invoice
+          later), then paid-at-intake create. Walk-in is a secondary
+          action so it doesn't out-shout the primary flow but stays
+          within one click for staff serving unpaid intake. */}
       <div className="pointer-events-none fixed bottom-6 right-6 z-40 flex items-center gap-3">
         <button
           type="button"
@@ -512,6 +541,22 @@ export function OnboardingForm({
         >
           <Trash2 className="mr-1.5 size-4" />
           Discard draft
+        </button>
+        <button
+          type="button"
+          onClick={handleCreateWalkIn}
+          disabled={!canCreateWalkIn || submitting || discarding}
+          title="Create the candidate profile now, raise an invoice from their profile later."
+          className="pointer-events-auto inline-flex h-11 items-center justify-center rounded-lg border border-input bg-background/95 px-4 text-sm font-medium text-foreground shadow-lg shadow-foreground/5 backdrop-blur transition-all hover:border-foreground/40 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {submitting ? (
+            <>
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Creating…
+            </>
+          ) : (
+            <>Create — invoice later</>
+          )}
         </button>
         <button
           type="button"
@@ -526,7 +571,7 @@ export function OnboardingForm({
             </>
           ) : (
             <>
-              Create candidate
+              Create + record payment
               <ArrowRight className="ml-2 size-4" />
             </>
           )}

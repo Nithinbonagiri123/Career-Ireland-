@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
 import type {
   FinaliseDraftInput,
+  FinaliseDraftWithoutPaymentInput,
   UpdateDraftNarrativeInput,
   UpdateDraftPersonInput,
 } from './onboarding-schemas';
@@ -11,6 +12,7 @@ import {
   createDraft,
   discardDraft,
   finaliseDraft,
+  finaliseDraftWithoutPayment,
   updateDraftNarrative,
   updateDraftPerson,
 } from './onboarding-service';
@@ -35,6 +37,15 @@ export async function updateDraftNarrativeAction(input: UpdateDraftNarrativeInpu
 
 export async function finaliseDraftAction(input: FinaliseDraftInput) {
   const r = await toActionResult(() => finaliseDraft(input));
+  if (r.ok) {
+    revalidatePath('/candidates');
+    revalidatePath(`/candidates/${r.data.personId}`);
+  }
+  return r;
+}
+
+export async function finaliseDraftWithoutPaymentAction(input: FinaliseDraftWithoutPaymentInput) {
+  const r = await toActionResult(() => finaliseDraftWithoutPayment(input));
   if (r.ok) {
     revalidatePath('/candidates');
     revalidatePath(`/candidates/${r.data.personId}`);

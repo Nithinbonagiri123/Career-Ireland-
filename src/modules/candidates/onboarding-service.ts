@@ -12,6 +12,8 @@ import { fetchAppSettings } from '@/modules/settings/service';
 import {
   type FinaliseDraftInput,
   FinaliseDraftSchema,
+  type FinaliseDraftWithoutPaymentInput,
+  FinaliseDraftWithoutPaymentSchema,
   type UpdateDraftNarrativeInput,
   UpdateDraftNarrativeSchema,
   type UpdateDraftPersonInput,
@@ -416,6 +418,83 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
       invoiceNumber: invoice.number,
       receiptNumber: receipt.number,
     };
+  });
+}
+
+/**
+ * Walk-in path: create the candidate profile now, invoice later. Same
+ * shape as finaliseDraft but skips every payment/invoice/receipt
+ * insert — the operator can raise an invoice from the candidate
+ * profile whenever payment actually shows up. Reduces to a
+ * two-transaction operation: flip is_draft → false, create profile.
+ *
+ * Audit trail carries `via: 'onboarding_walk_in'` so support can
+ * distinguish walk-ins from paid-at-intake candidates later.
+ */
+export async function finaliseDraftWithoutPayment(
+  input: FinaliseDraftWithoutPaymentInput,
+): Promise<{ personId: string; candidateProfileId: string }> {
+  const session = await requireInternalStaff();
+  const parsed = FinaliseDraftWithoutPaymentSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid walk-in payload',
+      parsed.error.flatten().fieldErrors as Record<string, string>,
+    );
+  }
+  const d = parsed.data;
+
+  return db.transaction(async (tx) => {
+    const [draft] = await tx
+      .select()
+      .from(persons)
+      .where(and(eq(persons.id, d.personId), eq(persons.isDraft, true)))
+      .limit(1);
+    if (!draft)
+      throw new BusinessRuleError(
+        'DRAFT_NOT_FOUND',
+        'Draft candidate not found or already finalised',
+      );
+    if (!draft.firstName || draft.firstName === 'Draft' || !draft.lastName) {
+      throw new ValidationError('First and last name are required to create a candidate', {
+        firstName: 'Required',
+        lastName: 'Required',
+      });
+    }
+
+    const [finalisedPerson] = await tx
+      .update(persons)
+      .set({ isDraft: false, draftedByUserId: null, updatedAt: sql`NOW()` })
+      .where(eq(persons.id, draft.id))
+      .returning();
+    if (!finalisedPerson) throw new Error('draft finalise update returned no row');
+
+    const [profile] = await tx
+      .insert(candidateProfiles)
+      .values({
+        personId: draft.id,
+        profileSummary: blankToNull(draft.notes),
+        primaryOccupationId: blankToNull(d.primaryOccupationId),
+        lifecycleStatus: 'ACTIVE',
+        availabilityStatus: 'AVAILABLE',
+        assignedUserId: session.user.id,
+      })
+      .returning({ id: candidateProfiles.id });
+    if (!profile) throw new Error('candidate_profiles insert returned no row');
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'candidate_profile',
+      entityId: profile.id,
+      action: 'CREATED',
+      after: { personId: draft.id, via: 'onboarding_walk_in' },
+      context: {
+        note: 'No invoice / receipt raised at intake — walk-in path.',
+        coverLetter: d.coverLetter ? true : false,
+      },
+    });
+
+    return { personId: draft.id, candidateProfileId: profile.id };
   });
 }
 

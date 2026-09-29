@@ -80,3 +80,17 @@ export const FinaliseDraftSchema = z.object({
   primaryOccupationId: z.string().uuid().optional().or(z.literal('')),
 });
 export type FinaliseDraftInput = z.infer<typeof FinaliseDraftSchema>;
+
+/**
+ * Walk-in path: create the candidate NOW, invoice later. Skips the
+ * payment section entirely — no invoice, no engagement, no receipt.
+ * Same audit trail flag ("via: onboarding_walk_in") so support can
+ * distinguish these later. Staff raise an invoice from the candidate
+ * profile whenever cash actually shows up.
+ */
+export const FinaliseDraftWithoutPaymentSchema = z.object({
+  personId: z.string().uuid(),
+  coverLetter: z.string().trim().max(10_000).optional().or(z.literal('')),
+  primaryOccupationId: z.string().uuid().optional().or(z.literal('')),
+});
+export type FinaliseDraftWithoutPaymentInput = z.infer<typeof FinaliseDraftWithoutPaymentSchema>;

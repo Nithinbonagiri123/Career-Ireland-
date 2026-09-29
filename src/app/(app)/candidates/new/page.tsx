@@ -62,7 +62,7 @@ export default async function NewCandidatePage({
         <PageHeader
           icon={UserPlus}
           title="Add candidate"
-          description="Every field is optional except first and last name. Documents can be attached as you go. Payment is required to create the profile."
+          description="Names are the only required fields. Take payment now and hit 'Create + record payment' — or drop the walk-in candidate straight into the pool with 'Create — invoice later' and raise the invoice from their profile whenever cash shows up."
           action={
             <Link
               href="/candidates"
