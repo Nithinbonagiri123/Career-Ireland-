@@ -1,13 +1,15 @@
-import { and, between, eq, gt, isNull, lte, ne, sql } from 'drizzle-orm';
+import { and, between, eq, gt, inArray, isNull, lte, ne, sql } from 'drizzle-orm';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { tasks } from '@/lib/db/schema/activities';
+import { creditNotes, invoices, receipts } from '@/lib/db/schema/billing';
 import { advertisements } from '@/lib/db/schema/campaigns';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { immigrationCases } from '@/lib/db/schema/immigration';
 import { leads } from '@/lib/db/schema/leads';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import { employers, jobRequisitions, placements } from '@/lib/db/schema/recruitment';
+import { OVERDUE_THRESHOLD_DAYS } from '@/modules/billing/aging';
 
 export type DashboardMetrics = {
   candidates: {
@@ -54,6 +56,24 @@ export type DashboardMetrics = {
     overdue: number;
     dueThisWeek: number;
   };
+  /**
+   * Financial rollups. Amounts stay as Record<currency, "12345.67">
+   * strings because summing across EUR + ZAR is meaningless. UI
+   * renders one line per currency.
+   */
+  invoicing: {
+    /** Count of ISSUED + PARTIALLY_PAID invoices. */
+    outstandingCount: number;
+    /** Count of the above where issued_at + OVERDUE_THRESHOLD_DAYS < now. */
+    overdueCount: number;
+    /** total_amount - verified_payments - credit_notes, floored at 0,
+     *  summed per currency across every non-VOIDED invoice. */
+    outstandingByCurrency: Record<string, string>;
+    /** Sum of VERIFIED payments received this calendar month, per
+     *  currency. Aligned with the invoice's currency because payments
+     *  inherit currency from the invoice's engagement. */
+    receivedThisMonthByCurrency: Record<string, string>;
+  };
 };
 
 /** All metrics for the top-level dashboard in a single call. Fast at our scale. */
@@ -68,6 +88,8 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
   const today = now.toISOString().slice(0, 10);
   const in30 = thirtyDaysAhead.toISOString().slice(0, 10);
   const in60 = sixtyDaysAhead.toISOString().slice(0, 10);
+  const overdueThreshold = new Date(now.getTime() - OVERDUE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
   // Batch queries in parallel — same DB roundtrip cost as a series of single COUNTs.
   const [
@@ -91,6 +113,8 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
     taskOverdue,
     taskThisWeek,
     positionsOpen,
+    invoicingRollup,
+    receivedThisMonthRows,
   ] = await Promise.all([
     db
       .select({
@@ -231,9 +255,69 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
       .from(jobRequisitions)
       .where(sql`${jobRequisitions.status} IN ('OPEN','IN_PROGRESS','PARTIALLY_FILLED')`)
       .then((r) => r[0]?.n ?? 0),
-    // reference serviceEngagements so import isn't unused; may add stats later
+    // Invoicing rollup: for every ISSUED / PARTIALLY_PAID invoice,
+    // compute its outstanding balance and aggregate per currency in a
+    // single DB pass. Also carries the count + overdue flag so we can
+    // return both in one round-trip.
+    db
+      .select({
+        currencyCode: invoices.currencyCode,
+        totalCount: sql<number>`COUNT(*)::int`,
+        overdueCount: sql<number>`COALESCE(SUM(CASE WHEN ${invoices.issuedAt} < ${overdueThreshold} THEN 1 ELSE 0 END), 0)::int`,
+        outstandingCents: sql<number>`COALESCE(SUM(
+          GREATEST(
+            0,
+            ROUND(${invoices.totalAmount} * 100)::bigint
+              - COALESCE((
+                  SELECT SUM(ROUND(${payments.amount} * 100)::bigint)
+                  FROM ${payments}
+                  WHERE ${payments.serviceEngagementId} = ${invoices.serviceEngagementId}
+                    AND ${payments.status} = 'VERIFIED'
+                ), 0)
+              - COALESCE((
+                  SELECT SUM(ROUND(${creditNotes.amount} * 100)::bigint)
+                  FROM ${creditNotes}
+                  WHERE ${creditNotes.invoiceId} = ${invoices.id}
+                ), 0)
+          )
+        ), 0)::bigint`,
+      })
+      .from(invoices)
+      .where(inArray(invoices.status, ['ISSUED', 'PARTIALLY_PAID']))
+      .groupBy(invoices.currencyCode),
+    // Sum of receipts issued this calendar month, keyed by currency.
+    // Receipts are the moment cash is confirmed, so this is real "money
+    // in" YTM. Grouped by currency because summing across is dishonest.
+    db
+      .select({
+        currencyCode: receipts.currencyCode,
+        totalCents: sql<number>`COALESCE(SUM(ROUND(${receipts.amount} * 100)::bigint), 0)::bigint`,
+      })
+      .from(receipts)
+      .where(gt(receipts.receivedAt, monthStart))
+      .groupBy(receipts.currencyCode),
   ]);
   void serviceEngagements;
+
+  // Fold the per-currency rollup rows into simple totals + records.
+  let outstandingCount = 0;
+  let overdueCount = 0;
+  const outstandingByCurrency: Record<string, string> = {};
+  for (const row of invoicingRollup) {
+    outstandingCount += row.totalCount;
+    overdueCount += row.overdueCount;
+    const cents = Number(row.outstandingCents);
+    if (cents > 0) {
+      outstandingByCurrency[row.currencyCode] = (cents / 100).toFixed(2);
+    }
+  }
+  const receivedThisMonthByCurrency: Record<string, string> = {};
+  for (const row of receivedThisMonthRows) {
+    const cents = Number(row.totalCents);
+    if (cents > 0) {
+      receivedThisMonthByCurrency[row.currencyCode] = (cents / 100).toFixed(2);
+    }
+  }
 
   return {
     candidates: candTotals,
@@ -271,6 +355,12 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
       open: taskOpen,
       overdue: taskOverdue,
       dueThisWeek: taskThisWeek,
+    },
+    invoicing: {
+      outstandingCount,
+      overdueCount,
+      outstandingByCurrency,
+      receivedThisMonthByCurrency,
     },
   };
 }

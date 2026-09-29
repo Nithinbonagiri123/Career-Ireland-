@@ -34,6 +34,7 @@ import { ActivityFeed } from './activity-feed';
 import { AgingSection } from './aging-section';
 import { AttentionCard } from './attention-card';
 import { DashboardDrilldownsSection } from './drilldowns-section';
+import { FinanceKpiCard } from './finance-kpi-card';
 import { PipelineFunnel } from './pipeline-funnel';
 import { RevenueBusinessGrid } from './revenue-business-chart';
 import { RevenueSection } from './revenue-section';
@@ -169,6 +170,11 @@ export default async function DashboardPage({
             />
           </div>
         </section>
+      </FadeUp>
+
+      {/* ─── Finance at a glance ────────────────────────────────── */}
+      <FadeUp delay={0.045} className="mb-6">
+        <FinanceKpiCard invoicing={m.invoicing} />
       </FadeUp>
 
       {/* ─── Revenue ─────────────────────────────────────────────── */}
