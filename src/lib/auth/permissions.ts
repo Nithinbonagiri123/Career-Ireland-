@@ -188,14 +188,26 @@ export function presetForRole(role: Role): PermissionKey[] {
         ...modulesWithVerbs('immigration', ['cases'], ['view', 'create', 'edit']),
       ];
     case 'FINANCE':
-      // Billing / payments across Candidate Services + Main Accounts.
+      // Billing / payments span every business — Candidate Services
+      // invoices AND recruitment placement fees AND immigration case
+      // invoices all pass through the same payments/engagements
+      // surfaces. Widen FINANCE to view the underlying entities across
+      // businesses too (read-only) so they can raise / verify /
+      // credit-note against them without depending on ADMIN escalation.
       return [
+        // Money-touching modules: full CRUD across every business.
         ...modulesWithVerbs(
           'candidate_services',
           ['payments', 'engagements'],
           ['view', 'create', 'edit'],
         ),
-        ...modulesWithVerbs('main', ['accounts'], ['view', 'create', 'edit']),
+        // View-only into the recruitment + immigration entities that
+        // spawn invoices, so the finance operator can navigate from a
+        // credit-note / payment back to context.
+        ...modulesWithVerbs('recruitment', ['employers', 'requisitions', 'placements'], ['view']),
+        ...modulesWithVerbs('immigration', ['cases'], ['view']),
+        ...modulesWithVerbs('candidate_services', ['candidates', 'leads'], ['view']),
+        ...modulesWithVerbs('main', ['accounts', 'overview'], ['view', 'create', 'edit']),
       ];
     case 'STAFF':
       // Deliberately empty — a fresh STAFF user has nothing until the

@@ -1,9 +1,10 @@
-import { and, desc, eq, isNull, lte, or, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lte, or, type SQL, sql } from 'drizzle-orm';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { todayInDublin } from '@/lib/dates';
 import { db } from '@/lib/db/client';
 import { tasks } from '@/lib/db/schema/activities';
+import { invoices } from '@/lib/db/schema/billing';
 import { advertisements } from '@/lib/db/schema/campaigns';
 import { immigrationCases } from '@/lib/db/schema/immigration';
 import { type Notification, notifications } from '@/lib/db/schema/notifications';
@@ -15,6 +16,14 @@ import { type Notification, notifications } from '@/lib/db/schema/notifications'
  */
 const AD_THRESHOLDS_DAYS = [30, 14, 7, 3, 1] as const;
 const IMMIGRATION_EXPIRY_THRESHOLDS_DAYS = [60, 30, 14, 7] as const;
+/**
+ * Invoice aging buckets. Fires escalating notifications so a payment
+ * that's a week overdue doesn't look identical to one that's two
+ * months overdue on the dashboard. Aligned with the aging report's
+ * OVERDUE_THRESHOLD_DAYS default (14) so the first notification lines
+ * up with the moment the invoice starts showing OVERDUE in list UIs.
+ */
+const INVOICE_OVERDUE_THRESHOLDS_DAYS = [14, 30, 60, 90] as const;
 
 async function insertIfNew(row: typeof notifications.$inferInsert) {
   await db
@@ -100,6 +109,65 @@ export async function runNotificationScan(): Promise<{ created: number }> {
         break;
       }
     }
+  }
+
+  // Overdue invoices — anything ISSUED or PARTIALLY_PAID beyond the
+  // aging threshold fires an escalating alert (14 → 30 → 60 → 90 days).
+  // Broadcast (no recipientUserId) so anyone on the finance dashboard
+  // sees it. Dedup is per invoice + threshold so an invoice that
+  // crosses 30d gets a new alert distinct from its 14d one, but the
+  // 14d alert never re-fires.
+  const openInvoices = await db
+    .select({
+      id: invoices.id,
+      number: invoices.number,
+      totalAmount: invoices.totalAmount,
+      currencyCode: invoices.currencyCode,
+      issuedAt: invoices.issuedAt,
+      status: invoices.status,
+      payerPersonId: invoices.payerPersonId,
+      payerEmployerId: invoices.payerEmployerId,
+    })
+    .from(invoices)
+    .where(inArray(invoices.status, ['ISSUED', 'PARTIALLY_PAID']));
+  for (const inv of openInvoices) {
+    const daysOverdue = Math.floor(
+      (Date.now() - new Date(inv.issuedAt).getTime()) / (1000 * 60 * 60 * 24),
+    );
+    // Fire the largest threshold this invoice has crossed. That way an
+    // invoice that goes 6 months without payment shows the 90d alert
+    // (not a stale 14d one) and never spams staff between escalations.
+    let hit: number | null = null;
+    for (const threshold of INVOICE_OVERDUE_THRESHOLDS_DAYS) {
+      if (daysOverdue >= threshold) hit = threshold;
+    }
+    if (hit === null) continue;
+    const dedup = `invoice-overdue:${inv.id}:${hit}`;
+    const before = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(eq(notifications.dedupKey, dedup))
+      .limit(1);
+    if (before.length > 0) continue;
+    const href = inv.payerPersonId
+      ? `/candidates/${inv.payerPersonId}/invoices/${inv.number}`
+      : inv.payerEmployerId
+        ? `/employers/${inv.payerEmployerId}/invoices/${inv.number}`
+        : '/payments';
+    await insertIfNew({
+      category: 'INVOICE_OVERDUE',
+      title: `${inv.number} is ${daysOverdue}d overdue`,
+      body: `${inv.totalAmount} ${inv.currencyCode} · ${inv.status.replace(/_/g, ' ')} · issued ${new Date(
+        inv.issuedAt,
+      )
+        .toISOString()
+        .slice(0, 10)}`,
+      entityType: 'invoice',
+      entityId: inv.id,
+      href,
+      dedupKey: dedup,
+    });
+    created += 1;
   }
 
   // Overdue tasks (fire once per task per day)

@@ -7,6 +7,7 @@ import {
   Bell,
   CheckCheck,
   Clock,
+  FileText,
   MailQuestion,
   PlaneTakeoff,
   Sparkles,
@@ -28,6 +29,7 @@ const ICONS: Record<Notification['category'], LucideIcon> = {
   TASK_OVERDUE: Clock,
   PAYMENT_PENDING: MailQuestion,
   FOLLOW_UP_DUE: AlertCircle,
+  INVOICE_OVERDUE: FileText,
 };
 
 /**
@@ -40,6 +42,7 @@ const CATEGORY_TONE: Record<Notification['category'], 'warning' | 'danger' | 'in
   TASK_OVERDUE: 'danger',
   PAYMENT_PENDING: 'warning',
   FOLLOW_UP_DUE: 'info',
+  INVOICE_OVERDUE: 'danger',
 };
 
 const CATEGORY_LABEL: Record<Notification['category'], string> = {
@@ -48,6 +51,7 @@ const CATEGORY_LABEL: Record<Notification['category'], string> = {
   TASK_OVERDUE: 'Task overdue',
   PAYMENT_PENDING: 'Payment pending',
   FOLLOW_UP_DUE: 'Follow-up due',
+  INVOICE_OVERDUE: 'Invoice overdue',
 };
 
 export function NotificationsList({ notifications }: { notifications: Notification[] }) {

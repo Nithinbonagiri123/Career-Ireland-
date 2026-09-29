@@ -19,6 +19,7 @@ export const notifications = pgTable(
         'TASK_OVERDUE',
         'PAYMENT_PENDING',
         'FOLLOW_UP_DUE',
+        'INVOICE_OVERDUE',
       ],
     }).notNull(),
     title: varchar('title', { length: 255 }).notNull(),
