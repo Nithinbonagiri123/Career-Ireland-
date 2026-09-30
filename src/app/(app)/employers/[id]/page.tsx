@@ -141,6 +141,7 @@ export default async function EmployerDetail({
                   placementId: raisePlacement || undefined,
                   jobRequisitionId: raiseRequisition || undefined,
                 }}
+                defaultOpen={Boolean(raisePlacement)}
               />
               <RequisitionDialog
                 employers={employersAll}

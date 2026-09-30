@@ -2,7 +2,7 @@
 
 import { FileText, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -50,6 +50,7 @@ export function GenerateInvoiceDialog({
   open: externalOpen,
   onOpenChange: externalOnOpenChange,
   contextLinks,
+  defaultOpen,
 }: {
   payerMode: 'PERSON' | 'EMPLOYER';
   payerId: string;
@@ -68,12 +69,24 @@ export function GenerateInvoiceDialog({
     jobRequisitionId?: string;
     placementId?: string;
   };
+  /** Pop the dialog on mount — used when a page is deep-linked with a
+   *  ?raisePlacement=… query param so the operator lands directly in
+   *  the invoice form instead of an extra button click. One-shot. */
+  defaultOpen?: boolean;
 }) {
   const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = externalOpen !== undefined && externalOnOpenChange !== undefined;
   const open = isControlled ? externalOpen : internalOpen;
   const setOpen = isControlled ? externalOnOpenChange : setInternalOpen;
+
+  // Deep-link auto-open — fires once on first render. If the caller
+  // also switches controlled mode later the effect won't re-fire and
+  // won't overwrite external state.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally one-shot mount
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, []);
 
   const [serviceId, setServiceId] = useState<string>(services[0]?.id ?? '');
   const [packageId, setPackageId] = useState<string>('');

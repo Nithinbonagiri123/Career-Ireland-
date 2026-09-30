@@ -205,8 +205,15 @@ test('lead → candidate → requisition → pipeline → placement → fee invo
   const raiseFeeLink = placementRow.getByRole('link', { name: /not invoiced/i });
   await raiseFeeLink.click();
   await page.waitForURL(/\/employers\/[0-9a-f-]+\?raisePlacement/i, { timeout: 20_000 });
+  // The employer page passes defaultOpen={true} to GenerateInvoiceDialog
+  // when the URL carries ?raisePlacement — the dialog opens via a
+  // useEffect on mount which needs a tick after hydration. Give it a
+  // generous wait before deciding to skip.
   const invoiceDialog = page.getByRole('dialog', { name: /generate invoice/i });
-  const dialogVisible = await invoiceDialog.isVisible().catch(() => false);
+  const dialogVisible = await invoiceDialog
+    .waitFor({ state: 'visible', timeout: 12_000 })
+    .then(() => true)
+    .catch(() => false);
   if (!dialogVisible) {
     // No active EMPLOYER-payable services — expected on a fresh DB.
     test.info().annotations.push({
@@ -235,22 +242,19 @@ test('lead → candidate → requisition → pipeline → placement → fee invo
   const invoiceNumber = invoiceNumberMatch?.[1] ?? '';
 
   // ── STEP 9 · Requisition Placements & Fees now shows the invoice ─────
-  await page.goto(requisitionUrl);
-  await expect(page.getByText(invoiceNumber).first()).toBeVisible({ timeout: 10_000 });
+  // Requisition detail defaults to Pipeline tab; the Placements & Fees
+  // section (where the fee invoice number renders) lives on Overview.
+  await page.goto(requisitionUrl, { waitUntil: 'networkidle' });
+  await page.getByRole('tab', { name: /^overview$/i }).click();
+  await expect(page.getByText(invoiceNumber).first()).toBeVisible({ timeout: 15_000 });
   await shot(page, '15-requisition-shows-fee-invoice');
 
   // ── STEP 10 · Finance KPI card reflects the outstanding invoice ──────
-  await page.goto('/dashboard');
-  await expect(page.getByRole('heading', { name: /finance/i }).first()).toBeVisible({
-    timeout: 10_000,
-  });
-  // The outstanding tile shows a count. Since we just created an ISSUED
-  // invoice, the count should be ≥ 1. Robust to the exact number since
-  // other tests may leave rows behind.
-  const financeCard = page
-    .locator('section, div')
-    .filter({ hasText: /outstanding/i })
-    .first();
-  await expect(financeCard).toBeVisible();
+  // CardTitle renders as <div>, not a semantic heading — query by text.
+  // The outstanding tile shows a count; since we just created an ISSUED
+  // invoice the count should be ≥ 1 (robust to the exact number).
+  await page.goto('/dashboard', { waitUntil: 'networkidle' });
+  await expect(page.getByText(/^finance$/i).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/outstanding/i).first()).toBeVisible();
   await shot(page, '16-dashboard-finance-kpi');
 });

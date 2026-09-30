@@ -5,14 +5,17 @@ import type * as React from 'react';
 import { cn } from '@/lib/utils';
 
 function Table({ className, ...props }: React.ComponentProps<'table'>) {
+  // No wrapping scroll container — callers (DataTable) own the outer
+  // overflow behaviour so the fade-mask indicator sits on the correct
+  // scroll box. `w-full` used to be here; kept as `min-w-full` so the
+  // table can grow beyond its container when nested inside an
+  // overflow-x-auto parent, but never shrink below its content.
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
-      <table
-        data-slot="table"
-        className={cn('w-full caption-bottom text-sm', className)}
-        {...props}
-      />
-    </div>
+    <table
+      data-slot="table"
+      className={cn('min-w-full caption-bottom text-sm', className)}
+      {...props}
+    />
   );
 }
 

@@ -35,9 +35,45 @@ export type InvoiceableService = {
   }>;
 };
 
+const PLACEMENT_FEE_CODE = 'PLACEMENT_FEE';
+const PLACEMENT_FEE_NAME = 'Placement Fee';
+
+/**
+ * Idempotent seed for the canonical Placement Fee catalog item. Returns
+ * immediately if a row with code=PLACEMENT_FEE already exists; otherwise
+ * inserts one with payerType='EMPLOYER'. Called from
+ * fetchInvoiceableServicesFor('EMPLOYER') so the catalog is never empty
+ * from an operator's perspective — the "Raise placement fee invoice"
+ * flow always has at least one billable service to pick.
+ *
+ * The insert uses ON CONFLICT DO NOTHING on the unique `code` column so
+ * two concurrent callers can't produce duplicates.
+ */
+async function ensurePlacementFeeCatalogItem(): Promise<void> {
+  await db
+    .insert(serviceCatalogItems)
+    .values({
+      code: PLACEMENT_FEE_CODE,
+      name: PLACEMENT_FEE_NAME,
+      defaultCurrencyCode: 'EUR',
+      payerType: 'EMPLOYER',
+    })
+    .onConflictDoNothing({ target: serviceCatalogItems.code });
+}
+
 export async function fetchInvoiceableServicesFor(
   payerMode: 'PERSON' | 'EMPLOYER',
 ): Promise<InvoiceableService[]> {
+  // Placement Fee bootstrap: a fresh Postgres install has no
+  // employer-payable services in the catalog, which means the "Raise
+  // placement fee invoice" flow greys out with no way in. Lazy-create
+  // a canonical PLACEMENT_FEE row the moment somebody asks for the
+  // employer-scoped catalog; subsequent asks find it and skip. Admins
+  // can still rename / disable it under /admin/services.
+  if (payerMode === 'EMPLOYER') {
+    await ensurePlacementFeeCatalogItem();
+  }
+
   const rows = await db
     .select({
       id: serviceCatalogItems.id,

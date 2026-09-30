@@ -100,75 +100,88 @@ export function DateRangeFilter({ className }: { className?: string }) {
 
   return (
     <div className={cn('relative', className)} ref={popoverRef}>
+      {/* Mobile scroll box: the tablist is wider than 375px on almost
+         every route (Anytime + 3 presets + "Custom"), so wrap in an
+         overflow-x-auto container with the same right-edge fade mask
+         we use on data tables. Scrolling reveals the trailing "Custom"
+         chip that would otherwise be invisible on iPhone SE. */}
       <div
-        role="tablist"
-        aria-label="Created date filter"
-        className="inline-flex items-center gap-0.5 rounded-md glass-panel p-0.5 text-xs"
+        className={cn(
+          'overflow-x-auto',
+          'supports-[mask-image:linear-gradient(black,black)]:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent_100%)]',
+          'supports-[mask-image:linear-gradient(black,black)]:sm:[mask-image:none]',
+        )}
       >
-        <span className="inline-flex items-center gap-1 px-2 text-muted-foreground">
-          <CalendarClock className="size-3.5" aria-hidden />
-          Created
-        </span>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={isAnytime}
-          onClick={() => setPreset('')}
-          className={cn(
-            'rounded px-2.5 py-1 transition-colors',
-            isAnytime
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:bg-accent/50',
-          )}
+        <div
+          role="tablist"
+          aria-label="Created date filter"
+          className="inline-flex items-center gap-0.5 rounded-md glass-panel p-0.5 text-xs"
         >
-          Anytime
-        </button>
-        {PRESETS.map((p) => {
-          const active = !isCustom && currentPreset === p.value;
-          return (
-            <button
-              key={p.value}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setPreset(p.value)}
-              className={cn(
-                'rounded px-2.5 py-1 transition-colors',
-                active
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:bg-accent/50',
-              )}
-            >
-              {p.label}
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          onClick={() => setCustomOpen((v) => !v)}
-          aria-expanded={customOpen}
-          className={cn(
-            'inline-flex items-center gap-1 rounded px-2.5 py-1 transition-colors',
-            isCustom
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:bg-accent/50',
-          )}
-        >
-          {customLabel}
-          {isCustom && (
-            <button
-              type="button"
-              aria-label="Clear custom range"
-              onClick={(e) => {
-                e.stopPropagation();
-                clearCustom();
-              }}
-              className="ml-1 inline-flex items-center rounded p-0.5 hover:bg-background/40"
-            >
-              <X className="size-3" />
-            </button>
-          )}
-        </button>
+          <span className="inline-flex items-center gap-1 px-2 text-muted-foreground">
+            <CalendarClock className="size-3.5" aria-hidden />
+            Created
+          </span>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isAnytime}
+            onClick={() => setPreset('')}
+            className={cn(
+              'rounded px-2.5 py-1 transition-colors',
+              isAnytime
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-accent/50',
+            )}
+          >
+            Anytime
+          </button>
+          {PRESETS.map((p) => {
+            const active = !isCustom && currentPreset === p.value;
+            return (
+              <button
+                key={p.value}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setPreset(p.value)}
+                className={cn(
+                  'rounded px-2.5 py-1 transition-colors',
+                  active
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-accent/50',
+                )}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setCustomOpen((v) => !v)}
+            aria-expanded={customOpen}
+            className={cn(
+              'inline-flex items-center gap-1 rounded px-2.5 py-1 transition-colors',
+              isCustom
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-accent/50',
+            )}
+          >
+            {customLabel}
+            {isCustom && (
+              <button
+                type="button"
+                aria-label="Clear custom range"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  clearCustom();
+                }}
+                className="ml-1 inline-flex items-center rounded p-0.5 hover:bg-background/40"
+              >
+                <X className="size-3" />
+              </button>
+            )}
+          </button>
+        </div>
       </div>
 
       <AnimatePresence>

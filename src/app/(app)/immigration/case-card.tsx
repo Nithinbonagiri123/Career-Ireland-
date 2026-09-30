@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDistanceToNowStrict } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
 import { Building2, CalendarDays, Filter, Grid3x3, UserCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,7 @@ import type { CaseListRow } from '@/modules/immigration/service';
  */
 export function CaseCard({ case: c }: { case: CaseListRow }) {
   const created = formatDistanceToNowStrict(c.createdAt, { addSuffix: true });
+  const createdAbsolute = format(c.createdAt, 'd MMM yyyy · HH:mm');
   return (
     <Link href={`/immigration/${c.id}`} className="block outline-none">
       <Card className="h-full transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring">
@@ -53,7 +54,9 @@ export function CaseCard({ case: c }: { case: CaseListRow }) {
             )}
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <CalendarDays className="size-3.5 shrink-0" />
-              <span>Opened {created}</span>
+              <time dateTime={c.createdAt.toISOString()} title={createdAbsolute}>
+                Opened {created}
+              </time>
             </div>
           </div>
         </CardContent>

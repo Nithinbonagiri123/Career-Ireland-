@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDistanceToNowStrict } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
 import {
   ArrowRight,
   Briefcase,
@@ -47,6 +47,7 @@ export function RequisitionCard({ requisition }: { requisition: RequisitionCardR
   const postedLabel = formatDistanceToNowStrict(new Date(requisition.createdAt), {
     addSuffix: true,
   });
+  const postedAbsolute = format(new Date(requisition.createdAt), 'd MMM yyyy · HH:mm');
   const descSnippet = trimDescription(requisition.description);
 
   return (
@@ -57,9 +58,13 @@ export function RequisitionCard({ requisition }: { requisition: RequisitionCardR
           Direct
         </PipelineChip>
         <StatusPill tone={tone}>{label}</StatusPill>
-        <span className="ml-auto text-[10px] italic text-muted-foreground">
+        <time
+          dateTime={new Date(requisition.createdAt).toISOString()}
+          title={postedAbsolute}
+          className="ml-auto text-[10px] italic text-muted-foreground"
+        >
           posted {postedLabel}
-        </span>
+        </time>
       </div>
 
       {/* Title strip */}

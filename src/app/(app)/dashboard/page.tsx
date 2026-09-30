@@ -89,11 +89,16 @@ export default async function DashboardPage({
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
-      {/* ─── Header ─────────────────────────────────────────────── */}
-      <FadeUp className="mb-8">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <div className="mb-1.5 flex items-center gap-2">
+      {/* ─── Header ───────────────────────────────────────────────
+         Mobile: title stacks above the CreateLead button so the long
+         "<brand> — today" heading isn't squeezed. From `sm:` upward
+         we switch back to a horizontal split. Also drop the title one
+         size on narrow viewports so it doesn't wrap to 3 lines on
+         iPhone SE. */}
+      <FadeUp className="mb-6 md:mb-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="mb-1.5 flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="rounded-full">
                 Overview
               </Badge>
@@ -101,7 +106,7 @@ export default async function DashboardPage({
                 {format(today, 'EEEE, d MMM yyyy')}
               </span>
             </div>
-            <h1 className="text-[28px] font-semibold leading-tight tracking-tight">
+            <h1 className="text-2xl font-semibold leading-tight tracking-tight md:text-[28px]">
               {settings.legalName} — today
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -111,8 +116,11 @@ export default async function DashboardPage({
           {/* Leads are service-agnostic — you can raise one for Candidate
               Services, Recruitment, or Immigration from anywhere. The
               dashboard is the natural entry point, so the same dialog
-              /leads uses lives here too. */}
-          <CreateLeadDialog invoiceableServices={invoiceableServices} currencies={currencies} />
+              /leads uses lives here too. Full-width on mobile so it's
+              a proper primary action; sits back to auto width on sm+. */}
+          <div className="shrink-0 sm:self-end [&_button]:w-full sm:[&_button]:w-auto">
+            <CreateLeadDialog invoiceableServices={invoiceableServices} currencies={currencies} />
+          </div>
         </div>
       </FadeUp>
 

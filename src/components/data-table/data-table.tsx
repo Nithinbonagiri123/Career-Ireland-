@@ -273,61 +273,86 @@ export function DataTable<TData, TValue>({
   return (
     <div className={cn('space-y-3', className)}>
       {toolbar}
-      <div className="glass-panel overflow-hidden rounded-lg">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((group) => (
-              <TableRow key={group.id}>
-                {group.headers.map((header) => (
-                  <TableHead key={header.id} style={{ width: header.getSize() }}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: loadingRows }).map((_, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows have no id
-                <TableRow key={`sk-${i}`}>
-                  {columnsWithSelect.map((_c, ci) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: skeleton cells have no id
-                    <TableCell key={`sk-${i}-${ci}`}>
-                      <Skeleton className="h-4 w-full max-w-[200px]" />
-                    </TableCell>
+      {/*
+        Wrapper handles two concerns at once:
+          1. Rounded glass panel (visual)
+          2. Horizontal scroll when the table is wider than the viewport
+             — critical on mobile where a 6-column table would otherwise
+             be clipped off the right edge with no affordance.
+        The inner scroll container carries a subtle right-edge gradient
+        via the `mobile-scroll-fade` utility so the user has a visual
+        cue that more columns exist off-screen. The gradient is
+        applied via a data-attribute + Tailwind arbitrary variant so
+        it disappears the moment the table fits.
+      */}
+      <div className="glass-panel rounded-lg">
+        <div
+          className={cn(
+            'overflow-x-auto rounded-lg',
+            // Right-edge fade mask for scroll indication. `mask-image`
+            // stays invisible on wide viewports (mask covers the whole
+            // width) and only reveals a subtle gradient when the
+            // container has to scroll. Falls back gracefully in browsers
+            // without mask-image support.
+            'supports-[mask-image:linear-gradient(black,black)]:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent_100%)]',
+            'supports-[mask-image:linear-gradient(black,black)]:sm:[mask-image:none]',
+          )}
+        >
+          <Table>
+            <TableHeader>
+              {table.getHeaderGroups().map((group) => (
+                <TableRow key={group.id}>
+                  {group.headers.map((header) => (
+                    <TableHead key={header.id} style={{ width: header.getSize() }}>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
                   ))}
                 </TableRow>
-              ))
-            ) : noResults ? (
-              <TableRow>
-                <TableCell
-                  colSpan={table.getAllLeafColumns().length}
-                  className="py-8 text-center text-xs text-muted-foreground"
-                >
-                  No rows match "{globalFilter}"
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredRows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-                  className={onRowClick ? 'cursor-pointer' : undefined}
-                  data-state={row.getIsSelected() ? 'selected' : undefined}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
+              ))}
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                Array.from({ length: loadingRows }).map((_, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows have no id
+                  <TableRow key={`sk-${i}`}>
+                    {columnsWithSelect.map((_c, ci) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: skeleton cells have no id
+                      <TableCell key={`sk-${i}-${ci}`}>
+                        <Skeleton className="h-4 w-full max-w-[200px]" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : noResults ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={table.getAllLeafColumns().length}
+                    className="py-8 text-center text-xs text-muted-foreground"
+                  >
+                    No rows match "{globalFilter}"
+                  </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                filteredRows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                    className={onRowClick ? 'cursor-pointer' : undefined}
+                    data-state={row.getIsSelected() ? 'selected' : undefined}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDistanceToNowStrict } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
 import {
   ArrowRight,
   Briefcase,
@@ -36,9 +36,11 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
   const postedLabel = formatDistanceToNowStrict(new Date(candidate.createdAt), {
     addSuffix: true,
   });
+  const postedAbsolute = format(new Date(candidate.createdAt), 'd MMM yyyy · HH:mm');
   const activatedLabel = formatDistanceToNowStrict(new Date(candidate.activatedAt), {
     addSuffix: true,
   });
+  const activatedAbsolute = format(new Date(candidate.activatedAt), 'd MMM yyyy · HH:mm');
 
   return (
     <Card className="flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 shadow-sm transition-shadow hover:shadow-md">
@@ -48,9 +50,13 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
           Talent
         </PipelineChip>
         <StatusPill tone={availability.tone}>{availability.label}</StatusPill>
-        <span className="ml-auto text-[10px] italic text-muted-foreground">
+        <time
+          dateTime={new Date(candidate.createdAt).toISOString()}
+          title={postedAbsolute}
+          className="ml-auto text-[10px] italic text-muted-foreground"
+        >
           added {postedLabel}
-        </span>
+        </time>
       </div>
 
       {/* Title strip — avatar + name */}
@@ -83,7 +89,9 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
           {candidate.assignedUserName ?? 'Unassigned'}
         </MetaRow>
         <MetaRow icon={<Briefcase className="text-pipeline-interview" />}>
-          activated {activatedLabel}
+          <time dateTime={new Date(candidate.activatedAt).toISOString()} title={activatedAbsolute}>
+            activated {activatedLabel}
+          </time>
         </MetaRow>
       </MetaList>
 

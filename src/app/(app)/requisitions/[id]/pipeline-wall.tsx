@@ -190,7 +190,19 @@ function PipelineBand({
       {entries.length === 0 ? (
         <div className="px-4 py-6 text-center text-xs opacity-70">{emptyMessage(stage)}</div>
       ) : (
-        <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 py-4">
+        // The band scrolls horizontally when it has more candidates than
+        // fit. Right-edge fade mask signals "there's more here" so users
+        // don't miss offscreen cards. Mask sits behind the cards, so
+        // pointer + tap targets aren't blocked. Only applied on
+        // mobile/tablet — desktop viewports rarely need the cue since the
+        // grid comfortably fits 3-4 cards.
+        <div
+          className={cn(
+            'flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 py-4',
+            'supports-[mask-image:linear-gradient(black,black)]:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent_100%)]',
+            'supports-[mask-image:linear-gradient(black,black)]:lg:[mask-image:none]',
+          )}
+        >
           {entries.map((entry) => (
             <PipelineCard
               key={`${stage}-${entry.personId}`}

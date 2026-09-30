@@ -177,7 +177,8 @@ describe('presetForRole', () => {
     const preset = presetForRole('FINANCE');
     const money = preset.filter(
       (p) =>
-        p.business === 'candidate_services' && (p.module === 'payments' || p.module === 'engagements'),
+        p.business === 'candidate_services' &&
+        (p.module === 'payments' || p.module === 'engagements'),
     );
     // 3 verbs (view, create, edit) × 2 modules = 6 rows
     expect(money.length).toBe(6);
