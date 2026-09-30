@@ -80,18 +80,28 @@ test('requisition: Add required qualification dialog shows autosuggest + inline-
   await expect(page.getByText(new RegExp(`Add qualification:.*${nonce}`))).toBeVisible();
 });
 
-test('candidate onboarding: occupation picker is autosuggest + inline-create', async ({ page }) => {
+test('candidate onboarding: occupation picker is a dropdown with +New occupation row', async ({
+  page,
+}) => {
+  // The occupation picker was swapped from the text-first
+  // CatalogAutosuggest to a DropdownMenu-shaped OccupationPicker that
+  // shows every catalog occupation upfront and has a "+ New occupation…"
+  // row at the bottom for inline-create. Reflect that shape here.
   await page.goto('/candidates/new');
   await page.waitForURL(/\/candidates\/new\?draft=/i);
 
-  const occupationInput = page.locator('#primaryOccupation');
-  await expect(occupationInput).toBeVisible();
-  const tagName = await occupationInput.evaluate((el) => el.tagName.toLowerCase());
-  expect(tagName).toBe('input');
+  const occupationSelect = page.locator('#primaryOccupation');
+  await expect(occupationSelect).toBeVisible();
+  const tagName = await occupationSelect.evaluate((el) => el.tagName.toLowerCase());
+  expect(tagName).toBe('select');
 
-  const nonce = `TestOcc_${Date.now()}`;
-  await occupationInput.fill(nonce);
-  await expect(page.getByText(new RegExp(`Add occupation:.*${nonce}`))).toBeVisible();
+  // The last <option> is the "+ New occupation…" affordance; every real
+  // catalog entry precedes it. Assert the option is present so a future
+  // refactor that drops the inline-create row is caught.
+  const newOccupationOption = occupationSelect.locator('option', {
+    hasText: /\+ New occupation/i,
+  });
+  await expect(newOccupationOption).toHaveCount(1);
 });
 
 test('root layout metadata: browser tab title reads brand from app_settings', async ({ page }) => {

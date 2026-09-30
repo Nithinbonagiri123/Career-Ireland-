@@ -52,8 +52,10 @@ test('requisition detail Pipeline tab shows the horizontal bands', async ({ page
   await page.waitForLoadState('networkidle');
 
   // Pipeline is the default tab — the stepper strip should be visible
-  // showing the stages (Source / Review / Shortlist / Apply / …).
-  await expect(page.getByText(/source/i).first()).toBeVisible({ timeout: 10_000 });
+  // showing the stages (Matched / Reviewed / Shortlisted / Applied / …).
+  // The first stage was renamed from "Source" to "Matched" when the
+  // pipeline chip labels were refreshed.
+  await expect(page.getByText(/matched/i).first()).toBeVisible({ timeout: 10_000 });
   await page.waitForTimeout(500);
   await page.screenshot({
     path: path.join(SHOTS, 'e2e__requisition-pipeline-wall.png'),
