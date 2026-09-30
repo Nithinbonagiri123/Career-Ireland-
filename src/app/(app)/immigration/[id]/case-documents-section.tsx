@@ -431,7 +431,12 @@ export function CaseDocumentsSection({
                     </p>
                     <p className="text-[10px] text-muted-foreground">
                       {d.status.toLowerCase()} · uploaded{' '}
-                      {formatDistanceToNow(d.createdAt, { addSuffix: true })}
+                      <time
+                        dateTime={new Date(d.createdAt).toISOString()}
+                        title={format(new Date(d.createdAt), 'd MMM yyyy · HH:mm')}
+                      >
+                        {formatDistanceToNow(d.createdAt, { addSuffix: true })}
+                      </time>
                     </p>
                   </div>
                   <Button size="sm" variant="outline" onClick={() => attachExisting(d.id)}>

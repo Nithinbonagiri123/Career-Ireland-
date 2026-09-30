@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { Archive, ArrowRight, MoreHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState, useTransition } from 'react';
@@ -70,22 +70,31 @@ export function CampaignsTable({ campaigns }: { campaigns: CampaignListRow[] }) 
         header: 'Started',
         accessorKey: 'startedAt',
         size: 140,
-        cell: ({ row }) => (
-          <span className="text-xs text-muted-foreground">
-            {row.original.startedAt
-              ? formatDistanceToNow(row.original.startedAt, { addSuffix: true })
-              : '—'}
-          </span>
-        ),
+        cell: ({ row }) =>
+          row.original.startedAt ? (
+            <time
+              dateTime={row.original.startedAt.toISOString()}
+              className="text-xs text-muted-foreground"
+              title={format(row.original.startedAt, 'd MMM yyyy · HH:mm')}
+            >
+              {formatDistanceToNow(row.original.startedAt, { addSuffix: true })}
+            </time>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          ),
       },
       {
         header: 'Created',
         accessorKey: 'createdAt',
         size: 130,
         cell: ({ row }) => (
-          <span className="text-xs text-muted-foreground">
+          <time
+            dateTime={row.original.createdAt.toISOString()}
+            className="text-xs text-muted-foreground"
+            title={format(row.original.createdAt, 'd MMM yyyy · HH:mm')}
+          >
             {formatDistanceToNow(row.original.createdAt, { addSuffix: true })}
-          </span>
+          </time>
         ),
       },
       {

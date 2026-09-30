@@ -66,9 +66,16 @@ export function ListSummaryStrip({
       </div>
 
       {chips.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        // Vertical divider before every chip after the first — makes the
+        // count groupings scannable on any width instead of relying on
+        // whitespace alone. `first:before:hidden` swallows the leading
+        // divider so the first chip sits flush against the total.
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           {chips.map((chip) => (
-            <div key={chip.label} className="flex items-center gap-1.5">
+            <div
+              key={chip.label}
+              className="flex items-center gap-1.5 before:mr-3 before:h-3 before:w-px before:bg-border/70 first:before:hidden"
+            >
               <span
                 className={cn(
                   'font-mono text-sm font-medium tabular-nums',

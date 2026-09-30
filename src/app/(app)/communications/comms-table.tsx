@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { Archive, MoreHorizontal, Pencil } from 'lucide-react';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -52,12 +52,13 @@ export function CommsTable({ comms }: { comms: CommunicationRow[] }) {
         accessorKey: 'occurredAt',
         size: 140,
         cell: ({ row }) => (
-          <span
+          <time
+            dateTime={row.original.occurredAt.toISOString()}
             className="text-xs text-muted-foreground"
-            title={row.original.occurredAt.toLocaleString()}
+            title={format(row.original.occurredAt, 'd MMM yyyy · HH:mm')}
           >
             {formatDistanceToNow(row.original.occurredAt, { addSuffix: true })}
-          </span>
+          </time>
         ),
       },
       {

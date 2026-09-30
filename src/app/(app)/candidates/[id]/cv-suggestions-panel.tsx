@@ -176,7 +176,15 @@ export function CvSuggestionsPanel({ personId }: { personId: string }) {
             <p className="text-[11px] text-muted-foreground">
               Scanned <span className="font-mono">{suggestions.filename}</span>
               {suggestions.parsedAt && (
-                <> · {formatDistanceToNow(suggestions.parsedAt, { addSuffix: true })}</>
+                <>
+                  {' · '}
+                  <time
+                    dateTime={new Date(suggestions.parsedAt).toISOString()}
+                    title={format(new Date(suggestions.parsedAt), 'd MMM yyyy · HH:mm')}
+                  >
+                    {formatDistanceToNow(suggestions.parsedAt, { addSuffix: true })}
+                  </time>
+                </>
               )}
             </p>
 

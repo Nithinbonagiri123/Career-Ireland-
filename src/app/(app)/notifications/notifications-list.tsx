@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import type { LucideIcon } from 'lucide-react';
 import {
   AlertCircle,
@@ -168,9 +168,13 @@ export function NotificationsList({ notifications }: { notifications: Notificati
                 {n.body && (
                   <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</p>
                 )}
-                <p className="mt-1 text-[10px] text-muted-foreground">
+                <time
+                  dateTime={new Date(n.createdAt).toISOString()}
+                  title={format(new Date(n.createdAt), 'd MMM yyyy · HH:mm')}
+                  className="mt-1 block text-[10px] text-muted-foreground"
+                >
                   {formatDistanceToNow(n.createdAt, { addSuffix: true })}
-                </p>
+                </time>
               </div>
               {dismissBtn}
             </div>
