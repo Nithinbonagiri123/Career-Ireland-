@@ -148,12 +148,50 @@ describe('presetForRole', () => {
     expect(new Set(keys)).toEqual(new Set(['candidate_services.documents', 'immigration.cases']));
   });
 
-  it('FINANCE covers billing + accounts only', () => {
+  it('FINANCE covers billing modules everywhere with read-only into money-adjacent entities', () => {
+    // FINANCE needs full CRUD on payments/engagements (where money moves)
+    // and view-only on the recruitment + immigration + CS entities that
+    // spawn invoices — so a finance operator can navigate from a receipt
+    // back to the case that raised it without needing ADMIN. main.accounts
+    // and main.overview stay full-CRUD so the finance dashboard is
+    // reachable.
     const preset = presetForRole('FINANCE');
     const keys = new Set(preset.map((p) => `${p.business}.${p.module}`));
     expect(keys).toEqual(
-      new Set(['candidate_services.payments', 'candidate_services.engagements', 'main.accounts']),
+      new Set([
+        'candidate_services.payments',
+        'candidate_services.engagements',
+        'candidate_services.candidates',
+        'candidate_services.leads',
+        'recruitment.employers',
+        'recruitment.requisitions',
+        'recruitment.placements',
+        'immigration.cases',
+        'main.accounts',
+        'main.overview',
+      ]),
     );
+  });
+
+  it('FINANCE has full CRUD on money modules but view-only on money-adjacent entities', () => {
+    const preset = presetForRole('FINANCE');
+    const money = preset.filter(
+      (p) =>
+        p.business === 'candidate_services' && (p.module === 'payments' || p.module === 'engagements'),
+    );
+    // 3 verbs (view, create, edit) × 2 modules = 6 rows
+    expect(money.length).toBe(6);
+    const adjacent = preset.filter(
+      (p) =>
+        (p.business === 'recruitment' &&
+          (p.module === 'employers' || p.module === 'requisitions' || p.module === 'placements')) ||
+        (p.business === 'immigration' && p.module === 'cases') ||
+        (p.business === 'candidate_services' &&
+          (p.module === 'candidates' || p.module === 'leads')),
+    );
+    // 6 modules (3 recruitment + 1 immigration + 2 CS) × 1 verb = 6 rows
+    expect(adjacent.length).toBe(6);
+    for (const p of adjacent) expect(p.verb).toBe('view');
   });
 
   it('every preset row is a valid permission (no typos)', () => {

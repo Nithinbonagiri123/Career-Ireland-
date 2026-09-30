@@ -47,7 +47,10 @@ test.describe('/dashboard', () => {
     // Immigration expiring — either populated rows or the empty message.
     for (const heading of [
       /requisitions unfilled/i,
-      /interviews this week/i,
+      // The scheduling-based "interviews this week" was removed when we
+      // ripped out the interviews table; the drilldown now surfaces
+      // candidates currently at the Interview pipeline stage instead.
+      /at the interview stage/i,
       /overdue tasks/i,
       /immigration cases expiring/i,
     ]) {

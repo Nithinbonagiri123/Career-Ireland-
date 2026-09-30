@@ -88,8 +88,13 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
   const today = now.toISOString().slice(0, 10);
   const in30 = thirtyDaysAhead.toISOString().slice(0, 10);
   const in60 = sixtyDaysAhead.toISOString().slice(0, 10);
-  const overdueThreshold = new Date(now.getTime() - OVERDUE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  // ISO strings for the two Date parameters that end up inside `sql` template
+  // literals below. postgres-js refuses to serialise a bare JS Date inside a
+  // CASE / WHERE expression — it only accepts primitives from tagged literals.
+  const overdueThresholdIso = new Date(
+    now.getTime() - OVERDUE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const monthStartIso = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
   // Batch queries in parallel — same DB roundtrip cost as a series of single COUNTs.
   const [
@@ -263,7 +268,7 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
       .select({
         currencyCode: invoices.currencyCode,
         totalCount: sql<number>`COUNT(*)::int`,
-        overdueCount: sql<number>`COALESCE(SUM(CASE WHEN ${invoices.issuedAt} < ${overdueThreshold} THEN 1 ELSE 0 END), 0)::int`,
+        overdueCount: sql<number>`COALESCE(SUM(CASE WHEN ${invoices.issuedAt} < ${overdueThresholdIso}::timestamptz THEN 1 ELSE 0 END), 0)::int`,
         outstandingCents: sql<number>`COALESCE(SUM(
           GREATEST(
             0,
@@ -294,7 +299,7 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
         totalCents: sql<number>`COALESCE(SUM(ROUND(${receipts.amount} * 100)::bigint), 0)::bigint`,
       })
       .from(receipts)
-      .where(gt(receipts.receivedAt, monthStart))
+      .where(sql`${receipts.receivedAt} >= ${monthStartIso}::timestamptz`)
       .groupBy(receipts.currencyCode),
   ]);
   void serviceEngagements;

@@ -50,7 +50,7 @@ test('sticky Create button is disabled until required fields are filled', async 
   await page.goto('/candidates/new');
   await page.waitForURL(/\/candidates\/new\?draft=[0-9a-f-]+/i);
 
-  const create = page.getByRole('button', { name: /create candidate/i });
+  const create = page.getByRole('button', { name: /create \+ record payment/i });
   await expect(create).toBeDisabled();
 
   await page.getByLabel(/first name/i).fill('Priya');
@@ -107,7 +107,7 @@ test('full happy path: fill form → Create → open invoice and receipt', async
   // handleCreate() flushes any in-flight debounced save before finalising, so
   // there's no need to wait for the "Saved" indicator — Create is the sync
   // boundary that guarantees the personal patch reaches the DB first.
-  await page.getByRole('button', { name: /create candidate/i }).click();
+  await page.getByRole('button', { name: /create \+ record payment/i }).click();
 
   // Redirect to /candidates/<id>?just_created=1 on success. The detail page
   // streams its content through Suspense (loading.tsx renders a skeleton),
