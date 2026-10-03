@@ -1,4 +1,5 @@
 export * from './_shared';
+export * from './accounting';
 export * from './activities';
 export * from './app_settings';
 export * from './audit_events';

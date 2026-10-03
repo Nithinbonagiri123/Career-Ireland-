@@ -274,6 +274,13 @@
       "when": 1790615382497,
       "tag": "0038_foamy_hairball",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1791031524622,
+      "tag": "0039_melted_speed_demon",
+      "breakpoints": true
     }
   ]
 }
