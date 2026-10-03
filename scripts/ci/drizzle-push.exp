@@ -28,20 +28,35 @@ log_user 1
 spawn -noecho pnpm exec drizzle-kit push
 
 expect {
-    # Known prompt: "add unique constraint … Do you want to truncate …?"
-    # Default is "No, add the constraint without truncating the table".
-    # Send ENTER to accept the default; keep listening for further prompts.
+    # Stage 1: "add unique constraint … Do you want to truncate …?"
+    # Default (pre-selected) is "No, add the constraint without truncating".
+    # Send ENTER to accept — preserves data; the DB raises an error if
+    # duplicates exist, which is the behaviour we want.
     -re "Do you want to truncate" {
         send "\r"
         exp_continue
     }
 
-    # Any other confirmation shape — stop here rather than guessing.
-    -re "(Yes|No).+truncate" {
-        send "\r"
+    # Stage 2: FINAL apply confirmation that drizzle-kit prints AFTER the
+    # full DDL plan is dumped. The options are:
+    #
+    #   ❯ No, abort
+    #     Yes, I want to execute all statements
+    #
+    # Default is "No, abort" so a bare ENTER would abort the whole push
+    # (that's what blocked the previous run — "[x] All changes were
+    # aborted"). We send Down-Arrow + ENTER to pick "Yes, execute all
+    # statements". Match on the UNIQUE phrase so this never collides with
+    # the truncate prompt above.
+    -re "I want to execute all statements" {
+        send "\033\[B\r"
         exp_continue
     }
 
+    # Any other prompt shape — stop here rather than guessing. Explicitly
+    # not matching "(Yes|No).+" broadly because arrow-key menus with a
+    # SAFE default should be left as default (ENTER) and arrow-key menus
+    # with a DESTRUCTIVE default must not be auto-advanced.
     timeout {
         send_user "\n[expect] timed out waiting for drizzle-kit output\n"
         exit 1
