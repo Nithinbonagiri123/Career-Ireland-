@@ -6,7 +6,7 @@ import './_bootstrap-env';
 import 'dotenv/config';
 import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { businessDivisions, chartOfAccounts } from '@/lib/db/schema/accounting';
+import { accountingRules, businessDivisions, chartOfAccounts } from '@/lib/db/schema/accounting';
 
 /**
  * One-time seed for the double-entry ledger. Idempotent — safe to run
@@ -156,6 +156,131 @@ async function main() {
     accInserted++;
   }
   console.log(`chart_of_accounts: ${accInserted} inserted, ${accSkipped} already present`);
+
+  // ─── accounting_rules (Phase 2) ────────────────────────────────
+  // Three events × three operational divisions, each with PRINCIPAL and
+  // (where applicable) TAX line roles. Currency-wildcard so EUR and
+  // ZAR flow through the same rule; add currency-specific rules later
+  // if the chart grows e.g. a ZAR-only bank account.
+  //
+  // Debits/credits are expressed FROM THE LEDGER'S PERSPECTIVE:
+  //   INVOICE_POSTED      — DR AR  CR Revenue;  TAX line CR VAT Payable
+  //   CREDIT_NOTE_POSTED  — same rule row; outbox-drain flips signs
+  //                          because the event's subtotal arrives negative
+  //   PAYMENT_RECEIVED    — DR Bank  CR AR (no TAX — recognised at invoice)
+  const RULES: Array<{
+    eventType: string;
+    divisionCode: string | null;
+    lineRole: 'PRINCIPAL' | 'TAX';
+    debit: string;
+    credit: string;
+    priority: number;
+  }> = [
+    // INVOICE_POSTED — principal per division
+    {
+      eventType: 'INVOICE_POSTED',
+      divisionCode: 'candidate_services',
+      lineRole: 'PRINCIPAL',
+      debit: '1100',
+      credit: '4100',
+      priority: 10,
+    },
+    {
+      eventType: 'INVOICE_POSTED',
+      divisionCode: 'recruitment',
+      lineRole: 'PRINCIPAL',
+      debit: '1100',
+      credit: '4200',
+      priority: 10,
+    },
+    {
+      eventType: 'INVOICE_POSTED',
+      divisionCode: 'immigration',
+      lineRole: 'PRINCIPAL',
+      debit: '1100',
+      credit: '4300',
+      priority: 10,
+    },
+    // INVOICE_POSTED — tax (division-agnostic — VAT goes to one account regardless)
+    {
+      eventType: 'INVOICE_POSTED',
+      divisionCode: null,
+      lineRole: 'TAX',
+      debit: '1100',
+      credit: '2100',
+      priority: 100,
+    },
+
+    // CREDIT_NOTE_POSTED — reuses the same account pairs; the drainer
+    // flips signs because the event payload sends negative amounts.
+    {
+      eventType: 'CREDIT_NOTE_POSTED',
+      divisionCode: 'candidate_services',
+      lineRole: 'PRINCIPAL',
+      debit: '1100',
+      credit: '4100',
+      priority: 10,
+    },
+    {
+      eventType: 'CREDIT_NOTE_POSTED',
+      divisionCode: 'recruitment',
+      lineRole: 'PRINCIPAL',
+      debit: '1100',
+      credit: '4200',
+      priority: 10,
+    },
+    {
+      eventType: 'CREDIT_NOTE_POSTED',
+      divisionCode: 'immigration',
+      lineRole: 'PRINCIPAL',
+      debit: '1100',
+      credit: '4300',
+      priority: 10,
+    },
+
+    // PAYMENT_RECEIVED — one wildcard rule (bank <- AR regardless of division)
+    {
+      eventType: 'PAYMENT_RECEIVED',
+      divisionCode: null,
+      lineRole: 'PRINCIPAL',
+      debit: '1010',
+      credit: '1100',
+      priority: 100,
+    },
+  ];
+
+  // Rely on the `(event_type, division_code, currency_code, line_role,
+  // effective_from)` UNIQUE constraint for idempotency. ON CONFLICT DO
+  // NOTHING turns a replay into a no-op without needing a pre-check
+  // round-trip per row.
+  const today = new Date().toISOString().slice(0, 10);
+  const toInsert = RULES.map((r) => ({
+    eventType: r.eventType,
+    divisionCode: r.divisionCode,
+    currencyCode: null,
+    debitAccountCode: r.debit,
+    creditAccountCode: r.credit,
+    lineRole: r.lineRole,
+    priority: r.priority,
+    effectiveFrom: today,
+  }));
+  const inserted = await db
+    .insert(accountingRules)
+    .values(toInsert)
+    .onConflictDoNothing({
+      target: [
+        accountingRules.eventType,
+        accountingRules.divisionCode,
+        accountingRules.currencyCode,
+        accountingRules.lineRole,
+        accountingRules.effectiveFrom,
+      ],
+    })
+    .returning({ id: accountingRules.id });
+  console.log(
+    `accounting_rules: ${inserted.length} inserted, ${toInsert.length - inserted.length} already present`,
+  );
+
   console.log('✓ accounting seed complete');
   process.exit(0);
 }

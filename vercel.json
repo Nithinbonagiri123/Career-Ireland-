@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/attendance-auto-close",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/drain-financial-events",
+      "schedule": "0 * * * *"
     }
   ]
 }
