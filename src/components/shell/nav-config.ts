@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   BarChart3,
   Bell,
+  BookOpen,
   Briefcase,
   Building2,
   CalendarClock,
@@ -101,6 +102,17 @@ export const WORKSPACES: Record<Business, WorkspaceConfig> = {
           { label: 'HR Board', href: '/hr/admin', icon: Users2, module: 'hr_board' },
           { label: 'Admin', href: '/admin', icon: UserCog, module: 'admin' },
           { label: 'Accounts', href: '/payments', icon: Coins, module: 'accounts' },
+          // Double-entry ledger lives at /admin/accounting. Distinct from the
+          // operational "Accounts" entry above (which is the payments list):
+          // this is the GL / journal / chart-of-accounts side introduced by
+          // the Phase 1 accounting foundation. Visible to anyone with
+          // main.accounting.view (FINANCE preset grants it).
+          {
+            label: 'Accounting',
+            href: '/admin/accounting',
+            icon: BookOpen,
+            module: 'accounting',
+          },
           // Audit logs live under Admin already, but the owner uses this daily
           // to see what happened across the whole business — surfaced as a
           // top-level nav item so it's one click away.

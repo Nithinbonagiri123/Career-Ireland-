@@ -36,7 +36,7 @@ export const MODULES = {
   // sidebar. `hasPermission(user, 'main', 'leads', 'view')` grants access
   // from the global view; candidate_services.leads still exists for the CS
   // workspace's own entry.
-  main: ['overview', 'activities', 'hr_board', 'admin', 'accounts', 'leads'],
+  main: ['overview', 'activities', 'hr_board', 'admin', 'accounts', 'accounting', 'leads'],
   candidate_services: [
     'dashboard',
     'leads',
