@@ -1,9 +1,11 @@
 import {
   ArrowRight,
   BookOpen,
+  CalendarRange,
   FileClock,
   Landmark,
   ListTree,
+  Percent,
   Plus,
   Scale,
   TrendingUp,
@@ -119,6 +121,18 @@ export default async function AccountingHubPage() {
             icon={TrendingUp}
             title="Profit &amp; loss"
             description="Revenue, cost of sales, operating expenses and net profit for a period. Reads straight from the ledger."
+          />
+          <HubLink
+            href="/admin/accounting/periods"
+            icon={CalendarRange}
+            title="Periods"
+            description="Month-end lifecycle: OPEN → SOFT_CLOSED → CLOSED → LOCKED. Close is blocked if DRAFT journals remain or the period doesn't balance."
+          />
+          <HubLink
+            href="/admin/accounting/vat"
+            icon={Percent}
+            title="VAT return"
+            description="Irish VAT3 T1 / T2 / T3 totals for a period, with CSV export of every underlying transaction for Revenue filing."
           />
         </div>
       </FadeUp>

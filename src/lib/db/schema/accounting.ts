@@ -306,6 +306,52 @@ export const accountingRules = pgTable(
   ],
 );
 
+/**
+ * VAT / tax subledger (Phase 5). Every tax-relevant event (invoice,
+ * credit note, future supplier bill) writes a row here so the VAT3
+ * return can be produced from a single table rather than reconstructed
+ * from journal lines. The journal_lines + chart_of_accounts split is
+ * optimised for *balances*; this subledger is optimised for *return
+ * filing*.
+ *
+ * `direction`:
+ *   OUTPUT  — VAT we charge our customers (goes into T1 on VAT3)
+ *   INPUT   — VAT we pay our suppliers and recover (goes into T2 on VAT3)
+ *
+ * Current app only emits OUTPUT (there is no AP flow yet). INPUT shows
+ * up once supplier bills land in Phase 7+.
+ */
+export const taxTransactions = pgTable(
+  'tax_transactions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    transactionDate: date('transaction_date').notNull(),
+    sourceType: varchar('source_type', { length: 40 }).notNull(),
+    sourceId: varchar('source_id', { length: 60 }).notNull(),
+    journalId: uuid('journal_id').references(() => journals.id),
+    direction: varchar('direction', { length: 10 }).notNull(),
+    taxCode: varchar('tax_code', { length: 40 }).notNull().default('STANDARD'),
+    taxRatePercent: numeric('tax_rate_percent', { precision: 5, scale: 2 }).notNull(),
+    netAmount: numeric('net_amount', { precision: 14, scale: 2 }).notNull(),
+    taxAmount: numeric('tax_amount', { precision: 14, scale: 2 }).notNull(),
+    currencyCode: char('currency_code', { length: 3 })
+      .notNull()
+      .references(() => currencies.code),
+    divisionId: uuid('division_id').references(() => businessDivisions.id),
+    customerPersonId: uuid('customer_person_id').references(() => persons.id),
+    customerEmployerId: uuid('customer_employer_id').references(() => employers.id),
+    description: text('description'),
+    createdAt,
+  },
+  (t) => [
+    unique('tax_transactions_source_unique').on(t.sourceType, t.sourceId, t.direction),
+    check('tax_transactions_direction_check', sql`${t.direction} IN ('OUTPUT','INPUT')`),
+    index('tax_transactions_date_idx').on(t.transactionDate),
+    index('tax_transactions_direction_date_idx').on(t.direction, t.transactionDate),
+    index('tax_transactions_journal_idx').on(t.journalId),
+  ],
+);
+
 export type BusinessDivision = typeof businessDivisions.$inferSelect;
 export type AccountingPeriod = typeof accountingPeriods.$inferSelect;
 export type ChartOfAccountsRow = typeof chartOfAccounts.$inferSelect;
@@ -313,3 +359,4 @@ export type FinancialEvent = typeof financialEvents.$inferSelect;
 export type Journal = typeof journals.$inferSelect;
 export type JournalLine = typeof journalLines.$inferSelect;
 export type AccountingRule = typeof accountingRules.$inferSelect;
+export type TaxTransaction = typeof taxTransactions.$inferSelect;

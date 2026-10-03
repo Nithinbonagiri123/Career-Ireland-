@@ -281,6 +281,13 @@
       "when": 1791031524622,
       "tag": "0039_melted_speed_demon",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791036520991,
+      "tag": "0040_nasty_lady_mastermind",
+      "breakpoints": true
     }
   ]
 }

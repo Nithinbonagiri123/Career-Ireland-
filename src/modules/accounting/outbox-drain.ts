@@ -1,6 +1,12 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { financialEvents, journalLines, journals } from '@/lib/db/schema/accounting';
+import {
+  businessDivisions,
+  financialEvents,
+  journalLines,
+  journals,
+  taxTransactions,
+} from '@/lib/db/schema/accounting';
 import { documentSequences } from '@/lib/db/schema/billing';
 import { logger } from '@/lib/logger';
 import { getOrCreatePeriodForDate } from './periods';
@@ -241,6 +247,45 @@ async function processOne(eventId: string): Promise<void> {
       });
     }
     await tx.insert(journalLines).values(linesForDb);
+
+    // Phase 5: write a tax_transactions row so VAT reporting can be
+    // produced directly from the subledger. Only emitted when the
+    // event carries a non-zero tax amount — zero-rated / exempt sales
+    // and payments don't create tax rows. ON CONFLICT DO NOTHING keeps
+    // the drain idempotent if an event is somehow re-processed.
+    if (taxCents !== 0 && event.eventType !== 'PAYMENT_RECEIVED') {
+      // Resolve divisionId from the division code so the subledger can
+      // slice by business line.
+      let divisionId: string | null = null;
+      if (payload.divisionCode) {
+        const [div] = await tx
+          .select({ id: businessDivisions.id })
+          .from(businessDivisions)
+          .where(eq(businessDivisions.code, payload.divisionCode))
+          .limit(1);
+        divisionId = div?.id ?? null;
+      }
+      const taxRate = subtotalCents !== 0 ? ((taxCents / subtotalCents) * 100).toFixed(2) : '0.00';
+      await tx
+        .insert(taxTransactions)
+        .values({
+          transactionDate: event.eventDate,
+          sourceType: event.sourceEntity,
+          sourceId: event.sourceId,
+          journalId: header.id,
+          direction: 'OUTPUT',
+          taxCode: 'STANDARD',
+          taxRatePercent: taxRate,
+          netAmount: (Math.abs(subtotalCents) / 100).toFixed(2),
+          taxAmount: (Math.abs(taxCents) / 100).toFixed(2),
+          currencyCode: payload.currencyCode,
+          divisionId,
+          description: payload.description ?? null,
+        })
+        .onConflictDoNothing({
+          target: [taxTransactions.sourceType, taxTransactions.sourceId, taxTransactions.direction],
+        });
+    }
 
     // Flip event → PROCESSED and back-link the journal id.
     await tx
