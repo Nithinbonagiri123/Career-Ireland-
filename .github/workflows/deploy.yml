@@ -105,22 +105,75 @@ jobs:
         # State-based push. CI already ran the migration replay against
         # a scratch DB, so any drift here would be a bug in the migration
         # generator, not a schema mismatch.
-        run: pnpm exec drizzle-kit push
+        #
+        # Non-interactive wrapper: drizzle-kit refuses to run when
+        # stdin/stdout aren't TTYs (it needs to prompt for data-loss
+        # confirmations). `script` from util-linux allocates a PTY so
+        # the CLI thinks it's interactive; we feed `No` to every prompt
+        # so any destructive safety offer (truncate before adding a
+        # unique constraint, drop column with data, etc.) is declined.
+        # The underlying DDL still runs — if it would actually fail
+        # because of existing data, the DB error surfaces here rather
+        # than silently destroying rows.
+        run: yes No | script -qefc "pnpm exec drizzle-kit push" /dev/null
 
   # Deploy is handled by Vercel's native GitHub integration — every push
   # to main triggers a build+deploy on Vercel's side, using the env vars
   # configured in the Vercel dashboard. That flow was set up when the
   # project was first linked via `vercel link`.
   #
-  # This workflow owns the two things Vercel's integration doesn't:
+  # This workflow owns the three things Vercel's integration doesn't:
   #   1. wait-for-ci — deploy only proceeds if CI has passed for the SHA
   #   2. db-push — drizzle-kit push against the prod DB before the app
   #      picks up the new schema
+  #   3. rollback-on-db-failure — because Vercel's auto-deploy fires in
+  #      parallel with this workflow (it watches the branch, not our
+  #      jobs), the app ships even when `db-push` fails. In that case we
+  #      promote the previous READY production deployment back so the
+  #      live app isn't talking to a stale schema. Belt & braces: db-push
+  #      is also structured to no-op cleanly if nothing is new.
   #
   # If you ever want CI-driven deploys (e.g. more control over the
   # promote step, or to run more pre-deploy scripts), disable the
   # Vercel-side integration in Project Settings → Git and re-add the
   # `deploy: needs: db-push` job here that runs `vercel deploy --prod`.
+  rollback-on-db-failure:
+    name: Rollback Vercel if db-push failed
+    needs: db-push
+    if: failure()
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+    steps:
+      - name: Promote previous READY production deployment
+        # Vercel auto-deployed this SHA in parallel to db-push, so the
+        # live site is now running new app code against the old schema.
+        # Find the most recent READY production deploy whose commit SHA
+        # differs from this one, and promote it back to production via
+        # the project-promote endpoint.
+        run: |
+          set -euo pipefail
+          SHA="${{ github.sha }}"
+          echo "db-push failed — looking for a previous READY deploy to promote back…"
+          resp=$(curl -sf -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID&target=production&state=READY&limit=10")
+          prev_id=$(echo "$resp" | jq -r --arg sha "$SHA" \
+            'first(.deployments[]? | select(.meta.githubCommitSha != $sha) | .uid) // ""')
+          if [[ -z "$prev_id" ]]; then
+            echo "✗ No previous READY production deployment found — manual rollback required."
+            exit 1
+          fi
+          echo "Promoting deployment $prev_id back to production…"
+          curl -sf -X POST \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$prev_id?teamId=$VERCEL_ORG_ID" > /dev/null
+          echo "✓ Rolled back live production to $prev_id"
+          # Fail the overall workflow run so the red X is visible on the
+          # commit — the rollback worked but the deploy itself didn't.
+          exit 1
+
   post-deploy-check:
     name: Confirm Vercel deploy is live
     needs: db-push
