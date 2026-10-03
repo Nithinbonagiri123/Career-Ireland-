@@ -27,7 +27,9 @@ export default async function ChartOfAccountsPage() {
   const accounts = await fetchChartOfAccounts();
 
   const byType = accounts.reduce<Record<string, typeof accounts>>((acc, a) => {
-    (acc[a.type] = acc[a.type] ?? []).push(a);
+    const bucket = acc[a.type] ?? [];
+    bucket.push(a);
+    acc[a.type] = bucket;
     return acc;
   }, {});
   const typeOrder = [
@@ -121,5 +123,8 @@ export default async function ChartOfAccountsPage() {
 }
 
 function humanType(type: string): string {
-  return type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  return type
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }

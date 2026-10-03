@@ -112,10 +112,7 @@ export default async function FinancialEventsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={statusTone(e.status)}
-                          className="rounded-full text-[10px]"
-                        >
+                        <Badge variant={statusTone(e.status)} className="rounded-full text-[10px]">
                           {e.status}
                         </Badge>
                       </TableCell>

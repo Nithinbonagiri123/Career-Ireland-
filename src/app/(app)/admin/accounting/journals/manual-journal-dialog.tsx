@@ -84,7 +84,11 @@ export function ManualJournalDialog({
       if (Number.isFinite(dd)) d += Math.round(dd * 100);
       if (Number.isFinite(cc)) c += Math.round(cc * 100);
     }
-    return { debit: (d / 100).toFixed(2), credit: (c / 100).toFixed(2), balanced: d === c && d > 0 };
+    return {
+      debit: (d / 100).toFixed(2),
+      credit: (c / 100).toFixed(2),
+      balanced: d === c && d > 0,
+    };
   }, [lines]);
 
   const canSubmit = useMemo(() => {
@@ -98,7 +102,7 @@ export function ManualJournalDialog({
       if (!Number.isFinite(dd) || !Number.isFinite(cc)) return false;
       if (dd < 0 || cc < 0) return false;
       // XOR: exactly one must be non-zero
-      if ((dd > 0) === (cc > 0)) return false;
+      if (dd > 0 === cc > 0) return false;
     }
     return totals.balanced;
   }, [description, currency, lines, totals.balanced]);
@@ -144,8 +148,8 @@ export function ManualJournalDialog({
         <DialogHeader>
           <DialogTitle>Post manual journal</DialogTitle>
           <DialogDescription>
-            Debits must equal credits. The DB-level balance trigger enforces this at commit — if
-            the numbers don't tie, nothing is written.
+            Debits must equal credits. The DB-level balance trigger enforces this at commit — if the
+            numbers don't tie, nothing is written.
           </DialogDescription>
         </DialogHeader>
 
@@ -239,9 +243,7 @@ export function ManualJournalDialog({
                     <Input
                       inputMode="decimal"
                       value={l.debit}
-                      onChange={(e) =>
-                        updateLine(i, { debit: e.target.value, credit: '0' })
-                      }
+                      onChange={(e) => updateLine(i, { debit: e.target.value, credit: '0' })}
                       placeholder="Debit"
                       aria-label={`Line ${i + 1} debit`}
                     />
@@ -250,9 +252,7 @@ export function ManualJournalDialog({
                     <Input
                       inputMode="decimal"
                       value={l.credit}
-                      onChange={(e) =>
-                        updateLine(i, { credit: e.target.value, debit: '0' })
-                      }
+                      onChange={(e) => updateLine(i, { credit: e.target.value, debit: '0' })}
                       placeholder="Credit"
                       aria-label={`Line ${i + 1} credit`}
                     />

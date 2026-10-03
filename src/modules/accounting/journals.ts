@@ -100,11 +100,12 @@ export async function postManualJournal(input: PostManualJournalInput): Promise<
         active: chartOfAccounts.active,
       })
       .from(chartOfAccounts);
-    const accountByCode = new Map(accounts.filter((a) => codes.includes(a.code)).map((a) => [a.code, a]));
+    const accountByCode = new Map(
+      accounts.filter((a) => codes.includes(a.code)).map((a) => [a.code, a]),
+    );
     for (const code of codes) {
       const row = accountByCode.get(code);
-      if (!row)
-        throw new BusinessRuleError('ACCOUNT_NOT_FOUND', `unknown account code "${code}"`);
+      if (!row) throw new BusinessRuleError('ACCOUNT_NOT_FOUND', `unknown account code "${code}"`);
       if (!row.active)
         throw new BusinessRuleError('ACCOUNT_INACTIVE', `account "${code}" is inactive`);
       if (!row.allowPosting)
@@ -171,16 +172,23 @@ export async function postManualJournal(input: PostManualJournalInput): Promise<
     if (!header) throw new Error('journals insert returned no row');
 
     await tx.insert(journalLines).values(
-      data.lines.map((l, i) => ({
-        journalId: header.id,
-        lineNumber: i + 1,
-        accountId: accountByCode.get(l.accountCode)!.id,
-        divisionId: l.divisionCode ? divisionByCode.get(l.divisionCode) : undefined,
-        debit: l.debit,
-        credit: l.credit,
-        currencyCode: data.transactionCurrency,
-        description: l.description,
-      })),
+      data.lines.map((l, i) => {
+        // Guaranteed by the pre-insert validation loop above — kept as an
+        // explicit guard so the biome `noNonNullAssertion` rule stays
+        // satisfied without a `!`.
+        const acct = accountByCode.get(l.accountCode);
+        if (!acct) throw new Error(`internal: account "${l.accountCode}" vanished mid-tx`);
+        return {
+          journalId: header.id,
+          lineNumber: i + 1,
+          accountId: acct.id,
+          divisionId: l.divisionCode ? divisionByCode.get(l.divisionCode) : undefined,
+          debit: l.debit,
+          credit: l.credit,
+          currencyCode: data.transactionCurrency,
+          description: l.description,
+        };
+      }),
     );
 
     await recordAudit(tx, {
@@ -290,10 +298,7 @@ export async function reverseJournal(input: {
 
     // Flip the original to REVERSED — the only UPDATE the DB-level
     // immutability trigger allows on a POSTED journal.
-    await tx
-      .update(journals)
-      .set({ status: 'REVERSED' })
-      .where(eq(journals.id, original.id));
+    await tx.update(journals).set({ status: 'REVERSED' }).where(eq(journals.id, original.id));
 
     await recordAudit(tx, {
       actorUserId: session.user.id,

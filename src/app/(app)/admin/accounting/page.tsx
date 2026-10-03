@@ -1,11 +1,4 @@
-import {
-  ArrowRight,
-  BookOpen,
-  FileClock,
-  Landmark,
-  ListTree,
-  Plus,
-} from 'lucide-react';
+import { ArrowRight, BookOpen, FileClock, Landmark, ListTree, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
@@ -33,7 +26,9 @@ export default async function AccountingHubPage() {
   ]);
 
   const postedJournals = journals.filter((j) => j.status === 'POSTED').length;
-  const pendingEvents = events.filter((e) => e.status === 'RECEIVED' || e.status === 'PROCESSING').length;
+  const pendingEvents = events.filter(
+    (e) => e.status === 'RECEIVED' || e.status === 'PROCESSING',
+  ).length;
   const failedEvents = events.filter((e) => e.status === 'FAILED').length;
 
   return (
@@ -172,7 +167,7 @@ function HubLink({
         <p className="text-sm text-muted-foreground">{description}</p>
         <Link
           href={href}
-          className={buttonVariants({ variant: 'ghost', size: 'sm' }) + ' shrink-0'}
+          className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} shrink-0`}
           aria-label={`Open ${title}`}
         >
           Open <ArrowRight className="ml-1.5 size-3.5" />

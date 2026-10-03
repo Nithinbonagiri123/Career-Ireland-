@@ -1,5 +1,10 @@
-import { eq } from 'drizzle-orm';
+// `./_bootstrap-env` must be the first import: it sets placeholder values
+// for the AUTH_SECRET / AUTH_URL / AWS_REGION / S3_BUCKET_DOCUMENTS keys
+// that env.ts's zod validator demands at module load. Only DATABASE_URL
+// is actually used by this script.
+import './_bootstrap-env';
 import 'dotenv/config';
+import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { businessDivisions, chartOfAccounts } from '@/lib/db/schema/accounting';
 

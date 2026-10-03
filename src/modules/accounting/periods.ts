@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
-import { type DbExecutor } from '@/lib/audit/withAudit';
-import { accountingPeriods, type AccountingPeriod } from '@/lib/db/schema/accounting';
+import type { DbExecutor } from '@/lib/audit/withAudit';
+import { type AccountingPeriod, accountingPeriods } from '@/lib/db/schema/accounting';
 import { BusinessRuleError } from '@/lib/errors';
 
 /**

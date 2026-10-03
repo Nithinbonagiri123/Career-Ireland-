@@ -1,4 +1,4 @@
-import { type DbExecutor } from '@/lib/audit/withAudit';
+import type { DbExecutor } from '@/lib/audit/withAudit';
 import { financialEvents } from '@/lib/db/schema/accounting';
 
 /**

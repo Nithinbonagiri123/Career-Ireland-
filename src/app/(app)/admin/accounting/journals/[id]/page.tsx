@@ -22,11 +22,7 @@ import { ReverseJournalButton } from './reverse-journal-button';
 
 export const dynamic = 'force-dynamic';
 
-export default async function JournalDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function JournalDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePermission('main', 'accounting', 'view');
   const { id } = await params;
   const detail = await fetchJournalWithLines(id);

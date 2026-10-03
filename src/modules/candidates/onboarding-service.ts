@@ -490,7 +490,7 @@ export async function finaliseDraftWithoutPayment(
       after: { personId: draft.id, via: 'onboarding_walk_in' },
       context: {
         note: 'No invoice / receipt raised at intake — walk-in path.',
-        coverLetter: d.coverLetter ? true : false,
+        coverLetter: Boolean(d.coverLetter),
       },
     });
 

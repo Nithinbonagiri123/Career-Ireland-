@@ -1,7 +1,7 @@
 import { ArrowRight, Landmark, Plus } from 'lucide-react';
 import Link from 'next/link';
-import { FadeUp } from '@/components/motion/motion-primitives';
 import { EmptyState } from '@/components/empty-state';
+import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -14,8 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { formatCurrency } from '@/lib/currency';
 import { requirePermission } from '@/lib/auth/session';
+import { formatCurrency } from '@/lib/currency';
 import { statusTone } from '@/lib/ui/status-tone';
 import {
   fetchBusinessDivisions,

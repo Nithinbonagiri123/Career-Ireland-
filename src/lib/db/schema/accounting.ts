@@ -104,9 +104,7 @@ export const chartOfAccounts = pgTable(
     code: varchar('code', { length: 10 }).notNull().unique(),
     name: text('name').notNull(),
     type: varchar('type', { length: 20 }).notNull(),
-    parentAccountId: uuid('parent_account_id').references(
-      (): AnyPgColumn => chartOfAccounts.id,
-    ),
+    parentAccountId: uuid('parent_account_id').references((): AnyPgColumn => chartOfAccounts.id),
     currencyCode: char('currency_code', { length: 3 }).references(() => currencies.code),
     taxCategory: varchar('tax_category', { length: 40 }),
     active: boolean('active').notNull().default(true),
@@ -196,9 +194,7 @@ export const journals = pgTable(
       .notNull()
       .default('EUR')
       .references(() => currencies.code),
-    exchangeRate: numeric('exchange_rate', { precision: 18, scale: 8 })
-      .notNull()
-      .default('1'),
+    exchangeRate: numeric('exchange_rate', { precision: 18, scale: 8 }).notNull().default('1'),
     description: text('description').notNull(),
     sourceType: varchar('source_type', { length: 60 }),
     sourceEventId: uuid('source_event_id').references(() => financialEvents.id),
@@ -260,14 +256,8 @@ export const journalLines = pgTable(
   },
   (t) => [
     unique('journal_lines_journal_line_unique').on(t.journalId, t.lineNumber),
-    check(
-      'journal_lines_debit_credit_nonneg',
-      sql`${t.debit} >= 0 AND ${t.credit} >= 0`,
-    ),
-    check(
-      'journal_lines_debit_xor_credit',
-      sql`(${t.debit} = 0) <> (${t.credit} = 0)`,
-    ),
+    check('journal_lines_debit_credit_nonneg', sql`${t.debit} >= 0 AND ${t.credit} >= 0`),
+    check('journal_lines_debit_xor_credit', sql`(${t.debit} = 0) <> (${t.credit} = 0)`),
     index('journal_lines_account_idx').on(t.accountId),
     index('journal_lines_division_idx').on(t.divisionId),
     index('journal_lines_customer_person_idx').on(t.customerPersonId),
