@@ -1,4 +1,13 @@
-import { ArrowRight, BookOpen, FileClock, Landmark, ListTree, Plus } from 'lucide-react';
+import {
+  ArrowRight,
+  BookOpen,
+  FileClock,
+  Landmark,
+  ListTree,
+  Plus,
+  Scale,
+  TrendingUp,
+} from 'lucide-react';
 import Link from 'next/link';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
@@ -98,6 +107,18 @@ export default async function AccountingHubPage() {
             title="Financial events"
             description="Outbox of events the operational system has emitted. Phase 2 wires these to journal postings."
             count={`${events.length} recent`}
+          />
+          <HubLink
+            href="/admin/accounting/trial-balance"
+            icon={Scale}
+            title="Trial balance"
+            description="Internal consistency check — every POSTED journal line aggregated by account. Debits must equal credits."
+          />
+          <HubLink
+            href="/admin/accounting/profit-loss"
+            icon={TrendingUp}
+            title="Profit &amp; loss"
+            description="Revenue, cost of sales, operating expenses and net profit for a period. Reads straight from the ledger."
           />
         </div>
       </FadeUp>
