@@ -30,6 +30,19 @@ const nextConfig: NextConfig = {
    * during the RSC/action bundling step.
    */
   serverExternalPackages: ['pdf-parse', 'pdfjs-dist', 'mammoth'],
+  experimental: {
+    /**
+     * Rewrites barrel-style imports (`import { Foo } from 'pkg'`) into
+     * per-module deep imports at build time, so the bundler can tree-shake
+     * properly without each call site having to spell out the subpath.
+     * Targeted at the two packages where this app does the most damage:
+     *   - lucide-react: 187 named imports from the icon barrel
+     *   - date-fns:      35 named imports from the function barrel
+     * The other heavy UI libs (@base-ui/react, framer-motion, recharts)
+     * are smaller / already optimised and don't benefit.
+     */
+    optimizePackageImports: ['lucide-react', 'date-fns'],
+  },
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
   },

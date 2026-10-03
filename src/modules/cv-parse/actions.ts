@@ -39,71 +39,83 @@ export async function acceptCvSuggestionsAction(input: {
   employment: EmploymentPick[];
 }) {
   return toActionResult(async () => {
-    let added = 0;
-    const errors: string[] = [];
+    // Fan out every pick in parallel. Each add is its own transaction
+    // (addCandidateSkill / addCandidateQualification / upsertEmploymentHistory
+    // open their own tx internally), so Promise.allSettled preserves the
+    // per-item failure isolation the comment above describes while
+    // collapsing N serial round-trips into one. A 20-pick batch goes
+    // from ~20× single-insert latency to roughly 1×.
+    const tasks: { label: string; run: () => Promise<unknown> }[] = [];
     for (const id of input.skillIds) {
-      try {
-        await addCandidateSkill({
-          personId: input.personId,
-          skillId: id,
-          proficiency: 'INTERMEDIATE',
-        });
-        added++;
-      } catch (e) {
-        errors.push(`skill ${id.slice(0, 6)}: ${(e as Error).message}`);
-      }
+      tasks.push({
+        label: `skill ${id.slice(0, 6)}`,
+        run: () =>
+          addCandidateSkill({
+            personId: input.personId,
+            skillId: id,
+            proficiency: 'INTERMEDIATE',
+          }),
+      });
     }
     for (const name of input.customSkills) {
-      try {
-        await addCandidateSkill({
-          personId: input.personId,
-          customName: name,
-          proficiency: 'INTERMEDIATE',
-        });
-        added++;
-      } catch (e) {
-        errors.push(`skill "${name}": ${(e as Error).message}`);
-      }
+      tasks.push({
+        label: `skill "${name}"`,
+        run: () =>
+          addCandidateSkill({
+            personId: input.personId,
+            customName: name,
+            proficiency: 'INTERMEDIATE',
+          }),
+      });
     }
     for (const id of input.qualificationIds) {
-      try {
-        await addCandidateQualification({
-          personId: input.personId,
-          qualificationId: id,
-        });
-        added++;
-      } catch (e) {
-        errors.push(`qual ${id.slice(0, 6)}: ${(e as Error).message}`);
-      }
+      tasks.push({
+        label: `qual ${id.slice(0, 6)}`,
+        run: () =>
+          addCandidateQualification({
+            personId: input.personId,
+            qualificationId: id,
+          }),
+      });
     }
     for (const name of input.customQualifications) {
-      try {
-        await addCandidateQualification({
-          personId: input.personId,
-          customName: name,
-        });
-        added++;
-      } catch (e) {
-        errors.push(`qual "${name}": ${(e as Error).message}`);
-      }
+      tasks.push({
+        label: `qual "${name}"`,
+        run: () =>
+          addCandidateQualification({
+            personId: input.personId,
+            customName: name,
+          }),
+      });
     }
     for (const emp of input.employment) {
-      try {
-        await upsertEmploymentHistory({
-          personId: input.personId,
-          employerName: emp.employerName,
-          jobTitle: emp.jobTitle ?? '',
-          location: emp.location ?? '',
-          startDate: emp.startDate ?? '',
-          endDate: emp.isCurrent ? '' : (emp.endDate ?? ''),
-          isCurrent: emp.isCurrent,
-          description: emp.description ?? '',
-        });
-        added++;
-      } catch (e) {
-        errors.push(`job "${emp.employerName}": ${(e as Error).message}`);
-      }
+      tasks.push({
+        label: `job "${emp.employerName}"`,
+        run: () =>
+          upsertEmploymentHistory({
+            personId: input.personId,
+            employerName: emp.employerName,
+            jobTitle: emp.jobTitle ?? '',
+            location: emp.location ?? '',
+            startDate: emp.startDate ?? '',
+            endDate: emp.isCurrent ? '' : (emp.endDate ?? ''),
+            isCurrent: emp.isCurrent,
+            description: emp.description ?? '',
+          }),
+      });
     }
+
+    const results = await Promise.allSettled(tasks.map((t) => t.run()));
+    let added = 0;
+    const errors: string[] = [];
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') {
+        added++;
+      } else {
+        errors.push(`${tasks[i].label}: ${(r.reason as Error).message}`);
+      }
+    });
+
     revalidatePath(`/candidates/${input.personId}`);
     return { added, errors };
   });
