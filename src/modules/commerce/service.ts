@@ -6,6 +6,8 @@ import { db } from '@/lib/db/client';
 import { invoices } from '@/lib/db/schema/billing';
 import { type Payment, type ServiceEngagement, serviceEngagements } from '@/lib/db/schema/commerce';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
+import { emitFinancialEvent } from '@/modules/accounting/events';
+import { resolveDivisionForInvoice } from '@/modules/accounting/rule-engine';
 import {
   assertNoOverpayment,
   insertReceipt,
@@ -245,6 +247,13 @@ export async function verifyPayment(input: VerifyPaymentInput): Promise<Payment>
         id: invoices.id,
         payerPersonId: invoices.payerPersonId,
         payerEmployerId: invoices.payerEmployerId,
+        currencyCode: invoices.currencyCode,
+        // Back-link columns so the shadow-ledger emit below can resolve
+        // the correct division — a payment belongs to whichever
+        // workspace raised the invoice it settles.
+        immigrationCaseId: invoices.immigrationCaseId,
+        jobRequisitionId: invoices.jobRequisitionId,
+        placementId: invoices.placementId,
       })
       .from(invoices)
       .where(eq(invoices.serviceEngagementId, after.serviceEngagementId))
@@ -303,6 +312,40 @@ export async function verifyPayment(input: VerifyPaymentInput): Promise<Payment>
         }
       }
     }
+
+    // Shadow-record the payment in the ledger. A VERIFIED payment is
+    // the moment cash counts as received; the rule engine turns this
+    // into DR Bank / CR Accounts Receivable (via the matched rule).
+    // Division resolves from the attached invoice if one exists; else
+    // defaults to candidate_services via the resolver's fallback. The
+    // event's subtotal is the payment amount — no tax split because the
+    // tax was already recognised at invoice-posting time.
+    await emitFinancialEvent(tx, {
+      eventType: 'PAYMENT_RECEIVED',
+      sourceSystem: 'ireland_careers',
+      sourceModule: 'commerce',
+      sourceEntity: 'payment',
+      sourceId: after.id,
+      sourceEventId: after.id,
+      eventDate: after.verifiedAt ?? after.receivedAt ?? new Date(),
+      payload: {
+        actorUserId: session.user.id,
+        paymentId: after.id,
+        invoiceId: issuedInvoice?.id ?? null,
+        divisionCode: resolveDivisionForInvoice({
+          immigrationCaseId: issuedInvoice?.immigrationCaseId,
+          jobRequisitionId: issuedInvoice?.jobRequisitionId,
+          placementId: issuedInvoice?.placementId,
+        }),
+        currencyCode: after.currencyCode,
+        subtotal: after.amount,
+        taxAmount: '0',
+        total: after.amount,
+        description: issuedInvoice
+          ? `Payment on invoice ${issuedInvoice.id}`
+          : `Payment ${after.id}`,
+      },
+    });
 
     return after;
   });

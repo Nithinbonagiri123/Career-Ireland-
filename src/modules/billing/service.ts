@@ -12,6 +12,8 @@ import {
 } from '@/lib/db/schema/billing';
 import { payments } from '@/lib/db/schema/commerce';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
+import { emitFinancialEvent } from '@/modules/accounting/events';
+import { resolveDivisionForInvoice } from '@/modules/accounting/rule-engine';
 
 /**
  * Allocate the next number for a (prefix, year) pair. Runs inside a caller-
@@ -129,6 +131,36 @@ export async function insertInvoice(
     })
     .returning();
   if (!row) throw new Error('invoices insert returned no row');
+
+  // Shadow-record into the ledger. The outbox-drain cron will pick this
+  // up and generate a balanced journal via the accounting_rules engine.
+  // Idempotent — if the same invoice emits twice (shouldn't happen, but
+  // retries exist), the UNIQUE on (source_system, source_event_id)
+  // absorbs the duplicate.
+  await emitFinancialEvent(tx, {
+    eventType: 'INVOICE_POSTED',
+    sourceSystem: 'ireland_careers',
+    sourceModule: 'billing',
+    sourceEntity: 'invoice',
+    sourceId: row.id,
+    sourceEventId: row.id,
+    eventDate: now,
+    payload: {
+      actorUserId: args.issuedByUserId,
+      invoiceNumber: row.number,
+      divisionCode: resolveDivisionForInvoice({
+        immigrationCaseId: args.immigrationCaseId,
+        jobRequisitionId: args.jobRequisitionId,
+        placementId: args.placementId,
+      }),
+      currencyCode: args.currencyCode,
+      subtotal: centsToString(subtotalCents),
+      taxAmount: centsToString(taxCents),
+      total: centsToString(totalCents),
+      description: `Invoice ${row.number}`,
+    },
+  });
+
   return row;
 }
 
@@ -429,6 +461,11 @@ export async function issueCreditNote(input: {
         totalAmount: invoices.totalAmount,
         currencyCode: invoices.currencyCode,
         status: invoices.status,
+        // Back-link columns so we can resolve the correct division for
+        // the shadow-ledger event emitted below.
+        immigrationCaseId: invoices.immigrationCaseId,
+        jobRequisitionId: invoices.jobRequisitionId,
+        placementId: invoices.placementId,
       })
       .from(invoices)
       .where(eq(invoices.id, input.invoiceId))
@@ -508,6 +545,37 @@ export async function issueCreditNote(input: {
         context: { via: 'credit_note_issued', creditNoteId: row.id, creditNoteNumber: row.number },
       });
     }
+
+    // Shadow-record the credit note in the ledger. The `subtotal` is
+    // sent NEGATIVE so the outbox-drain's sign-flip logic produces the
+    // reversed debit/credit movement (DR Revenue / CR AR) relative to
+    // an invoice posting (DR AR / CR Revenue). Tax is NOT separated here
+    // in Phase 2: credit notes carry no explicit tax split in the
+    // current data model, so the whole amount flows through PRINCIPAL.
+    await emitFinancialEvent(tx, {
+      eventType: 'CREDIT_NOTE_POSTED',
+      sourceSystem: 'ireland_careers',
+      sourceModule: 'billing',
+      sourceEntity: 'credit_note',
+      sourceId: row.id,
+      sourceEventId: row.id,
+      eventDate: now,
+      payload: {
+        actorUserId: session.user.id,
+        creditNoteNumber: row.number,
+        invoiceId: inv.id,
+        divisionCode: resolveDivisionForInvoice({
+          immigrationCaseId: inv.immigrationCaseId,
+          jobRequisitionId: inv.jobRequisitionId,
+          placementId: inv.placementId,
+        }),
+        currencyCode: row.currencyCode,
+        subtotal: `-${input.amount}`,
+        taxAmount: '0',
+        total: `-${input.amount}`,
+        description: `Credit note ${row.number} against invoice`,
+      },
+    });
 
     return {
       id: row.id,
