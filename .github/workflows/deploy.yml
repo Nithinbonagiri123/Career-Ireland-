@@ -101,21 +101,25 @@ jobs:
       - name: Approve required build scripts
         run: pnpm rebuild argon2
 
+      - name: Install expect (for drizzle-kit prompt automation)
+        # Not pre-installed on ubuntu-24.04 runner images in every tier.
+        # expect itself is ~1 MB and installs in <2 s.
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq expect
+
       - name: Push schema to production
         # State-based push. CI already ran the migration replay against
         # a scratch DB, so any drift here would be a bug in the migration
         # generator, not a schema mismatch.
         #
-        # Non-interactive wrapper: drizzle-kit refuses to run when
-        # stdin/stdout aren't TTYs (it needs to prompt for data-loss
-        # confirmations). `script` from util-linux allocates a PTY so
-        # the CLI thinks it's interactive; we feed `No` to every prompt
-        # so any destructive safety offer (truncate before adding a
-        # unique constraint, drop column with data, etc.) is declined.
-        # The underlying DDL still runs — if it would actually fail
-        # because of existing data, the DB error surfaces here rather
-        # than silently destroying rows.
-        run: yes No | script -qefc "pnpm exec drizzle-kit push" /dev/null
+        # drizzle-kit's prompt library reads real TTY keystrokes, not
+        # piped bytes, so the previous `yes No | script …` incantation
+        # hung with the UI drawn but ignored. scripts/ci/drizzle-push.exp
+        # spawns the CLI under a proper PTY (expect's `spawn`) and sends
+        # a real ENTER on the "truncate before adding unique constraint?"
+        # prompt — which pre-selects the SAFE "No, add the constraint
+        # without truncating" option. On an unknown prompt the script
+        # times out rather than guessing.
+        run: ./scripts/ci/drizzle-push.exp
 
   # Deploy is handled by Vercel's native GitHub integration — every push
   # to main triggers a build+deploy on Vercel's side, using the env vars
