@@ -64,62 +64,34 @@ jobs:
           allowed-conclusions: success
 
   db-push:
-    name: Apply DB schema (drizzle push)
+    name: Apply DB migrations (psql)
     needs: wait-for-ci
     runs-on: ubuntu-latest
     env:
       # Production DATABASE_URL comes from a repository secret. Never
-      # commit a real URL. The drizzle-kit push command reads it via
-      # drizzle.config.ts, which itself reads env.DATABASE_URL.
+      # commit a real URL.
       DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
-      # Drizzle push requires the same env shape as runtime, but for
-      # this step none of the app runtime services (S3, cron, email
-      # crypto) are exercised — placeholders keep env.ts's zod schema
-      # happy without exposing real secrets.
-      AUTH_SECRET: ${{ secrets.PROD_AUTH_SECRET }}
-      AUTH_URL: ${{ secrets.PROD_AUTH_URL }}
-      AWS_REGION: eu-west-1
-      S3_BUCKET_DOCUMENTS: placeholder
-      LOG_LEVEL: warn
-      NODE_ENV: production
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: Install psql
+        # scripts/ci/apply-migrations.sh needs psql; postgresql-client is
+        # tiny and installs in <5 s. We deliberately avoid depending on
+        # pnpm / node / drizzle-kit in this job — the point of this
+        # replacement is to NOT touch drizzle-kit's interactive CLI from
+        # CI (its arrow-key prompts can't be reliably scripted). See the
+        # script's header for the full rationale.
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
 
-      - name: Setup Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install dependencies (frozen lockfile)
-        run: pnpm install --frozen-lockfile
-
-      - name: Approve required build scripts
-        run: pnpm rebuild argon2
-
-      - name: Install expect (for drizzle-kit prompt automation)
-        # Not pre-installed on ubuntu-24.04 runner images in every tier.
-        # expect itself is ~1 MB and installs in <2 s.
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq expect
-
-      - name: Push schema to production
-        # State-based push. CI already ran the migration replay against
-        # a scratch DB, so any drift here would be a bug in the migration
-        # generator, not a schema mismatch.
-        #
-        # drizzle-kit's prompt library reads real TTY keystrokes, not
-        # piped bytes, so the previous `yes No | script …` incantation
-        # hung with the UI drawn but ignored. scripts/ci/drizzle-push.exp
-        # spawns the CLI under a proper PTY (expect's `spawn`) and sends
-        # a real ENTER on the "truncate before adding unique constraint?"
-        # prompt — which pre-selects the SAFE "No, add the constraint
-        # without truncating" option. On an unknown prompt the script
-        # times out rather than guessing.
-        run: ./scripts/ci/drizzle-push.exp
+      - name: Apply pending migrations
+        # scripts/ci/apply-migrations.sh walks src/lib/db/migrations/*.sql
+        # in order, tracks applied filenames in a `__ic_migrations` table,
+        # and skips anything already recorded. Idempotent and
+        # non-destructive — if any .sql file fails, exits 1 and the
+        # rollback job below promotes the previous production deploy
+        # back.
+        run: ./scripts/ci/apply-migrations.sh
 
   # Deploy is handled by Vercel's native GitHub integration — every push
   # to main triggers a build+deploy on Vercel's side, using the env vars
