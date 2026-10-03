@@ -4,6 +4,7 @@ import {
   CalendarRange,
   FileClock,
   Landmark,
+  Library,
   ListTree,
   Percent,
   Plus,
@@ -121,6 +122,12 @@ export default async function AccountingHubPage() {
             icon={TrendingUp}
             title="Profit &amp; loss"
             description="Revenue, cost of sales, operating expenses and net profit for a period. Reads straight from the ledger."
+          />
+          <HubLink
+            href="/admin/accounting/balance-sheet"
+            icon={Library}
+            title="Balance sheet"
+            description="Assets, liabilities and equity at a point in time. Synthetic current-year profit line keeps the sheet balanced before year-end close."
           />
           <HubLink
             href="/admin/accounting/periods"
