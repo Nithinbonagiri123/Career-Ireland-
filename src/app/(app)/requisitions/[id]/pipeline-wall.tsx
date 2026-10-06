@@ -118,6 +118,33 @@ export function PipelineWall({
   };
 
   const dismiss = (stage: PipelineStageKey, entry: PipelineEntry) => {
+    // Source + Review dismiss their matching rows; Offer stage dismisses
+    // the application itself (declines/withdraws the offer). Keeping the
+    // one `dismiss` entry point lets the card template stay dumb.
+    if (stage === 'offer') {
+      const reason = window.prompt(
+        `Decline the offer to ${entry.personName}? Add a reason (audited):`,
+        '',
+      );
+      if (reason === null) return; // user cancelled
+      setBusyPersonId(entry.personId);
+      startTransition(async () => {
+        try {
+          const r = await updateApplicationStatusAction(
+            {
+              applicationId: entry.entryId,
+              status: 'REJECTED',
+              rejectionReason: reason.trim() || undefined,
+            },
+            requisition.id,
+          );
+          toastResult(r, { success: `Offer to ${entry.personName} declined` });
+        } finally {
+          setBusyPersonId(null);
+        }
+      });
+      return;
+    }
     if (stage !== 'source' && stage !== 'review') return;
     setBusyPersonId(entry.personId);
     startTransition(async () => {
@@ -242,7 +269,12 @@ function PipelineCard({
   const scoreLabel =
     entry.matchScore !== null && entry.matchScore >= 0 ? Math.round(entry.matchScore) : null;
   const advanceLabel = ADVANCE_LABEL[stage];
-  const canDismiss = stage === 'source' || stage === 'review';
+  // Source + Review surface a "Dismiss match" button; Offer surfaces a
+  // "Decline offer" button that calls the same onDismiss handler (the
+  // handler branches on stage).
+  const canDismiss = stage === 'source' || stage === 'review' || stage === 'offer';
+  const dismissLabel =
+    stage === 'offer' ? 'Decline offer' : stage === 'source' || stage === 'review' ? 'Dismiss' : '';
 
   return (
     <article
@@ -336,9 +368,14 @@ function PipelineCard({
           type="button"
           onClick={onDismiss}
           disabled={disabled}
-          className="flex items-center justify-center gap-1 rounded-md border border-border/60 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+          className={cn(
+            'flex items-center justify-center gap-1 rounded-md border py-1 text-[11px] font-medium disabled:opacity-50',
+            stage === 'offer'
+              ? 'border-destructive/40 text-destructive hover:bg-destructive/5'
+              : 'border-border/60 text-muted-foreground hover:bg-muted',
+          )}
         >
-          <Ban className="size-3" /> Dismiss
+          <Ban className="size-3" /> {dismissLabel}
         </button>
       )}
       {stage === 'placed' && (

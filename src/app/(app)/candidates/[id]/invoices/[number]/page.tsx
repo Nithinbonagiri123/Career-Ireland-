@@ -77,6 +77,21 @@ export default async function InvoicePrintPage({
         </div>
       </div>
 
+      {/* Correction-path banner — invoices are immutable by design (Irish
+          VAT rules + audit trail). This banner surfaces the two legal
+          correction paths right at the top so staff don't go hunting for
+          an Edit button that doesn't exist. */}
+      {(canVoid || (canCredit && maxCreditCents > 0)) && (
+        <div className="mx-auto mt-3 max-w-3xl px-6 print:hidden">
+          <div className="rounded-md border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+            <strong className="font-semibold">Need to correct the amount?</strong>{' '}
+            {data.invoice.status === 'ISSUED'
+              ? "Nothing paid yet — Void the invoice above and generate a fresh one from the candidate's Billing tab."
+              : "Issue a credit note above to reduce what's owed, then raise a second invoice from the candidate's Billing tab for the correct amount. Invoices are final once paid — this is required by Irish VAT rules."}
+          </div>
+        </div>
+      )}
+
       <InvoicePrintable
         invoice={data.invoice}
         settings={settings}

@@ -68,6 +68,17 @@ export default async function EmployerInvoicePrintPage({
         </div>
       </div>
 
+      {canCredit && maxCreditCents > 0 && (
+        <div className="mx-auto mt-3 max-w-3xl px-6 print:hidden">
+          <div className="rounded-md border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+            <strong className="font-semibold">Need to correct the amount?</strong> Issue a credit
+            note above to reduce what's owed, then raise a second invoice from the employer's
+            Billing section for the correct amount. Invoices are final once paid — this is required
+            by Irish VAT rules.
+          </div>
+        </div>
+      )}
+
       <InvoicePrintable
         invoice={data.invoice}
         settings={settings}

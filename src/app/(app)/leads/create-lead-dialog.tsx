@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
 import { AlertCircle, FileText, Loader2, Plus, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
@@ -313,6 +313,21 @@ export function CreateLeadDialog({
   const watched = watch(['firstName', 'lastName']);
   const canCheck = Boolean(watched[0] && watched[1]);
   const submitLabel = service && invoiceIsValid ? 'Create lead + issue invoice' : 'Create lead';
+
+  // Clear the duplicate-matches panel the moment the user starts
+  // editing name OR email OR phone — otherwise the panel from a prior
+  // check lingers even when it no longer reflects the current form
+  // values, making the operator unsure whether they're about to create
+  // a new person or accidentally overwrite the matched one.
+  const watchedForClear = watch(['firstName', 'lastName', 'email', 'phone']);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally clear on any field change
+  useEffect(() => {
+    if (matches) setMatches(null);
+    // Only re-run when the watched values themselves change — not when
+    // setMatches identity changes (it doesn't) or when matches change
+    // (we'd loop).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedForClear[0], watchedForClear[1], watchedForClear[2], watchedForClear[3]]);
 
   return (
     <Dialog

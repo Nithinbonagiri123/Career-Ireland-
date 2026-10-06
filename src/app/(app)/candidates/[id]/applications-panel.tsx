@@ -48,7 +48,15 @@ const EXTERNAL_SOURCES = [
   'OTHER',
 ] as const;
 
-function AddExternalDialog({ personId }: { personId: string }) {
+export type KnownEmployer = { id: string; legalName: string; tradingName: string | null };
+
+function AddExternalDialog({
+  personId,
+  knownEmployers,
+}: {
+  personId: string;
+  knownEmployers: KnownEmployer[];
+}) {
   const [open, setOpen] = useState(false);
   const [source, setSource] = useState<(typeof EXTERNAL_SOURCES)[number]>('IRISH_JOBS');
   const [company, setCompany] = useState('');
@@ -136,11 +144,35 @@ function AddExternalDialog({ personId }: { personId: string }) {
             <Label htmlFor="company">Company *</Label>
             <Input
               id="company"
+              list="known-employers"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
-              placeholder="e.g. Dublin Health Group"
+              placeholder="Type to search existing clients, or add a new company"
               required
+              autoComplete="off"
             />
+            {/* Native datalist — the input stays free-text (external
+                boards may list employers you've never worked with) but
+                existing clients auto-suggest as you type. Avoids the
+                "lots of clients already on the list but I can't pick
+                one" friction. */}
+            <datalist id="known-employers">
+              {knownEmployers.map((e) => {
+                const label = e.tradingName ? `${e.legalName} (${e.tradingName})` : e.legalName;
+                return (
+                  <option key={e.id} value={e.legalName}>
+                    {label}
+                  </option>
+                );
+              })}
+            </datalist>
+            {knownEmployers.length > 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                {knownEmployers.length} existing client
+                {knownEmployers.length === 1 ? '' : 's'} available — type to filter, or just enter a
+                new name.
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <Label htmlFor="title">Job title</Label>
@@ -195,9 +227,11 @@ function AddExternalDialog({ personId }: { personId: string }) {
 export function ApplicationsPanel({
   personId,
   rows,
+  knownEmployers,
 }: {
   personId: string;
   rows: CandidateApplicationRow[];
+  knownEmployers: KnownEmployer[];
 }) {
   return (
     <Card>
@@ -205,7 +239,7 @@ export function ApplicationsPanel({
         icon={Send}
         title="Applications"
         count={rows.length}
-        action={<AddExternalDialog personId={personId} />}
+        action={<AddExternalDialog personId={personId} knownEmployers={knownEmployers} />}
       >
         Both internal (in-house requisitions) and external (IrishJobs, Indeed, JobsIreland).
       </SectionHeader>

@@ -292,7 +292,15 @@ export default async function CandidateDetail({
 
   const applicationsTab = (
     <FadeUp>
-      <ApplicationsPanel personId={id} rows={candidateApplications} />
+      <ApplicationsPanel
+        personId={id}
+        rows={candidateApplications}
+        knownEmployers={immigrationEmployers.map((e) => ({
+          id: e.id,
+          legalName: e.legalName,
+          tradingName: e.tradingName,
+        }))}
+      />
     </FadeUp>
   );
 
