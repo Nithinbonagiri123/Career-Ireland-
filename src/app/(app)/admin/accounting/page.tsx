@@ -1,6 +1,7 @@
 import {
   ArrowRight,
   BookOpen,
+  CalendarCheck,
   CalendarRange,
   FileClock,
   Landmark,
@@ -10,6 +11,7 @@ import {
   Plus,
   Scale,
   TrendingUp,
+  Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import { FadeUp } from '@/components/motion/motion-primitives';
@@ -140,6 +142,18 @@ export default async function AccountingHubPage() {
             icon={Percent}
             title="VAT return"
             description="Irish VAT3 T1 / T2 / T3 totals for a period, with CSV export of every underlying transaction for Revenue filing."
+          />
+          <HubLink
+            href="/admin/accounting/ap"
+            icon={Wallet}
+            title="Accounts Payable"
+            description="Supplier master, bills, bill payments, and AP aging. Every bill posts DR Expense / DR VAT Recoverable / CR AP; payments reduce AP against Bank."
+          />
+          <HubLink
+            href="/admin/accounting/year-end"
+            icon={CalendarCheck}
+            title="Year-end close"
+            description="Zero the P&L accounts into Retained Earnings. ADMIN only. Needed once per fiscal year — after it posts, the Balance Sheet's synthetic current-year-profit line drops to zero."
           />
         </div>
       </FadeUp>

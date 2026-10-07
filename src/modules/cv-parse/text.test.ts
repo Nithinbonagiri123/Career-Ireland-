@@ -175,6 +175,68 @@ Owned the customer segmentation pipeline.
   });
 });
 
+describe('customCandidatesFrom — narrative-bullet filtering', () => {
+  // Regression for the George Lugalo CV: the "KEY QUALIFICATIONS"
+  // section contained narrative bullets like "Demonstrated ability in
+  // route planning, vehicle maintenance, and emergency handling". The
+  // old parser comma-split them into junk fragments ("and emergency
+  // handling", "and client satisfaction") and surfaced them as
+  // qualification suggestions. These assertions pin the fixed
+  // behaviour: filler-word fragments and narrative sentences are
+  // dropped; only genuinely atomic items survive.
+  const DRIVER_CV = `
+KEY QUALIFICATIONS
+
+• Possesses a Code EC (14) Driver Licence with a Professional Driver Permit since 2013
+• Demonstrated ability in route planning, vehicle maintenance, and emergency handling
+• Track record of maintaining safety, compliance, and client satisfaction
+• Excellent health and a readiness to relocate for the right opportunity
+
+WORK EXPERIENCE
+Nothing here for this test.
+`;
+
+  it('drops comma-split sentence fragments starting with "and"', () => {
+    const cands = customCandidatesFrom(
+      DRIVER_CV,
+      ['qualifications', 'qualification', 'education', 'academic'],
+      new Set(),
+    );
+    const phrases = cands.map((c) => c.phrase.toLowerCase());
+    expect(phrases).not.toContain('and emergency handling');
+    expect(phrases).not.toContain('and client satisfaction');
+    expect(phrases).not.toContain('or client satisfaction');
+  });
+
+  it('drops long narrative-prose bullets wholesale', () => {
+    const cands = customCandidatesFrom(
+      DRIVER_CV,
+      ['qualifications', 'qualification', 'education', 'academic'],
+      new Set(),
+    );
+    const phrases = cands.map((c) => c.phrase);
+    expect(phrases.some((p) => /excellent health and a readiness to relocate/i.test(p))).toBe(
+      false,
+    );
+    expect(phrases.some((p) => /^demonstrated ability/i.test(p))).toBe(false);
+    expect(phrases.some((p) => /^track record of maintaining/i.test(p))).toBe(false);
+    expect(phrases.some((p) => /^possesses a/i.test(p))).toBe(false);
+  });
+
+  it('still keeps genuinely atomic competency names', () => {
+    const cands = customCandidatesFrom(
+      DRIVER_CV,
+      ['qualifications', 'qualification', 'education', 'academic'],
+      new Set(),
+    );
+    const phrases = cands.map((c) => c.phrase.toLowerCase());
+    // Two short noun phrases survive — they're what the panel should
+    // actually offer the operator to accept into the record.
+    expect(phrases).toContain('vehicle maintenance');
+    expect(phrases).toContain('compliance');
+  });
+});
+
 describe('customCandidatesFrom — mixed header spellings', () => {
   it('finds quals under an "ACADEMIC BACKGROUND" header', () => {
     const cv = `

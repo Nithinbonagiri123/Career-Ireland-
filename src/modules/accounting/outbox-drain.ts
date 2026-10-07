@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import {
   businessDivisions,
+  chartOfAccounts,
   financialEvents,
   journalLines,
   journals,
@@ -193,10 +194,26 @@ async function processOne(eventId: string): Promise<void> {
     const subtotalCents = Math.round(parseFloat(payload.subtotal) * 100);
     const taxCents = Math.round(parseFloat(payload.taxAmount ?? '0') * 100);
 
+    // Payload-override lookup: a per-event DR/CR account code (e.g. a
+    // bill's expense account) wins over the rule's static account.
+    // Keeps the rule table small while supporting flows where the DR
+    // side varies per transaction (SUPPLIER_BILL_POSTED).
+    const resolveOverride = async (code: string | undefined): Promise<string | null> => {
+      if (!code) return null;
+      const [row] = await tx
+        .select({ id: chartOfAccounts.id })
+        .from(chartOfAccounts)
+        .where(eq(chartOfAccounts.code, code))
+        .limit(1);
+      return row?.id ?? null;
+    };
+    const principalDebitOverride = await resolveOverride(payload.principalDebitAccountCode);
+    const principalCreditOverride = await resolveOverride(payload.principalCreditAccountCode);
+
     if (principal && subtotalCents !== 0) {
       lineInputs.push({
-        debitAccountId: principal.debitAccountId,
-        creditAccountId: principal.creditAccountId,
+        debitAccountId: principalDebitOverride ?? principal.debitAccountId,
+        creditAccountId: principalCreditOverride ?? principal.creditAccountId,
         amountCents: Math.abs(subtotalCents),
         description: `${event.eventType} subtotal`,
       });
@@ -248,14 +265,26 @@ async function processOne(eventId: string): Promise<void> {
     }
     await tx.insert(journalLines).values(linesForDb);
 
-    // Phase 5: write a tax_transactions row so VAT reporting can be
-    // produced directly from the subledger. Only emitted when the
-    // event carries a non-zero tax amount — zero-rated / exempt sales
-    // and payments don't create tax rows. ON CONFLICT DO NOTHING keeps
-    // the drain idempotent if an event is somehow re-processed.
-    if (taxCents !== 0 && event.eventType !== 'PAYMENT_RECEIVED') {
-      // Resolve divisionId from the division code so the subledger can
-      // slice by business line.
+    // Phase 5 + 7: write a tax_transactions row so VAT reporting can
+    // be produced directly from the subledger. Direction follows the
+    // event type:
+    //   INVOICE_POSTED, CREDIT_NOTE_POSTED → OUTPUT (T1 — VAT we charge)
+    //   SUPPLIER_BILL_POSTED               → INPUT  (T2 — VAT we recover)
+    //   Payment events                     → no row (VAT already
+    //                                        recognised on the
+    //                                        originating invoice/bill)
+    //
+    // Credit notes carry negative subtotal/tax; the subledger stores
+    // the signed amount so a VAT3 report nets credits against invoices
+    // via a single SUM aggregation. ON CONFLICT DO NOTHING keeps the
+    // drain idempotent for retries.
+    const taxDirection: 'OUTPUT' | 'INPUT' | null =
+      event.eventType === 'SUPPLIER_BILL_POSTED'
+        ? 'INPUT'
+        : event.eventType === 'INVOICE_POSTED' || event.eventType === 'CREDIT_NOTE_POSTED'
+          ? 'OUTPUT'
+          : null;
+    if (taxDirection && taxCents !== 0) {
       let divisionId: string | null = null;
       if (payload.divisionCode) {
         const [div] = await tx
@@ -273,11 +302,11 @@ async function processOne(eventId: string): Promise<void> {
           sourceType: event.sourceEntity,
           sourceId: event.sourceId,
           journalId: header.id,
-          direction: 'OUTPUT',
+          direction: taxDirection,
           taxCode: 'STANDARD',
           taxRatePercent: taxRate,
-          netAmount: (Math.abs(subtotalCents) / 100).toFixed(2),
-          taxAmount: (Math.abs(taxCents) / 100).toFixed(2),
+          netAmount: (subtotalCents / 100).toFixed(2),
+          taxAmount: (taxCents / 100).toFixed(2),
           currencyCode: payload.currencyCode,
           divisionId,
           description: payload.description ?? null,
@@ -308,6 +337,14 @@ type EventPayload = {
   total?: string;
   description?: string;
   actorUserId: string;
+  /** Override the rule's PRINCIPAL debit account for events whose DR
+   *  side varies per transaction (e.g. SUPPLIER_BILL_POSTED routes to
+   *  whatever expense account the bill picked). Rule's debit stays as
+   *  a fallback when the override is absent. */
+  principalDebitAccountCode?: string;
+  /** Same mechanism for the credit side, used by future events whose
+   *  CR side varies (e.g. multi-bank-account payments). */
+  principalCreditAccountCode?: string;
   // Free-form additional fields (invoice number, payer id, etc.) —
   // ignored by the drain but useful for debugging in the admin UI.
   [k: string]: unknown;

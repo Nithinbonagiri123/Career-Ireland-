@@ -458,6 +458,8 @@ export async function issueCreditNote(input: {
     const [inv] = await tx
       .select({
         id: invoices.id,
+        subtotal: invoices.subtotal,
+        taxAmount: invoices.taxAmount,
         totalAmount: invoices.totalAmount,
         currencyCode: invoices.currencyCode,
         status: invoices.status,
@@ -497,6 +499,14 @@ export async function issueCreditNote(input: {
       );
     }
 
+    // Pro-rate the invoice's tax across the credit so the VAT subledger
+    // can post an exact reversal.
+    const invTotalCents = Math.round(Number.parseFloat(inv.totalAmount) * 100);
+    const invTaxCents = Math.round(Number.parseFloat(inv.taxAmount) * 100);
+    const creditTaxCents =
+      invTotalCents > 0 ? Math.round((amountCents * invTaxCents) / invTotalCents) : 0;
+    const creditNetCents = amountCents - creditTaxCents;
+
     const now = new Date();
     const number = await allocateNextNumber(tx, 'CRN', now.getUTCFullYear());
     const [row] = await tx
@@ -505,6 +515,7 @@ export async function issueCreditNote(input: {
         number,
         invoiceId: input.invoiceId,
         amount: input.amount,
+        taxAmount: (creditTaxCents / 100).toFixed(2),
         currencyCode: inv.currencyCode,
         reason: trimmedReason,
         issuedByUserId: session.user.id,
@@ -546,12 +557,12 @@ export async function issueCreditNote(input: {
       });
     }
 
-    // Shadow-record the credit note in the ledger. The `subtotal` is
+    // Shadow-record the credit note in the ledger. Subtotal + tax are
     // sent NEGATIVE so the outbox-drain's sign-flip logic produces the
-    // reversed debit/credit movement (DR Revenue / CR AR) relative to
-    // an invoice posting (DR AR / CR Revenue). Tax is NOT separated here
-    // in Phase 2: credit notes carry no explicit tax split in the
-    // current data model, so the whole amount flows through PRINCIPAL.
+    // reversed debit/credit movement (DR Revenue / CR AR; DR VAT
+    // Payable / CR AR) relative to an invoice posting. The tax split
+    // is pro-rated from the originating invoice so the VAT subledger
+    // can net it against the original T1 output.
     await emitFinancialEvent(tx, {
       eventType: 'CREDIT_NOTE_POSTED',
       sourceSystem: 'ireland_careers',
@@ -570,8 +581,8 @@ export async function issueCreditNote(input: {
           placementId: inv.placementId,
         }),
         currencyCode: row.currencyCode,
-        subtotal: `-${input.amount}`,
-        taxAmount: '0',
+        subtotal: `-${(creditNetCents / 100).toFixed(2)}`,
+        taxAmount: `-${(creditTaxCents / 100).toFixed(2)}`,
         total: `-${input.amount}`,
         description: `Credit note ${row.number} against invoice`,
       },

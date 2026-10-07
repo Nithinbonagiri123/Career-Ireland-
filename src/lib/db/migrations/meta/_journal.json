@@ -288,6 +288,13 @@
       "when": 1791036520991,
       "tag": "0040_nasty_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791041194054,
+      "tag": "0041_smooth_johnny_storm",
+      "breakpoints": true
     }
   ]
 }

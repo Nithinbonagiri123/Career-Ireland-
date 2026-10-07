@@ -125,10 +125,52 @@ export function looksLikeStrongHeader(line: string): boolean {
 }
 
 /**
+ * Function words that make a leading token a dead giveaway for a
+ * comma-split sentence fragment ("and emergency handling", "or client
+ * satisfaction", "with professional driver permit"). CVs almost never
+ * have genuine skill or qualification names starting with these.
+ */
+const FUNCTION_WORD_LEAD =
+  /^(and|or|but|the|a|an|to|with|from|by|in|on|at|for|of|as|is|are|was|were|be|been|being|my|our|your|their|that|this|these|those|will|can|may|also|plus)\s/i;
+
+/**
+ * Narrative-prose tokens that signal "this is a sentence describing a
+ * competency", not an atomic skill/qualification name. Lines like
+ * "Demonstrated ability in route planning" or "Track record of
+ * maintaining safety" belong on a resume as narrative bullets but not
+ * as items on a candidate's skill/qualification list.
+ */
+const NARRATIVE_TOKEN =
+  /\b(ability|able|experience|ensur\w+|maintain\w+|track\s+record|excellent|committed|demonstrated|proven|skilled|possess\w*|recognised|recognized|responsible|readiness|reliability|professional\s+(driver|experience|profile))\b/i;
+
+/**
+ * Decide whether a comma-split chunk looks like an atomic skill /
+ * qualification name worth suggesting. Rejects:
+ *   - too-short or too-long chunks
+ *   - leading function words (`and X`, `with X`, `to X`, etc.)
+ *   - narrative sentences describing a competency rather than naming one
+ *   - very long multi-word phrases (likely a mid-bullet sentence)
+ */
+function looksLikeAtomicItem(phrase: string): boolean {
+  if (phrase.length < 2 || phrase.length > 80) return false;
+  if (FUNCTION_WORD_LEAD.test(phrase)) return false;
+  const wordCount = phrase.split(/\s+/).length;
+  if (wordCount > 6) return false;
+  if (wordCount >= 3 && NARRATIVE_TOKEN.test(phrase)) return false;
+  return true;
+}
+
+/**
  * Pull candidate free-text phrases from a section. Match is permissive:
  * the header only needs to *contain* one of the given keywords on a
  * short header-shaped line. The section ends at another header-shaped
  * line or a long blank run.
+ *
+ * Each surviving line is split on common list separators (`,`, `;`,
+ * `·`, `|`, double-spaces, ` - `). Chunks that look like comma-split
+ * sentence fragments (`and emergency handling`) or narrative prose
+ * (`Demonstrated ability in route planning`) are rejected — see
+ * `looksLikeAtomicItem`. The remaining chunks become suggestions.
  */
 export function customCandidatesFrom(
   text: string,
@@ -176,7 +218,7 @@ export function customCandidatesFrom(
       .replace(/^[\s•\-*·▪◦]+/, '')
       .split(/[,;·|]| {2,}| - /)
       .map((p) => p.trim())
-      .filter((p) => p.length >= 2 && p.length <= 80);
+      .filter(looksLikeAtomicItem);
 
     for (const p of parts) {
       const key = p.toLowerCase();

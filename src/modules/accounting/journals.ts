@@ -1,5 +1,4 @@
 import { eq, sql } from 'drizzle-orm';
-import { z } from 'zod';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -12,7 +11,16 @@ import {
 } from '@/lib/db/schema/accounting';
 import { documentSequences } from '@/lib/db/schema/billing';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
+import {
+  type PostManualJournalInput,
+  PostManualJournalLineSchema,
+  PostManualJournalSchema,
+} from './journal-schemas';
 import { getOrCreatePeriodForDate } from './periods';
+
+// Re-export the schemas for callers that imported them from here before
+// the pure-schemas split. Keeps the public surface stable.
+export { type PostManualJournalInput, PostManualJournalLineSchema, PostManualJournalSchema };
 
 /**
  * Service layer for the double-entry ledger (Phase 1 scope).
@@ -36,40 +44,6 @@ import { getOrCreatePeriodForDate } from './periods';
  *     fast-fail so the client gets a clear error without a round-trip
  *     to the DB
  */
-
-export const PostManualJournalLineSchema = z
-  .object({
-    accountCode: z.string().min(1).max(10),
-    divisionCode: z.string().min(1).max(40).optional(),
-    debit: z.string().regex(/^\d+(\.\d{1,2})?$/, 'debit must be a decimal with up to 2 dp'),
-    credit: z.string().regex(/^\d+(\.\d{1,2})?$/, 'credit must be a decimal with up to 2 dp'),
-    description: z.string().max(500).optional(),
-  })
-  .refine(
-    (l) => (l.debit === '0' || l.debit === '0.00') !== (l.credit === '0' || l.credit === '0.00'),
-    { message: 'each line must be either a debit or a credit, not both' },
-  );
-
-export const PostManualJournalSchema = z
-  .object({
-    journalDate: z.date(),
-    description: z.string().min(1).max(500),
-    transactionCurrency: z
-      .string()
-      .length(3)
-      .regex(/^[A-Z]{3}$/, 'currency code must be 3 uppercase letters'),
-    lines: z.array(PostManualJournalLineSchema).min(2, 'a journal needs at least two lines'),
-  })
-  .refine(
-    (j) => {
-      const d = j.lines.reduce((s, l) => s + Math.round(parseFloat(l.debit) * 100), 0);
-      const c = j.lines.reduce((s, l) => s + Math.round(parseFloat(l.credit) * 100), 0);
-      return d === c;
-    },
-    { message: 'journal is unbalanced — sum(debit) must equal sum(credit)' },
-  );
-
-export type PostManualJournalInput = z.infer<typeof PostManualJournalSchema>;
 
 /**
  * Post an admin-authored balanced journal. ADMIN + FINANCE only. Writes

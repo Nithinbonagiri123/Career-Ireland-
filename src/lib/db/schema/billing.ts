@@ -204,7 +204,14 @@ export const creditNotes = pgTable(
     invoiceId: uuid('invoice_id')
       .notNull()
       .references(() => invoices.id),
+    /** Credit note's net amount (what's being deducted from the invoice's gross). */
     amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    /** VAT portion of the credit. Pro-rated from the originating invoice at
+     *  issue time: `tax_amount = round(amount × invoice.tax_amount /
+     *  invoice.total_amount, 2)`. Zero when the invoice carried no VAT.
+     *  Captured on the row so the VAT subledger can post an exact reversal
+     *  rather than re-deriving the ratio at report time. */
+    taxAmount: numeric('tax_amount', { precision: 14, scale: 2 }).notNull().default('0'),
     currencyCode: char('currency_code', { length: 3 })
       .notNull()
       .references(() => currencies.code),
@@ -220,6 +227,7 @@ export const creditNotes = pgTable(
   (t) => [
     index('credit_notes_invoice_idx').on(t.invoiceId),
     check('credit_notes_amount_positive', sql`${t.amount} > 0`),
+    check('credit_notes_tax_nonneg', sql`${t.taxAmount} >= 0`),
   ],
 );
 

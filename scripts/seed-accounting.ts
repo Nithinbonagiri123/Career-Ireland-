@@ -60,6 +60,12 @@ const ACCOUNTS: AccountSeed[] = [
     description: 'Customer invoices awaiting payment.',
   },
   { code: '1200', name: 'Prepayments', type: 'ASSET' },
+  {
+    code: '1050',
+    name: 'VAT Recoverable',
+    type: 'ASSET',
+    description: 'Input VAT paid on supplier bills that we can reclaim from Revenue.',
+  },
 
   // ─── Liabilities ───────────────────────────────────────────────
   { code: '2000', name: 'Accounts Payable', type: 'LIABILITY' },
@@ -245,6 +251,43 @@ async function main() {
       lineRole: 'PRINCIPAL',
       debit: '1010',
       credit: '1100',
+      priority: 100,
+    },
+
+    // ─── Phase 7: Accounts Payable ────────────────────────────────
+    //
+    // SUPPLIER_BILL_POSTED — DR Expense (per bill's expense account —
+    // overridden via payload.principalDebitAccountCode) / CR 2000 AP.
+    // The debit account below ('6300' Software) is just a fallback for
+    // bills that somehow emit without an override; the drainer
+    // overrides it with the actual expense account on the bill.
+    {
+      eventType: 'SUPPLIER_BILL_POSTED',
+      divisionCode: null,
+      lineRole: 'PRINCIPAL',
+      debit: '6300',
+      credit: '2000',
+      priority: 100,
+    },
+    // TAX side: input VAT goes into 1050 VAT Recoverable (asset — we
+    // reclaim it from Revenue in T2). CR 2000 AP so the whole bill
+    // settles against the single payable.
+    {
+      eventType: 'SUPPLIER_BILL_POSTED',
+      divisionCode: null,
+      lineRole: 'TAX',
+      debit: '1050',
+      credit: '2000',
+      priority: 100,
+    },
+
+    // SUPPLIER_PAYMENT_SENT — DR 2000 AP (reduce payable) / CR 1010 Bank
+    {
+      eventType: 'SUPPLIER_PAYMENT_SENT',
+      divisionCode: null,
+      lineRole: 'PRINCIPAL',
+      debit: '2000',
+      credit: '1010',
       priority: 100,
     },
   ];
