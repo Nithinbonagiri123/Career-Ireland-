@@ -35,12 +35,14 @@ import { fetchStaffUserOptions } from '@/modules/users/service';
 import { listChecklistsForRequisition } from '@/modules/work-permit-checklists/service';
 import { RequisitionDialog } from '../requisition-dialog';
 import { AddCandidateDialog } from './add-candidate-dialog';
+import { AddOutsourcedCandidateDialog } from './add-outsourced-dialog';
 import { ChecklistsSection } from './checklists-section';
 import { PipelineWall } from './pipeline-wall';
 import { PlacementsFeesSection } from './placements-fees-section';
 import { RequisitionQualificationsSection, RequisitionSkillsSection } from './requirements-section';
 import { CloseRequisitionButton, RunMatchingButton } from './requisition-actions';
 import { RequisitionTabs } from './requisition-tabs';
+import { SetRequisitionReminderDialog } from './set-reminder-dialog';
 
 export const dynamic = 'force-dynamic';
 
@@ -328,6 +330,14 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
                 requisitionTitle={requisition.title}
                 persons={allPersons}
               />
+              {/* Session 12: outsourced candidate flow — closes the one
+                  remaining Scenario 2 partial per docs/ux-redesign-audit.md
+                  §5a. Separate entry point so provenance (which agency /
+                  partner) is captured at intake, not reconstructed later. */}
+              <AddOutsourcedCandidateDialog
+                requisitionId={id}
+                requisitionTitle={requisition.title}
+              />
               <RunMatchingButton requisitionId={id} />
               {/* Session 5: these were hidden under Edit before. */}
               <Link
@@ -336,6 +346,13 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
               >
                 <Megaphone className="mr-1.5 size-4" aria-hidden /> Start advertisement
               </Link>
+              {/* Session 11: requisition-scoped reminder — closes the
+                  Scenario 2 gap flagged in docs/ux-redesign-audit.md §5a. */}
+              <SetRequisitionReminderDialog
+                requisitionId={id}
+                requisitionTitle={requisition.title}
+                currentUserId={session.user.id}
+              />
               {requisition.status !== 'CLOSED' && requisition.status !== 'CANCELLED' && (
                 <CloseRequisitionButton requisitionId={id} />
               )}
