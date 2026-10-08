@@ -78,14 +78,14 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
         <DialogHeader>
           <DialogTitle>Record a payment</DialogTitle>
           <DialogDescription>
-            Payments are attached to a Service Engagement. Adding a reference marks the payment as
-            "proof uploaded" — an ADMIN can then verify or reject.
+            Payments are attached to a service. Adding a reference marks the payment as "proof
+            uploaded" — an ADMIN can then verify or reject.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <FormField
             id="p-engagement"
-            label="Engagement"
+            label="Service"
             hint={
               selectedEngagement
                 ? `Agreed ${selectedEngagement.agreedAmount} ${selectedEngagement.currencyCode} · status ${selectedEngagement.status.replace(/_/g, ' ')}`

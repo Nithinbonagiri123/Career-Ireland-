@@ -67,7 +67,7 @@ const ROW_ORDER: Array<{
     icon: PlaneTakeoff,
     href: () => '/immigration',
   },
-  { key: 'engagement', label: 'service engagements', icon: Coins, href: () => '/engagements' },
+  { key: 'engagement', label: 'services', icon: Coins, href: () => '/engagements' },
   {
     key: 'communication',
     label: 'communications',

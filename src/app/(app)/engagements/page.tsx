@@ -36,8 +36,8 @@ export default async function EngagementsPage({
         <PageHeader
           icon={Coins}
           iconTone="green"
-          title="Service engagements"
-          description={`Commercial orders for ${settings.legalName} services. Create an engagement first, then record payments against it.`}
+          title="Services"
+          description={`Services ${settings.legalName} is delivering, with the money tied to each. Start a service here, then record payments against it as they land.`}
           action={
             <div className="flex flex-wrap items-center gap-2">
               <DateRangeFilter />

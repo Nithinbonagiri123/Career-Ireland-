@@ -155,7 +155,7 @@ export const WORKSPACES: Record<Business, WorkspaceConfig> = {
       {
         label: 'Commerce',
         items: [
-          { label: 'Engagements', href: '/engagements', icon: Coins, module: 'engagements' },
+          { label: 'Services', href: '/engagements', icon: Coins, module: 'engagements' },
           { label: 'Payments', href: '/payments', icon: Coins, module: 'payments' },
         ],
       },

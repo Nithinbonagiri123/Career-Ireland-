@@ -166,7 +166,7 @@ export function CandidatesTable({
         data={candidates}
         emptyIcon={Users}
         emptyTitle="No candidates yet"
-        emptyDescription="Candidates appear here after a Lead is converted (payment-verified or staff manual override)."
+        emptyDescription="Candidates land here once a lead is accepted — automatically when payment is verified, or manually from the lead row."
         emptyAction={
           <Link href="/leads" className={buttonVariants({ size: 'sm' })}>
             <UserPlus className="mr-1.5 size-4" /> Go to Leads

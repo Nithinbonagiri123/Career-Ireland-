@@ -143,7 +143,7 @@ export function CommsTable({ comms }: { comms: CommunicationRow[] }) {
         columns={columns}
         data={comms}
         emptyTitle="No communications logged"
-        emptyDescription="Every email, call, meeting, and note lives here — attached to the person, employer, requisition, engagement, or case it relates to."
+        emptyDescription="Every email, call, meeting, and note lives here — attached to the person, employer, requisition, service, or case it relates to."
       />
       <EditCommDialog
         comm={editTarget}

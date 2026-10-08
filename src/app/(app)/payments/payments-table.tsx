@@ -149,10 +149,10 @@ export function PaymentsTable({ payments, role }: { payments: Row[]; role: UserR
         data={payments}
         emptyIcon={Coins}
         emptyTitle="No payments yet"
-        emptyDescription="Payments are recorded against Service Engagements. Open an engagement first, then record a payment on it."
+        emptyDescription="Payments are recorded against a service. Start a service first, then record the payment against it when the money arrives."
         emptyAction={
           <Link href="/engagements" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
-            Go to Engagements <ArrowRight className="ml-1.5 size-3.5" />
+            Go to Services <ArrowRight className="ml-1.5 size-3.5" />
           </Link>
         }
       />

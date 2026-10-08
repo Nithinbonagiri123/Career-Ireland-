@@ -304,11 +304,11 @@ export function DocumentsTable({ documents }: { documents: DocumentsHubRow[] }) 
         open={decideTarget !== null}
         onCancel={() => setDecideTarget(null)}
         onConfirm={confirmDecide}
-        title="Reject document"
-        description="The reason is stored on the document instance and visible to the owner."
-        label="Rejection reason (audited)"
+        title="Decline document"
+        description="The reason is stored on the document and visible to the owner."
+        label="Reason for decline (audited)"
         placeholder="e.g. Illegible / wrong document type / expired"
-        confirmLabel="Reject"
+        confirmLabel="Decline"
         confirmVariant="destructive"
         pending={decideTarget ? busy === decideTarget.docId : false}
       />

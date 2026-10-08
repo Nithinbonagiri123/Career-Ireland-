@@ -89,13 +89,13 @@ export function CreateEngagementDialog({ services, currencies, persons }: Props)
       <DialogTrigger
         render={
           <Button size="sm" disabled={activeServices.length === 0 || activeCurrencies.length === 0}>
-            <Plus className="mr-1.5 size-4" /> New engagement
+            <Plus className="mr-1.5 size-4" /> Start service
           </Button>
         }
       />
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>New service engagement</DialogTitle>
+          <DialogTitle>Start a service</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <FormField

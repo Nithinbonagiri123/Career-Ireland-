@@ -123,15 +123,15 @@ export function EngagementsTable({ engagements }: { engagements: EngagementListR
       <DataTable
         columns={columns}
         data={engagements}
-        emptyTitle="No engagements yet"
-        emptyDescription="A Service Engagement is the commercial 'order' — created before a payment is recorded."
+        emptyTitle="No services yet"
+        emptyDescription="A service is the commercial order with a customer — start one before you record a payment against it."
       />
       <PromptDialog
         open={archiveTarget !== null}
         onCancel={() => setArchiveTarget(null)}
         onConfirm={confirmArchive}
-        title="Archive this engagement?"
-        description="Archived engagements are hidden from the list, and the payments recorded against them stop appearing in /payments. The underlying rows stay for accounting history."
+        title="Archive this service?"
+        description="Archived services are hidden from the list, and payments recorded against them stop appearing on the Payments page. The underlying rows stay for accounting history."
         label="Reason (audited)"
         placeholder="e.g. Duplicate entry, cancelled at intake"
         confirmLabel="Archive"

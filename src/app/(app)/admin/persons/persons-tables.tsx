@@ -102,8 +102,8 @@ export function ActivePersonsTable({ persons }: { persons: Person[] }) {
       <DataTable
         columns={columnsWithActions}
         data={persons}
-        emptyTitle="No persons yet"
-        emptyDescription="Every human in the system appears here — added via Leads, Prospects, or Immigration cases."
+        emptyTitle="No people yet"
+        emptyDescription="Every person tracked in the app appears here — added via leads, campaign prospects, or immigration cases."
       />
       <PromptDialog
         open={archiveTarget !== null}
