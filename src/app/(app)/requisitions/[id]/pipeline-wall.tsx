@@ -458,7 +458,7 @@ const ADVANCE_LABEL: Record<PipelineStageKey, string | null> = {
   shortlist: 'Promote to Applied',
   apply: 'Move to Interview',
   interview: 'Move to Offer',
-  offer: 'Mark Placed',
+  offer: 'Accept offer',
   placed: null,
 };
 

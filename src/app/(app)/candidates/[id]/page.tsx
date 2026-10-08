@@ -2,6 +2,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { eq, or } from 'drizzle-orm';
 import type { LucideIcon } from 'lucide-react';
 import {
+  ArrowRight,
   Briefcase,
   CheckSquare,
   Coins,
@@ -12,6 +13,7 @@ import {
   User,
   UserPlus,
 } from 'lucide-react';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
@@ -24,7 +26,7 @@ import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
 import { RelatedWorkPanel } from '@/components/related-work-panel';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusDot } from '@/components/ui/status-dot';
 import { requireInternalStaff } from '@/lib/auth/session';
@@ -486,6 +488,20 @@ export default async function CandidateDetail({
           meta={metaStrip}
           action={
             <div className="flex items-center gap-2">
+              {/* Session 7: state-aware primary verb in the header. Mirrors
+                  the NextActionCard CTA below so a user scanning the header
+                  sees the next action without reading the sentence. Filled
+                  variant lifts it visually above the outlined secondary
+                  verbs (Edit, Raise case). */}
+              {nextAction && (
+                <Link
+                  href={nextAction.primary.href}
+                  className={buttonVariants({ size: 'sm', variant: 'default' })}
+                >
+                  {nextAction.primary.label}
+                  <ArrowRight className="ml-1 size-3.5" aria-hidden />
+                </Link>
+              )}
               <EditPersonDialog
                 person={person}
                 candidateProfile={candidateProfile}

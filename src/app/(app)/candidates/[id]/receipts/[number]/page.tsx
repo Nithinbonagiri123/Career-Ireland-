@@ -23,6 +23,8 @@ export default async function ReceiptPrintPage({
 
   const person = data.payer.person;
 
+  const relatedInvoiceVoided = data.invoice?.status === 'VOIDED';
+
   return (
     <div className="min-h-screen bg-muted/40 print:bg-white">
       <div className="mx-auto flex max-w-3xl items-center justify-between px-6 pt-6 print:hidden">
@@ -33,6 +35,20 @@ export default async function ReceiptPrintPage({
           <ArrowLeft className="mr-1.5 size-4" /> Back to candidate
         </Link>
         <PrintButton />
+      </div>
+
+      {/* Correction-path banner — receipts are immutable by design, same
+          as invoices. Mirrors the invoice page's amber banner so staff
+          don't go hunting for an Edit button that doesn't exist, and
+          flags the orphan case where the underlying invoice was voided
+          after the receipt was issued. */}
+      <div className="mx-auto mt-3 max-w-3xl px-6 print:hidden">
+        <div className="rounded-md border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+          <strong className="font-semibold">Need to correct this payment?</strong>{' '}
+          {relatedInvoiceVoided
+            ? "The invoice tied to this receipt has been voided. Issue a refund to the payer if the money was returned, then raise a fresh invoice from the candidate's Billing tab."
+            : "Receipts are final once issued. If the amount or date is wrong, void the related invoice first, then raise a fresh invoice from the candidate's Billing tab."}
+        </div>
       </div>
 
       <ReceiptPrintable
