@@ -8,6 +8,7 @@ import { type ReactElement, useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';
+import { FormSection } from '@/components/form-section';
 import { SubmitButton } from '@/components/submit-button';
 import { Button } from '@/components/ui/button';
 import {
@@ -97,46 +98,58 @@ export function EmployerDialog({ trigger, initial }: Props) {
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit employer' : 'Add employer'}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <FormField id="em-legal" label="Legal name" error={errors.legalName?.message}>
-            <Input
-              id="em-legal"
-              aria-invalid={Boolean(errors.legalName)}
-              {...register('legalName')}
-            />
-          </FormField>
-          <div className="grid grid-cols-2 gap-3">
-            <FormField id="em-trading" label="Trading name">
-              <Input id="em-trading" {...register('tradingName')} />
+        <form onSubmit={onSubmit} className="space-y-6" noValidate>
+          <FormSection title="Basic info">
+            <FormField id="em-legal" label="Legal name" error={errors.legalName?.message}>
+              <Input
+                id="em-legal"
+                aria-invalid={Boolean(errors.legalName)}
+                {...register('legalName')}
+              />
             </FormField>
-            <FormField id="em-industry" label="Industry">
-              <Input id="em-industry" {...register('industry')} />
+            <div className="grid grid-cols-2 gap-3">
+              <FormField id="em-trading" label="Trading name">
+                <Input id="em-trading" {...register('tradingName')} />
+              </FormField>
+              <FormField id="em-industry" label="Industry">
+                <Input id="em-industry" {...register('industry')} />
+              </FormField>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField id="em-website" label="Website">
+                <Input id="em-website" {...register('website')} />
+              </FormField>
+              <FormField id="em-status" label="Status">
+                <Select id="em-status" {...register('relationshipStatus')}>
+                  <option value="PROSPECT">Prospect</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="ON_HOLD">On hold</option>
+                  <option value="ARCHIVED">Archived</option>
+                </Select>
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection title="Address" description="Where the business operates." collapsible>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField id="em-country" label="Country">
+                <Input id="em-country" {...register('country')} />
+              </FormField>
+              <FormField id="em-city" label="City">
+                <Input id="em-city" {...register('city')} />
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection
+            title="Notes"
+            description="Anything the next operator should know."
+            collapsible
+          >
+            <FormField id="em-notes" label="Notes">
+              <Textarea id="em-notes" rows={3} {...register('notes')} />
             </FormField>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <FormField id="em-website" label="Website">
-              <Input id="em-website" {...register('website')} />
-            </FormField>
-            <FormField id="em-status" label="Status">
-              <Select id="em-status" {...register('relationshipStatus')}>
-                <option value="PROSPECT">Prospect</option>
-                <option value="ACTIVE">Active</option>
-                <option value="ON_HOLD">On hold</option>
-                <option value="ARCHIVED">Archived</option>
-              </Select>
-            </FormField>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <FormField id="em-country" label="Country">
-              <Input id="em-country" {...register('country')} />
-            </FormField>
-            <FormField id="em-city" label="City">
-              <Input id="em-city" {...register('city')} />
-            </FormField>
-          </div>
-          <FormField id="em-notes" label="Notes">
-            <Textarea id="em-notes" rows={3} {...register('notes')} />
-          </FormField>
+          </FormSection>
           <FormErrorAlert error={formError} />
           <AnimatePresence>
             {!isEdit && similar.length > 0 && !dismissed && (

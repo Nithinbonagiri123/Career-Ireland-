@@ -6,6 +6,7 @@ import { type ReactElement, useEffect, useMemo } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';
+import { FormSection } from '@/components/form-section';
 import { PersonPicker } from '@/components/person-picker';
 import { PersonPreviewCard } from '@/components/person-preview-card';
 import { SubmitButton } from '@/components/submit-button';
@@ -131,136 +132,152 @@ export function CaseDialog({
             an internal placement — independent employer-driven cases are supported.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <div className="grid grid-cols-2 gap-3">
-            <FormField id="ic-type" label="Case type">
-              <Select id="ic-type" {...register('caseType')}>
-                <option value="EMPLOYMENT_PERMIT">Employment permit</option>
-                <option value="VISA">Visa</option>
-                <option value="VISA_EXTENSION">Visa extension</option>
-              </Select>
-            </FormField>
-            <FormField id="ic-status" label="Status">
-              <Select id="ic-status" {...register('status')}>
-                <option value="OPEN">Open</option>
-                <option value="DOCUMENTS_PENDING">Documents pending</option>
-                <option value="SUBMITTED">Submitted</option>
-                <option value="UNDER_AUTHORITY_REVIEW">Under authority review</option>
-                <option value="APPROVED">Approved</option>
-                <option value="REJECTED">Rejected</option>
-                <option value="CLOSED">Closed</option>
-              </Select>
-            </FormField>
-          </div>
-
-          <FormField
-            id="ic-apptype"
-            label="Application type"
-            hint={
-              filteredTypes.length === 0 ? (
-                <span className="text-amber-600 dark:text-amber-500">
-                  No active application types for the{' '}
-                  {watchedCategory.toLowerCase().replace('_', ' ')} category.{' '}
-                  <Link
-                    href="/admin/immigration-types"
-                    className="underline hover:text-foreground"
-                    target="_blank"
-                  >
-                    Add one
-                  </Link>{' '}
-                  (e.g. Critical Skills Work Permit, General Employment Permit), then reopen this
-                  dialog.
-                </span>
-              ) : (
-                <>
-                  Specific type under the {watchedCategory.toLowerCase().replace('_', ' ')}{' '}
-                  category.{' '}
-                  <Link
-                    href="/admin/immigration-types"
-                    className="underline hover:text-foreground"
-                    target="_blank"
-                  >
-                    Manage types
-                  </Link>
-                  .
-                </>
-              )
-            }
-          >
-            <Select id="ic-apptype" {...register('applicationTypeId')}>
-              <option value="">
-                {filteredTypes.length === 0 ? '— none yet — add via Manage types →' : '— select —'}
-              </option>
-              {filteredTypes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </Select>
-          </FormField>
-
-          <FormField
-            id="ic-beneficiary"
-            label="Beneficiary"
-            error={errors.beneficiaryPersonId?.message}
-            hint="Search an existing candidate, or add a new one on the fly."
-          >
-            <div className="space-y-2">
-              <PersonPicker
-                id="ic-beneficiary"
-                persons={persons}
-                value={form.watch('beneficiaryPersonId')}
-                onChange={(id) =>
-                  form.setValue('beneficiaryPersonId', id, {
-                    shouldValidate: true,
-                    shouldDirty: true,
-                  })
-                }
-                invalid={Boolean(errors.beneficiaryPersonId)}
-                placeholder="Select or add candidate"
-              />
-              {selectedPerson && <PersonPreviewCard person={selectedPerson} />}
+        <form onSubmit={onSubmit} className="space-y-6" noValidate>
+          <FormSection title="Case">
+            <div className="grid grid-cols-2 gap-3">
+              <FormField id="ic-type" label="Case type">
+                <Select id="ic-type" {...register('caseType')}>
+                  <option value="EMPLOYMENT_PERMIT">Employment permit</option>
+                  <option value="VISA">Visa</option>
+                  <option value="VISA_EXTENSION">Visa extension</option>
+                </Select>
+              </FormField>
+              <FormField id="ic-status" label="Status">
+                <Select id="ic-status" {...register('status')}>
+                  <option value="OPEN">Open</option>
+                  <option value="DOCUMENTS_PENDING">Documents pending</option>
+                  <option value="SUBMITTED">Submitted</option>
+                  <option value="UNDER_AUTHORITY_REVIEW">Under authority review</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="CLOSED">Closed</option>
+                </Select>
+              </FormField>
             </div>
-          </FormField>
 
-          <FormField id="ic-sponsor" label="Sponsor employer (optional)">
-            <Select id="ic-sponsor" {...register('sponsorEmployerId')}>
-              <option value="">— none —</option>
-              {employers.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.legalName}
+            <FormField
+              id="ic-apptype"
+              label="Application type"
+              hint={
+                filteredTypes.length === 0 ? (
+                  <span className="text-amber-600 dark:text-amber-500">
+                    No active application types for the{' '}
+                    {watchedCategory.toLowerCase().replace('_', ' ')} category.{' '}
+                    <Link
+                      href="/admin/immigration-types"
+                      className="underline hover:text-foreground"
+                      target="_blank"
+                    >
+                      Add one
+                    </Link>{' '}
+                    (e.g. Critical Skills Work Permit, General Employment Permit), then reopen this
+                    dialog.
+                  </span>
+                ) : (
+                  <>
+                    Specific type under the {watchedCategory.toLowerCase().replace('_', ' ')}{' '}
+                    category.{' '}
+                    <Link
+                      href="/admin/immigration-types"
+                      className="underline hover:text-foreground"
+                      target="_blank"
+                    >
+                      Manage types
+                    </Link>
+                    .
+                  </>
+                )
+              }
+            >
+              <Select id="ic-apptype" {...register('applicationTypeId')}>
+                <option value="">
+                  {filteredTypes.length === 0
+                    ? '— none yet — add via Manage types →'
+                    : '— select —'}
                 </option>
-              ))}
-            </Select>
-          </FormField>
+                {filteredTypes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
 
-          <div className="grid grid-cols-3 gap-3">
-            <FormField id="ic-submitted" label="Submitted">
-              <Input id="ic-submitted" type="date" {...register('submittedAt')} />
+            <FormField
+              id="ic-beneficiary"
+              label="Beneficiary"
+              error={errors.beneficiaryPersonId?.message}
+              hint="Search an existing candidate, or add a new one on the fly."
+            >
+              <div className="space-y-2">
+                <PersonPicker
+                  id="ic-beneficiary"
+                  persons={persons}
+                  value={form.watch('beneficiaryPersonId')}
+                  onChange={(id) =>
+                    form.setValue('beneficiaryPersonId', id, {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    })
+                  }
+                  invalid={Boolean(errors.beneficiaryPersonId)}
+                  placeholder="Select or add candidate"
+                />
+                {selectedPerson && <PersonPreviewCard person={selectedPerson} />}
+              </div>
             </FormField>
-            <FormField id="ic-decision" label="Decision">
-              <Input id="ic-decision" type="date" {...register('decisionAt')} />
-            </FormField>
-            <FormField id="ic-expires" label="Expires">
-              <Input id="ic-expires" type="date" {...register('expiresOn')} />
-            </FormField>
-          </div>
 
-          <FormField
-            id="ic-reminder"
-            label="Reminder date"
-            hint="A follow-up task fires on this date. Clear the field to remove the reminder."
+            <FormField id="ic-sponsor" label="Sponsor employer (optional)">
+              <Select id="ic-sponsor" {...register('sponsorEmployerId')}>
+                <option value="">— none —</option>
+                {employers.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.legalName}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+          </FormSection>
+
+          <FormSection
+            title="Timeline"
+            description="Dates and the authority reference once this case is in motion."
+            collapsible
           >
-            <Input id="ic-reminder" type="date" {...register('reminderOn')} />
-          </FormField>
+            <div className="grid grid-cols-3 gap-3">
+              <FormField id="ic-submitted" label="Submitted">
+                <Input id="ic-submitted" type="date" {...register('submittedAt')} />
+              </FormField>
+              <FormField id="ic-decision" label="Decision">
+                <Input id="ic-decision" type="date" {...register('decisionAt')} />
+              </FormField>
+              <FormField id="ic-expires" label="Expires">
+                <Input id="ic-expires" type="date" {...register('expiresOn')} />
+              </FormField>
+            </div>
 
-          <FormField id="ic-ref" label="Authority reference">
-            <Input id="ic-ref" placeholder="Govt case number" {...register('authorityReference')} />
-          </FormField>
+            <FormField
+              id="ic-reminder"
+              label="Reminder date"
+              hint="A follow-up task fires on this date. Clear the field to remove the reminder."
+            >
+              <Input id="ic-reminder" type="date" {...register('reminderOn')} />
+            </FormField>
 
-          <FormField id="ic-notes" label="Notes">
-            <Textarea id="ic-notes" rows={3} {...register('notes')} />
-          </FormField>
+            <FormField id="ic-ref" label="Authority reference">
+              <Input
+                id="ic-ref"
+                placeholder="Govt case number"
+                {...register('authorityReference')}
+              />
+            </FormField>
+          </FormSection>
+
+          <FormSection title="Notes" collapsible>
+            <FormField id="ic-notes" label="Notes">
+              <Textarea id="ic-notes" rows={3} {...register('notes')} />
+            </FormField>
+          </FormSection>
 
           <FormErrorAlert error={formError} />
 

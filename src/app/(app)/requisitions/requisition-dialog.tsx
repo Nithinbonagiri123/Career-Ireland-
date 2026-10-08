@@ -5,6 +5,7 @@ import { type ReactElement, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';
+import { FormSection } from '@/components/form-section';
 import { type OccupationOption, OccupationPicker } from '@/components/occupation-picker';
 import { SubmitButton } from '@/components/submit-button';
 import { Button } from '@/components/ui/button';
@@ -101,94 +102,110 @@ export function RequisitionDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit requisition' : 'New job requisition'}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <FormField id="jr-employer" label="Employer">
-            <Select id="jr-employer" {...register('employerId')}>
-              {employers.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.legalName}
-                </option>
-              ))}
-            </Select>
-          </FormField>
-          <FormField id="jr-title" label="Job title" error={errors.title?.message}>
-            <Input id="jr-title" aria-invalid={Boolean(errors.title)} {...register('title')} />
-          </FormField>
-          <div className="grid grid-cols-3 gap-3">
-            <FormField id="jr-occupation" label="Occupation">
-              <input type="hidden" {...register('occupationId')} />
-              <OccupationPicker
-                inputId="jr-occupation"
-                options={occupationOptions}
-                value={form.watch('occupationId') ?? ''}
-                onChange={(id) => setValue('occupationId', id, { shouldDirty: true })}
-                onOptionsChanged={(created) =>
-                  setLocallyCreatedOccupations((prev) => [created, ...prev])
-                }
-                placeholder="Select occupation…"
-              />
-            </FormField>
-            <FormField id="jr-positions" label="Positions">
-              <Input
-                id="jr-positions"
-                type="number"
-                min={1}
-                max={999}
-                aria-invalid={Boolean(errors.positionsRequired)}
-                {...register('positionsRequired', { valueAsNumber: true })}
-              />
-            </FormField>
-            <FormField id="jr-type" label="Type">
-              <Select id="jr-type" {...register('employmentType')}>
-                <option value="FULL_TIME">Full-time</option>
-                <option value="PART_TIME">Part-time</option>
-                <option value="CONTRACT">Contract</option>
-                <option value="TEMP">Temp</option>
+        <form onSubmit={onSubmit} className="space-y-6" noValidate>
+          <FormSection title="Role">
+            <FormField id="jr-employer" label="Employer">
+              <Select id="jr-employer" {...register('employerId')}>
+                {employers.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.legalName}
+                  </option>
+                ))}
               </Select>
             </FormField>
-          </div>
-          <FormField id="jr-location" label="Location">
-            <Input id="jr-location" {...register('location')} />
-          </FormField>
-          <div className="grid grid-cols-3 gap-3">
-            <FormField id="jr-smin" label="Salary min">
-              <Input id="jr-smin" inputMode="decimal" {...register('salaryMin')} />
+            <FormField id="jr-title" label="Job title" error={errors.title?.message}>
+              <Input id="jr-title" aria-invalid={Boolean(errors.title)} {...register('title')} />
             </FormField>
-            <FormField id="jr-smax" label="Salary max">
-              <Input id="jr-smax" inputMode="decimal" {...register('salaryMax')} />
+            <div className="grid grid-cols-3 gap-3">
+              <FormField id="jr-occupation" label="Occupation">
+                <input type="hidden" {...register('occupationId')} />
+                <OccupationPicker
+                  inputId="jr-occupation"
+                  options={occupationOptions}
+                  value={form.watch('occupationId') ?? ''}
+                  onChange={(id) => setValue('occupationId', id, { shouldDirty: true })}
+                  onOptionsChanged={(created) =>
+                    setLocallyCreatedOccupations((prev) => [created, ...prev])
+                  }
+                  placeholder="Select occupation…"
+                />
+              </FormField>
+              <FormField id="jr-positions" label="Positions">
+                <Input
+                  id="jr-positions"
+                  type="number"
+                  min={1}
+                  max={999}
+                  aria-invalid={Boolean(errors.positionsRequired)}
+                  {...register('positionsRequired', { valueAsNumber: true })}
+                />
+              </FormField>
+              <FormField id="jr-type" label="Type">
+                <Select id="jr-type" {...register('employmentType')}>
+                  <option value="FULL_TIME">Full-time</option>
+                  <option value="PART_TIME">Part-time</option>
+                  <option value="CONTRACT">Contract</option>
+                  <option value="TEMP">Temp</option>
+                </Select>
+              </FormField>
+            </div>
+            <FormField id="jr-location" label="Location">
+              <Input id="jr-location" {...register('location')} />
             </FormField>
-            <FormField id="jr-cur" label="Currency">
-              <Select id="jr-cur" {...register('salaryCurrencyCode')}>
-                <option value="">— none —</option>
-                {currencies
-                  .filter((c) => c.isActive || c.code === initial?.salaryCurrencyCode)
-                  .map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.code}
-                    </option>
-                  ))}
-              </Select>
+            <FormField id="jr-desc" label="Description">
+              <Textarea id="jr-desc" rows={3} {...register('description')} />
             </FormField>
-          </div>
-          <FormField id="jr-desc" label="Description">
-            <Textarea id="jr-desc" rows={3} {...register('description')} />
-          </FormField>
-          <div className="grid grid-cols-2 gap-3">
-            <FormField id="jr-status" label="Status">
-              <Select id="jr-status" {...register('status')}>
-                <option value="DRAFT">Draft</option>
-                <option value="OPEN">Open</option>
-                <option value="IN_PROGRESS">In progress</option>
-                <option value="PARTIALLY_FILLED">Partially filled</option>
-                <option value="FILLED">Filled</option>
-                <option value="CLOSED">Closed</option>
-                <option value="CANCELLED">Cancelled</option>
-              </Select>
-            </FormField>
-            <FormField id="jr-target" label="Target fill date">
-              <Input id="jr-target" type="date" {...register('targetFillDate')} />
-            </FormField>
-          </div>
+          </FormSection>
+
+          <FormSection
+            title="Compensation"
+            description="Salary band shown to candidates during matching."
+            collapsible
+          >
+            <div className="grid grid-cols-3 gap-3">
+              <FormField id="jr-smin" label="Salary min">
+                <Input id="jr-smin" inputMode="decimal" {...register('salaryMin')} />
+              </FormField>
+              <FormField id="jr-smax" label="Salary max">
+                <Input id="jr-smax" inputMode="decimal" {...register('salaryMax')} />
+              </FormField>
+              <FormField id="jr-cur" label="Currency">
+                <Select id="jr-cur" {...register('salaryCurrencyCode')}>
+                  <option value="">— none —</option>
+                  {currencies
+                    .filter((c) => c.isActive || c.code === initial?.salaryCurrencyCode)
+                    .map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code}
+                      </option>
+                    ))}
+                </Select>
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection
+            title="Admin"
+            description="Lifecycle status and a target fill date for forecasting."
+            collapsible
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <FormField id="jr-status" label="Status">
+                <Select id="jr-status" {...register('status')}>
+                  <option value="DRAFT">Draft</option>
+                  <option value="OPEN">Open</option>
+                  <option value="IN_PROGRESS">In progress</option>
+                  <option value="PARTIALLY_FILLED">Partially filled</option>
+                  <option value="FILLED">Filled</option>
+                  <option value="CLOSED">Closed</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </Select>
+              </FormField>
+              <FormField id="jr-target" label="Target fill date">
+                <Input id="jr-target" type="date" {...register('targetFillDate')} />
+              </FormField>
+            </div>
+          </FormSection>
           <FormErrorAlert error={formError} />
           <DialogFooter>
             <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
