@@ -1,5 +1,5 @@
 import { format, formatDistanceToNow } from 'date-fns';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import type { LucideIcon } from 'lucide-react';
 import {
   Briefcase,
@@ -19,6 +19,7 @@ import { EditPersonDialog } from '@/components/edit-person-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { ImmigrationCasesPanel } from '@/components/immigration-cases-panel';
 import { FadeUp } from '@/components/motion/motion-primitives';
+import { NextActionCard } from '@/components/next-action-card';
 import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
 import { RelatedWorkPanel } from '@/components/related-work-panel';
@@ -28,6 +29,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusDot } from '@/components/ui/status-dot';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
+import { serviceEngagements } from '@/lib/db/schema/commerce';
+import { leads } from '@/lib/db/schema/leads';
 import { candidateProfiles } from '@/lib/db/schema/persons';
 import { statusTone } from '@/lib/ui/status-tone';
 import { listApplicationsForPerson } from '@/modules/applications/service';
@@ -40,6 +43,7 @@ import {
   listCandidateSkills,
   listEmploymentHistory,
 } from '@/modules/candidate-details/service';
+import { computeCandidateNextAction } from '@/modules/candidates/next-action';
 import { fetchDocumentTypes } from '@/modules/document-types/service';
 import { listUploadRequestsForPerson } from '@/modules/document-upload-requests/service';
 import { fetchPersonDocuments, fetchPersonRequirements } from '@/modules/documents/service';
@@ -146,6 +150,45 @@ export default async function CandidateDetail({
   const currentOwner = assignedUserId
     ? (staffUsers.find((u) => u.id === assignedUserId) ?? null)
     : null;
+
+  // Compute the "what to do next" prompt for the top of the record. The
+  // state machine is pure (see modules/candidates/next-action.ts) — this
+  // block just gathers the two raw inputs it needs (leads + engagements)
+  // that fetchPersonDetail doesn't expose directly, and passes through
+  // the invoice rows the Billing tab already loaded.
+  const [leadRowsForNext, engagementRowsForNext] = await Promise.all([
+    db.select({ status: leads.status }).from(leads).where(eq(leads.personId, id)),
+    db
+      .select({
+        id: serviceEngagements.id,
+        status: serviceEngagements.status,
+        archivedAt: serviceEngagements.archivedAt,
+      })
+      .from(serviceEngagements)
+      .where(
+        or(
+          eq(serviceEngagements.payerPersonId, id),
+          eq(serviceEngagements.beneficiaryPersonId, id),
+        ),
+      ),
+  ]);
+  const nextAction = computeCandidateNextAction({
+    personId: id,
+    candidateProfile: candidateProfile
+      ? {
+          availabilityStatus: candidateProfile.availabilityStatus,
+          lifecycleStatus: candidateProfile.lifecycleStatus,
+        }
+      : null,
+    leads: leadRowsForNext,
+    engagements: engagementRowsForNext,
+    invoices: billingHistory.invoices.map((r) => ({
+      number: r.invoice.number,
+      outstandingAmount: r.outstandingAmount,
+      totalAmount: r.invoice.totalAmount,
+      issuedAt: r.invoice.issuedAt,
+    })),
+  });
 
   const fullName = `${person.firstName} ${person.lastName}`;
   const location = [person.currentCity, person.currentCountry].filter(Boolean).join(', ');
@@ -489,6 +532,19 @@ export default async function CandidateDetail({
           }
         />
       </FadeUp>
+
+      {nextAction && (
+        <FadeUp delay={0.02}>
+          <NextActionCard
+            label={nextAction.label}
+            dueHint={nextAction.dueHint}
+            sentence={nextAction.sentence}
+            tone={nextAction.tone}
+            primary={nextAction.primary}
+            className="-mt-2 mb-6"
+          />
+        </FadeUp>
+      )}
 
       <CandidateTabs
         overview={overviewTab}
