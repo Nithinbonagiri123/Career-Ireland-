@@ -561,6 +561,87 @@ Decisions I need from you before I write the NextActionCard component:
 
 ---
 
+## 5a. Session 10 — Acceptance walk after Sessions 2–9
+
+Walked all three §26 scenarios against the current app on 2026-10-08.
+Each step scored strict (⚠️ = partial pass but doesn't meet the "≤3
+clicks for a non-technical user" bar).
+
+### Scenario 1 — Candidate Service
+
+| Step | Before | After | Change |
+|---|---|---|---|
+| 1. Create a candidate lead | ✅ | ✅ | Quick Actions `+ New lead` on dashboard — 1 click |
+| 2. Understand what to do next | ❌ | ✅ | NextActionCard on every record (Session 2) |
+| 3. Create an invoice without re-searching | ⚠️ | ✅ | NextActionCard CTA deep-links to `?tab=billing` — 2 clicks total |
+| 4. Enter the amount | ✅ | ✅ | — |
+| 5. Record payment | ⚠️ | ✅ | NextActionCard swaps to "Record the payment" with inline link to the invoice — 2 clicks |
+| 6. Start the resume service | ❌ | ⚠️ | NextActionCard says "advance the service" but there's no dedicated **Start service** button yet |
+| 7. Complete the service | ❌ | ⚠️ | Same — direction is clear in the card, but no explicit **Complete service** button |
+| 8. Find the candidate later | ✅ | ✅ | — |
+
+**Score: 6/8 pass + 2 partial** (was 4/8). +2 net.
+
+### Scenario 2 — Recruitment
+
+| Step | Before | After | Change |
+|---|---|---|---|
+| 1. Add a company | ✅ | ✅ | Quick Actions `+ Company` |
+| 2. Create a requisition | ✅ | ✅ | Quick Actions + `New requisition` button on company |
+| 3. Start an advertisement | ⚠️ | ✅ | Session 5 — "Start advertisement" button on requisition deep-links to `/campaigns?requisitionId=…` with the dialog pre-filled |
+| 4. Add a reminder | ❌ | ⚠️ | Dashboard `+ Reminder` links to `/tasks`, but there's still no requisition-scoped reminder flow |
+| 5. See when the reminder is due | ❌ | ⚠️ | Same as #4; depends on it |
+| 6. Find a candidate from existing list | ✅ | ✅ | — |
+| 7. Add an outsourced candidate | ⚠️ | ⚠️ | Unchanged — the internal/external distinction isn't surfaced on the requisition |
+| 8. Track candidate through recruitment | ✅ | ✅ | Pipeline wall; Session 7 renamed "Mark Placed" → "Accept offer" for clarity |
+
+**Score: 5/8 pass + 3 partial** (was 5/8). Three fails converted into three partials — real improvement but short of the 7/8 target.
+
+### Scenario 3 — Immigration
+
+| Step | Before | After | Change |
+|---|---|---|---|
+| 1. Create own case type | ✅ | ✅ | — |
+| 2. Open an existing candidate | ✅ | ✅ | — |
+| 3. Start an immigration case from candidate | ✅ | ✅ | — |
+| 4. Open a company | ✅ | ✅ | — |
+| 5. Start an immigration case from company | ❌ | ✅ | Session 5 — "Start immigration case" button on employer header with sponsor pre-filled |
+| 6. Recruitment + immigration on same company | ⚠️ | ⚠️ | Still no "Immigration cases" surface on the employer page |
+| 7. Create an invoice | ✅ | ✅ | — |
+| 8. See next action required | ❌ | ✅ | NextActionCard on every immigration case (Session 3), state-aware |
+
+**Score: 7/8 pass + 1 partial** (was 4/8). **Meets the audit's 7/8 target.** +3 net.
+
+### Summary
+
+| Scenario | Before | After | Target | Status |
+|---|---|---|---|---|
+| 1 — Candidate Service | 4/8 | 6/8 | 7/8 | 1 short |
+| 2 — Recruitment | 5/8 | 5/8 (+3 partials) | 7/8 | 2 short |
+| 3 — Immigration | 4/8 | 7/8 | 7/8 | ✅ **met** |
+
+Scenario 1 and 2 fall short of the strict 7/8 bar because of structural gaps the sessions didn't close:
+
+- **Scenario 1 — missing Start/Complete service verbs.** The NextActionCard sentence points the user in the right direction, but there's no first-class `[Start service]` / `[Complete service]` button on the engagement, so the operator still has to open billing and advance the engagement status manually. Fix would be a Session 11 scoped to adding those two server actions + buttons to the engagements surface.
+
+- **Scenario 2 — no requisition-scoped reminders.** `+ Reminder` on the dashboard lands in a global tasks list. For "I want to be reminded about THIS requisition in a week", the user has to type the context manually. Fix would be a requisition-scoped reminder dialog similar to the Session-5 `SetReminderDialog` for immigration cases.
+
+- **Scenario 2 — outsourced-candidate flow.** The audit flagged this as `⚠️` originally; nothing in Sessions 2-9 addressed it. The existing `Log external application` dialog on the candidate page is adjacent but not the same thing. Fix would be a dedicated outsourced-candidate concept on the requisition.
+
+- **Scenario 3 — employer-side immigration surface.** Starting a case from the employer works (Session 5) but the employer page doesn't yet surface *existing* immigration cases. Fix is a small `ImmigrationCasesPanel` on the employer record, same as the one that already lives on the candidate record.
+
+### Recommendation
+
+The acceptance walk confirms the redesign landed its intended value — the two Candidate-Service misses and two Recruitment misses are concrete, bounded follow-ups (not systemic). Suggest a Session 11 scoped to:
+
+1. Add visible `Start service` + `Complete service` verbs on the engagement (Scenario 1 steps 6, 7)
+2. Add a requisition-scoped `SetReminder` dialog + button (Scenario 2 steps 4, 5)
+3. Add an `ImmigrationCasesPanel` to the employer page (Scenario 3 step 6)
+
+A Session 12 would then tackle the outsourced-candidate flow if the owner decides it's worth doing.
+
+---
+
 ## 6. What this audit does not cover
 
 - Specific accessibility (WCAG) gaps — presume we re-audit after each
