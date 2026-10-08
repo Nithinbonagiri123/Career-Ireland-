@@ -1,4 +1,4 @@
-import { Briefcase, Building2, MapPin, Pencil, Users } from 'lucide-react';
+import { Briefcase, Building2, MapPin, Megaphone, Pencil, Users } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
@@ -8,7 +8,7 @@ import { NextActionCard } from '@/components/next-action-card';
 import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { statusTone } from '@/lib/ui/status-tone';
@@ -39,7 +39,7 @@ import { ChecklistsSection } from './checklists-section';
 import { PipelineWall } from './pipeline-wall';
 import { PlacementsFeesSection } from './placements-fees-section';
 import { RequisitionQualificationsSection, RequisitionSkillsSection } from './requirements-section';
-import { RunMatchingButton } from './requisition-actions';
+import { CloseRequisitionButton, RunMatchingButton } from './requisition-actions';
 import { RequisitionTabs } from './requisition-tabs';
 
 export const dynamic = 'force-dynamic';
@@ -329,6 +329,16 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
                 persons={allPersons}
               />
               <RunMatchingButton requisitionId={id} />
+              {/* Session 5: these were hidden under Edit before. */}
+              <Link
+                href={`/campaigns?requisitionId=${id}`}
+                className={buttonVariants({ size: 'sm', variant: 'outline' })}
+              >
+                <Megaphone className="mr-1.5 size-4" aria-hidden /> Start advertisement
+              </Link>
+              {requisition.status !== 'CLOSED' && requisition.status !== 'CANCELLED' && (
+                <CloseRequisitionButton requisitionId={id} />
+              )}
             </div>
           }
         />

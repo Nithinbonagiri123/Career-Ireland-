@@ -15,10 +15,15 @@ export const dynamic = 'force-dynamic';
 export default async function CampaignsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ created?: string; from?: string; to?: string }>;
+  searchParams: Promise<{
+    created?: string;
+    from?: string;
+    to?: string;
+    requisitionId?: string;
+  }>;
 }) {
   await requirePermission('recruitment', 'campaigns', 'view');
-  const { created, from, to } = await searchParams;
+  const { created, from, to, requisitionId } = await searchParams;
   const createdRange = parseDateRangeParams({ created, from, to });
   const [campaigns, requisitions] = await Promise.all([
     fetchCampaigns(createdRange),
@@ -38,6 +43,8 @@ export default async function CampaignsPage({
               <DateRangeFilter />
               <CampaignDialog
                 requisitions={requisitions}
+                prefillRequisitionId={requisitionId}
+                defaultOpen={Boolean(requisitionId)}
                 trigger={<Button size="sm">New campaign</Button>}
               />
             </div>

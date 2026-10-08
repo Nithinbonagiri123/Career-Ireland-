@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { ReactElement } from 'react';
+import { type ReactElement, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';
@@ -29,15 +29,26 @@ type Props = {
   trigger: ReactElement;
   requisitions: JobRequisition[];
   initial?: RecruitmentCampaign;
+  /** Session 5: when "Start advertisement" is clicked from a requisition
+   *  header, deep-link to /campaigns?requisitionId=<id> opens the dialog
+   *  with the requisition already picked. */
+  prefillRequisitionId?: string;
+  defaultOpen?: boolean;
 };
 
-export function CampaignDialog({ trigger, requisitions, initial }: Props) {
+export function CampaignDialog({
+  trigger,
+  requisitions,
+  initial,
+  prefillRequisitionId,
+  defaultOpen,
+}: Props) {
   const isEdit = Boolean(initial);
   const form = useForm<UpsertCampaignInput>({
     resolver: zodResolver(UpsertCampaignSchema),
     defaultValues: {
       id: initial?.id,
-      jobRequisitionId: initial?.jobRequisitionId ?? '',
+      jobRequisitionId: initial?.jobRequisitionId ?? prefillRequisitionId ?? '',
       name: initial?.name ?? '',
       status: initial?.status ?? 'DRAFT',
       notes: initial?.notes ?? '',
@@ -48,7 +59,13 @@ export function CampaignDialog({ trigger, requisitions, initial }: Props) {
     handleSubmit,
     formState: { errors, isSubmitting },
   } = form;
-  const { open, onOpenChange, formError, submit } = useFormDialog(form);
+  const { open, setOpen, onOpenChange, formError, submit } = useFormDialog(form);
+  // Deep-link from the requisition page's "Start advertisement" button
+  // lands on /campaigns?requisitionId=<id>; the page passes defaultOpen
+  // so this dialog opens with that requisition already selected.
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen, setOpen]);
 
   const onSubmit = handleSubmit((data) =>
     submit(data, upsertCampaignAction, {

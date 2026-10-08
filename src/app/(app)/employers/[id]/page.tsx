@@ -1,5 +1,16 @@
 import { asc, desc, eq, inArray } from 'drizzle-orm';
-import { ArrowRight, Briefcase, Building2, Globe, MapPin, Pencil, Plus, User } from 'lucide-react';
+import {
+  ArrowRight,
+  Briefcase,
+  Building2,
+  Coins,
+  Globe,
+  MapPin,
+  Pencil,
+  PlaneTakeoff,
+  Plus,
+  User,
+} from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
@@ -23,7 +34,10 @@ import { fetchEmployerBillingHistory, fetchInvoiceableServicesFor } from '@/modu
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { computeEmployerNextAction } from '@/modules/employers/next-action';
 import { fetchEmployer, fetchEmployerContacts, fetchEmployers } from '@/modules/employers/service';
+import { fetchApplicationTypes } from '@/modules/immigration/application-types';
+import { fetchPersons } from '@/modules/persons/service';
 import { fetchRequisitionsForEmployer } from '@/modules/requisitions/service';
+import { CaseDialog } from '../../immigration/case-dialog';
 import { RequisitionDialog } from '../../requisitions/requisition-dialog';
 import { EmployerDialog } from '../employer-dialog';
 import { ContactDialog } from './contact-dialog';
@@ -51,6 +65,8 @@ export default async function EmployerDetail({
     occupationList,
     invoiceableServices,
     billingHistory,
+    allPersons,
+    allApplicationTypes,
   ] = await Promise.all([
     fetchEmployerContacts(id),
     fetchRequisitionsForEmployer(id),
@@ -61,6 +77,10 @@ export default async function EmployerDetail({
     // invoice" trigger. Includes services with payerType='ANY'.
     fetchInvoiceableServicesFor('EMPLOYER'),
     fetchEmployerBillingHistory(id),
+    // Session 5: needed for the "Start immigration case" header button,
+    // which opens the shared CaseDialog with sponsor pre-filled.
+    fetchPersons(),
+    fetchApplicationTypes(),
   ]);
 
   // Pull the employer's placements + their latest fee invoice in two
@@ -129,6 +149,18 @@ export default async function EmployerDetail({
       latestInvoice: latestInvoiceByPlacement.get(p.id) ?? null,
     })),
   });
+
+  // Session 5: surface "Raise placement fee" as a visible top-level
+  // button when the employer has a placement that still needs billing.
+  // Prefer an uninvoiced placement first; else the oldest unpaid
+  // placement so the operator can chase the outstanding one.
+  const firstRaisablePlacement =
+    employerPlacementRows.find((p) => !latestInvoiceByPlacement.get(p.id)) ??
+    employerPlacementRows.find((p) => {
+      const inv = latestInvoiceByPlacement.get(p.id);
+      return inv && Number.parseFloat(inv.outstandingAmount) > 0;
+    }) ??
+    null;
 
   const canVerifyPayments = session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
 
@@ -214,6 +246,31 @@ export default async function EmployerDetail({
                   jobRequisitionId: raiseRequisition || undefined,
                 }}
                 defaultOpen={Boolean(raisePlacement)}
+              />
+              {/* Session 5: distinct "Raise placement fee" entry point that
+                  was previously only reachable by landing on this page
+                  via ?raisePlacement=…. Only shown when there's actually
+                  a placement that needs billing. */}
+              {firstRaisablePlacement && !raisePlacement && (
+                <Link
+                  href={`/employers/${employer.id}?raisePlacement=${firstRaisablePlacement.id}`}
+                  className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                >
+                  <Coins className="mr-1.5 size-4" aria-hidden /> Raise placement fee
+                </Link>
+              )}
+              {/* Session 5: start an immigration case directly from the
+                  employer — sponsor is pre-filled to this employer. */}
+              <CaseDialog
+                persons={allPersons}
+                employers={employersAll}
+                applicationTypes={allApplicationTypes}
+                prefill={{ sponsorEmployerId: employer.id }}
+                trigger={
+                  <Button size="sm" variant="outline">
+                    <PlaneTakeoff className="mr-1.5 size-4" /> Start immigration case
+                  </Button>
+                }
               />
               <RequisitionDialog
                 employers={employersAll}

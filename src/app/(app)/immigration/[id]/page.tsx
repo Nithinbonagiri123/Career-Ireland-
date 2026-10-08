@@ -41,6 +41,7 @@ import { fetchPersonDetail } from '@/modules/persons/detail';
 import { fetchStaffUserOptions } from '@/modules/users/service';
 import { ArchiveCaseButton } from './archive-button';
 import { CaseDocumentsSection } from './case-documents-section';
+import { CloseCaseButton, RecordDecisionButtons, SetReminderDialog } from './case-quick-actions';
 import { CaseTabs } from './case-tabs';
 import { CaseTasksSection } from './tasks-section';
 
@@ -366,6 +367,19 @@ export default async function ImmigrationCaseDetail({
                   email: u.email,
                 }))}
               />
+              {/* Session 5: state-aware verbs. Previously the operator
+                  had to open Edit → change one field → save. These make
+                  the next action one click. Each one only renders in
+                  the state where it makes sense. */}
+              {c.status !== 'CLOSED' && (
+                <SetReminderDialog caseId={id} currentReminderOn={c.reminderOn} />
+              )}
+              {(c.status === 'SUBMITTED' || c.status === 'UNDER_AUTHORITY_REVIEW') && (
+                <RecordDecisionButtons caseId={id} />
+              )}
+              {(c.status === 'APPROVED' || c.status === 'REJECTED') && (
+                <CloseCaseButton caseId={id} />
+              )}
               <ArchiveCaseButton caseId={id} beneficiaryName={c.beneficiaryName} />
             </div>
           }

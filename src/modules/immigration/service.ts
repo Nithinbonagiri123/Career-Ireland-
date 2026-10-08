@@ -33,6 +33,8 @@ import {
   DetachCaseDocumentSchema,
   type RemoveCaseDocumentRequirementInput,
   RemoveCaseDocumentRequirementSchema,
+  type SetCaseReminderInput,
+  SetCaseReminderSchema,
   type UnarchiveCaseInput,
   UnarchiveCaseSchema,
   type UpdateCaseDocumentRequirementInput,
@@ -434,6 +436,42 @@ export async function updateCaseStatus(input: UpdateCaseStatusInput): Promise<Im
       trigger: after.status,
       actorUserId: session.user.id,
       caseAssignedUserId: after.assignedUserId,
+    });
+    return after;
+  });
+}
+
+/**
+ * Focused action behind the Session 5 "Set reminder" header button on
+ * the immigration case page. Updates only reminderOn (date or empty
+ * string to clear) + emits an audit row — distinct from upsertCase so
+ * the operator doesn't have to re-save the whole case to change one
+ * date, and so audits read "reminder set" rather than "case updated".
+ */
+export async function setCaseReminder(input: SetCaseReminderInput): Promise<ImmigrationCase> {
+  const session = await requireInternalStaff();
+  const parsed = SetCaseReminderSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(immigrationCases)
+      .where(eq(immigrationCases.id, parsed.caseId))
+      .limit(1);
+    if (!before) throw new BusinessRuleError('CASE_NOT_FOUND', 'Immigration case not found');
+    const reminderOn = parsed.reminderOn && parsed.reminderOn !== '' ? parsed.reminderOn : null;
+    const [after] = await tx
+      .update(immigrationCases)
+      .set({ reminderOn, updatedAt: sql`NOW()` })
+      .where(eq(immigrationCases.id, parsed.caseId))
+      .returning();
+    if (!after) throw new Error('update returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'immigration_case',
+      entityId: after.id,
+      action: 'REMINDER_SET',
+      before: { reminderOn: before.reminderOn },
+      after: { reminderOn: after.reminderOn },
     });
     return after;
   });

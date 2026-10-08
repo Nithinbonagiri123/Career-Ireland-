@@ -37,6 +37,12 @@ export const UpdateCaseStatusSchema = z.object({
   authorityReference: z.string().max(120).optional().or(z.literal('')),
 });
 
+export const SetCaseReminderSchema = z.object({
+  caseId: z.string().uuid(),
+  /** YYYY-MM-DD or empty string to clear the reminder. */
+  reminderOn: z.string().date().optional().or(z.literal('')),
+});
+
 // ─── Case documents ───────────────────────────────────────────────────────────
 
 export const CaseDocumentStatusSchema = z.enum(['MISSING', 'PROVIDED', 'ACCEPTED', 'REJECTED']);
@@ -82,6 +88,7 @@ export const UnarchiveCaseSchema = z.object({
 
 export type UpsertCaseInput = z.infer<typeof UpsertCaseSchema>;
 export type UpdateCaseStatusInput = z.infer<typeof UpdateCaseStatusSchema>;
+export type SetCaseReminderInput = z.infer<typeof SetCaseReminderSchema>;
 export type AddCaseDocumentRequirementInput = z.infer<typeof AddCaseDocumentRequirementSchema>;
 export type UpdateCaseDocumentRequirementInput = z.infer<
   typeof UpdateCaseDocumentRequirementSchema

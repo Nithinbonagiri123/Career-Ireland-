@@ -15,6 +15,7 @@ import type {
   AttachCaseDocumentInput,
   DetachCaseDocumentInput,
   RemoveCaseDocumentRequirementInput,
+  SetCaseReminderInput,
   UnarchiveCaseInput,
   UpdateCaseDocumentRequirementInput,
   UpdateCaseStatusInput,
@@ -26,6 +27,7 @@ import {
   attachDocumentToCase,
   detachDocumentFromCase,
   removeCaseDocumentRequirement,
+  setCaseReminder,
   unarchiveCase,
   updateCaseDocumentRequirement,
   updateCaseStatus,
@@ -46,6 +48,12 @@ export async function upsertCaseAction(input: UpsertCaseInput) {
 
 export async function updateCaseStatusAction(input: UpdateCaseStatusInput) {
   const r = await toActionResult(() => updateCaseStatus(input));
+  if (r.ok) revCase(input.caseId);
+  return r;
+}
+
+export async function setCaseReminderAction(input: SetCaseReminderInput) {
+  const r = await toActionResult(() => setCaseReminder(input));
   if (r.ok) revCase(input.caseId);
   return r;
 }
