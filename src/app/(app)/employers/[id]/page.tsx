@@ -1,4 +1,4 @@
-import { asc } from 'drizzle-orm';
+import { asc, desc, eq, inArray } from 'drizzle-orm';
 import { ArrowRight, Briefcase, Building2, Globe, MapPin, Pencil, Plus, User } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -7,16 +7,21 @@ import { BillingSection } from '@/components/billing/billing-section';
 import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
+import { NextActionCard } from '@/components/next-action-card';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
+import { invoices } from '@/lib/db/schema/billing';
 import { occupations } from '@/lib/db/schema/occupations';
+import { persons } from '@/lib/db/schema/persons';
+import { placements } from '@/lib/db/schema/recruitment';
 import { statusTone } from '@/lib/ui/status-tone';
 import { fetchEmployerBillingHistory, fetchInvoiceableServicesFor } from '@/modules/billing/read';
 import { fetchCurrencies } from '@/modules/currencies/service';
+import { computeEmployerNextAction } from '@/modules/employers/next-action';
 import { fetchEmployer, fetchEmployerContacts, fetchEmployers } from '@/modules/employers/service';
 import { fetchRequisitionsForEmployer } from '@/modules/requisitions/service';
 import { RequisitionDialog } from '../../requisitions/requisition-dialog';
@@ -57,6 +62,73 @@ export default async function EmployerDetail({
     fetchInvoiceableServicesFor('EMPLOYER'),
     fetchEmployerBillingHistory(id),
   ]);
+
+  // Pull the employer's placements + their latest fee invoice in two
+  // small queries. The state machine then decides whether the next step
+  // is "raise fee" / "chase overdue" / something earlier in the funnel.
+  const employerPlacementRows = await db
+    .select({
+      id: placements.id,
+      jobRequisitionId: placements.jobRequisitionId,
+      firstName: persons.firstName,
+      lastName: persons.lastName,
+    })
+    .from(placements)
+    .innerJoin(persons, eq(persons.id, placements.personId))
+    .where(eq(placements.employerId, id))
+    .orderBy(desc(placements.createdAt));
+  // Placement fee invoices are keyed on invoice.placement_id. For the
+  // state machine's purpose, "outstanding" = 0 when the invoice is PAID
+  // or VOIDED, else the full totalAmount. This mirrors how the Placements
+  // table surfaces per-row invoice state.
+  const placementInvoiceRows =
+    employerPlacementRows.length > 0
+      ? await db
+          .select({
+            placementId: invoices.placementId,
+            number: invoices.number,
+            issuedAt: invoices.issuedAt,
+            totalAmount: invoices.totalAmount,
+            status: invoices.status,
+          })
+          .from(invoices)
+          .where(
+            inArray(
+              invoices.placementId,
+              employerPlacementRows.map((p) => p.id),
+            ),
+          )
+          .orderBy(desc(invoices.issuedAt))
+      : [];
+  const latestInvoiceByPlacement = new Map<
+    string,
+    { number: string; issuedAt: Date; outstandingAmount: string }
+  >();
+  for (const r of placementInvoiceRows) {
+    if (!r.placementId || latestInvoiceByPlacement.has(r.placementId)) continue;
+    const settled = r.status === 'PAID' || r.status === 'VOIDED';
+    latestInvoiceByPlacement.set(r.placementId, {
+      number: r.number,
+      issuedAt: r.issuedAt,
+      outstandingAmount: settled ? '0.00' : r.totalAmount,
+    });
+  }
+  const nextAction = computeEmployerNextAction({
+    employerId: id,
+    requisitions: requisitions.map((r) => ({
+      id: r.id,
+      title: r.title,
+      status: r.status,
+      positionsRequired: r.positionsRequired,
+      positionsFilled: r.positionsFilled,
+    })),
+    placements: employerPlacementRows.map((p) => ({
+      id: p.id,
+      personName: `${p.firstName} ${p.lastName}`,
+      jobRequisitionId: p.jobRequisitionId,
+      latestInvoice: latestInvoiceByPlacement.get(p.id) ?? null,
+    })),
+  });
 
   const canVerifyPayments = session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
 
@@ -158,6 +230,19 @@ export default async function EmployerDetail({
           }
         />
       </FadeUp>
+
+      {nextAction && (
+        <FadeUp delay={0.02}>
+          <NextActionCard
+            label={nextAction.label}
+            dueHint={nextAction.dueHint}
+            sentence={nextAction.sentence}
+            tone={nextAction.tone}
+            primary={nextAction.primary}
+            className="-mt-2 mb-6"
+          />
+        </FadeUp>
+      )}
 
       <FadeUp delay={0.05} className="mb-8">
         <Card>

@@ -15,6 +15,7 @@ import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
 import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { FadeUp } from '@/components/motion/motion-primitives';
+import { NextActionCard } from '@/components/next-action-card';
 import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
 import { RelatedWorkPanel } from '@/components/related-work-panel';
@@ -30,6 +31,7 @@ import {
 import { fetchDocumentTypes } from '@/modules/document-types/service';
 import { fetchPersonDocuments } from '@/modules/documents/service';
 import { CASE_STAGE_LABEL, CASE_TYPE_LABEL } from '@/modules/immigration/labels';
+import { computeImmigrationNextAction } from '@/modules/immigration/next-action';
 import {
   fetchCase,
   listCaseDocumentRequirements,
@@ -85,6 +87,19 @@ export default async function ImmigrationCaseDetail({
     : null;
 
   const humanType = CASE_TYPE_LABEL[c.caseType];
+
+  const nextAction = computeImmigrationNextAction({
+    caseId: id,
+    status: c.status,
+    reminderOn: c.reminderOn,
+    expiresOn: c.expiresOn,
+    decisionAt: c.decisionAt,
+    submittedAt: c.submittedAt,
+    requirements: {
+      total: requirements.length,
+      missing: requirements.filter((r) => r.status === 'MISSING').length,
+    },
+  });
 
   const metaStrip = (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
@@ -356,6 +371,19 @@ export default async function ImmigrationCaseDetail({
           }
         />
       </FadeUp>
+
+      {nextAction && (
+        <FadeUp delay={0.02}>
+          <NextActionCard
+            label={nextAction.label}
+            dueHint={nextAction.dueHint}
+            sentence={nextAction.sentence}
+            tone={nextAction.tone}
+            primary={nextAction.primary}
+            className="-mt-2 mb-6"
+          />
+        </FadeUp>
+      )}
 
       <CaseTabs
         overview={overviewTab}

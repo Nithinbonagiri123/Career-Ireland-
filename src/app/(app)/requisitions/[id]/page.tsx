@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
 import { FadeUp } from '@/components/motion/motion-primitives';
+import { NextActionCard } from '@/components/next-action-card';
 import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +24,7 @@ import { fetchPersons } from '@/modules/persons/service';
 import { fetchRequisitionPipeline } from '@/modules/pipeline/service';
 import { listPlacementsForRequisition } from '@/modules/placements/service';
 import { fetchQualifications } from '@/modules/qualifications/service';
+import { computeRequisitionNextAction } from '@/modules/requisitions/next-action';
 import {
   fetchRequisition,
   listRequisitionQualifications,
@@ -86,6 +88,22 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     : null;
 
   const pipelineTotal = Object.values(pipelineData).reduce((sum, arr) => sum + arr.length, 0);
+
+  const nextAction = computeRequisitionNextAction({
+    requisitionId: id,
+    status: requisition.status,
+    positionsRequired: requisition.positionsRequired,
+    positionsFilled: requisition.positionsFilled,
+    pipelineCounts: {
+      source: pipelineData.source.length,
+      review: pipelineData.review.length,
+      shortlist: pipelineData.shortlist.length,
+      apply: pipelineData.apply.length,
+      interview: pipelineData.interview.length,
+      offer: pipelineData.offer.length,
+      placed: pipelineData.placed.length,
+    },
+  });
 
   // Pool of candidates the checklist dialog offers = applicants + shortlist,
   // deduped by personId.
@@ -315,6 +333,19 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
           }
         />
       </FadeUp>
+
+      {nextAction && (
+        <FadeUp delay={0.02}>
+          <NextActionCard
+            label={nextAction.label}
+            dueHint={nextAction.dueHint}
+            sentence={nextAction.sentence}
+            tone={nextAction.tone}
+            primary={nextAction.primary}
+            className="-mt-2 mb-6"
+          />
+        </FadeUp>
+      )}
 
       <RequisitionTabs
         overview={overviewTab}
