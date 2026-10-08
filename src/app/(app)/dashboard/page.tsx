@@ -36,6 +36,7 @@ import { AttentionCard } from './attention-card';
 import { DashboardDrilldownsSection } from './drilldowns-section';
 import { FinanceKpiCard } from './finance-kpi-card';
 import { PipelineFunnel } from './pipeline-funnel';
+import { QuickActionsBar } from './quick-actions-bar';
 import { RevenueBusinessGrid } from './revenue-business-chart';
 import { RevenueSection } from './revenue-section';
 import { StatChip } from './stat-chip';
@@ -113,15 +114,20 @@ export default async function DashboardPage({
               What is happening, what needs attention, and what to do next.
             </p>
           </div>
-          {/* Leads are service-agnostic — you can raise one for Candidate
-              Services, Recruitment, or Immigration from anywhere. The
-              dashboard is the natural entry point, so the same dialog
-              /leads uses lives here too. Full-width on mobile so it's
-              a proper primary action; sits back to auto width on sm+. */}
-          <div className="shrink-0 sm:self-end [&_button]:w-full sm:[&_button]:w-auto">
-            <CreateLeadDialog invoiceableServices={invoiceableServices} currencies={currencies} />
-          </div>
         </div>
+      </FadeUp>
+
+      {/* ─── Quick actions ──────────────────────────────────────────
+         Session 4 (audit §13). Primary action is still "New Lead" —
+         the most common entry point in this business. Six outlined
+         links sit alongside, each routing to the module where the
+         respective creation dialog already lives. */}
+      <FadeUp delay={0.03}>
+        <QuickActionsBar
+          primary={
+            <CreateLeadDialog invoiceableServices={invoiceableServices} currencies={currencies} />
+          }
+        />
       </FadeUp>
 
       {/* ─── Row 1 · KPI strip ───────────────────────────────────── */}
@@ -345,17 +351,20 @@ export default async function DashboardPage({
         </section>
       </FadeUp>
 
-      {/* ─── Row 3 · Attention needed ────────────────────────────── */}
+      {/* ─── Row 3 · What needs doing ────────────────────────────── */}
       <FadeUp delay={0.12}>
-        <section aria-label="Attention needed" className="mb-8">
-          <div className="mb-3 flex items-center justify-between">
+        <section aria-label="What needs doing" className="mb-8">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
-              Attention needed
+              What needs doing
             </h2>
+            <p className="text-[11px] text-foreground/60">
+              Four buckets of pending work. Click any card to open the list.
+            </p>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <AttentionCard
-              title="Overdue tasks"
+              title="Overdue to-dos"
               count={m.tasks.overdue}
               href="/tasks"
               icon={CheckSquare}
@@ -409,7 +418,7 @@ export default async function DashboardPage({
               </div>
             </AttentionCard>
             <AttentionCard
-              title="Cases expiring (60d)"
+              title="Permits expiring soon"
               count={m.immigration.expiringWithin60Days}
               href="/immigration"
               icon={PlaneTakeoff}
@@ -434,7 +443,7 @@ export default async function DashboardPage({
               </ul>
             </AttentionCard>
             <AttentionCard
-              title="At the Interview stage"
+              title="Interviews in progress"
               count={drilldowns.interviewStageApplications.length}
               href="/interviews"
               icon={Clock}
