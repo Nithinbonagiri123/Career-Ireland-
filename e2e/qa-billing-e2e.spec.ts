@@ -126,9 +126,15 @@ test('04 · Employer invoice — dialog + manual price flow', async ({ page }) =
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
   // Session 20's RecordHeaderActions moved "Generate invoice" into the
-  // overflow dropdown. Open the "More actions" menu first.
+  // overflow dropdown. Wait for the "More actions" trigger to hydrate,
+  // then open it. `isVisible()` is synchronous and races hydration, so
+  // use waitFor({ state: 'visible' }) with a short timeout.
   const moreActions = page.getByRole('button', { name: /^more actions$/i }).first();
-  if (await moreActions.isVisible().catch(() => false)) {
+  const hasOverflow = await moreActions
+    .waitFor({ state: 'visible', timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  if (hasOverflow) {
     await moreActions.click();
   }
   await page

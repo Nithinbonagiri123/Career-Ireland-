@@ -71,8 +71,46 @@ export default async function VatReturnPage({
         />
       </FadeUp>
 
+      {/* T1-T4 headline cards always render — zero figures are themselves the
+          answer ("nothing to file this period"). Breakdown tables below only
+          render when there's underlying activity. */}
+      <FadeUp delay={0.05} className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <HeadlineCard
+          code="T1"
+          label="VAT on sales"
+          amount={summary.totals.t1}
+          hint={`Net turnover ${summary.totals.netSalesTurnover}`}
+          tone={summary.totals.t1 === '0.00' ? 'muted' : 'emerald'}
+        />
+        <HeadlineCard
+          code="T2"
+          label="VAT on purchases"
+          amount={summary.totals.t2}
+          hint={
+            summary.totals.t2 === '0.00'
+              ? 'No AP flow yet (Phase 7)'
+              : `Net purchases ${summary.totals.netPurchases}`
+          }
+          tone="muted"
+        />
+        <HeadlineCard
+          code="T3"
+          label="VAT payable"
+          amount={summary.totals.t3}
+          hint="= T1 − T2 (if positive)"
+          tone={summary.totals.t3 === '0.00' ? 'muted' : 'emerald'}
+        />
+        <HeadlineCard
+          code="T4"
+          label="VAT repayable"
+          amount={summary.totals.t4}
+          hint="= T2 − T1 (if positive)"
+          tone={summary.totals.t4 === '0.00' ? 'muted' : 'warning'}
+        />
+      </FadeUp>
+
       {!hasActivity ? (
-        <FadeUp delay={0.05} className="mt-6">
+        <FadeUp delay={0.1} className="mt-6">
           <Card>
             <CardContent className="pt-5">
               <EmptyState
@@ -84,55 +122,15 @@ export default async function VatReturnPage({
           </Card>
         </FadeUp>
       ) : (
-        <>
-          <FadeUp
-            delay={0.05}
-            className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
-          >
-            <HeadlineCard
-              code="T1"
-              label="VAT on sales"
-              amount={summary.totals.t1}
-              hint={`Net turnover ${summary.totals.netSalesTurnover}`}
-              tone="emerald"
-            />
-            <HeadlineCard
-              code="T2"
-              label="VAT on purchases"
-              amount={summary.totals.t2}
-              hint={
-                summary.totals.t2 === '0.00'
-                  ? 'No AP flow yet (Phase 7)'
-                  : `Net purchases ${summary.totals.netPurchases}`
-              }
-              tone="muted"
-            />
-            <HeadlineCard
-              code="T3"
-              label="VAT payable"
-              amount={summary.totals.t3}
-              hint="= T1 − T2 (if positive)"
-              tone={summary.totals.t3 === '0.00' ? 'muted' : 'emerald'}
-            />
-            <HeadlineCard
-              code="T4"
-              label="VAT repayable"
-              amount={summary.totals.t4}
-              hint="= T2 − T1 (if positive)"
-              tone={summary.totals.t4 === '0.00' ? 'muted' : 'warning'}
-            />
-          </FadeUp>
-
-          <FadeUp delay={0.1} className="mt-6 space-y-5">
-            <RateBreakdownCard title="Output VAT by rate (sales)" rows={summary.outputByRate} />
-            {summary.outputByDivision.length > 0 && (
-              <DivisionBreakdownCard rows={summary.outputByDivision} />
-            )}
-            {summary.inputByRate.length > 0 && (
-              <RateBreakdownCard title="Input VAT by rate (purchases)" rows={summary.inputByRate} />
-            )}
-          </FadeUp>
-        </>
+        <FadeUp delay={0.1} className="mt-6 space-y-5">
+          <RateBreakdownCard title="Output VAT by rate (sales)" rows={summary.outputByRate} />
+          {summary.outputByDivision.length > 0 && (
+            <DivisionBreakdownCard rows={summary.outputByDivision} />
+          )}
+          {summary.inputByRate.length > 0 && (
+            <RateBreakdownCard title="Input VAT by rate (purchases)" rows={summary.inputByRate} />
+          )}
+        </FadeUp>
       )}
     </div>
   );
