@@ -39,8 +39,20 @@ export type UpdateAppSettingsInput = {
   bankAccountName: string | null;
   bankIban: string | null;
   bankBic: string | null;
+  /**
+   * Phase 3 blueprint §8.2 — when false, `vatRatePercent` is coerced
+   * to '0.00' before persisting so no downstream renderer accidentally
+   * taxes an invoice while the business isn't actually registered.
+   */
+  vatRegistered: boolean;
   /** VAT percent as a numeric string with up to 2 decimals, e.g. "23.00". */
   vatRatePercent: string;
+  /**
+   * Phase 3 blueprint §7.2 — app-wide default payment terms, in days.
+   * Used when an employer doesn't carry a per-client override. Must be
+   * a non-negative integer; 0 means "due on issue".
+   */
+  defaultPaymentTermsDays: number;
   invoiceFooter: string;
   receiptFooter: string;
 };
@@ -62,6 +74,11 @@ export async function updateAppSettings(input: UpdateAppSettingsInput): Promise<
         'app_settings singleton row is missing — re-run pnpm db:migrate',
       );
     }
+    // VAT-off == rate 0, enforced server-side. The admin UI already
+    // disables the input when `vatRegistered` is false, but we coerce
+    // here too so a stale form or a direct action caller can't persist
+    // a non-zero rate while registration is marked off.
+    const effectiveVatRate = input.vatRegistered ? input.vatRatePercent : '0.00';
     const [after] = await tx
       .update(appSettings)
       .set({
@@ -76,7 +93,9 @@ export async function updateAppSettings(input: UpdateAppSettingsInput): Promise<
         bankAccountName: input.bankAccountName,
         bankIban: input.bankIban,
         bankBic: input.bankBic,
-        vatRatePercent: input.vatRatePercent,
+        vatRegistered: input.vatRegistered,
+        vatRatePercent: effectiveVatRate,
+        defaultPaymentTermsDays: input.defaultPaymentTermsDays,
         invoiceFooter: input.invoiceFooter,
         receiptFooter: input.receiptFooter,
         updatedByUserId: session.user.id,

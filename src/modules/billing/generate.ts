@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
+import { employers } from '@/lib/db/schema/recruitment';
 import { serviceCatalogItems, servicePackages } from '@/lib/db/schema/services';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { insertEngagement } from '@/modules/commerce/repository';
@@ -159,17 +160,40 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
       },
     });
 
+    // Phase 3 blueprint §7.2 + §8.3 — pull payment terms AND VAT
+    // treatment off the employer in one shot. For PERSON invoices
+    // treatment stays STANDARD and terms fall back to the app default.
+    let paymentTermsDays: number | null = settings.defaultPaymentTermsDays;
+    let vatTreatment: 'STANDARD' | 'REVERSE_CHARGE' | 'EXEMPT' | 'OUTSIDE_SCOPE' = 'STANDARD';
+    if (data.payerMode === 'EMPLOYER') {
+      const [emp] = await tx
+        .select({ terms: employers.paymentTermsDays, treatment: employers.vatTreatment })
+        .from(employers)
+        .where(eq(employers.id, data.payerId))
+        .limit(1);
+      if (emp?.terms != null) paymentTermsDays = emp.terms;
+      if (emp?.treatment) vatTreatment = emp.treatment;
+    }
+
     const lineDescription = data.lineDescription?.trim() || service.name;
+    // Phase 3 blueprint §8.2 + §8.3 — the effective rate is zero when:
+    //   - the business isn't VAT-registered yet, OR
+    //   - the employer is non-STANDARD (reverse charge, exempt, or
+    //     outside scope — all legally 0% with a legend on the invoice).
+    const effectiveVatRate =
+      settings.vatRegistered && vatTreatment === 'STANDARD' ? settings.vatRatePercent : '0.00';
     const invoice = await insertInvoice(tx, {
       payerPersonId: data.payerMode === 'PERSON' ? data.payerId : null,
       payerEmployerId: data.payerMode === 'EMPLOYER' ? data.payerId : null,
       serviceEngagementId: engagement.id,
       qty: data.qty,
       unitPrice: data.unitPrice,
-      vatRatePercent: settings.vatRatePercent,
+      vatRatePercent: effectiveVatRate,
+      vatTreatment,
       currencyCode: data.currencyCode,
       lineDescription,
       issuedByUserId: session.user.id,
+      paymentTermsDays,
       immigrationCaseId: data.immigrationCaseId ?? null,
       jobRequisitionId: data.jobRequisitionId ?? null,
       placementId: data.placementId ?? null,
@@ -187,7 +211,8 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
         unitPrice: invoice.unitPrice,
         totalAmount: invoice.totalAmount,
         currency: invoice.currencyCode,
-        vatRatePercent: settings.vatRatePercent,
+        vatRatePercent: effectiveVatRate,
+        vatTreatment,
       },
     });
 

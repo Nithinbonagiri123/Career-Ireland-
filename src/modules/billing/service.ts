@@ -9,6 +9,7 @@ import {
   invoices,
   type Receipt,
   receipts,
+  refunds,
 } from '@/lib/db/schema/billing';
 import { payments } from '@/lib/db/schema/commerce';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
@@ -76,9 +77,25 @@ export async function insertInvoice(
     unitPrice: string;
     /** VAT rate to apply, as a percent (e.g. "23.00"). Comes from app_settings. */
     vatRatePercent: string;
+    /**
+     * Phase 3 blueprint §8.3 — snapshotted VAT treatment. Must be
+     * STANDARD unless the invoice is to a non-STANDARD employer, in
+     * which case the caller forces the rate to '0.00' before passing
+     * it in. Defaults to STANDARD for callers that don't yet care.
+     */
+    vatTreatment?: 'STANDARD' | 'REVERSE_CHARGE' | 'EXEMPT' | 'OUTSIDE_SCOPE';
     currencyCode: string;
     lineDescription: string;
     issuedByUserId: string;
+    /**
+     * Phase 3 blueprint §7.2 — number of days from `issuedAt` to the
+     * payment due date. Caller computes this from
+     * `employer.paymentTermsDays ?? appSettings.defaultPaymentTermsDays`
+     * and passes it in; the schema stays agnostic of where the rule
+     * came from. Omit for historical invoices or when the caller
+     * genuinely has no due-date obligation.
+     */
+    paymentTermsDays?: number | null;
     /** Optional cross-business back-links. When set, the invoice appears
      *  on the corresponding case / requisition / placement detail page. */
     immigrationCaseId?: string | null;
@@ -108,6 +125,12 @@ export async function insertInvoice(
 
   const now = new Date();
   const number = await allocateNextNumber(tx, 'INV', now.getUTCFullYear());
+  // Phase 3 blueprint §7.2 — compute dueAt from issuedAt + terms.
+  const dueAt =
+    args.paymentTermsDays != null && args.paymentTermsDays >= 0
+      ? new Date(now.getTime() + args.paymentTermsDays * 24 * 60 * 60 * 1000)
+      : null;
+  const vatTreatment = args.vatTreatment ?? 'STANDARD';
   const [row] = await tx
     .insert(invoices)
     .values({
@@ -124,6 +147,8 @@ export async function insertInvoice(
       lineDescription: args.lineDescription,
       issuedByUserId: args.issuedByUserId,
       status: 'ISSUED',
+      dueAt,
+      vatTreatment,
       immigrationCaseId: args.immigrationCaseId ?? null,
       jobRequisitionId: args.jobRequisitionId ?? null,
       placementId: args.placementId ?? null,
@@ -594,6 +619,257 @@ export async function issueCreditNote(input: {
       invoiceId: row.invoiceId,
       amount: row.amount,
       currencyCode: row.currencyCode,
+    };
+  });
+}
+
+/**
+ * Issue a refund against a specific verified payment.
+ *
+ * Phase-1 of docs/ux-audit-blueprint.md §7.1. Before this landed, refunds
+ * "happened off-system" — operators issued a credit note, moved money via
+ * their bank, and the CRM had no record cash had been returned. That's a
+ * bookkeeping disaster for any business processing payments at scale.
+ *
+ * This function does five things atomically:
+ *   1. Validates the refund is within the refundable envelope
+ *      (payment.amount − already-refunded).
+ *   2. Issues a credit note against the invoice tied to the payment, so
+ *      the legal/VAT reversal is captured correctly (pro-rated tax).
+ *   3. Inserts the refund row, linking payment + credit note + method +
+ *      external reference.
+ *   4. Flips the payment status to PARTIALLY_REFUNDED or REFUNDED based
+ *      on remaining refundable.
+ *   5. Recomputes the invoice status (handled inside the credit-note
+ *      path) + records audit events for both artefacts.
+ *
+ * ADMIN + FINANCE only.
+ */
+export async function issueRefund(input: {
+  paymentId: string;
+  amount: string;
+  method: 'BANK_TRANSFER' | 'CASH' | 'OTHER';
+  reason: string;
+  reference?: string;
+}): Promise<{
+  refundId: string;
+  creditNoteNumber: string;
+  paymentStatusAfter: 'PARTIALLY_REFUNDED' | 'REFUNDED';
+}> {
+  const session = await requireRole(['ADMIN', 'FINANCE']);
+  const trimmedReason = input.reason.trim();
+  if (trimmedReason.length < 3) {
+    throw new ValidationError('A refund reason of at least 3 characters is required.', {
+      reason: 'Explain why the refund is being issued — the audit trail needs it.',
+    });
+  }
+  if (!/^\d+(\.\d{1,2})?$/.test(input.amount)) {
+    throw new ValidationError('Amount must be a decimal with up to 2 decimal places.', {
+      amount: 'Enter a valid amount like 150 or 150.00',
+    });
+  }
+  const refundCents = Math.round(Number.parseFloat(input.amount) * 100);
+  if (refundCents <= 0) {
+    throw new ValidationError('Refund amount must be greater than zero.', {
+      amount: 'Enter a positive amount',
+    });
+  }
+
+  return db.transaction(async (tx) => {
+    // 1. Lock the payment row + load its linked invoice.
+    const [pay] = await tx
+      .select({
+        id: payments.id,
+        amount: payments.amount,
+        currencyCode: payments.currencyCode,
+        status: payments.status,
+        serviceEngagementId: payments.serviceEngagementId,
+      })
+      .from(payments)
+      .where(eq(payments.id, input.paymentId))
+      .for('update')
+      .limit(1);
+    if (!pay) throw new BusinessRuleError('PAYMENT_NOT_FOUND', 'Payment not found');
+    if (pay.status !== 'VERIFIED' && pay.status !== 'PARTIALLY_REFUNDED') {
+      throw new BusinessRuleError(
+        'PAYMENT_NOT_REFUNDABLE',
+        `Cannot refund a payment in status ${pay.status}. Only verified or partially-refunded payments can be refunded.`,
+      );
+    }
+
+    // The invoice associated with this payment via the engagement.
+    const [inv] = await tx
+      .select({
+        id: invoices.id,
+        subtotal: invoices.subtotal,
+        taxAmount: invoices.taxAmount,
+        totalAmount: invoices.totalAmount,
+        currencyCode: invoices.currencyCode,
+        status: invoices.status,
+        immigrationCaseId: invoices.immigrationCaseId,
+        jobRequisitionId: invoices.jobRequisitionId,
+        placementId: invoices.placementId,
+      })
+      .from(invoices)
+      .where(eq(invoices.serviceEngagementId, pay.serviceEngagementId))
+      .for('update')
+      .limit(1);
+    if (!inv) {
+      throw new BusinessRuleError(
+        'INVOICE_NOT_FOUND',
+        'No invoice tied to this payment — refund cannot be issued without a VAT-reversal path.',
+      );
+    }
+
+    // 2. Compute refund envelope: payment.amount − already-refunded.
+    const paymentCents = Math.round(Number.parseFloat(pay.amount) * 100);
+    const [{ refunded }] = await tx
+      .select({
+        refunded: sql<string>`COALESCE(SUM(${refunds.amount}), 0)::text`,
+      })
+      .from(refunds)
+      .where(eq(refunds.paymentId, pay.id));
+    const alreadyRefundedCents = Math.round(Number.parseFloat(refunded) * 100);
+    const remainingRefundableCents = paymentCents - alreadyRefundedCents;
+    if (refundCents > remainingRefundableCents) {
+      throw new BusinessRuleError(
+        'REFUND_EXCEEDS_REMAINING',
+        `Refund amount exceeds the remaining refundable (${(remainingRefundableCents / 100).toFixed(2)} ${pay.currencyCode}).`,
+      );
+    }
+
+    // 3. Issue the credit note inline (same tx — can't call issueCreditNote
+    //    which starts its own transaction). Mirrors the credit-note code
+    //    path exactly: pro-rated tax, next-number allocation, audit.
+    const invTotalCents = Math.round(Number.parseFloat(inv.totalAmount) * 100);
+    const invTaxCents = Math.round(Number.parseFloat(inv.taxAmount) * 100);
+    const creditTaxCents =
+      invTotalCents > 0 ? Math.round((refundCents * invTaxCents) / invTotalCents) : 0;
+    const creditNetCents = refundCents - creditTaxCents;
+
+    const now = new Date();
+    const creditNoteNumber = await allocateNextNumber(tx, 'CRN', now.getUTCFullYear());
+    const [creditRow] = await tx
+      .insert(creditNotes)
+      .values({
+        number: creditNoteNumber,
+        invoiceId: inv.id,
+        amount: input.amount,
+        taxAmount: (creditTaxCents / 100).toFixed(2),
+        currencyCode: inv.currencyCode,
+        reason: `Refund: ${trimmedReason}`,
+        issuedByUserId: session.user.id,
+      })
+      .returning();
+    if (!creditRow) throw new Error('credit_notes insert returned no row');
+
+    // 4. Insert the refund row — links payment + credit note.
+    const [refundRow] = await tx
+      .insert(refunds)
+      .values({
+        paymentId: pay.id,
+        creditNoteId: creditRow.id,
+        amount: input.amount,
+        currencyCode: pay.currencyCode,
+        reason: trimmedReason,
+        method: input.method,
+        reference: input.reference?.trim() || null,
+        issuedByUserId: session.user.id,
+      })
+      .returning({ id: refunds.id });
+    if (!refundRow) throw new Error('refunds insert returned no row');
+
+    // 5. Update payment status based on remaining refundable after this hop.
+    const newAlreadyRefunded = alreadyRefundedCents + refundCents;
+    const newPaymentStatus: 'PARTIALLY_REFUNDED' | 'REFUNDED' =
+      newAlreadyRefunded >= paymentCents ? 'REFUNDED' : 'PARTIALLY_REFUNDED';
+    await tx
+      .update(payments)
+      .set({ status: newPaymentStatus, updatedAt: sql`NOW()` })
+      .where(eq(payments.id, pay.id));
+
+    // 6. Recompute invoice status (credit note shifts the settled total).
+    const change = await recomputeInvoiceStatus(tx, inv.id);
+
+    // 7. Audit — one event each for refund, credit note, payment, invoice.
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'refund',
+      entityId: refundRow.id,
+      action: 'CREATED',
+      after: {
+        paymentId: pay.id,
+        creditNoteId: creditRow.id,
+        amount: input.amount,
+        method: input.method,
+        reason: trimmedReason,
+      },
+    });
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'credit_note',
+      entityId: creditRow.id,
+      action: 'CREATED',
+      after: {
+        number: creditRow.number,
+        invoiceId: creditRow.invoiceId,
+        amount: creditRow.amount,
+        reason: creditRow.reason,
+      },
+      context: { via: 'refund', refundId: refundRow.id },
+    });
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'payment',
+      entityId: pay.id,
+      action: 'STATUS_CHANGED',
+      before: { status: pay.status },
+      after: { status: newPaymentStatus },
+      context: { via: 'refund', refundId: refundRow.id },
+    });
+    if (change.before !== change.after) {
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'invoice',
+        entityId: inv.id,
+        action: 'STATUS_CHANGED',
+        before: { status: change.before },
+        after: { status: change.after },
+        context: { via: 'refund', refundId: refundRow.id, creditNoteNumber: creditRow.number },
+      });
+    }
+
+    // 8. Shadow-ledger the credit-note side so VAT subledger reverses
+    //    correctly — same shape as issueCreditNote's emission.
+    await emitFinancialEvent(tx, {
+      eventType: 'CREDIT_NOTE_POSTED',
+      sourceSystem: 'ireland_careers',
+      sourceModule: 'billing',
+      sourceEntity: 'credit_note',
+      sourceId: creditRow.id,
+      sourceEventId: creditRow.id,
+      eventDate: now,
+      payload: {
+        actorUserId: session.user.id,
+        creditNoteNumber: creditRow.number,
+        invoiceId: inv.id,
+        divisionCode: resolveDivisionForInvoice({
+          immigrationCaseId: inv.immigrationCaseId,
+          jobRequisitionId: inv.jobRequisitionId,
+          placementId: inv.placementId,
+        }),
+        currencyCode: creditRow.currencyCode,
+        subtotal: `-${(creditNetCents / 100).toFixed(2)}`,
+        taxAmount: `-${(creditTaxCents / 100).toFixed(2)}`,
+        total: `-${input.amount}`,
+        description: `Refund ${(refundCents / 100).toFixed(2)} ${pay.currencyCode} on payment ${pay.id}`,
+      },
+    });
+
+    return {
+      refundId: refundRow.id,
+      creditNoteNumber: creditRow.number,
+      paymentStatusAfter: newPaymentStatus,
     };
   });
 }

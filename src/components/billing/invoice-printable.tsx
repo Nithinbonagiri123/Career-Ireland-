@@ -86,10 +86,11 @@ export function InvoicePrintable({
   const currency = invoice.currencyCode;
   const money = (v: string) => formatCurrency(v, currency);
   const vatRate = Number.parseFloat(settings.vatRatePercent);
-  // Hide the whole VAT row + label when the business isn't charging VAT
-  // yet (rate = 0, and the actual line has no tax component). Templates
-  // stay ready to bring it back — just set VAT rate > 0 in /admin/settings.
-  const showVatLine = vatRate > 0 || Number.parseFloat(invoice.taxAmount) > 0;
+  // Hide the whole VAT row + label when the business isn't VAT-registered
+  // (explicit flag), with a safety net for the implicit case where the
+  // flag is on but the rate + line tax both happen to be zero.
+  const showVatLine =
+    settings.vatRegistered && (vatRate > 0 || Number.parseFloat(invoice.taxAmount) > 0);
 
   const bankBlockVisible =
     Boolean(settings.bankName) && Boolean(settings.bankAccountName) && Boolean(settings.bankIban);
@@ -145,6 +146,16 @@ export function InvoicePrintable({
               {format(invoice.issuedAt, "dd MMMM yyyy 'at' HH:mm")}
             </td>
           </tr>
+          {invoice.dueAt && (
+            <tr className="border border-slate-300">
+              <th className="bg-slate-100 px-3 py-2 text-left font-semibold uppercase tracking-wider text-xs text-slate-700">
+                Payment Due
+              </th>
+              <td className="border-l border-slate-300 px-3 py-2">
+                {format(invoice.dueAt, 'dd MMMM yyyy')}
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
 
@@ -236,6 +247,23 @@ export function InvoicePrintable({
           </tr>
         </tfoot>
       </table>
+
+      {/* ── VAT treatment legend ───────────────────────────────
+          Non-STANDARD invoices must carry a legal note explaining
+          why no VAT is charged. Required by Irish/EU VAT rules so
+          the recipient (and their accountant) knows how to treat
+          the supply. STANDARD invoices show nothing here — the
+          VAT row above already tells the story. */}
+      {invoice.vatTreatment && invoice.vatTreatment !== 'STANDARD' && (
+        <p className="mt-3 border-l-2 border-slate-300 bg-slate-50 px-3 py-2 text-[11px] italic text-slate-700">
+          {invoice.vatTreatment === 'REVERSE_CHARGE' &&
+            'Reverse charge — VAT is to be accounted for by the recipient (Article 196, Council Directive 2006/112/EC).'}
+          {invoice.vatTreatment === 'EXEMPT' &&
+            'Exempt supply — no VAT is chargeable on this invoice.'}
+          {invoice.vatTreatment === 'OUTSIDE_SCOPE' &&
+            'Outside the scope of VAT — supply made to a recipient outside the EU VAT area.'}
+        </p>
+      )}
 
       {/* ── Credit notes (if any) ──────────────────────────────
           Legal reversal path under Irish VAT rules. Shown even

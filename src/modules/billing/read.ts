@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
-import { creditNotes, invoices, receipts } from '@/lib/db/schema/billing';
+import { creditNotes, invoices, receipts, refunds } from '@/lib/db/schema/billing';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { persons } from '@/lib/db/schema/persons';
 import { employers } from '@/lib/db/schema/recruitment';
@@ -253,6 +253,60 @@ export async function fetchCreditNotesForInvoice(invoiceId: string): Promise<Cre
     .where(eq(creditNotes.invoiceId, invoiceId))
     .orderBy(desc(creditNotes.issuedAt));
   return rows;
+}
+
+export type RefundablePaymentRow = {
+  id: string;
+  amount: string;
+  currencyCode: string;
+  method: 'BANK_TRANSFER' | 'CASH' | 'OTHER';
+  verifiedAt: Date | null;
+  remainingRefundable: string;
+};
+
+/**
+ * Payments on this invoice that still have money left to refund.
+ * Powers the IssueRefundControls dialog. Returns VERIFIED or
+ * PARTIALLY_REFUNDED payments with their remaining-refundable envelope
+ * (= payment.amount − sum(prior refunds)). Rows where the envelope has
+ * fallen to zero are filtered out.
+ */
+export async function fetchRefundablePaymentsForInvoice(
+  invoiceId: string,
+): Promise<RefundablePaymentRow[]> {
+  await requireInternalStaff();
+  const rows = await db
+    .select({
+      id: payments.id,
+      amount: payments.amount,
+      currencyCode: payments.currencyCode,
+      method: payments.method,
+      status: payments.status,
+      verifiedAt: payments.verifiedAt,
+      refunded: sql<string>`COALESCE((
+        SELECT SUM(${refunds.amount}) FROM ${refunds} WHERE ${refunds.paymentId} = ${payments.id}
+      ), 0)::text`,
+    })
+    .from(payments)
+    .innerJoin(invoices, eq(invoices.serviceEngagementId, payments.serviceEngagementId))
+    .where(
+      and(eq(invoices.id, invoiceId), inArray(payments.status, ['VERIFIED', 'PARTIALLY_REFUNDED'])),
+    );
+  return rows
+    .map((r) => {
+      const paymentCents = Math.round(Number.parseFloat(r.amount) * 100);
+      const refundedCents = Math.round(Number.parseFloat(r.refunded ?? '0') * 100);
+      const remainingCents = Math.max(0, paymentCents - refundedCents);
+      return {
+        id: r.id,
+        amount: r.amount,
+        currencyCode: r.currencyCode,
+        method: r.method,
+        verifiedAt: r.verifiedAt,
+        remainingRefundable: (remainingCents / 100).toFixed(2),
+      };
+    })
+    .filter((r) => Number.parseFloat(r.remainingRefundable) > 0);
 }
 
 export type PersonBillingRow = {

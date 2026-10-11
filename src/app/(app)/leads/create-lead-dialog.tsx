@@ -207,6 +207,7 @@ export function CreateLeadDialog({
         country: employerCountry,
         city: employerCity,
         relationshipStatus: 'PROSPECT',
+        vatTreatment: 'STANDARD',
         assignedUserId: '',
         notes: employerNotes,
       },
@@ -421,7 +422,7 @@ export function CreateLeadDialog({
                   placeholder="e.g. ABC Manufacturing Ltd"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="rl-country">Country</Label>
                   <Input
@@ -480,7 +481,7 @@ export function CreateLeadDialog({
               <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 Person
               </h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="cl-first">First name</Label>
                   <Input
@@ -504,7 +505,7 @@ export function CreateLeadDialog({
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="cl-email">Email</Label>
                   <Input id="cl-email" type="email" {...register('email')} />
@@ -514,7 +515,7 @@ export function CreateLeadDialog({
                   <Input id="cl-phone" type="tel" {...register('phone')} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="cl-country">Country</Label>
                   <Input id="cl-country" {...register('currentCountry')} />
@@ -672,7 +673,7 @@ export function CreateLeadDialog({
                         </div>
                       )}
 
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         <div className="space-y-1.5">
                           <Label htmlFor="cl-qty" className="text-xs">
                             QTY

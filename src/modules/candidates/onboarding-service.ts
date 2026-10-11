@@ -348,15 +348,22 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
     // app_settings so a future rate change is reflected here without
     // touching this code.
     const settings = await fetchAppSettings();
+    // Phase 3 blueprint §8.2 — honour the vatRegistered switch here
+    // too so onboarding invoices don't accidentally bill VAT while the
+    // business isn't actually registered.
+    const effectiveVatRate = settings.vatRegistered ? settings.vatRatePercent : '0.00';
     const invoice = await insertInvoice(tx, {
       payerPersonId: draft.id,
       serviceEngagementId: engagement.id,
       qty: 1,
       unitPrice: d.payment.amount,
-      vatRatePercent: settings.vatRatePercent,
+      vatRatePercent: effectiveVatRate,
       currencyCode: d.payment.currencyCode,
       lineDescription: `${CANDIDATE_ONBOARDING_NAME} — ${draft.firstName} ${draft.lastName}`,
       issuedByUserId: session.user.id,
+      // Phase 3 blueprint §7.2 — candidate-paid invoices use the app
+      // default. Candidates don't carry per-client payment terms.
+      paymentTermsDays: settings.defaultPaymentTermsDays,
     });
 
     const receipt = await insertReceipt(tx, {

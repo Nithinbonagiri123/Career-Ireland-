@@ -29,9 +29,19 @@ import { findSimilarEmployersAction, upsertEmployerAction } from '@/modules/empl
 import { type UpsertEmployerInput, UpsertEmployerSchema } from '@/modules/employers/schemas';
 import type { SimilarEmployer } from '@/modules/employers/service';
 
-type Props = { trigger: ReactElement; initial?: Employer };
+type Props = {
+  trigger: ReactElement;
+  initial?: Employer;
+  /**
+   * Phase 3 blueprint §8.2 — pass the app-wide VAT-registered flag from
+   * the server page so the dialog can disable the VAT treatment picker
+   * and surface a clear "VAT is off app-wide" hint. Optional + defaults
+   * to true to keep existing/legacy render paths working.
+   */
+  appVatRegistered?: boolean;
+};
 
-export function EmployerDialog({ trigger, initial }: Props) {
+export function EmployerDialog({ trigger, initial, appVatRegistered = true }: Props) {
   const [similar, setSimilar] = useState<SimilarEmployer[]>([]);
   const [dismissed, setDismissed] = useState(false);
   const isEdit = Boolean(initial);
@@ -46,6 +56,13 @@ export function EmployerDialog({ trigger, initial }: Props) {
       industry: initial?.industry ?? '',
       country: initial?.country ?? '',
       city: initial?.city ?? '',
+      addressLine1: initial?.addressLine1 ?? '',
+      addressLine2: initial?.addressLine2 ?? '',
+      postcode: initial?.postcode ?? '',
+      billingEmail: initial?.billingEmail ?? '',
+      vatId: initial?.vatId ?? '',
+      vatTreatment: initial?.vatTreatment ?? 'STANDARD',
+      paymentTermsDays: initial?.paymentTermsDays ?? undefined,
       relationshipStatus: initial?.relationshipStatus ?? 'PROSPECT',
       assignedUserId: initial?.assignedUserId ?? '',
       notes: initial?.notes ?? '',
@@ -107,7 +124,7 @@ export function EmployerDialog({ trigger, initial }: Props) {
                 {...register('legalName')}
               />
             </FormField>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField id="em-trading" label="Trading name">
                 <Input id="em-trading" {...register('tradingName')} />
               </FormField>
@@ -115,7 +132,7 @@ export function EmployerDialog({ trigger, initial }: Props) {
                 <Input id="em-industry" {...register('industry')} />
               </FormField>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField id="em-website" label="Website">
                 <Input id="em-website" {...register('website')} />
               </FormField>
@@ -130,15 +147,94 @@ export function EmployerDialog({ trigger, initial }: Props) {
             </div>
           </FormSection>
 
-          <FormSection title="Address" description="Where the business operates." collapsible>
-            <div className="grid grid-cols-2 gap-3">
-              <FormField id="em-country" label="Country">
-                <Input id="em-country" {...register('country')} />
-              </FormField>
+          <FormSection
+            title="Address"
+            description="Where the business operates. Also used as the invoice address."
+            collapsible
+          >
+            <FormField id="em-address-line1" label="Street address">
+              <Input id="em-address-line1" {...register('addressLine1')} />
+            </FormField>
+            <FormField id="em-address-line2" label="Address line 2 (optional)">
+              <Input id="em-address-line2" {...register('addressLine2')} />
+            </FormField>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <FormField id="em-city" label="City">
                 <Input id="em-city" {...register('city')} />
               </FormField>
+              <FormField id="em-postcode" label="Postcode">
+                <Input id="em-postcode" {...register('postcode')} />
+              </FormField>
+              <FormField id="em-country" label="Country">
+                <Input id="em-country" {...register('country')} />
+              </FormField>
             </div>
+          </FormSection>
+
+          <FormSection
+            title="Billing & VAT"
+            description="Where invoices get sent + how VAT is applied. Fill this out before raising the first invoice."
+            collapsible
+          >
+            <FormField
+              id="em-billing-email"
+              label="Invoice email"
+              hint="Where PDF invoices and receipts are delivered. Leave blank to use the primary contact email."
+              error={errors.billingEmail?.message}
+            >
+              <Input
+                id="em-billing-email"
+                type="email"
+                aria-invalid={Boolean(errors.billingEmail)}
+                {...register('billingEmail')}
+              />
+            </FormField>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FormField
+                id="em-vat-id"
+                label="VAT ID"
+                hint="Required if VAT treatment is Standard and the business is VAT-registered."
+              >
+                <Input id="em-vat-id" {...register('vatId')} placeholder="e.g. IE1234567X" />
+              </FormField>
+              <FormField
+                id="em-vat-treatment"
+                label="VAT treatment"
+                hint={
+                  appVatRegistered
+                    ? 'How VAT is calculated on invoices to this client.'
+                    : 'Disabled — the business is not VAT-registered yet. Enable VAT in /admin/settings to use per-client treatments.'
+                }
+              >
+                <Select
+                  id="em-vat-treatment"
+                  {...register('vatTreatment')}
+                  disabled={!appVatRegistered}
+                  className={appVatRegistered ? '' : 'opacity-60'}
+                >
+                  <option value="STANDARD">Standard — normal VAT rate</option>
+                  <option value="REVERSE_CHARGE">Reverse charge — EU B2B 0%</option>
+                  <option value="EXEMPT">Exempt — VAT 0%</option>
+                  <option value="OUTSIDE_SCOPE">Outside scope — non-EU</option>
+                </Select>
+              </FormField>
+            </div>
+            <FormField
+              id="em-payment-terms"
+              label="Payment terms (days)"
+              hint="How many days after an invoice is issued before it counts as overdue. Blank uses the app default."
+            >
+              <Input
+                id="em-payment-terms"
+                type="number"
+                min={0}
+                max={365}
+                placeholder="e.g. 30"
+                {...register('paymentTermsDays', {
+                  setValueAs: (v) => (v === '' || v === null ? undefined : Number(v)),
+                })}
+              />
+            </FormField>
           </FormSection>
 
           <FormSection

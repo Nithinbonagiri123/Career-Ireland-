@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
-import { issueCreditNote, voidInvoice } from './service';
+import { issueCreditNote, issueRefund, voidInvoice } from './service';
 
 export async function voidInvoiceAction(input: {
   invoiceId: string;
@@ -37,6 +37,32 @@ export async function issueCreditNoteAction(input: {
   if (r.ok) {
     revalidatePath(input.profileHref);
     revalidatePath(`${input.profileHref}/invoices/${input.invoiceNumber}`);
+  }
+  return r;
+}
+
+export async function issueRefundAction(input: {
+  paymentId: string;
+  invoiceNumber: string;
+  profileHref: string;
+  amount: string;
+  method: 'BANK_TRANSFER' | 'CASH' | 'OTHER';
+  reason: string;
+  reference?: string;
+}) {
+  const r = await toActionResult(() =>
+    issueRefund({
+      paymentId: input.paymentId,
+      amount: input.amount,
+      method: input.method,
+      reason: input.reason,
+      reference: input.reference,
+    }),
+  );
+  if (r.ok) {
+    revalidatePath(input.profileHref);
+    revalidatePath(`${input.profileHref}/invoices/${input.invoiceNumber}`);
+    revalidatePath('/payments');
   }
   return r;
 }

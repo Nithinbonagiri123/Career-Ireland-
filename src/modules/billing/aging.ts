@@ -4,23 +4,28 @@ import { db } from '@/lib/db/client';
 import { invoices } from '@/lib/db/schema/billing';
 
 /**
- * Days since `issued_at` at which an ISSUED invoice starts flagging as
- * OVERDUE. The owner's rule is "payment expected on issue" — but we
- * give a 14-day tolerance so paperwork-latency doesn't yell at staff.
- *
- * Kept as a constant (not a settings row) on purpose — this is more
- * about surfacing operational rot than about setting policy, so
- * changing it should be a code review, not a UI toggle.
+ * Fallback window used for invoices that were created before dueAt
+ * existed (Phase 3 blueprint §7.2 migration landed in 0044_due_at.sql).
+ * New invoices carry their own dueAt computed from
+ * `employer.paymentTermsDays ?? appSettings.defaultPaymentTermsDays`.
+ * Historical rows have NULL dueAt — this constant is only consulted
+ * for those legacy invoices.
  */
-export const OVERDUE_THRESHOLD_DAYS = 14;
+export const LEGACY_OVERDUE_THRESHOLD_DAYS = 14;
+/** @deprecated kept for callers migrated incrementally; prefer dueAt + fallback. */
+export const OVERDUE_THRESHOLD_DAYS = LEGACY_OVERDUE_THRESHOLD_DAYS;
 
 export function isInvoiceOverdue(
-  invoice: { status: string; issuedAt: Date },
+  invoice: { status: string; issuedAt: Date; dueAt?: Date | null },
   today: Date = new Date(),
 ): boolean {
   if (invoice.status !== 'ISSUED') return false;
+  if (invoice.dueAt) {
+    return today.getTime() > invoice.dueAt.getTime();
+  }
+  // Legacy invoice without dueAt — fall back to the historical window.
   const days = Math.floor((today.getTime() - invoice.issuedAt.getTime()) / (1000 * 60 * 60 * 24));
-  return days >= OVERDUE_THRESHOLD_DAYS;
+  return days >= LEGACY_OVERDUE_THRESHOLD_DAYS;
 }
 
 /**
@@ -60,31 +65,31 @@ const EMPTY_BUCKET_MAP: Record<AgingBucket, AgingCurrencyTotal[]> = {
 
 export async function fetchAgingReport(): Promise<AgingReport> {
   await requireInternalStaff();
+  // Phase 3 blueprint §7.2 — bucket off dueAt where set, else fall
+  // back to `issuedAt + 14 days`. We define `effective_due` with
+  // COALESCE and bucket off `NOW() - effective_due`:
+  //   current  = not yet due (effective_due in the future)
+  //   d14_30   = overdue 1-30 days
+  //   d31_60   = overdue 31-60 days
+  //   d60_plus = overdue 61+ days
+  const bucketExpr = sql<AgingBucket>`
+    CASE
+      WHEN COALESCE(${invoices.dueAt}, ${invoices.issuedAt} + INTERVAL '14 days') > NOW() THEN 'current'
+      WHEN NOW() - COALESCE(${invoices.dueAt}, ${invoices.issuedAt} + INTERVAL '14 days') < INTERVAL '31 days' THEN 'd14_30'
+      WHEN NOW() - COALESCE(${invoices.dueAt}, ${invoices.issuedAt} + INTERVAL '14 days') < INTERVAL '61 days' THEN 'd31_60'
+      ELSE 'd60_plus'
+    END
+  `;
   const rows = await db
     .select({
-      bucket: sql<AgingBucket>`
-        CASE
-          WHEN NOW() - ${invoices.issuedAt} < INTERVAL '14 days' THEN 'current'
-          WHEN NOW() - ${invoices.issuedAt} < INTERVAL '31 days' THEN 'd14_30'
-          WHEN NOW() - ${invoices.issuedAt} < INTERVAL '61 days' THEN 'd31_60'
-          ELSE 'd60_plus'
-        END
-      `,
+      bucket: bucketExpr,
       currencyCode: invoices.currencyCode,
       count: sql<number>`COUNT(*)::int`,
       total: sql<string>`SUM(${invoices.totalAmount})::text`,
     })
     .from(invoices)
     .where(and(eq(invoices.status, 'ISSUED')))
-    .groupBy(
-      sql`CASE
-        WHEN NOW() - ${invoices.issuedAt} < INTERVAL '14 days' THEN 'current'
-        WHEN NOW() - ${invoices.issuedAt} < INTERVAL '31 days' THEN 'd14_30'
-        WHEN NOW() - ${invoices.issuedAt} < INTERVAL '61 days' THEN 'd31_60'
-        ELSE 'd60_plus'
-      END`,
-      invoices.currencyCode,
-    );
+    .groupBy(bucketExpr, invoices.currencyCode);
 
   const buckets: Record<AgingBucket, AgingCurrencyTotal[]> = { ...EMPTY_BUCKET_MAP };
   for (const b of ['current', 'd14_30', 'd31_60', 'd60_plus'] as AgingBucket[]) {

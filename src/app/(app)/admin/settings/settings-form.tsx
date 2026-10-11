@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { easeStandard } from '@/components/motion/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -34,7 +35,11 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
   const [bankAccountName, setBankAccountName] = useState(initial.bankAccountName ?? '');
   const [bankIban, setBankIban] = useState(initial.bankIban ?? '');
   const [bankBic, setBankBic] = useState(initial.bankBic ?? '');
+  const [vatRegistered, setVatRegistered] = useState(initial.vatRegistered);
   const [vatRatePercent, setVatRatePercent] = useState(initial.vatRatePercent);
+  const [defaultPaymentTermsDays, setDefaultPaymentTermsDays] = useState(
+    String(initial.defaultPaymentTermsDays),
+  );
   const [invoiceFooter, setInvoiceFooter] = useState(initial.invoiceFooter);
   const [receiptFooter, setReceiptFooter] = useState(initial.receiptFooter);
   const [pending, startTransition] = useTransition();
@@ -55,7 +60,12 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
       bankAccountName: bankAccountName.trim() || null,
       bankIban: bankIban.trim() || null,
       bankBic: bankBic.trim() || null,
+      vatRegistered,
       vatRatePercent: vatRatePercent.trim() || '0.00',
+      defaultPaymentTermsDays: Math.max(
+        0,
+        Math.min(365, Number.parseInt(defaultPaymentTermsDays, 10) || 0),
+      ),
       invoiceFooter,
       receiptFooter,
     }),
@@ -71,7 +81,9 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
       bankAccountName,
       bankIban,
       bankBic,
+      vatRegistered,
       vatRatePercent,
+      defaultPaymentTermsDays,
       invoiceFooter,
       receiptFooter,
     ],
@@ -90,7 +102,9 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
       bankAccountName: initial.bankAccountName,
       bankIban: initial.bankIban,
       bankBic: initial.bankBic,
+      vatRegistered: initial.vatRegistered,
       vatRatePercent: initial.vatRatePercent,
+      defaultPaymentTermsDays: initial.defaultPaymentTermsDays,
       invoiceFooter: initial.invoiceFooter,
       receiptFooter: initial.receiptFooter,
     }),
@@ -226,22 +240,61 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Tax</CardTitle>
+          <CardTitle className="text-base">Tax &amp; payment terms</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <FieldWrap
-            label="VAT rate (%)"
-            htmlFor="vatRatePercent"
-            hint="Ireland standard is 23. Set to 0 if not VAT-registered — the invoice will show 'VAT €0.00'."
-          >
-            <Input
-              id="vatRatePercent"
-              inputMode="decimal"
-              value={vatRatePercent}
-              onChange={(e) => setVatRatePercent(e.target.value)}
-              placeholder="23.00"
+        <CardContent className="space-y-4">
+          <div className="flex items-start gap-3 rounded-md border bg-muted/30 p-3">
+            <Checkbox
+              id="vatRegistered"
+              checked={vatRegistered}
+              onCheckedChange={(v) => setVatRegistered(v === true)}
+              className="mt-0.5"
             />
-          </FieldWrap>
+            <div className="space-y-1">
+              <Label htmlFor="vatRegistered" className="text-sm font-medium">
+                Business is VAT-registered
+              </Label>
+              <p className="text-[11px] text-muted-foreground">
+                Turn this on only after your VAT registration is live with Revenue. While it's off,
+                invoices omit the VAT row entirely and employer VAT treatments have no effect — the
+                rate below is dormant until this switch flips on.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FieldWrap
+              label="VAT rate (%)"
+              htmlFor="vatRatePercent"
+              hint={
+                vatRegistered
+                  ? 'Ireland standard is 23. The invoice renders this rate on every line.'
+                  : 'Dormant while VAT-registered is off. You can pre-fill 23 ready for registration day.'
+              }
+            >
+              <Input
+                id="vatRatePercent"
+                inputMode="decimal"
+                value={vatRatePercent}
+                onChange={(e) => setVatRatePercent(e.target.value)}
+                placeholder="23.00"
+                disabled={!vatRegistered}
+                className={vatRegistered ? '' : 'opacity-60'}
+              />
+            </FieldWrap>
+            <FieldWrap
+              label="Default payment terms (days)"
+              htmlFor="defaultPaymentTermsDays"
+              hint="Used when an employer invoice has no per-client override. 0 means due on issue; 14 is a common SME default."
+            >
+              <Input
+                id="defaultPaymentTermsDays"
+                inputMode="numeric"
+                value={defaultPaymentTermsDays}
+                onChange={(e) => setDefaultPaymentTermsDays(e.target.value)}
+                placeholder="14"
+              />
+            </FieldWrap>
+          </div>
         </CardContent>
       </Card>
 
