@@ -2,6 +2,7 @@ import { asc } from 'drizzle-orm';
 import { Briefcase, Plus } from 'lucide-react';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { EmptyMineNudge } from '@/components/empty-mine-nudge';
 import { ListSummaryStrip, type SummaryChip } from '@/components/list-summary-strip';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
@@ -15,6 +16,7 @@ import { parseAssignmentScope } from '@/lib/scope';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchEmployers } from '@/modules/employers/service';
 import { fetchRequisitions, fetchRequisitionsWithCounts } from '@/modules/requisitions/service';
+import { fetchStaffUserOptions } from '@/modules/users/service';
 import { RequisitionsCardGrid, RequisitionsViewToggle } from './requisition-card';
 import { RequisitionDialog } from './requisition-dialog';
 import { RequisitionsTable } from './requisitions-table';
@@ -43,15 +45,17 @@ export default async function RequisitionsPage({
   const cardView = view !== 'table';
   // Fetch both shapes so the summary strip can render even when the table view
   // is active — the counter data is cheap and the strip should be consistent.
-  const [requisitions, requisitionCards, employers, currencies, occupationList] = await Promise.all(
-    [
+  const [requisitions, requisitionCards, employers, currencies, occupationList, staffUsers] =
+    await Promise.all([
       cardView ? Promise.resolve([]) : fetchRequisitions(scope, createdRange),
       fetchRequisitionsWithCounts(scope, createdRange),
       fetchEmployers(),
       fetchCurrencies(),
       db.select().from(occupations).orderBy(asc(occupations.name)),
-    ],
-  );
+      // Session 31 (blueprint §13) — owner avatars inline on list rows.
+      fetchStaffUserOptions(),
+    ]);
+  const owners = staffUsers.map((u) => ({ id: u.id, fullName: u.fullName }));
 
   const openCount = requisitionCards.filter((r) => r.status === 'OPEN').length;
   const inProgressCount = requisitionCards.filter((r) => r.status === 'IN_PROGRESS').length;
@@ -67,15 +71,16 @@ export default async function RequisitionsPage({
     { label: 'filled', value: filledCount },
     { label: 'draft', value: draftCount },
   ];
+  // Session 35 — `mine` is the default; only non-default scopes earn a chip.
   const activeFilters =
-    scope === 'mine'
-      ? [{ label: 'scope: mine' }]
+    scope === 'all'
+      ? [{ label: 'scope: everyone' }]
       : scope === 'unassigned'
         ? [{ label: 'scope: unassigned' }]
         : [];
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={Briefcase}
@@ -110,11 +115,16 @@ export default async function RequisitionsPage({
           filters={activeFilters}
         />
       </FadeUp>
+      {scope === 'mine' && requisitionCards.length === 0 && (
+        <FadeUp delay={0.06}>
+          <EmptyMineNudge resourceLabel="requisitions" seeAllHref="/requisitions?assigned=all" />
+        </FadeUp>
+      )}
       <FadeUp delay={0.08}>
         {cardView ? (
           <RequisitionsCardGrid requisitions={requisitionCards} />
         ) : (
-          <RequisitionsTable requisitions={requisitions} />
+          <RequisitionsTable requisitions={requisitions} owners={owners} />
         )}
       </FadeUp>
     </div>

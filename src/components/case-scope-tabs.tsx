@@ -32,7 +32,10 @@ export function CaseScopeTabs({
 
   const setScope = (next: 'mine' | 'all') => {
     const usp = new URLSearchParams(params?.toString() ?? '');
-    if (next === 'all') usp.delete('assigned');
+    // Session 35 — `mine` is the default when the param is absent, so
+    // we drop it from the URL on the common path. "Global" writes an
+    // explicit `?assigned=all`.
+    if (next === 'mine') usp.delete('assigned');
     else usp.set('assigned', next);
     const qs = usp.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname);

@@ -21,7 +21,10 @@ export function ScopeFilter({
 
   const setScope = (next: AssignmentScope) => {
     const usp = new URLSearchParams(params?.toString() ?? '');
-    if (next === 'all') {
+    // Session 35 — `mine` is the default when the param is absent, so
+    // we drop it from the URL on the common path. Explicitly setting
+    // `all` or `unassigned` writes the param.
+    if (next === 'mine') {
       usp.delete('assigned');
     } else {
       usp.set('assigned', next);

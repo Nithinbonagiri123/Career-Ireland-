@@ -1,6 +1,7 @@
 import { PlaneTakeoff, Plus } from 'lucide-react';
 import { CaseScopeTabs } from '@/components/case-scope-tabs';
 import { CsvExportButton } from '@/components/csv-export-button';
+import { EmptyMineNudge } from '@/components/empty-mine-nudge';
 import { ListSummaryStrip, type SummaryChip } from '@/components/list-summary-strip';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
@@ -72,15 +73,16 @@ export default async function ImmigrationPage({
     { label: 'approved', value: stageCounts.Approved ?? 0, tone: 'success' },
     { label: 'rejected', value: stageCounts.Rejected ?? 0, tone: 'destructive' },
   ];
+  // Session 35 — `mine` is the default; only non-default scopes earn a chip.
   const activeFilters =
-    scope === 'mine'
-      ? [{ label: 'scope: My Cases' }]
+    scope === 'all'
+      ? [{ label: 'scope: All Cases' }]
       : scope === 'unassigned'
         ? [{ label: 'scope: Unassigned' }]
         : [];
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={PlaneTakeoff}
@@ -116,6 +118,11 @@ export default async function ImmigrationPage({
           filters={activeFilters}
         />
       </FadeUp>
+      {scope === 'mine' && cases.length === 0 && (
+        <FadeUp delay={0.06}>
+          <EmptyMineNudge resourceLabel="cases" seeAllHref="/immigration?assigned=all" />
+        </FadeUp>
+      )}
       <FadeUp delay={0.08}>
         {cardView ? <CasesCardGrid cases={cases} /> : <CasesTable cases={cases} />}
       </FadeUp>
