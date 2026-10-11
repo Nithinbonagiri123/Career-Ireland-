@@ -4,6 +4,7 @@ import { Bell, KeyRound, LogOut, Menu, User as UserIcon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
+import { ClockWidget } from '@/components/shell/clock-widget';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -40,18 +41,26 @@ function initialsFromName(name: string): string {
   );
 }
 
+export type ClockInitial = {
+  status: 'off' | 'working' | 'on_break';
+  openSessionAt: Date | null;
+  openBreakAt: Date | null;
+};
+
 export function TopBar({
   user,
   unreadNotifications = 0,
   workspace,
   reachable,
   visibleModules,
+  clockInitial,
 }: {
   user: TopBarUser;
   unreadNotifications?: number;
   workspace: import('@/lib/auth/permissions').Business;
   reachable: import('@/lib/auth/permissions').Business[];
   visibleModules: Set<string>;
+  clockInitial: ClockInitial;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -84,7 +93,14 @@ export function TopBar({
 
       <GlobalSearch />
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-1.5">
+        {/* Phase 1 blueprint §11.1 — clock in/out is always one click
+            away, not buried on /hr. */}
+        <ClockWidget
+          initialStatus={clockInitial.status}
+          initialOpenSessionAt={clockInitial.openSessionAt}
+          initialOpenBreakAt={clockInitial.openBreakAt}
+        />
         <Link
           href="/notifications"
           aria-label={`Notifications${unreadNotifications > 0 ? ` (${unreadNotifications} unread)` : ''}`}

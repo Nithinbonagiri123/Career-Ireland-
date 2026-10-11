@@ -3,20 +3,26 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
+import { FinancialSummaryCard } from '@/components/billing/financial-summary-card';
+import { CampaignsPanel } from '@/components/campaigns-panel';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { NextActionCard } from '@/components/next-action-card';
+import { OwnerAvatar } from '@/components/owner-avatar';
 import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
+import { RecordHeaderActions } from '@/components/record-header-actions';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { statusTone } from '@/lib/ui/status-tone';
+import { fetchTasksForRequisition } from '@/modules/activities/service';
 import {
   listApplicationsForRequisition,
   listShortlistPromotionCandidates,
 } from '@/modules/applications/service';
 import { fetchRequisitionBillingHistory } from '@/modules/billing/read';
+import { fetchCampaignsForRequisition } from '@/modules/campaigns/service';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchEmployers } from '@/modules/employers/service';
 import { fetchOccupations } from '@/modules/occupations/service';
@@ -43,6 +49,7 @@ import { RequisitionQualificationsSection, RequisitionSkillsSection } from './re
 import { CloseRequisitionButton, RunMatchingButton } from './requisition-actions';
 import { RequisitionTabs } from './requisition-tabs';
 import { SetRequisitionReminderDialog } from './set-reminder-dialog';
+import { WorkLogSection } from './work-log-section';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,6 +91,13 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
     fetchRequisitionBillingHistory(id),
     fetchPersons(),
     listPlacementsForRequisition(id),
+  ]);
+  // Phase 2 blueprint §1.3 — per-requisition work log is backed by
+  // the generic tasks table filtered by jobRequisitionId.
+  // Phase 2 blueprint §6.1 — ads for this requisition shown inline.
+  const [workLogTasks, requisitionCampaigns] = await Promise.all([
+    fetchTasksForRequisition(id),
+    fetchCampaignsForRequisition(id),
   ]);
   const currentOwner = requisition.assignedUserId
     ? (staffUsers.find((u) => u.id === requisition.assignedUserId) ?? null)
@@ -142,6 +156,14 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
 
   const metaStrip = (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+        Owner:{' '}
+        <OwnerAvatar
+          user={currentOwner ? { id: currentOwner.id, fullName: currentOwner.fullName } : null}
+          size="sm"
+          showName
+        />
+      </span>
       <Badge variant={statusTone(requisition.status)} className="rounded-full">
         {requisition.status.replace(/_/g, ' ')}
       </Badge>
@@ -223,6 +245,11 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
           </Card>
         </FadeUp>
       )}
+      {/* Phase 2 blueprint §1.3 — Work Log: operator-facing checklist
+          of standard recruitment milestones, backed by the tasks table. */}
+      <FadeUp delay={0.052}>
+        <WorkLogSection requisitionId={id} tasks={workLogTasks} />
+      </FadeUp>
       {/* Placements + their fee invoices. Renders even when empty so
           the operator sees the placeholder before anyone is placed.
           Each row links straight to the employer invoice printable
@@ -230,6 +257,17 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
           hasn't. */}
       <FadeUp delay={0.055}>
         <PlacementsFeesSection placements={requisitionPlacements} />
+      </FadeUp>
+      {/* Phase 2 blueprint §6.1 — ad campaigns tied to this
+          requisition. Operators see at a glance whether this req has
+          been promoted externally and can jump straight to the
+          campaign detail. */}
+      <FadeUp delay={0.058}>
+        <CampaignsPanel
+          campaigns={requisitionCampaigns}
+          scope="requisition"
+          startAdvertisementHref={`/campaigns?requisitionId=${id}`}
+        />
       </FadeUp>
       {/* Billing for THIS requisition — invoices tied via
           invoices.job_requisition_id (populated when acceptLead
@@ -246,7 +284,10 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
                 lead was Accepted; also updated on any subsequent invoice raised against it.
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {requisitionBilling.invoices.length > 0 && (
+                <FinancialSummaryCard invoices={requisitionBilling.invoices} />
+              )}
               <BillingSection
                 profileHref={`/employers/${requisition.employerId}`}
                 invoices={requisitionBilling.invoices}
@@ -284,7 +325,7 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
   );
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={Briefcase}
@@ -295,68 +336,83 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
           ]}
           meta={metaStrip}
           action={
-            <div className="flex items-center gap-2">
-              <AssignToMeButton
-                entity="requisition"
-                id={id}
-                currentUserId={session.user.id}
-                currentAssignedUserId={requisition.assignedUserId}
-              />
-              <ReassignButton
-                entity="requisition"
-                id={id}
-                subjectLabel={`requisition ${requisition.title}`}
-                currentAssignedUserId={requisition.assignedUserId}
-                currentAssignedName={currentOwner?.fullName ?? null}
-                staffUsers={staffUsers.map((u) => ({
-                  id: u.id,
-                  fullName: u.fullName,
-                  email: u.email,
-                }))}
-              />
-              <RequisitionDialog
-                employers={employers}
-                occupations={occupationList}
-                currencies={currencies}
-                initial={requisition}
-                trigger={
-                  <Button size="sm" variant="outline">
-                    <Pencil className="mr-1.5 size-4" /> Edit
-                  </Button>
-                }
-              />
-              <AddCandidateDialog
-                requisitionId={id}
-                requisitionTitle={requisition.title}
-                persons={allPersons}
-              />
-              {/* Session 12: outsourced candidate flow — closes the one
-                  remaining Scenario 2 partial per docs/ux-redesign-audit.md
-                  §5a. Separate entry point so provenance (which agency /
-                  partner) is captured at intake, not reconstructed later. */}
-              <AddOutsourcedCandidateDialog
-                requisitionId={id}
-                requisitionTitle={requisition.title}
-              />
-              <RunMatchingButton requisitionId={id} />
-              {/* Session 5: these were hidden under Edit before. */}
-              <Link
-                href={`/campaigns?requisitionId=${id}`}
-                className={buttonVariants({ size: 'sm', variant: 'outline' })}
-              >
-                <Megaphone className="mr-1.5 size-4" aria-hidden /> Start advertisement
-              </Link>
-              {/* Session 11: requisition-scoped reminder — closes the
-                  Scenario 2 gap flagged in docs/ux-redesign-audit.md §5a. */}
-              <SetRequisitionReminderDialog
-                requisitionId={id}
-                requisitionTitle={requisition.title}
-                currentUserId={session.user.id}
-              />
-              {requisition.status !== 'CLOSED' && requisition.status !== 'CANCELLED' && (
-                <CloseRequisitionButton requisitionId={id} />
-              )}
-            </div>
+            // Phase 2 blueprint §1.2 — primary / secondary / overflow.
+            // Was: 9-button toolbar. Now: one primary + three secondary
+            // + the rest tucked away.
+            //
+            // Primary — "Add candidate" (the single most-common move).
+            // Secondary — Assign/Reassign (ownership) + Edit.
+            // Overflow — Add outsourced · Run matching · Start
+            //           advertisement · Set reminder · Close requisition.
+            <RecordHeaderActions
+              primary={
+                <AddCandidateDialog
+                  requisitionId={id}
+                  requisitionTitle={requisition.title}
+                  persons={allPersons}
+                />
+              }
+              secondary={[
+                <AssignToMeButton
+                  key="assign"
+                  entity="requisition"
+                  id={id}
+                  currentUserId={session.user.id}
+                  currentAssignedUserId={requisition.assignedUserId}
+                  canReassign={session.user.isOwner}
+                />,
+                <ReassignButton
+                  key="reassign"
+                  entity="requisition"
+                  id={id}
+                  subjectLabel={`requisition ${requisition.title}`}
+                  currentAssignedUserId={requisition.assignedUserId}
+                  currentAssignedName={currentOwner?.fullName ?? null}
+                  staffUsers={staffUsers.map((u) => ({
+                    id: u.id,
+                    fullName: u.fullName,
+                    email: u.email,
+                  }))}
+                  canReassign={session.user.isOwner}
+                />,
+                <RequisitionDialog
+                  key="edit"
+                  employers={employers}
+                  occupations={occupationList}
+                  currencies={currencies}
+                  initial={requisition}
+                  trigger={
+                    <Button size="sm" variant="outline">
+                      <Pencil className="mr-1.5 size-4" /> Edit
+                    </Button>
+                  }
+                />,
+              ]}
+              overflow={[
+                <AddOutsourcedCandidateDialog
+                  key="outsourced"
+                  requisitionId={id}
+                  requisitionTitle={requisition.title}
+                />,
+                <RunMatchingButton key="matching" requisitionId={id} />,
+                <Link
+                  key="advertisement"
+                  href={`/campaigns?requisitionId=${id}`}
+                  className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                >
+                  <Megaphone className="mr-1.5 size-4" aria-hidden /> Start advertisement
+                </Link>,
+                <SetRequisitionReminderDialog
+                  key="reminder"
+                  requisitionId={id}
+                  requisitionTitle={requisition.title}
+                  currentUserId={session.user.id}
+                />,
+                requisition.status !== 'CLOSED' && requisition.status !== 'CANCELLED' && (
+                  <CloseRequisitionButton key="close" requisitionId={id} />
+                ),
+              ]}
+            />
           }
         />
       </FadeUp>

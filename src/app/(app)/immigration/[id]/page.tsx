@@ -13,11 +13,14 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
+import { FinancialSummaryCard } from '@/components/billing/financial-summary-card';
 import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { NextActionCard } from '@/components/next-action-card';
+import { OwnerAvatar } from '@/components/owner-avatar';
 import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
+import { RecordHeaderActions } from '@/components/record-header-actions';
 import { RelatedWorkPanel } from '@/components/related-work-panel';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,6 +44,7 @@ import { fetchPersonDetail } from '@/modules/persons/detail';
 import { fetchStaffUserOptions } from '@/modules/users/service';
 import { ArchiveCaseButton } from './archive-button';
 import { CaseDocumentsSection } from './case-documents-section';
+import { CasePhaseHero } from './case-phase-hero';
 import { CloseCaseButton, RecordDecisionButtons, SetReminderDialog } from './case-quick-actions';
 import { CaseTabs } from './case-tabs';
 import { CaseTasksSection } from './tasks-section';
@@ -104,6 +108,14 @@ export default async function ImmigrationCaseDetail({
 
   const metaStrip = (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+        Owner:{' '}
+        <OwnerAvatar
+          user={currentOwner ? { id: currentOwner.id, fullName: currentOwner.fullName } : null}
+          size="sm"
+          showName
+        />
+      </span>
       <Badge variant={statusTone(c.status)} className="rounded-full">
         {CASE_STAGE_LABEL[c.status]}
       </Badge>
@@ -217,6 +229,29 @@ export default async function ImmigrationCaseDetail({
       </FadeUp>
 
       <div className="space-y-6 lg:col-span-2">
+        {/* Phase 1 blueprint §3.1 — hero phase card. The one clear
+            "what's happening right now" story at the top of the main
+            content area. Everything else below is secondary context. */}
+        <FadeUp delay={0.06}>
+          <CasePhaseHero
+            beneficiaryName={c.beneficiaryName}
+            input={{
+              status: c.status,
+              submittedAt: c.submittedAt,
+              decisionAt: c.decisionAt,
+              expiresOn: c.expiresOn,
+              reminderOn: c.reminderOn,
+              openedAt: c.createdAt,
+              requirements: {
+                total: requirements.length,
+                missingMandatory: requirements.filter(
+                  (r) => r.status === 'MISSING' && r.isMandatory === 'MANDATORY',
+                ).length,
+                totalMandatory: requirements.filter((r) => r.isMandatory === 'MANDATORY').length,
+              },
+            }}
+          />
+        </FadeUp>
         {beneficiaryDetail && (
           <FadeUp delay={0.08}>
             <RelatedWorkPanel
@@ -297,7 +332,10 @@ export default async function ImmigrationCaseDetail({
                 contextLinks={{ immigrationCaseId: id }}
               />
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {caseBilling.invoices.length > 0 && (
+                <FinancialSummaryCard invoices={caseBilling.invoices} />
+              )}
               {caseBilling.invoices.length > 0 || caseBilling.receipts.length > 0 ? (
                 <BillingSection
                   profileHref={`/candidates/${c.beneficiaryPersonId}`}
@@ -337,7 +375,7 @@ export default async function ImmigrationCaseDetail({
   );
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={PlaneTakeoff}
@@ -348,40 +386,50 @@ export default async function ImmigrationCaseDetail({
           ]}
           meta={metaStrip}
           action={
-            <div className="flex items-center gap-2">
-              <AssignToMeButton
-                entity="immigration_case"
-                id={id}
-                currentUserId={session.user.id}
-                currentAssignedUserId={c.assignedUserId}
-              />
-              <ReassignButton
-                entity="immigration_case"
-                id={id}
-                subjectLabel={`case for ${c.beneficiaryName}`}
-                currentAssignedUserId={c.assignedUserId}
-                currentAssignedName={currentOwner?.fullName ?? null}
-                staffUsers={staffUsers.map((u) => ({
-                  id: u.id,
-                  fullName: u.fullName,
-                  email: u.email,
-                }))}
-              />
-              {/* Session 5: state-aware verbs. Previously the operator
-                  had to open Edit → change one field → save. These make
-                  the next action one click. Each one only renders in
-                  the state where it makes sense. */}
-              {c.status !== 'CLOSED' && (
-                <SetReminderDialog caseId={id} currentReminderOn={c.reminderOn} />
-              )}
-              {(c.status === 'SUBMITTED' || c.status === 'UNDER_AUTHORITY_REVIEW') && (
-                <RecordDecisionButtons caseId={id} />
-              )}
-              {(c.status === 'APPROVED' || c.status === 'REJECTED') && (
-                <CloseCaseButton caseId={id} />
-              )}
-              <ArchiveCaseButton caseId={id} beneficiaryName={c.beneficiaryName} />
-            </div>
+            // Phase 2 blueprint §1.2 — primary / secondary / overflow.
+            //
+            // Primary — null here; the NextActionCard carries the "do
+            //           this next" story for immigration cases.
+            // Secondary — Assign/Reassign + state-exclusive next verb.
+            // Overflow — Archive case.
+            <RecordHeaderActions
+              secondary={[
+                <AssignToMeButton
+                  key="assign"
+                  entity="immigration_case"
+                  id={id}
+                  currentUserId={session.user.id}
+                  currentAssignedUserId={c.assignedUserId}
+                  canReassign={session.user.isOwner}
+                />,
+                <ReassignButton
+                  key="reassign"
+                  entity="immigration_case"
+                  id={id}
+                  subjectLabel={`case for ${c.beneficiaryName}`}
+                  currentAssignedUserId={c.assignedUserId}
+                  currentAssignedName={currentOwner?.fullName ?? null}
+                  staffUsers={staffUsers.map((u) => ({
+                    id: u.id,
+                    fullName: u.fullName,
+                    email: u.email,
+                  }))}
+                  canReassign={session.user.isOwner}
+                />,
+                c.status !== 'CLOSED' && (
+                  <SetReminderDialog key="reminder" caseId={id} currentReminderOn={c.reminderOn} />
+                ),
+                (c.status === 'SUBMITTED' || c.status === 'UNDER_AUTHORITY_REVIEW') && (
+                  <RecordDecisionButtons key="decision" caseId={id} />
+                ),
+                (c.status === 'APPROVED' || c.status === 'REJECTED') && (
+                  <CloseCaseButton key="close" caseId={id} />
+                ),
+              ]}
+              overflow={[
+                <ArchiveCaseButton key="archive" caseId={id} beneficiaryName={c.beneficiaryName} />,
+              ]}
+            />
           }
         />
       </FadeUp>

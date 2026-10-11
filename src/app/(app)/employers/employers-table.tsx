@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import { OwnerAvatar } from '@/components/owner-avatar';
 import { PromptDialog } from '@/components/prompt-dialog';
 import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,18 @@ import { statusTone } from '@/lib/ui/status-tone';
 import { archiveEmployerAction } from '@/modules/employers/actions';
 import { EmployerDialog } from './employer-dialog';
 
-export function EmployersTable({ employers }: { employers: Employer[] }) {
+export function EmployersTable({
+  employers,
+  appVatRegistered = true,
+  owners = [],
+}: {
+  employers: Employer[];
+  appVatRegistered?: boolean;
+  /** Lookup list for rendering owner avatars inline. Keep this small —
+   *  just staff users; a per-row id-only field is useless on screen. */
+  owners?: Array<{ id: string; fullName: string }>;
+}) {
+  const ownerMap = new Map(owners.map((o) => [o.id, o]));
   const [archiveTarget, setArchiveTarget] = useState<Employer | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -78,6 +90,20 @@ export function EmployersTable({ employers }: { employers: Employer[] }) {
       ),
     },
     {
+      header: 'Owner',
+      id: 'owner',
+      size: 170,
+      cell: ({ row }) => (
+        <OwnerAvatar
+          user={
+            row.original.assignedUserId ? (ownerMap.get(row.original.assignedUserId) ?? null) : null
+          }
+          size="sm"
+          showName
+        />
+      ),
+    },
+    {
       header: 'Added',
       accessorKey: 'createdAt',
       size: 170,
@@ -91,6 +117,7 @@ export function EmployersTable({ employers }: { employers: Employer[] }) {
         <div className="flex items-center justify-end gap-2">
           <EmployerDialog
             initial={row.original}
+            appVatRegistered={appVatRegistered}
             trigger={
               <Button variant="ghost" size="icon" aria-label={`Edit ${row.original.legalName}`}>
                 <Pencil className="size-3.5" />

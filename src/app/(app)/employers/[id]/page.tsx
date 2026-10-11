@@ -15,11 +15,16 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
+import { FinancialSummaryCard } from '@/components/billing/financial-summary-card';
 import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
+import { CampaignsPanel } from '@/components/campaigns-panel';
 import { EmptyState } from '@/components/empty-state';
+import { ImmigrationCasesPanel } from '@/components/immigration-cases-panel';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { NextActionCard } from '@/components/next-action-card';
+import { OwnerAvatar } from '@/components/owner-avatar';
 import { PageHeader } from '@/components/page-header';
+import { RecordHeaderActions } from '@/components/record-header-actions';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,15 +36,20 @@ import { persons } from '@/lib/db/schema/persons';
 import { placements } from '@/lib/db/schema/recruitment';
 import { statusTone } from '@/lib/ui/status-tone';
 import { fetchEmployerBillingHistory, fetchInvoiceableServicesFor } from '@/modules/billing/read';
+import { fetchCampaignsForEmployer } from '@/modules/campaigns/service';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { computeEmployerNextAction } from '@/modules/employers/next-action';
 import { fetchEmployer, fetchEmployerContacts, fetchEmployers } from '@/modules/employers/service';
 import { fetchApplicationTypes } from '@/modules/immigration/application-types';
+import { listCasesForEmployer } from '@/modules/immigration/service';
 import { fetchPersons } from '@/modules/persons/service';
 import { fetchRequisitionsForEmployer } from '@/modules/requisitions/service';
+import { fetchAppSettings } from '@/modules/settings/service';
+import { fetchStaffUserOptions } from '@/modules/users/service';
 import { CaseDialog } from '../../immigration/case-dialog';
 import { RequisitionDialog } from '../../requisitions/requisition-dialog';
 import { EmployerDialog } from '../employer-dialog';
+import { CompleteOnboardingButton } from './complete-onboarding-button';
 import { ContactDialog } from './contact-dialog';
 
 export const dynamic = 'force-dynamic';
@@ -82,6 +92,24 @@ export default async function EmployerDetail({
     fetchPersons(),
     fetchApplicationTypes(),
   ]);
+  // Session 11: immigration cases where this employer sponsors someone.
+  // Rendered as a dedicated panel so recruitment + immigration status
+  // for the same employer are visible in one place.
+  const [employerImmigrationCases, employerCampaigns, appSettings, staffUsers] = await Promise.all([
+    listCasesForEmployer(id),
+    // Session 23 (blueprint §6.1) — ads tied to this employer via the
+    // campaigns → requisitions → employer chain.
+    fetchCampaignsForEmployer(id),
+    // Session 26 (blueprint §8.2) — app-wide VAT-registered flag used
+    // to disable the VAT treatment picker in the edit dialog.
+    fetchAppSettings(),
+    // Session 31 (blueprint §13) — resolve the owner id into a name/
+    // avatar for the header. Cheap list fetch — staff is small.
+    fetchStaffUserOptions(),
+  ]);
+  const assignedOwner = employer.assignedUserId
+    ? (staffUsers.find((u) => u.id === employer.assignedUserId) ?? null)
+    : null;
 
   // Pull the employer's placements + their latest fee invoice in two
   // small queries. The state machine then decides whether the next step
@@ -170,11 +198,36 @@ export default async function EmployerDetail({
   const totalFilled = requisitions.reduce((sum, r) => sum + r.positionsFilled, 0);
   const openReqs = requisitions.filter((r) => r.status !== 'CLOSED').length;
 
+  // Phase 1 blueprint §4.1 — onboarding completeness signal. Shows when
+  // the operator hasn't yet marked onboarding done. "Primary contact"
+  // and "billing email" are the two hard requirements; the banner
+  // doesn't block the invoice flow but it gets loud about the risk.
+  const hasPrimaryContact = contacts.some((c) => c.isPrimary);
+  const hasBillingEmail = Boolean(employer.billingEmail);
+  const onboardingComplete = Boolean(employer.onboardingCompletedAt);
+  const canCompleteOnboarding =
+    !onboardingComplete &&
+    hasPrimaryContact &&
+    (employer.vatTreatment !== 'STANDARD' || hasBillingEmail);
+
   const metaStrip = (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+        Owner:{' '}
+        <OwnerAvatar
+          user={assignedOwner ? { id: assignedOwner.id, fullName: assignedOwner.fullName } : null}
+          size="sm"
+          showName
+        />
+      </span>
       <Badge variant={statusTone(employer.relationshipStatus)} className="rounded-full">
         {employer.relationshipStatus.replace(/_/g, ' ')}
       </Badge>
+      {!onboardingComplete && (
+        <Badge variant="warning" className="rounded-full">
+          Onboarding incomplete
+        </Badge>
+      )}
       {employer.industry && (
         <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground">
           <Briefcase className="size-3" aria-hidden />
@@ -210,7 +263,7 @@ export default async function EmployerDetail({
   );
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={Building2}
@@ -219,71 +272,87 @@ export default async function EmployerDetail({
           breadcrumbs={[{ label: 'Employers', href: '/employers' }, { label: employer.legalName }]}
           meta={metaStrip}
           action={
-            <div className="flex flex-wrap justify-end gap-2">
-              <AssignToMeButton
-                entity="employer"
-                id={employer.id}
-                currentUserId={session.user.id}
-                currentAssignedUserId={employer.assignedUserId}
-              />
-              <EmployerDialog
-                initial={employer}
-                trigger={
-                  <Button size="sm" variant="outline">
-                    <Pencil className="mr-1.5 size-4" /> Edit
-                  </Button>
-                }
-              />
-              <GenerateInvoiceDialog
-                payerMode="EMPLOYER"
-                payerId={employer.id}
-                payerLabel={employer.legalName}
-                services={invoiceableServices}
-                triggerVariant="outline"
-                triggerLabel={raisePlacement ? 'Raise placement fee invoice' : 'Generate invoice'}
-                contextLinks={{
-                  placementId: raisePlacement || undefined,
-                  jobRequisitionId: raiseRequisition || undefined,
-                }}
-                defaultOpen={Boolean(raisePlacement)}
-              />
-              {/* Session 5: distinct "Raise placement fee" entry point that
-                  was previously only reachable by landing on this page
-                  via ?raisePlacement=…. Only shown when there's actually
-                  a placement that needs billing. */}
-              {firstRaisablePlacement && !raisePlacement && (
-                <Link
-                  href={`/employers/${employer.id}?raisePlacement=${firstRaisablePlacement.id}`}
-                  className={buttonVariants({ size: 'sm', variant: 'outline' })}
-                >
-                  <Coins className="mr-1.5 size-4" aria-hidden /> Raise placement fee
-                </Link>
-              )}
-              {/* Session 5: start an immigration case directly from the
-                  employer — sponsor is pre-filled to this employer. */}
-              <CaseDialog
-                persons={allPersons}
-                employers={employersAll}
-                applicationTypes={allApplicationTypes}
-                prefill={{ sponsorEmployerId: employer.id }}
-                trigger={
-                  <Button size="sm" variant="outline">
-                    <PlaneTakeoff className="mr-1.5 size-4" /> Start immigration case
-                  </Button>
-                }
-              />
-              <RequisitionDialog
-                employers={employersAll}
-                currencies={currencies}
-                occupations={occupationList}
-                defaultEmployerId={employer.id}
-                trigger={
-                  <Button size="sm">
-                    <Plus className="mr-1.5 size-4" /> New requisition
-                  </Button>
-                }
-              />
-            </div>
+            // Phase 2 blueprint §1.2 — primary / secondary / overflow.
+            //
+            // Primary — the most common growth move: "New requisition".
+            // Secondary — Assign to me (ownership) + Edit + conditional
+            //             "Raise placement fee" when there's one pending.
+            // Overflow — Generate invoice + Start immigration case.
+            <RecordHeaderActions
+              primary={
+                <RequisitionDialog
+                  employers={employersAll}
+                  currencies={currencies}
+                  occupations={occupationList}
+                  defaultEmployerId={employer.id}
+                  trigger={
+                    <Button size="sm">
+                      <Plus className="mr-1.5 size-4" /> New requisition
+                    </Button>
+                  }
+                />
+              }
+              secondary={[
+                <AssignToMeButton
+                  key="assign"
+                  entity="employer"
+                  id={employer.id}
+                  currentUserId={session.user.id}
+                  currentAssignedUserId={employer.assignedUserId}
+                  canReassign={session.user.isOwner}
+                />,
+                <EmployerDialog
+                  key="edit"
+                  initial={employer}
+                  appVatRegistered={appSettings.vatRegistered}
+                  trigger={
+                    <Button size="sm" variant="outline">
+                      <Pencil className="mr-1.5 size-4" /> Edit
+                    </Button>
+                  }
+                />,
+                firstRaisablePlacement && !raisePlacement && (
+                  <Link
+                    key="raise-fee"
+                    href={`/employers/${employer.id}?raisePlacement=${firstRaisablePlacement.id}`}
+                    className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                  >
+                    <Coins className="mr-1.5 size-4" aria-hidden /> Raise placement fee
+                  </Link>
+                ),
+              ]}
+              overflow={[
+                <GenerateInvoiceDialog
+                  key="generate-invoice"
+                  payerMode="EMPLOYER"
+                  payerId={employer.id}
+                  payerLabel={employer.legalName}
+                  services={invoiceableServices}
+                  triggerVariant="outline"
+                  triggerLabel={raisePlacement ? 'Raise placement fee invoice' : 'Generate invoice'}
+                  contextLinks={{
+                    placementId: raisePlacement || undefined,
+                    jobRequisitionId: raiseRequisition || undefined,
+                  }}
+                  defaultOpen={Boolean(raisePlacement)}
+                />,
+                <CaseDialog
+                  key="immigration-case"
+                  persons={allPersons}
+                  employers={employersAll}
+                  applicationTypes={allApplicationTypes}
+                  prefill={{ sponsorEmployerId: employer.id }}
+                  trigger={
+                    <button
+                      type="button"
+                      className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                    >
+                      <PlaneTakeoff className="size-4" /> Start immigration case
+                    </button>
+                  }
+                />,
+              ]}
+            />
           }
         />
       </FadeUp>
@@ -298,6 +367,37 @@ export default async function EmployerDetail({
             primary={nextAction.primary}
             className="-mt-2 mb-6"
           />
+        </FadeUp>
+      )}
+
+      {/* Phase 1 blueprint §4.1 — onboarding completeness banner. Loud
+          but not blocking: the operator can still raise invoices etc,
+          but the banner explains what's missing and offers the one
+          button that marks the record done. */}
+      {!onboardingComplete && (
+        <FadeUp delay={0.025}>
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 dark:border-amber-900/60 dark:bg-amber-950/40">
+            <div className="min-w-0 flex-1 space-y-1 text-xs">
+              <p className="font-semibold text-amber-900 dark:text-amber-100">
+                Onboarding incomplete
+              </p>
+              <ul className="list-disc space-y-0.5 pl-5 text-amber-900/90 dark:text-amber-100/90">
+                {!hasPrimaryContact && (
+                  <li>Add a primary contact under the Contacts section below.</li>
+                )}
+                {employer.vatTreatment === 'STANDARD' && !hasBillingEmail && (
+                  <li>Add an invoice email under Edit → Billing & VAT.</li>
+                )}
+                {!employer.addressLine1 && (
+                  <li>Add a street address (recommended for printable invoices).</li>
+                )}
+                {hasPrimaryContact && (employer.vatTreatment !== 'STANDARD' || hasBillingEmail) && (
+                  <li>Review the record once more, then mark onboarding complete.</li>
+                )}
+              </ul>
+            </div>
+            {canCompleteOnboarding && <CompleteOnboardingButton employerId={employer.id} />}
+          </div>
         </FadeUp>
       )}
 
@@ -432,6 +532,26 @@ export default async function EmployerDetail({
           </CardContent>
         </Card>
       </FadeUp>
+
+      {/* Session 11: Immigration cases where this employer is the sponsor.
+          Sits between Requisitions and Billing — recruitment outcome,
+          immigration follow-through, then the money. */}
+      <FadeUp delay={0.13} className="mb-8">
+        <ImmigrationCasesPanel cases={employerImmigrationCases} />
+      </FadeUp>
+
+      {/* Session 23 (blueprint §6.1) — campaigns tied to this client's
+          requisitions. Operators can now see at a glance whether a
+          client has an advertising campaign running. */}
+      <FadeUp delay={0.14} className="mb-8">
+        <CampaignsPanel campaigns={employerCampaigns} scope="employer" />
+      </FadeUp>
+
+      {billingHistory.invoices.length > 0 && (
+        <FadeUp delay={0.13} className="mb-4">
+          <FinancialSummaryCard invoices={billingHistory.invoices} />
+        </FadeUp>
+      )}
 
       <FadeUp delay={0.15} className="mb-8">
         <Card>

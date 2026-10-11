@@ -16,13 +16,14 @@ import {
 } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { Badge } from '@/components/ui/badge';
-import { requirePermission } from '@/lib/auth/session';
+import { requireInternalStaff, requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchAgingReport } from '@/modules/billing/aging';
 import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchRecentActivity } from '@/modules/dashboard/activity';
 import { fetchDashboardDrilldowns } from '@/modules/dashboard/drilldowns';
+import { fetchMyWorkCounts } from '@/modules/dashboard/my-work';
 import { fetchDashboardPipelines } from '@/modules/dashboard/pipelines';
 import { fetchDashboardRevenue, fetchRevenueTrendBySource } from '@/modules/dashboard/revenue';
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
@@ -35,6 +36,7 @@ import { AgingSection } from './aging-section';
 import { AttentionCard } from './attention-card';
 import { DashboardDrilldownsSection } from './drilldowns-section';
 import { FinanceKpiCard } from './finance-kpi-card';
+import { MyWorkSection } from './my-work-section';
 import { PipelineFunnel } from './pipeline-funnel';
 import { QuickActionsBar } from './quick-actions-bar';
 import { RevenueBusinessGrid } from './revenue-business-chart';
@@ -51,6 +53,7 @@ export default async function DashboardPage({
   searchParams: Promise<{ created?: string; from?: string; to?: string }>;
 }) {
   await requirePermission('main', 'overview', 'view');
+  const session = await requireInternalStaff();
   const { created, from, to } = await searchParams;
   const range = parseDateRangeParams({ created, from, to });
   const [
@@ -67,6 +70,7 @@ export default async function DashboardPage({
     settings,
     invoiceableServices,
     currencies,
+    myWork,
   ] = await Promise.all([
     fetchDashboardMetrics(),
     fetchDashboardDrilldowns(),
@@ -84,12 +88,13 @@ export default async function DashboardPage({
     // renders the same set of pickable services.
     fetchInvoiceableServicesFor('PERSON'),
     fetchCurrencies(),
+    fetchMyWorkCounts(),
   ]);
 
   const today = new Date();
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       {/* ─── Header ───────────────────────────────────────────────
          Mobile: title stacks above the CreateLead button so the long
          "<brand> — today" heading isn't squeezed. From `sm:` upward
@@ -115,6 +120,14 @@ export default async function DashboardPage({
             </p>
           </div>
         </div>
+      </FadeUp>
+
+      {/* ─── My Work — Phase 1 blueprint §12.1 ────────────────────
+         The first thing every user sees: counts for everything
+         assigned to them, with deep links to the ?assigned=me
+         filtered lists. Workspace-wide stats drop below the fold. */}
+      <FadeUp delay={0.02}>
+        <MyWorkSection counts={myWork} userName={session.user.name} />
       </FadeUp>
 
       {/* ─── Quick actions ──────────────────────────────────────────

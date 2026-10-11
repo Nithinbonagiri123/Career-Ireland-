@@ -15,6 +15,7 @@ import {
 import Link from 'next/link';
 
 import { MetaList, MetaRow } from '@/components/meta-row';
+import { OwnerAvatar } from '@/components/owner-avatar';
 import { PipelineChip } from '@/components/pipeline-chip';
 import { RingCounter } from '@/components/ring-counter';
 import { StatusPill, type StatusTone } from '@/components/status-pill';
@@ -86,7 +87,15 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
           <MetaRow icon={<Phone className="text-pipeline-apply" />}>{candidate.phone}</MetaRow>
         )}
         <MetaRow icon={<UserCheck className="text-pipeline-review" />}>
-          {candidate.assignedUserName ?? 'Unassigned'}
+          <OwnerAvatar
+            user={
+              candidate.assignedUserId && candidate.assignedUserName
+                ? { id: candidate.assignedUserId, fullName: candidate.assignedUserName }
+                : null
+            }
+            size="sm"
+            showName
+          />
         </MetaRow>
         <MetaRow icon={<Briefcase className="text-pipeline-interview" />}>
           <time dateTime={new Date(candidate.activatedAt).toISOString()} title={activatedAbsolute}>
@@ -95,11 +104,14 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
         </MetaRow>
       </MetaList>
 
-      {/* Tags */}
-      <div className="flex flex-wrap gap-1.5 px-4 pt-3">
-        <StatusPill tone={lifecycle.tone}>{lifecycle.label}</StatusPill>
-        <StatusPill tone={availability.tone}>{availability.label.toLowerCase()}</StatusPill>
-      </div>
+      {/* Tags — Session 9: drop the duplicate availability chip (already
+          shown in the header) and only surface the lifecycle when it's
+          worth noticing (anything other than ACTIVE). */}
+      {candidate.lifecycleStatus !== 'ACTIVE' && (
+        <div className="flex flex-wrap gap-1.5 px-4 pt-3">
+          <StatusPill tone={lifecycle.tone}>{lifecycle.label}</StatusPill>
+        </div>
+      )}
 
       {/* Counters — placeholder cells until we wire per-candidate stats
           (applications, shortlists, interviews). Ring keeps parity with

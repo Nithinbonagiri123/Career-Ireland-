@@ -16,6 +16,7 @@ import {
   archiveTask,
   createCommunication,
   createTask,
+  seedRequisitionWorkLog,
   updateCommunication,
   updateTask,
   updateTaskStatus,
@@ -34,6 +35,15 @@ export async function createCommunicationAction(input: CreateCommunicationInput)
 export async function createTaskAction(input: CreateTaskInput) {
   const r = await toActionResult(() => createTask(input));
   if (r.ok) rev();
+  return r;
+}
+
+export async function seedRequisitionWorkLogAction(requisitionId: string) {
+  const r = await toActionResult(() => seedRequisitionWorkLog(requisitionId));
+  if (r.ok) {
+    rev();
+    revalidatePath(`/requisitions/${requisitionId}`);
+  }
   return r;
 }
 export async function updateTaskStatusAction(

@@ -16,6 +16,7 @@ import {
 import Link from 'next/link';
 
 import { MetaList, MetaRow } from '@/components/meta-row';
+import { OwnerAvatar } from '@/components/owner-avatar';
 import { PipelineChip } from '@/components/pipeline-chip';
 import { RingCounter } from '@/components/ring-counter';
 import { StatusPill, type StatusTone } from '@/components/status-pill';
@@ -98,7 +99,18 @@ export function RequisitionCard({ requisition }: { requisition: RequisitionCardR
           {requisition.positionsFilled} of {requisition.positionsRequired} filled
         </MetaRow>
         <MetaRow icon={<UserCheck className="text-pipeline-review" />}>
-          Owner: {requisition.ownerName ?? 'Unassigned'}
+          <span className="inline-flex items-center gap-1.5">
+            Owner:{' '}
+            <OwnerAvatar
+              user={
+                requisition.assignedUserId && requisition.ownerName
+                  ? { id: requisition.assignedUserId, fullName: requisition.ownerName }
+                  : null
+              }
+              size="sm"
+              showName
+            />
+          </span>
         </MetaRow>
         {targetLabel && (
           <MetaRow icon={<Calendar className="text-pipeline-interview" />}>{targetLabel}</MetaRow>

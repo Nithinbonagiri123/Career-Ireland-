@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import { OwnerAvatar } from '@/components/owner-avatar';
 import { PromptDialog } from '@/components/prompt-dialog';
 import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
@@ -47,34 +48,40 @@ const COLUMNS: ColumnDef<CandidateListRow>[] = [
     ),
   },
   {
-    header: 'Availability',
+    header: 'Status',
     accessorKey: 'availabilityStatus',
-    size: 130,
-    cell: ({ row }) => (
-      <span className="inline-flex items-center gap-1.5 text-xs">
-        <StatusDot tone={statusTone(row.original.availabilityStatus)} />
-        {AVAILABILITY_LABEL[row.original.availabilityStatus]}
-      </span>
-    ),
+    size: 170,
+    cell: ({ row }) => {
+      const lifecycle = row.original.lifecycleStatus;
+      return (
+        <span className="inline-flex items-center gap-2 text-xs" title={`Lifecycle: ${lifecycle}`}>
+          <span className="inline-flex items-center gap-1.5">
+            <StatusDot tone={statusTone(row.original.availabilityStatus)} />
+            {AVAILABILITY_LABEL[row.original.availabilityStatus]}
+          </span>
+          {lifecycle !== 'ACTIVE' && (
+            <Badge variant={statusTone(lifecycle)} className="rounded-full text-[10px]">
+              {lifecycle}
+            </Badge>
+          )}
+        </span>
+      );
+    },
   },
   {
-    header: 'Lifecycle',
-    accessorKey: 'lifecycleStatus',
-    size: 110,
-    cell: ({ row }) => (
-      <Badge variant={statusTone(row.original.lifecycleStatus)} className="rounded-full">
-        {row.original.lifecycleStatus}
-      </Badge>
-    ),
-  },
-  {
-    header: 'Assigned',
+    header: 'Owner',
     accessorKey: 'assignedUserName',
-    size: 140,
+    size: 160,
     cell: ({ row }) => (
-      <span className="text-xs text-muted-foreground">
-        {row.original.assignedUserName ?? 'Unassigned'}
-      </span>
+      <OwnerAvatar
+        user={
+          row.original.assignedUserId && row.original.assignedUserName
+            ? { id: row.original.assignedUserId, fullName: row.original.assignedUserName }
+            : null
+        }
+        size="sm"
+        showName
+      />
     ),
   },
   {

@@ -1,8 +1,9 @@
 'use client';
 
 import { format, formatDistanceToNowStrict } from 'date-fns';
-import { Building2, CalendarDays, Filter, Grid3x3, UserCircle2 } from 'lucide-react';
+import { Building2, CalendarDays, Filter, Grid3x3 } from 'lucide-react';
 import Link from 'next/link';
+import { OwnerAvatar } from '@/components/owner-avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { statusTone } from '@/lib/ui/status-tone';
@@ -39,12 +40,16 @@ export function CaseCard({ case: c }: { case: CaseListRow }) {
 
           <div className="mt-auto space-y-1.5 text-xs">
             <div className="flex items-center gap-1.5">
-              <UserCircle2 className="size-3.5 shrink-0 text-muted-foreground" />
-              <span
-                className={cn('truncate font-medium', !c.ownerName && 'text-muted-foreground/60')}
-              >
-                Owner: {c.ownerName ?? 'Unassigned'}
-              </span>
+              <span className="text-muted-foreground">Owner:</span>
+              <OwnerAvatar
+                user={
+                  c.assignedUserId && c.ownerName
+                    ? { id: c.assignedUserId, fullName: c.ownerName }
+                    : null
+                }
+                size="sm"
+                showName
+              />
             </div>
             {c.sponsorName && (
               <div className="flex items-center gap-1.5 text-muted-foreground">

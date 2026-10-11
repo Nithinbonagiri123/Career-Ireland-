@@ -61,6 +61,44 @@ export async function fetchCampaigns(createdRange?: DateRange): Promise<Campaign
   return rows.map((r) => ({ ...r.c, requisitionTitle: r.title }));
 }
 
+/**
+ * Phase 2 blueprint §6.1 — campaigns scoped to a single requisition.
+ * Powers the "Advertising" panel on the requisition detail page.
+ */
+export async function fetchCampaignsForRequisition(
+  requisitionId: string,
+): Promise<CampaignListRow[]> {
+  await requireInternalStaff();
+  const rows = await db
+    .select({ c: recruitmentCampaigns, title: jobRequisitions.title })
+    .from(recruitmentCampaigns)
+    .leftJoin(jobRequisitions, eq(jobRequisitions.id, recruitmentCampaigns.jobRequisitionId))
+    .where(
+      and(
+        eq(recruitmentCampaigns.jobRequisitionId, requisitionId),
+        isNull(recruitmentCampaigns.archivedAt),
+      ),
+    )
+    .orderBy(desc(recruitmentCampaigns.createdAt));
+  return rows.map((r) => ({ ...r.c, requisitionTitle: r.title }));
+}
+
+/**
+ * Phase 2 blueprint §6.1 — campaigns scoped to an employer, via the
+ * campaigns → jobRequisitions → employer back-chain. Powers the
+ * "Advertising" panel on the employer detail page.
+ */
+export async function fetchCampaignsForEmployer(employerId: string): Promise<CampaignListRow[]> {
+  await requireInternalStaff();
+  const rows = await db
+    .select({ c: recruitmentCampaigns, title: jobRequisitions.title })
+    .from(recruitmentCampaigns)
+    .innerJoin(jobRequisitions, eq(jobRequisitions.id, recruitmentCampaigns.jobRequisitionId))
+    .where(and(eq(jobRequisitions.employerId, employerId), isNull(recruitmentCampaigns.archivedAt)))
+    .orderBy(desc(recruitmentCampaigns.createdAt));
+  return rows.map((r) => ({ ...r.c, requisitionTitle: r.title }));
+}
+
 export async function upsertCampaign(input: UpsertCampaignInput): Promise<RecruitmentCampaign> {
   const session = await requireInternalStaff();
   const parsed = UpsertCampaignSchema.safeParse(input);

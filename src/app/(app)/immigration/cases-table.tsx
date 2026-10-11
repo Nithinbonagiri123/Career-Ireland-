@@ -3,6 +3,7 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { useRouter } from 'next/navigation';
 import { DataTable } from '@/components/data-table/data-table';
+import { OwnerAvatar } from '@/components/owner-avatar';
 import { Badge } from '@/components/ui/badge';
 import { statusTone } from '@/lib/ui/status-tone';
 import { CASE_STAGE_LABEL, CASE_TYPE_LABEL } from '@/modules/immigration/labels';
@@ -43,9 +44,15 @@ const columns: ColumnDef<CaseListRow>[] = [
     accessorKey: 'ownerName',
     size: 160,
     cell: ({ row }) => (
-      <span className={row.original.ownerName ? 'text-xs' : 'text-xs text-muted-foreground/60'}>
-        {row.original.ownerName ?? 'Unassigned'}
-      </span>
+      <OwnerAvatar
+        user={
+          row.original.assignedUserId && row.original.ownerName
+            ? { id: row.original.assignedUserId, fullName: row.original.ownerName }
+            : null
+        }
+        size="sm"
+        showName
+      />
     ),
   },
   {

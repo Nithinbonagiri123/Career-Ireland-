@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import { OwnerAvatar } from '@/components/owner-avatar';
 import { PromptDialog } from '@/components/prompt-dialog';
 import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +22,14 @@ import { statusTone } from '@/lib/ui/status-tone';
 import { archiveRequisitionAction } from '@/modules/requisitions/actions';
 import type { RequisitionListRow } from '@/modules/requisitions/service';
 
-export function RequisitionsTable({ requisitions }: { requisitions: RequisitionListRow[] }) {
+export function RequisitionsTable({
+  requisitions,
+  owners = [],
+}: {
+  requisitions: RequisitionListRow[];
+  owners?: Array<{ id: string; fullName: string }>;
+}) {
+  const ownerMap = useMemo(() => new Map(owners.map((o) => [o.id, o])), [owners]);
   const [archiveTarget, setArchiveTarget] = useState<RequisitionListRow | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -85,6 +93,22 @@ export function RequisitionsTable({ requisitions }: { requisitions: RequisitionL
         ),
       },
       {
+        header: 'Owner',
+        id: 'owner',
+        size: 160,
+        cell: ({ row }) => (
+          <OwnerAvatar
+            user={
+              row.original.assignedUserId
+                ? (ownerMap.get(row.original.assignedUserId) ?? null)
+                : null
+            }
+            size="sm"
+            showName
+          />
+        ),
+      },
+      {
         header: 'Created',
         accessorKey: 'createdAt',
         size: 170,
@@ -128,7 +152,7 @@ export function RequisitionsTable({ requisitions }: { requisitions: RequisitionL
         },
       },
     ],
-    [busyId],
+    [busyId, ownerMap],
   );
 
   return (

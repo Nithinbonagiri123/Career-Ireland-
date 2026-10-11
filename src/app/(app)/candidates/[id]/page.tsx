@@ -17,13 +17,16 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
+import { FinancialSummaryCard } from '@/components/billing/financial-summary-card';
 import { EditPersonDialog } from '@/components/edit-person-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { ImmigrationCasesPanel } from '@/components/immigration-cases-panel';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { NextActionCard } from '@/components/next-action-card';
+import { OwnerAvatar } from '@/components/owner-avatar';
 import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
+import { RecordHeaderActions } from '@/components/record-header-actions';
 import { RelatedWorkPanel } from '@/components/related-work-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -197,15 +200,34 @@ export default async function CandidateDetail({
 
   const metaStrip = (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+        Owner:{' '}
+        <OwnerAvatar
+          user={currentOwner ? { id: currentOwner.id, fullName: currentOwner.fullName } : null}
+          size="sm"
+          showName
+        />
+      </span>
       {candidateProfile && (
         <>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2 py-0.5">
+          {/* Session 9: ONE visible status chip. The chip title attribute
+              reveals the lifecycle on hover so the ADMIN info stays
+              one gesture away without cluttering the strip. If the
+              lifecycle is anything other than ACTIVE (archived or
+              inactive) it's noteworthy, so render it as a second
+              compact badge instead of hiding it. */}
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2 py-0.5"
+            title={`Lifecycle: ${candidateProfile.lifecycleStatus}`}
+          >
             <StatusDot tone={statusTone(candidateProfile.availabilityStatus)} />
             {AVAILABILITY_LABEL[candidateProfile.availabilityStatus]}
           </span>
-          <Badge variant={statusTone(candidateProfile.lifecycleStatus)} className="rounded-full">
-            {candidateProfile.lifecycleStatus}
-          </Badge>
+          {candidateProfile.lifecycleStatus !== 'ACTIVE' && (
+            <Badge variant={statusTone(candidateProfile.lifecycleStatus)} className="rounded-full">
+              {candidateProfile.lifecycleStatus}
+            </Badge>
+          )}
           {candidateProfile.primaryOccupationName && (
             <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground">
               <Briefcase className="size-3" aria-hidden />
@@ -239,21 +261,23 @@ export default async function CandidateDetail({
             {candidateProfile ? (
               <>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Availability</span>
+                  <span className="text-muted-foreground">Status</span>
                   <span className="inline-flex items-center gap-1.5 text-xs">
                     <StatusDot tone={statusTone(candidateProfile.availabilityStatus)} />
                     {AVAILABILITY_LABEL[candidateProfile.availabilityStatus]}
                   </span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Lifecycle</span>
-                  <Badge
-                    variant={statusTone(candidateProfile.lifecycleStatus)}
-                    className="rounded-full text-[10px]"
-                  >
-                    {candidateProfile.lifecycleStatus}
-                  </Badge>
-                </div>
+                {candidateProfile.lifecycleStatus !== 'ACTIVE' && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Lifecycle</span>
+                    <Badge
+                      variant={statusTone(candidateProfile.lifecycleStatus)}
+                      className="rounded-full text-[10px]"
+                    >
+                      {candidateProfile.lifecycleStatus}
+                    </Badge>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Primary occupation</span>
                   <span className="text-xs">
@@ -395,6 +419,11 @@ export default async function CandidateDetail({
   const canVerifyPayments = session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
   const billingTab = (
     <FadeUp>
+      {billingHistory.invoices.length > 0 && (
+        <div className="mb-4">
+          <FinancialSummaryCard invoices={billingHistory.invoices} />
+        </div>
+      )}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Billing history</CardTitle>
@@ -468,7 +497,7 @@ export default async function CandidateDetail({
   );
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       {billingLinks && (billingLinks.invoiceNumber || billingLinks.receiptNumber) && (
         <FadeUp>
           <JustCreatedCard
@@ -487,50 +516,47 @@ export default async function CandidateDetail({
           breadcrumbs={[{ label: 'Candidates', href: '/candidates' }, { label: fullName }]}
           meta={metaStrip}
           action={
-            <div className="flex items-center gap-2">
-              {/* Session 7: state-aware primary verb in the header. Mirrors
-                  the NextActionCard CTA below so a user scanning the header
-                  sees the next action without reading the sentence. Filled
-                  variant lifts it visually above the outlined secondary
-                  verbs (Edit, Raise case). */}
-              {nextAction && (
-                <Link
-                  href={nextAction.primary.href}
-                  className={buttonVariants({ size: 'sm', variant: 'default' })}
-                >
-                  {nextAction.primary.label}
-                  <ArrowRight className="ml-1 size-3.5" aria-hidden />
-                </Link>
-              )}
-              <EditPersonDialog
-                person={person}
-                candidateProfile={candidateProfile}
-                occupations={allOccupations.map((o) => ({
-                  id: o.id,
-                  name: o.name,
-                  isActive: o.isActive,
-                }))}
-              />
-              <CaseDialog
-                trigger={
-                  <Button size="sm" variant="outline">
-                    <PlaneTakeoff className="mr-1.5 size-4" /> Raise immigration case
-                  </Button>
-                }
-                persons={[person]}
-                employers={immigrationEmployers}
-                applicationTypes={immigrationApplicationTypes}
-                prefill={{ beneficiaryPersonId: person.id }}
-              />
-              {candidateProfile && (
-                <>
+            // Phase 2 blueprint §1.2 — primary / secondary / overflow.
+            //
+            // Primary — the state-aware next action (filled, loudest).
+            // Secondary — Edit + ownership (common moves).
+            // Overflow — the less-frequent "raise immigration case" trip.
+            <RecordHeaderActions
+              primary={
+                nextAction && (
+                  <Link
+                    href={nextAction.primary.href}
+                    className={buttonVariants({ size: 'sm', variant: 'default' })}
+                  >
+                    {nextAction.primary.label}
+                    <ArrowRight className="ml-1 size-3.5" aria-hidden />
+                  </Link>
+                )
+              }
+              secondary={[
+                <EditPersonDialog
+                  key="edit"
+                  person={person}
+                  candidateProfile={candidateProfile}
+                  occupations={allOccupations.map((o) => ({
+                    id: o.id,
+                    name: o.name,
+                    isActive: o.isActive,
+                  }))}
+                />,
+                candidateProfile && (
                   <AssignToMeButton
+                    key="assign"
                     entity="candidate"
                     id={person.id}
                     currentUserId={session.user.id}
                     currentAssignedUserId={assignedUserId}
+                    canReassign={session.user.isOwner}
                   />
+                ),
+                candidateProfile && (
                   <ReassignButton
+                    key="reassign"
                     entity="candidate"
                     id={person.id}
                     subjectLabel={fullName}
@@ -541,10 +567,28 @@ export default async function CandidateDetail({
                       fullName: u.fullName,
                       email: u.email,
                     }))}
+                    canReassign={session.user.isOwner}
                   />
-                </>
-              )}
-            </div>
+                ),
+              ]}
+              overflow={[
+                <CaseDialog
+                  key="raise-case"
+                  trigger={
+                    <button
+                      type="button"
+                      className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                    >
+                      <PlaneTakeoff className="size-4" /> Raise immigration case
+                    </button>
+                  }
+                  persons={[person]}
+                  employers={immigrationEmployers}
+                  applicationTypes={immigrationApplicationTypes}
+                  prefill={{ beneficiaryPersonId: person.id }}
+                />,
+              ]}
+            />
           }
         />
       </FadeUp>

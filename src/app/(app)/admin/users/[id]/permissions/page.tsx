@@ -9,7 +9,7 @@ import {
   fetchUserPermissionSnapshot,
   type UserPermissionSnapshot,
 } from '@/modules/permissions/service';
-import { PermissionsEditor } from './permissions-editor';
+import { RoleFirstPermissions } from './role-first-permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +25,7 @@ export default async function UserPermissionsPage({ params }: { params: Promise<
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={KeyRound}
@@ -33,8 +33,8 @@ export default async function UserPermissionsPage({ params }: { params: Promise<
           title={`${snapshot.fullName} — Permissions`}
           description={
             snapshot.isOwner
-              ? 'This user is the business owner. Owner bypasses every permission check — the matrix below is read-only.'
-              : `Preset applied at user creation was ${snapshot.role}. Adjust the checkboxes; a Manage grant covers Delete → Edit → Create → View, so you only need to check the highest verb you want to allow.`
+              ? 'This user is the business owner. Owner bypasses every permission check — the controls below are read-only.'
+              : 'Pick a role to set a preset for this user. Open the Advanced section only if you need to grant or revoke a specific verb on top of the preset.'
           }
           breadcrumbs={[{ label: 'Users', href: '/admin/users' }, { label: snapshot.fullName }]}
           action={
@@ -48,7 +48,7 @@ export default async function UserPermissionsPage({ params }: { params: Promise<
         />
       </FadeUp>
       <FadeUp delay={0.05}>
-        <PermissionsEditor snapshot={snapshot} />
+        <RoleFirstPermissions snapshot={snapshot} />
       </FadeUp>
     </div>
   );

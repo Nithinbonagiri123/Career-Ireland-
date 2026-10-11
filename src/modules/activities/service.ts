@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, type SQL, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
@@ -82,6 +82,97 @@ export async function fetchTasksForImmigrationCase(caseId: string): Promise<Task
     .where(and(eq(tasks.immigrationCaseId, caseId), isNull(tasks.archivedAt)))
     .orderBy(asc(tasks.status), asc(tasks.dueAt), desc(tasks.createdAt));
   return rows.map((r) => ({ ...r.t, assignedName: r.assignedName }));
+}
+
+export async function fetchTasksForRequisition(requisitionId: string): Promise<TaskRow[]> {
+  await requireInternalStaff();
+  const rows = await db
+    .select({ t: tasks, assignedName: users.fullName })
+    .from(tasks)
+    .innerJoin(users, eq(users.id, tasks.assignedUserId))
+    .where(and(eq(tasks.jobRequisitionId, requisitionId), isNull(tasks.archivedAt)))
+    .orderBy(asc(tasks.status), asc(tasks.dueAt), desc(tasks.createdAt));
+  return rows.map((r) => ({ ...r.t, assignedName: r.assignedName }));
+}
+
+/**
+ * Phase 2 blueprint §1.3 — standard recruitment milestones.
+ *
+ * Operator clicks "Seed standard checklist" the first time they open
+ * a requisition's Work Log. Six pre-defined tasks land tied to the
+ * requisition with the current user as owner. Idempotent — if any of
+ * the standard titles already exist on this req they're skipped (the
+ * unique index on (jobRequisitionId, title) where status in open/
+ * in_progress and not archived enforces this at the DB layer too).
+ */
+const STANDARD_REQUISITION_MILESTONES = [
+  {
+    title: 'Source candidates',
+    description: 'Add 5+ matches / shortlist entries to the pipeline.',
+  },
+  {
+    title: 'Shortlist 3 candidates',
+    description: 'Present the top 3 to the client for screening.',
+  },
+  {
+    title: 'Schedule interviews',
+    description: 'Confirm interview slots with the client + candidates.',
+  },
+  {
+    title: 'Send offer',
+    description: 'Issue offer letter to the selected candidate.',
+  },
+  {
+    title: 'Collect candidate documentation',
+    description: 'ID, references, right-to-work, etc.',
+  },
+  {
+    title: 'Confirm placement',
+    description: 'Mark the placement confirmed and raise the placement-fee invoice.',
+  },
+] as const;
+
+export async function seedRequisitionWorkLog(requisitionId: string): Promise<Task[]> {
+  const session = await requireInternalStaff();
+  return db.transaction(async (tx) => {
+    const existing = await tx
+      .select({ title: tasks.title })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.jobRequisitionId, requisitionId),
+          inArray(tasks.status, ['OPEN', 'IN_PROGRESS']),
+          isNull(tasks.archivedAt),
+        ),
+      );
+    const existingTitles = new Set(existing.map((t) => t.title));
+    const toInsert = STANDARD_REQUISITION_MILESTONES.filter(
+      (m) => !existingTitles.has(m.title),
+    ).map((m) => ({
+      title: m.title,
+      description: m.description,
+      jobRequisitionId: requisitionId,
+      assignedUserId: session.user.id,
+      priority: 'NORMAL' as const,
+      status: 'OPEN' as const,
+    }));
+    if (toInsert.length === 0) return [];
+    const inserted = await tx.insert(tasks).values(toInsert).returning();
+    for (const task of inserted) {
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'task',
+        entityId: task.id,
+        action: 'CREATED',
+        after: {
+          title: task.title,
+          jobRequisitionId: task.jobRequisitionId,
+          via: 'requisition_work_log_seed',
+        },
+      });
+    }
+    return inserted;
+  });
 }
 
 export async function createCommunication(
