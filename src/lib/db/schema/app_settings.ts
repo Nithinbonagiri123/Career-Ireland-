@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, jsonb, numeric, pgTable, text, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, integer, jsonb, numeric, pgTable, text, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, updatedAt } from './_shared';
 import { users } from './users';
 
@@ -47,16 +47,38 @@ export const appSettings = pgTable(
 
     // ── Tax ─────────────────────────────────────────────────────────
     /**
+     * Phase 3 blueprint §8.2 — explicit VAT-registration switch.
+     *
+     * Previously "VAT off" was implicit: `vatRatePercent = 0.00`. That
+     * gave no signal to other surfaces (employer VAT treatment picker,
+     * invoice generation, admin UI copy) so each had to re-derive the
+     * state. This flag is the single source of truth. When false:
+     *   - vat_rate_percent is forced to 0 by the service layer
+     *   - invoice printable omits the VAT row entirely
+     *   - employer VAT treatment picker is disabled with an explanation
+     *   - admin can still edit the rate ahead of registration day
+     */
+    vatRegistered: boolean('vat_registered').notNull().default(false),
+
+    /**
      * Standard VAT rate applied on every invoice line, as a percent.
-     * Default = 0.00 (owner asked for VAT-off while the business is
-     * still small). Bump to 23.00 or another rate in /admin/settings
-     * when VAT registration kicks in — the invoice/receipt templates
-     * automatically re-show the VAT row when the rate is non-zero.
-     * Never hardcoded per the no-hardcoded-document-content rule.
+     * Default = 0.00 — only consumed when `vatRegistered` is true. The
+     * value may be edited in advance of registration day so the owner
+     * can line up the correct rate; it stays dormant until the switch
+     * flips on. Never hardcoded per no-hardcoded-document-content.
      */
     vatRatePercent: numeric('vat_rate_percent', { precision: 5, scale: 2 })
       .notNull()
       .default('0.00'),
+
+    /**
+     * Phase 3 blueprint §7.2 — app-wide default payment terms applied
+     * when an employer doesn't carry its own per-client override. 14
+     * days matches the previous hardcoded OVERDUE_THRESHOLD_DAYS so
+     * nothing changes commercially until an operator sets a different
+     * value in /admin/settings or on an individual employer record.
+     */
+    defaultPaymentTermsDays: integer('default_payment_terms_days').notNull().default(14),
 
     // ── Editable copy on printables ────────────────────────────────
     /** Footer paragraph on invoices. `${contactEmail}` interpolated by

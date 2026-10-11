@@ -22,7 +22,13 @@ export const auditEvents = pgTable(
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
     actorUserId: uuid('actor_user_id').references(() => users.id),
     entityType: text('entity_type').notNull(),
-    entityId: uuid('entity_id').notNull(),
+    /**
+     * Business key of the audited entity. Usually a UUID, but singleton
+     * tables with text primary keys (e.g. `app_settings.id = 'global'`)
+     * also need audit coverage, so this is text. The entityType column
+     * disambiguates which keyspace the id belongs to.
+     */
+    entityId: text('entity_id').notNull(),
     action: text('action').notNull(),
     before: jsonb('before'),
     after: jsonb('after'),

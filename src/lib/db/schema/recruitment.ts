@@ -34,6 +34,34 @@ export const employers = pgTable(
     industry: varchar('industry', { length: 120 }),
     country: varchar('country', { length: 80 }),
     city: varchar('city', { length: 120 }),
+    /**
+     * Phase 1 blueprint §4.1 — proper invoice address + billing info.
+     * Previously the only required field was legalName; invoices then
+     * raised against this employer had no delivery address, no VAT ID,
+     * and no payment terms. These added fields close that gap.
+     */
+    addressLine1: varchar('address_line1', { length: 200 }),
+    addressLine2: varchar('address_line2', { length: 200 }),
+    postcode: varchar('postcode', { length: 40 }),
+    billingEmail: varchar('billing_email', { length: 200 }),
+    /** Govt VAT identifier — required when vatTreatment = STANDARD and
+     *  jurisdiction is VAT-registered. */
+    vatId: varchar('vat_id', { length: 40 }),
+    /** VAT treatment classification per blueprint §8.3. Determines how
+     *  the invoice line calculates VAT:
+     *   - STANDARD        — normal rate from service / app settings
+     *   - REVERSE_CHARGE  — EU B2B reverse charge, VAT 0% with legend
+     *   - EXEMPT          — VAT 0% (education, finance, etc.)
+     *   - OUTSIDE_SCOPE   — non-EU, no VAT applies
+     */
+    vatTreatment: text('vat_treatment', {
+      enum: ['STANDARD', 'REVERSE_CHARGE', 'EXEMPT', 'OUTSIDE_SCOPE'],
+    })
+      .notNull()
+      .default('STANDARD'),
+    /** Per-employer override on the app-wide default payment terms. NULL
+     *  = use the app default (currently hard-coded 14 days in aging.ts). */
+    paymentTermsDays: integer('payment_terms_days'),
     relationshipStatus: text('relationship_status', {
       enum: ['PROSPECT', 'ACTIVE', 'ON_HOLD', 'ARCHIVED'],
     })
@@ -41,6 +69,10 @@ export const employers = pgTable(
       .default('PROSPECT'),
     assignedUserId: uuid('assigned_user_id').references(() => users.id),
     notes: text('notes'),
+    /** When onboarding was formally completed — set when the operator
+     *  clicks "Mark onboarding complete" on the employer record. NULL
+     *  while the employer is still being set up. */
+    onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt,
     updatedAt,

@@ -77,7 +77,7 @@ export const payments = pgTable(
       .references(() => currencies.code),
     method: text('method', { enum: ['BANK_TRANSFER', 'CASH', 'OTHER'] }).notNull(),
     status: text('status', {
-      enum: ['PENDING', 'PROOF_UPLOADED', 'VERIFIED', 'REJECTED'],
+      enum: ['PENDING', 'PROOF_UPLOADED', 'VERIFIED', 'REJECTED', 'PARTIALLY_REFUNDED', 'REFUNDED'],
     })
       .notNull()
       .default('PENDING'),

@@ -79,6 +79,28 @@ export const invoices = pgTable(
       .references(() => currencies.code),
     lineDescription: text('line_description').notNull(),
     issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * Phase 3 blueprint §7.2 — per-invoice payment due date. Set at
+     * creation time from the employer's paymentTermsDays (if any)
+     * falling back to appSettings.defaultPaymentTermsDays. Nullable
+     * so historical rows survive the migration without a backfill;
+     * aging treats NULL dueAt as "fall back to the app-wide default
+     * computed from issuedAt".
+     */
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    /**
+     * Phase 3 blueprint §8.3 — the VAT treatment applied at issue time,
+     * snapshotted onto the invoice so a later edit to the employer's
+     * `vatTreatment` field never retroactively changes a printed VAT
+     * document (Irish VAT law requires immutability). Candidate /
+     * person invoices always land as STANDARD. Non-STANDARD rows carry
+     * the legal legend on the printable.
+     */
+    vatTreatment: text('vat_treatment', {
+      enum: ['STANDARD', 'REVERSE_CHARGE', 'EXEMPT', 'OUTSIDE_SCOPE'],
+    })
+      .notNull()
+      .default('STANDARD'),
     issuedByUserId: uuid('issued_by_user_id')
       .notNull()
       .references(() => users.id),
@@ -232,4 +254,59 @@ export const creditNotes = pgTable(
 );
 
 export type CreditNote = typeof creditNotes.$inferSelect;
+
+/**
+ * Refunds — money returned to a payer after a verified payment.
+ *
+ * Session 14 of the UX redesign (docs/ux-audit-blueprint.md §7.1).
+ * Before this table existed, refunds "happened off-system" — operators
+ * issued a credit note, moved money via their bank, and the CRM had no
+ * record that cash had been returned. That's a bookkeeping disaster for
+ * any business processing payments at scale.
+ *
+ * A refund is always:
+ *   - Tied to exactly one verified payment (the source of the cash)
+ *   - Backed by a credit note (the legal/VAT reversal)
+ *   - Issued by a specific user, with a reason (audit-friendly)
+ *
+ * The service layer updates the source payment's status to
+ * PARTIALLY_REFUNDED (if other refunds still leave money paid) or
+ * REFUNDED (full), and recomputes the invoice's outstanding so the
+ * usual "paid / overdue" surfaces behave correctly.
+ */
+export const refunds = pgTable(
+  'refunds',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    paymentId: uuid('payment_id')
+      .notNull()
+      .references(() => payments.id),
+    creditNoteId: uuid('credit_note_id')
+      .notNull()
+      .references(() => creditNotes.id),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    currencyCode: char('currency_code', { length: 3 })
+      .notNull()
+      .references(() => currencies.code),
+    reason: text('reason').notNull(),
+    /** How the money was actually returned to the payer. */
+    method: text('method', { enum: ['BANK_TRANSFER', 'CASH', 'OTHER'] }).notNull(),
+    /** External reference — bank statement row, cash slip number. */
+    reference: text('reference'),
+    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
+    issuedByUserId: uuid('issued_by_user_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    index('refunds_payment_idx').on(t.paymentId),
+    index('refunds_credit_note_idx').on(t.creditNoteId),
+    check('refunds_amount_positive', sql`${t.amount} > 0`),
+  ],
+);
+
+export type Refund = typeof refunds.$inferSelect;
+export type NewRefund = typeof refunds.$inferInsert;
 export type NewCreditNote = typeof creditNotes.$inferInsert;

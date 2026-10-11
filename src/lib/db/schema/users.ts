@@ -7,7 +7,6 @@ import {
   pgTable,
   text,
   timestamp,
-  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -67,11 +66,12 @@ export const users = pgTable(
     isActive: boolean('is_active').notNull().default(true),
     /**
      * Business owner flag. The owner bypasses every permission check
-     * — they always have every verb on every module. Exactly one user
-     * can be owner at a time (partial unique index below). Set via
-     * `pnpm tsx scripts/set-owner.ts <email>` — there is deliberately
-     * no in-app UI, since transferring ownership needs a human
-     * decision on the DB side.
+     * — they always have every verb on every module. Multiple users
+     * can be owner at a time (co-founders, partners). The system
+     * enforces "at least one owner must exist" at the application
+     * layer, not via a DB constraint. Toggled from the user admin
+     * UI by any existing owner; the `set-owner.ts` script remains
+     * as a bootstrap escape hatch for the very first owner.
      */
     isOwner: boolean('is_owner').notNull().default(false),
     /**
@@ -101,8 +101,10 @@ export const users = pgTable(
         (${t.role} = 'EMPLOYER' AND ${t.employerId} IS NOT NULL AND ${t.personId} IS NULL)
       )`,
     ),
-    // At most one owner in the whole DB.
-    uniqueIndex('users_single_owner').on(t.isOwner).where(sql`${t.isOwner} = true`),
+    // Session 33 — ownership is a multi-user concept (co-founders /
+    // partners). The former "exactly one owner" partial unique index is
+    // dropped; the service layer enforces "at least one owner must exist"
+    // when demoting someone.
   ],
 );
 
