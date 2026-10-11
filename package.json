@@ -21,6 +21,7 @@
     "db:seed:services": "tsx scripts/seed-services-2026.ts",
     "db:seed:service-categories": "tsx scripts/seed-service-categories.ts",
     "db:seed:document-types": "tsx scripts/seed-document-types.ts",
+    "db:seed:accounting": "tsx scripts/seed-accounting.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"

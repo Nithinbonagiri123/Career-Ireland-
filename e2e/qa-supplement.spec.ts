@@ -97,30 +97,34 @@ test('revenue: empty range', async ({ page }) => {
 test('hr: Today card in Working state', async ({ page }) => {
   await page.goto('/hr', { waitUntil: 'networkidle' });
 
+  // Session 19 added a ClockWidget to the global top bar — scope to
+  // <main> so we only assert on the dedicated ClockPanel.
+  const panel = page.locator('main');
+
   // Reset to a clean Off state first, whatever the DB has.
-  const endBreak = page.getByRole('button', { name: /^end break$/i });
+  const endBreak = panel.getByRole('button', { name: /^end break$/i });
   if (await endBreak.isVisible().catch(() => false)) {
     await endBreak.click();
     await page.waitForTimeout(500);
   }
-  const clockOut = page.getByRole('button', { name: /^clock out$/i });
+  const clockOut = panel.getByRole('button', { name: /^clock out$/i });
   if (await clockOut.isVisible().catch(() => false)) {
     await clockOut.click();
     await page.waitForTimeout(500);
   }
 
   // Now clock in and screenshot the Working state.
-  await page.getByRole('button', { name: /^clock in$/i }).click();
-  await expect(page.getByText(/^working$/i)).toBeVisible({ timeout: 10_000 });
+  await panel.getByRole('button', { name: /^clock in$/i }).click();
+  await expect(panel.getByText(/^working$/i)).toBeVisible({ timeout: 10_000 });
   await shoot(page, 'supp__hr-working');
 
   // Also capture the On-break state.
-  await page.getByRole('button', { name: /^start break$/i }).click();
-  await expect(page.getByText(/^on break$/i)).toBeVisible({ timeout: 10_000 });
+  await panel.getByRole('button', { name: /^start break$/i }).click();
+  await expect(panel.getByText(/^on break$/i)).toBeVisible({ timeout: 10_000 });
   await shoot(page, 'supp__hr-on-break');
 
   // Clean up so subsequent tests don't inherit a live session.
-  await page.getByRole('button', { name: /^end break$/i }).click();
-  await expect(page.getByText(/^working$/i)).toBeVisible({ timeout: 10_000 });
-  await page.getByRole('button', { name: /^clock out$/i }).click();
+  await panel.getByRole('button', { name: /^end break$/i }).click();
+  await expect(panel.getByText(/^working$/i)).toBeVisible({ timeout: 10_000 });
+  await panel.getByRole('button', { name: /^clock out$/i }).click();
 });

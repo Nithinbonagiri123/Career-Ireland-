@@ -125,7 +125,16 @@ test('04 · Employer invoice — dialog + manual price flow', async ({ page }) =
   await firstOpenLink.click();
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
-  await page.getByRole('button', { name: /generate invoice/i }).click();
+  // Session 20's RecordHeaderActions moved "Generate invoice" into the
+  // overflow dropdown. Open the "More actions" menu first.
+  const moreActions = page.getByRole('button', { name: /^more actions$/i }).first();
+  if (await moreActions.isVisible().catch(() => false)) {
+    await moreActions.click();
+  }
+  await page
+    .getByRole('button', { name: /generate invoice/i })
+    .first()
+    .click();
   await expect(page.getByRole('heading', { name: /generate invoice/i })).toBeVisible();
   await fullShot(page, 'e2e__employer-invoice-dialog');
 

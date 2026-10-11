@@ -87,6 +87,12 @@ jobs:
           pnpm db:seed:document-types
           pnpm db:seed:services
 
+      - name: Seed accounting (chart of accounts + divisions + rules)
+        # The accounting-walk e2e tests expect a populated chart. The
+        # script is idempotent so re-running it in a cached CI DB is
+        # safe.
+        run: pnpm db:seed:accounting
+
       - name: Seed E2E minimal fixtures
         run: pnpm db:seed:e2e-minimal
 
@@ -184,6 +190,12 @@ jobs:
           pnpm db:seed:currencies
           pnpm db:seed:document-types
           pnpm db:seed:services
+
+      - name: Seed accounting (chart of accounts + divisions + rules)
+        # Needed by the accounting-walk e2e tests (chart of accounts,
+        # VAT return, year-end close) which assert the layout against
+        # real seed data.
+        run: pnpm db:seed:accounting
 
       - name: Seed E2E minimal fixtures (1 employer, 1 requisition, 2 candidates, 1 lead)
         # Gives the Playwright suite something to click on. Tests like

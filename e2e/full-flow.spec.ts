@@ -154,7 +154,7 @@ test('lead → candidate → requisition → pipeline → placement → fee invo
     { label: /promote to applied/i, expect: /promoted to applied/i, snap: '06-applied' },
     { label: /move to interview/i, expect: /moved to interview/i, snap: '07-interview' },
     { label: /move to offer/i, expect: /moved to offer/i, snap: '08-offer' },
-    { label: /mark placed/i, expect: /placed/i, snap: '09-placed' },
+    { label: /accept offer|mark placed/i, expect: /placed/i, snap: '09-placed' },
   ];
   for (const step of advanceSequence) {
     // The candidate card for OUR candidate is the one whose text contains

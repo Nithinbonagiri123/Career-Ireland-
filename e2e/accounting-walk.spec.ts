@@ -33,6 +33,8 @@ test.describe('accounting hub', () => {
 
     await expect(page.getByRole('heading', { name: /double-entry ledger/i })).toBeVisible();
 
+    // The hub's section tiles use CardTitle (a styled <div>), not real
+    // heading tags, so match by exact text instead of role=heading.
     for (const title of [
       'Chart of accounts',
       'Journals',
@@ -47,7 +49,9 @@ test.describe('accounting hub', () => {
       'Year-end close',
     ]) {
       await expect(
-        page.getByRole('heading', { name: new RegExp(`^${title}$`, 'i') }),
+        page
+          .getByText(new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'))
+          .first(),
       ).toBeVisible();
     }
 
@@ -192,9 +196,10 @@ test.describe('year-end close', () => {
   test('shows per-year rows with status badges', async ({ page }) => {
     await page.goto('/admin/accounting/year-end', { waitUntil: 'networkidle' });
     await expect(page.getByRole('heading', { name: /year-end close/i })).toBeVisible();
-    // Current year row
+    // Current year row — pick the <h3> specifically so the description
+    // paragraph "You can close FY YYYY once…" doesn't trip strict mode.
     const currentYear = new Date().getUTCFullYear();
-    await expect(page.getByText(`FY ${currentYear}`)).toBeVisible();
+    await expect(page.getByRole('heading', { name: `FY ${currentYear}`, level: 3 })).toBeVisible();
     await shot(page, 'e2e__accounting-year-end');
   });
 });

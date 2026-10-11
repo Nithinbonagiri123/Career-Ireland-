@@ -5,17 +5,17 @@ test.describe('/engagements', () => {
     await page.goto('/engagements');
   });
 
-  test('page header shows title + Create engagement action', async ({ page }) => {
+  test('page header shows title + Start service action', async ({ page }) => {
+    // The /engagements route renders the Services page (the DB term is
+    // "engagement" but the user-facing term is "service").
+    await expect(page.getByRole('heading', { name: /^services$/i, level: 1 })).toBeVisible();
     await expect(
-      page.getByRole('heading', { name: /service engagements|engagements/i, level: 1 }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: /create engagement|new engagement/i }).first(),
+      page.getByRole('button', { name: /start service|create engagement|new engagement/i }).first(),
     ).toBeVisible();
   });
 
-  test('description mentions the legal name and service context', async ({ page }) => {
-    await expect(page.getByText(/commercial orders|create an engagement/i)).toBeVisible();
+  test('description mentions services + money', async ({ page }) => {
+    await expect(page.getByText(/is delivering, with the money tied/i)).toBeVisible();
   });
 
   test('date-range filter defaults to Anytime', async ({ page }) => {
@@ -24,14 +24,14 @@ test.describe('/engagements', () => {
     await expect(anytime).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('engagements table or empty state renders', async ({ page }) => {
+  test('services table or empty state renders', async ({ page }) => {
     const hasTable = await page
       .locator('table')
       .first()
       .isVisible()
       .catch(() => false);
     const hasEmpty = await page
-      .getByText(/no engagements/i)
+      .getByText(/no engagements|no services/i)
       .first()
       .isVisible()
       .catch(() => false);
@@ -40,7 +40,7 @@ test.describe('/engagements', () => {
 
   test('clicking the create button opens the create dialog', async ({ page }) => {
     const createBtn = page
-      .getByRole('button', { name: /create engagement|new engagement/i })
+      .getByRole('button', { name: /start service|create engagement|new engagement/i })
       .first();
     await createBtn.click();
     await expect(page.getByRole('dialog').first()).toBeVisible();

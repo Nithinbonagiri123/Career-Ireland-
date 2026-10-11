@@ -54,7 +54,8 @@ const ROUTES: Array<{ path: string; expectHeading?: RegExp }> = [
   { path: '/communications', expectHeading: /communications/i },
 
   // ── Commerce ───────────────────────────────────────────────────────
-  { path: '/engagements', expectHeading: /engagements/i },
+  // /engagements renders the Services page (DB "engagement" → UI "service").
+  { path: '/engagements', expectHeading: /^services$/i },
   { path: '/payments', expectHeading: /payments/i },
 
   // ── Reports + notifications ────────────────────────────────────────

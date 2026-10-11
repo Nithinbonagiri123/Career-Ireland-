@@ -33,7 +33,7 @@ const ROUTES: Array<{ path: string; heading: RegExp; slug: string }> = [
   { path: '/payments', heading: /payments/i, slug: '11-payments' },
   { path: '/campaigns', heading: /campaigns/i, slug: '12-campaigns' },
   { path: '/prospects', heading: /prospects/i, slug: '13-prospects' },
-  { path: '/engagements', heading: /engagements/i, slug: '14-engagements' },
+  { path: '/engagements', heading: /^services$/i, slug: '14-engagements' },
   { path: '/tasks', heading: /tasks/i, slug: '15-tasks' },
   { path: '/reports', heading: /reports/i, slug: '16-reports' },
   { path: '/notifications', heading: /notifications/i, slug: '17-notifications' },
