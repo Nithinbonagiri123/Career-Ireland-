@@ -3,21 +3,26 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { requirePermission } from '@/lib/auth/session';
 import { fetchCurrencies } from '@/modules/currencies/service';
-import { fetchServiceCatalog, fetchServicePackages } from '@/modules/services-catalog/service';
+import {
+  fetchServiceCatalog,
+  fetchServiceCategories,
+  fetchServicePackages,
+} from '@/modules/services-catalog/service';
 import { ServicesView } from './services-view';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ServicesAdminPage() {
   await requirePermission('main', 'admin', 'view');
-  const [services, packages, currencies] = await Promise.all([
+  const [services, packages, currencies, categories] = await Promise.all([
     fetchServiceCatalog(),
     fetchServicePackages(),
     fetchCurrencies(),
+    fetchServiceCategories(),
   ]);
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={Package}
@@ -27,7 +32,12 @@ export default async function ServicesAdminPage() {
         />
       </FadeUp>
       <FadeUp delay={0.05}>
-        <ServicesView services={services} packages={packages} currencies={currencies} />
+        <ServicesView
+          services={services}
+          packages={packages}
+          currencies={currencies}
+          categories={categories}
+        />
       </FadeUp>
     </div>
   );

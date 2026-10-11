@@ -4,14 +4,20 @@ import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
   type ServiceCatalogItem,
+  type ServiceCategory,
   type ServicePackage,
   serviceCatalogItems,
+  serviceCategories,
   servicePackages,
 } from '@/lib/db/schema/services';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import {
   type SetActiveByIdInput,
   SetActiveByIdSchema,
+  type SetServiceCategoryActiveInput,
+  SetServiceCategoryActiveSchema,
+  type UpsertServiceCategoryInput,
+  UpsertServiceCategorySchema,
   type UpsertServiceItemInput,
   UpsertServiceItemSchema,
   type UpsertServicePackageInput,
@@ -66,6 +72,8 @@ export async function upsertServiceItem(
       defaultCurrencyCode: blankToNull(data.defaultCurrencyCode),
       defaultPrice: blankToNull(data.defaultPrice),
       payerType: data.payerType,
+      // Session 34 — empty string = "no category" from the dropdown.
+      categoryId: blankToNull(data.categoryId),
       isActive: data.isActive,
     };
     if (data.id) {
@@ -86,6 +94,7 @@ export async function upsertServiceItem(
           code: existing.code,
           name: existing.name,
           payerType: existing.payerType,
+          categoryId: existing.categoryId,
           isActive: existing.isActive,
           defaultPrice: existing.defaultPrice,
           defaultCurrencyCode: existing.defaultCurrencyCode,
@@ -272,6 +281,140 @@ export async function setServicePackageActive(input: SetActiveByIdInput): Promis
     await recordAudit(tx, {
       actorUserId: session.user.id,
       entityType: 'service_package',
+      entityId: after.id,
+      action: parsed.isActive ? 'ACTIVATED' : 'DEACTIVATED',
+      before: { isActive: existing.isActive },
+      after: { isActive: after.isActive },
+    });
+    return after;
+  });
+}
+
+// ─── Service categories (Session 34) ─────────────────────────────────
+
+/**
+ * Returns every category — active and inactive — ordered by display
+ * order then name. Lightweight (categories are expected to stay in
+ * single digits for the lifetime of the business), so no pagination.
+ */
+export async function fetchServiceCategories(): Promise<ServiceCategory[]> {
+  await requireInternalStaff();
+  return db
+    .select()
+    .from(serviceCategories)
+    .orderBy(asc(serviceCategories.displayOrder), asc(serviceCategories.name));
+}
+
+/** Lower-kebab-case slug derived from the category name. */
+function slugFromName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
+async function getCategory(id: string): Promise<ServiceCategory | null> {
+  const [r] = await db
+    .select()
+    .from(serviceCategories)
+    .where(eq(serviceCategories.id, id))
+    .limit(1);
+  return r ?? null;
+}
+
+export async function upsertServiceCategory(
+  input: UpsertServiceCategoryInput,
+): Promise<ServiceCategory> {
+  const session = await requireRole(['ADMIN']);
+  const parsed = UpsertServiceCategorySchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid service category',
+      parsed.error.flatten().fieldErrors as Record<string, string>,
+    );
+  }
+  const data = parsed.data;
+  const name = data.name.trim();
+  // Derive the slug from name if the admin left it blank — the common
+  // path is "type the name, hit save", slug auto-fills.
+  const slugSource = data.slug?.trim();
+  const slug = slugSource && slugSource.length > 0 ? slugSource : slugFromName(name);
+  if (!slug) {
+    throw new ValidationError('Could not derive a slug from the name', {
+      slug: 'Provide a slug manually',
+    });
+  }
+
+  return db.transaction(async (tx) => {
+    const values = {
+      slug,
+      name,
+      description: blankToNull(data.description),
+      displayOrder: data.displayOrder ?? 100,
+      isActive: data.isActive,
+    };
+    if (data.id) {
+      const existing = await getCategory(data.id);
+      if (!existing) throw new BusinessRuleError('CATEGORY_NOT_FOUND', 'Not found');
+      const [after] = await tx
+        .update(serviceCategories)
+        .set({ ...values, updatedAt: sql`NOW()` })
+        .where(eq(serviceCategories.id, data.id))
+        .returning();
+      if (!after) throw new Error('update returned no row');
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'service_category',
+        entityId: after.id,
+        action: 'UPDATED',
+        before: {
+          slug: existing.slug,
+          name: existing.name,
+          displayOrder: existing.displayOrder,
+          isActive: existing.isActive,
+        },
+        after: {
+          slug: after.slug,
+          name: after.name,
+          displayOrder: after.displayOrder,
+          isActive: after.isActive,
+        },
+      });
+      return after;
+    }
+    const [created] = await tx.insert(serviceCategories).values(values).returning();
+    if (!created) throw new Error('insert returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'service_category',
+      entityId: created.id,
+      action: 'CREATED',
+      after: { slug: created.slug, name: created.name },
+    });
+    return created;
+  });
+}
+
+export async function setServiceCategoryActive(
+  input: SetServiceCategoryActiveInput,
+): Promise<ServiceCategory> {
+  const session = await requireRole(['ADMIN']);
+  const parsed = SetServiceCategoryActiveSchema.parse(input);
+  return db.transaction(async (tx) => {
+    const existing = await getCategory(parsed.id);
+    if (!existing) throw new BusinessRuleError('CATEGORY_NOT_FOUND', 'Not found');
+    if (existing.isActive === parsed.isActive) return existing;
+    const [after] = await tx
+      .update(serviceCategories)
+      .set({ isActive: parsed.isActive, updatedAt: sql`NOW()` })
+      .where(eq(serviceCategories.id, parsed.id))
+      .returning();
+    if (!after) throw new Error('update returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'service_category',
       entityId: after.id,
       action: parsed.isActive ? 'ACTIVATED' : 'DEACTIVATED',
       before: { isActive: existing.isActive },

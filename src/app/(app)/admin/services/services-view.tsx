@@ -8,7 +8,7 @@ import { DataTable } from '@/components/data-table/data-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Currency } from '@/lib/db/schema/currencies';
-import type { ServiceCatalogItem, ServicePackage } from '@/lib/db/schema/services';
+import type { ServiceCatalogItem, ServiceCategory, ServicePackage } from '@/lib/db/schema/services';
 import {
   setServiceItemActiveAction,
   setServicePackageActiveAction,
@@ -20,6 +20,7 @@ type Props = {
   services: ServiceCatalogItem[];
   packages: ServicePackage[];
   currencies: Currency[];
+  categories: ServiceCategory[];
 };
 
 const PAYER_LABEL: Record<ServiceCatalogItem['payerType'], string> = {
@@ -28,12 +29,14 @@ const PAYER_LABEL: Record<ServiceCatalogItem['payerType'], string> = {
   ANY: 'Either',
 };
 
-export function ServicesView({ services, packages, currencies }: Props) {
+export function ServicesView({ services, packages, currencies, categories }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   const serviceById = useMemo(() => new Map(services.map((s) => [s.id, s])), [services]);
   const currencyByCode = useMemo(() => new Map(currencies.map((c) => [c.code, c])), [currencies]);
+  const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  const activeCategories = useMemo(() => categories.filter((c) => c.isActive), [categories]);
 
   const toggleService = (s: ServiceCatalogItem) => {
     setBusy(s.id);
@@ -78,6 +81,21 @@ export function ServicesView({ services, packages, currencies }: Props) {
           {PAYER_LABEL[row.original.payerType]}
         </Badge>
       ),
+    },
+    {
+      header: 'Category',
+      accessorKey: 'categoryId',
+      size: 160,
+      cell: ({ row }) => {
+        const cat = row.original.categoryId ? categoryById.get(row.original.categoryId) : null;
+        return cat ? (
+          <Badge variant="info" className="rounded-full">
+            {cat.name}
+          </Badge>
+        ) : (
+          <span className="text-xs italic text-muted-foreground">Uncategorised</span>
+        );
+      },
     },
     {
       header: 'Default price',
@@ -129,6 +147,7 @@ export function ServicesView({ services, packages, currencies }: Props) {
           <ServiceItemDialog
             initial={row.original}
             currencies={currencies}
+            categories={activeCategories}
             trigger={
               <Button variant="ghost" size="icon" aria-label={`Edit ${row.original.code}`}>
                 <Pencil className="size-3.5" />
@@ -227,6 +246,7 @@ export function ServicesView({ services, packages, currencies }: Props) {
           </h2>
           <ServiceItemDialog
             currencies={currencies}
+            categories={activeCategories}
             trigger={
               <Button size="sm" variant="outline">
                 <Plus className="mr-1.5 size-4" /> New service

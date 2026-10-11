@@ -19,7 +19,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import type { Currency } from '@/lib/db/schema/currencies';
-import type { ServiceCatalogItem } from '@/lib/db/schema/services';
+import type { ServiceCatalogItem, ServiceCategory } from '@/lib/db/schema/services';
 import { useFormDialog } from '@/lib/hooks/use-form-dialog';
 import { upsertServiceItemAction } from '@/modules/services-catalog/actions';
 import {
@@ -30,10 +30,17 @@ import {
 type Props = {
   trigger: ReactElement;
   currencies: Currency[];
+  /**
+   * Session 34 — active categories to populate the Category dropdown.
+   * Can be empty (page falls back to "— Uncategorised —" only), in
+   * which case the admin needs to add categories from
+   * /admin/service-categories first.
+   */
+  categories: ServiceCategory[];
   initial?: ServiceCatalogItem;
 };
 
-export function ServiceItemDialog({ trigger, currencies, initial }: Props) {
+export function ServiceItemDialog({ trigger, currencies, categories, initial }: Props) {
   const isEdit = Boolean(initial);
   const form = useForm<UpsertServiceItemInput>({
     resolver: zodResolver(UpsertServiceItemSchema),
@@ -44,6 +51,7 @@ export function ServiceItemDialog({ trigger, currencies, initial }: Props) {
       defaultCurrencyCode: initial?.defaultCurrencyCode ?? '',
       defaultPrice: initial?.defaultPrice ?? '',
       payerType: initial?.payerType ?? 'PERSON',
+      categoryId: initial?.categoryId ?? '',
       isActive: initial?.isActive ?? true,
     },
   });
@@ -68,7 +76,7 @@ export function ServiceItemDialog({ trigger, currencies, initial }: Props) {
           <DialogTitle>{isEdit ? `Edit ${initial?.code}` : 'Add service'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <FormField id="si-code" label="Code" error={errors.code?.message}>
               <Input
                 id="si-code"
@@ -104,13 +112,37 @@ export function ServiceItemDialog({ trigger, currencies, initial }: Props) {
               <Input id="si-price" type="text" inputMode="decimal" {...register('defaultPrice')} />
             </FormField>
           </div>
-          <FormField id="si-payer" label="Payer type">
-            <Select id="si-payer" {...register('payerType')}>
-              <option value="PERSON">Person (candidate pays)</option>
-              <option value="EMPLOYER">Employer (company pays)</option>
-              <option value="ANY">Either</option>
-            </Select>
-          </FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField id="si-payer" label="Payer type">
+              <Select id="si-payer" {...register('payerType')}>
+                <option value="PERSON">Person (candidate pays)</option>
+                <option value="EMPLOYER">Employer (company pays)</option>
+                <option value="ANY">Either</option>
+              </Select>
+            </FormField>
+            <FormField
+              id="si-category"
+              label="Category"
+              hint={
+                categories.length === 0
+                  ? 'Add categories from /admin/service-categories first.'
+                  : 'Business line this service belongs to (optional).'
+              }
+            >
+              <Select id="si-category" {...register('categoryId')}>
+                <option value="">— Uncategorised —</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+                {/* Preserve the chosen category even if it was deactivated after this service was tagged. */}
+                {initial?.categoryId && !categories.some((c) => c.id === initial.categoryId) && (
+                  <option value={initial.categoryId}>Current (inactive)</option>
+                )}
+              </Select>
+            </FormField>
+          </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...register('isActive')} className="size-4 accent-accent" />
             Active

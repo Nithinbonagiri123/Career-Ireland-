@@ -116,6 +116,12 @@ const SECTIONS: Array<{
         description: 'Catalog of billable services',
       },
       {
+        label: 'Service categories',
+        href: '/admin/service-categories',
+        icon: Tags,
+        description: 'Business-line tags (Candidate services, Recruitment, Immigration, …)',
+      },
+      {
         label: 'Currencies',
         href: '/admin/currencies',
         icon: Globe,
@@ -141,7 +147,7 @@ export default async function AdminHubPage() {
   await requirePermission('main', 'admin', 'view');
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={UserCog}
