@@ -1,0 +1,23 @@
+-- Drift reconciliation migration (Session 40, 2026-10-11).
+--
+-- Why this file is empty:
+--
+-- Migrations 0042-0049 were authored by hand without matching
+-- snapshot JSONs under meta/. Drizzle-kit's `db:generate` therefore
+-- diffs the current schema against the last snapshotted migration
+-- (0041) and produces one combined "catch-up" migration — the file
+-- it drops is this one. The schema delta it emits here was already
+-- applied via 0042-0049 on every live database (local, dev, prod),
+-- so re-applying it would collide with existing tables and columns.
+--
+-- The solution: keep this file + its snapshot (so the CI drift check
+-- passes) but strip the SQL body so running the migration is a no-op.
+-- Any new DB spun up from scratch will still get the full schema via
+-- 0042-0049; this entry just caps the chain so drizzle-kit treats the
+-- schema as "in sync" with its tracked state.
+--
+-- From here on in, edit the Drizzle schema, run `pnpm db:generate`,
+-- and let it produce a proper 0051, 0052, … against the snapshot
+-- that lives beside this file.
+
+SELECT 1;
