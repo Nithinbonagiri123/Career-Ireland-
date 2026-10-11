@@ -62,7 +62,7 @@ export function DocTypeDialog({ trigger, initial }: Props) {
           <DialogTitle>{isEdit ? `Edit ${initial?.code}` : 'Add document type'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <FormField id="dt-code" label="Code" error={errors.code?.message}>
               <Input
                 id="dt-code"

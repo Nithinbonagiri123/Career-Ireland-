@@ -128,6 +128,47 @@ export function CvSuggestionsPanel({ personId }: { personId: string }) {
     });
   };
 
+  const totalSuggested = suggestions
+    ? suggestions.skills.catalogHits.length +
+      suggestions.skills.customCandidates.length +
+      suggestions.qualifications.catalogHits.length +
+      suggestions.qualifications.customCandidates.length +
+      suggestions.employment.candidates.length
+    : 0;
+
+  const allSelected = totalSuggested > 0 && totalPicked === totalSuggested;
+
+  /**
+   * Phase 2 blueprint §2.2 — Select all / Clear shortcut. Lets the
+   * operator one-click accept everything the parser suggested instead
+   * of ticking boxes one by one. The parse is already deterministic
+   * (no LLM) so blanket-accept is safe; operators can un-tick
+   * individual rows before clicking Accept if they want to exclude
+   * one.
+   */
+  const selectAll = () => {
+    if (!suggestions) return;
+    if (allSelected) {
+      setPicked({
+        skillIds: new Set(),
+        customSkills: new Set(),
+        qualificationIds: new Set(),
+        customQualifications: new Set(),
+        employment: new Set(),
+      });
+      return;
+    }
+    setPicked({
+      skillIds: new Set(suggestions.skills.catalogHits.map((h) => h.id)),
+      customSkills: new Set(suggestions.skills.customCandidates.map((c) => c.phrase)),
+      qualificationIds: new Set(suggestions.qualifications.catalogHits.map((h) => h.id)),
+      customQualifications: new Set(
+        suggestions.qualifications.customCandidates.map((c) => c.phrase),
+      ),
+      employment: new Set(suggestions.employment.candidates.map((c) => c.key)),
+    });
+  };
+
   return (
     <Card>
       <SectionHeader
@@ -242,11 +283,24 @@ export function CvSuggestionsPanel({ personId }: { personId: string }) {
               onToggle={(key) => toggle('employment', key)}
             />
 
-            <div className="flex items-center justify-between border-t pt-4">
-              <p className="text-xs text-muted-foreground">{totalPicked} selected</p>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+              <div className="flex items-center gap-3">
+                <p className="text-xs text-muted-foreground">
+                  {totalPicked} of {totalSuggested} selected
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={selectAll}
+                  disabled={totalSuggested === 0 || pending}
+                >
+                  {allSelected ? 'Clear all' : 'Select all'}
+                </Button>
+              </div>
               <Button onClick={accept} disabled={totalPicked === 0 || pending}>
                 <Plus className="mr-1.5 size-4" />
-                Accept selected ({totalPicked})
+                {allSelected ? `Accept all ${totalPicked}` : `Accept selected (${totalPicked})`}
               </Button>
             </div>
           </div>

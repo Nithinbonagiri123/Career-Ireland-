@@ -96,7 +96,7 @@ export function AdDialog({ trigger, campaignId, initial }: Props) {
               {...register('targetApplicants', { valueAsNumber: true })}
             />
           </FormField>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <FormField id="ad-start" label="Start">
               <Input
                 id="ad-start"

@@ -2,7 +2,7 @@ import { CardWithRowsSkeleton, PageHeaderSkeleton, TableSkeleton } from '@/compo
 
 export default function RequisitionDetailLoading() {
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <PageHeaderSkeleton hasBadge actionWidth={200} />
       <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <CardWithRowsSkeleton titleWidth={180} rowCount={3} />

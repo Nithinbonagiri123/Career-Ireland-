@@ -4,27 +4,28 @@ import { differenceInYears } from 'date-fns';
 import {
   ArrowRight,
   Ban,
-  Briefcase,
   ChevronRight,
-  Coins,
   Eye,
+  Handshake,
   Mail,
   MapPin,
-  MoreHorizontal,
   Phone,
   PlaneTakeoff,
-  Sparkles,
+  Search,
+  Send,
+  Star,
+  Target,
   User,
+  UserCheck,
+  Users,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
-import { MetaRow } from '@/components/meta-row';
 import { Note } from '@/components/note';
 import { PIPELINE_STAGES, PipelineChip, type PipelineStage } from '@/components/pipeline-chip';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { formatCurrency } from '@/lib/currency';
 import { toastResult } from '@/lib/toast-result';
 import { cn } from '@/lib/utils';
 import {
@@ -208,14 +209,33 @@ function PipelineBand({
 }) {
   const tone = BAND_TONE[stage];
 
+  const stageIndex = STAGE_ORDER.indexOf(stage) + 1;
+  const Icon = STAGE_ICON[stage];
+  const label = PIPELINE_STAGES[stage].label;
+
   return (
     <Note tone={tone} as="section" className="overflow-hidden">
-      <header className="flex items-center gap-2 border-b border-black/5 px-4 py-2.5">
-        <PipelineChip stage={stage} variant="solid" />
-        <span className="text-[11px] font-medium opacity-75">{entries.length} candidates</span>
+      {/* Session 36 — band header gets a step number + stage icon so
+          the funnel is readable at a glance. The old header duplicated
+          the stepper strip above; this version uses the extra space
+          to show the stage name prominently and the count as support. */}
+      <header className="flex items-center justify-between gap-3 border-b border-black/5 px-4 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-background/70 font-mono text-[10px] font-semibold tabular-nums text-foreground">
+            {stageIndex}
+          </span>
+          <Icon className="size-3.5 opacity-80" aria-hidden />
+          <span className="text-sm font-semibold">{label}</span>
+        </div>
+        <span className="font-mono text-xs font-medium tabular-nums opacity-70">
+          {entries.length}
+        </span>
       </header>
       {entries.length === 0 ? (
-        <div className="px-4 py-6 text-center text-xs opacity-70">{emptyMessage(stage)}</div>
+        <div className="flex items-center justify-center gap-2 px-4 py-6 text-center text-xs opacity-70">
+          <Icon className="size-3.5 shrink-0 opacity-60" aria-hidden />
+          <span>{emptyMessage(stage)}</span>
+        </div>
       ) : (
         // The band scrolls horizontally when it has more candidates than
         // fit. Right-edge fade mask signals "there's more here" so users
@@ -252,7 +272,6 @@ function PipelineBand({
 function PipelineCard({
   stage,
   entry,
-  requisition,
   onAdvance,
   onDismiss,
   disabled,
@@ -265,7 +284,6 @@ function PipelineCard({
   disabled: boolean;
 }) {
   const initials = getInitials(entry.personName);
-  const salaryLabel = formatSalary(requisition);
   const scoreLabel =
     entry.matchScore !== null && entry.matchScore >= 0 ? Math.round(entry.matchScore) : null;
   const advanceLabel = ADVANCE_LABEL[stage];
@@ -279,10 +297,15 @@ function PipelineCard({
   return (
     <article
       className={cn(
-        'glass-panel flex w-64 shrink-0 snap-start flex-col gap-2 rounded-xl p-3 transition-shadow',
+        'glass-panel group flex w-64 shrink-0 snap-start flex-col gap-2.5 rounded-xl p-3 shadow-sm transition-shadow hover:shadow-md',
         disabled && 'pointer-events-none opacity-60',
       )}
     >
+      {/* Session 36 — identity row: avatar / name / match score.
+          Dropped the duplicated requisition meta rows (title, salary,
+          employer) because the page itself IS one requisition and the
+          page header already carries them. The reclaimed vertical
+          space goes to the candidate's own contact rail. */}
       <div className="flex items-start gap-2">
         <Avatar className="size-10 rounded-lg bg-muted">
           <AvatarFallback className="rounded-lg text-xs font-semibold">
@@ -296,72 +319,91 @@ function PipelineCard({
           >
             {entry.personName}
           </Link>
-          {entry.personLocation && (
+          {entry.personLocation ? (
             <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-muted-foreground">
               <MapPin className="size-2.5 shrink-0" />
               <span className="truncate">{entry.personLocation}</span>
             </p>
+          ) : (
+            <p className="mt-0.5 text-[10px] italic text-muted-foreground/60">Location not set</p>
           )}
         </div>
         {scoreLabel !== null && (
           <span
             className={cn(
-              'grid size-8 shrink-0 place-items-center rounded-full border-2 bg-card font-mono text-[10px] font-bold tabular-nums',
+              'grid size-9 shrink-0 place-items-center rounded-full border-2 bg-card font-mono text-[11px] font-bold tabular-nums',
               scoreLabel >= 75
                 ? 'border-pipeline-placed text-pipeline-placed'
                 : scoreLabel >= 50
                   ? 'border-pipeline-review text-pipeline-review'
                   : 'border-border text-muted-foreground',
             )}
+            title={`Match score ${scoreLabel}`}
           >
             {scoreLabel}
           </span>
         )}
       </div>
 
-      <ul className="space-y-0.5 text-[10px] text-muted-foreground">
-        <MetaRow icon={<Briefcase />}>{requisition.title}</MetaRow>
-        {salaryLabel && <MetaRow icon={<Coins />}>{salaryLabel}</MetaRow>}
-        <MetaRow icon={<Sparkles />}>{requisition.employerName}</MetaRow>
-      </ul>
+      {/* Source-layer badge — Session 17 context. Promoted to its own
+          row so the identity row above stays uncluttered. */}
+      <div className="flex items-center gap-1.5 text-[10px]">
+        <span
+          className="rounded-full border border-border/70 bg-background px-1.5 py-0.5 font-mono uppercase tracking-wide text-muted-foreground"
+          title={`Backed by: ${SOURCE_LAYER_LABEL[stage]} record`}
+        >
+          {SOURCE_LAYER_LABEL[stage]}
+        </span>
+        {!entry.personEmail && !entry.personPhone && (
+          <span className="text-muted-foreground/70 italic">No contact info</span>
+        )}
+      </div>
 
-      <div className="mt-auto flex items-center gap-1 border-t pt-2">
+      {/* Contact rail — only emits actionable buttons for data we have.
+          Previously four cells were always visible (view + email + phone
+          + more); the "more" overflow button went nowhere and the
+          disabled mail/phone cells read as broken. Removed. */}
+      <div className="flex items-center gap-1 border-t pt-2">
         <IconAction
           title="View profile"
           href={`/candidates/${entry.personId}`}
           icon={<Eye className="size-3" />}
         />
-        <IconAction
-          title="Email"
-          href={entry.personEmail ? `mailto:${entry.personEmail}` : undefined}
-          icon={<Mail className="size-3" />}
-        />
-        <IconAction
-          title="Call"
-          href={entry.personPhone ? `tel:${entry.personPhone}` : undefined}
-          icon={<Phone className="size-3" />}
-        />
-        <button
-          type="button"
-          className="ml-auto grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-muted"
-          aria-label="More"
-        >
-          <MoreHorizontal className="size-3" />
-        </button>
+        {entry.personEmail && (
+          <IconAction
+            title={`Email ${entry.personEmail}`}
+            href={`mailto:${entry.personEmail}`}
+            icon={<Mail className="size-3" />}
+          />
+        )}
+        {entry.personPhone && (
+          <IconAction
+            title={`Call ${entry.personPhone}`}
+            href={`tel:${entry.personPhone}`}
+            icon={<Phone className="size-3" />}
+          />
+        )}
       </div>
 
       {advanceLabel && (
-        <button
-          type="button"
-          onClick={onAdvance}
-          disabled={disabled}
-          className={cn(
-            'flex items-center justify-center gap-1 rounded-md py-1.5 text-[11px] font-semibold text-white transition-transform hover:scale-[1.01] disabled:opacity-50',
-            PIPELINE_STAGES[NEXT_STAGE[stage] ?? 'placed'].solidClassName,
+        <>
+          <button
+            type="button"
+            onClick={onAdvance}
+            disabled={disabled}
+            className={cn(
+              'flex items-center justify-center gap-1 rounded-md py-1.5 text-[11px] font-semibold text-white transition-transform hover:scale-[1.01] disabled:opacity-50',
+              PIPELINE_STAGES[NEXT_STAGE[stage] ?? 'placed'].solidClassName,
+            )}
+          >
+            {advanceLabel} <ArrowRight className="size-3" />
+          </button>
+          {ADVANCE_HINT[stage] && (
+            <p className="text-center text-[9px] leading-tight text-muted-foreground">
+              {ADVANCE_HINT[stage]}
+            </p>
           )}
-        >
-          {advanceLabel} <ArrowRight className="size-3" />
-        </button>
+        </>
       )}
       {canDismiss && (
         <button
@@ -442,6 +484,21 @@ const BAND_TONE: Record<PipelineStageKey, Parameters<typeof Note>[0]['tone']> = 
   placed: 'green',
 };
 
+/**
+ * Session 36 — one icon per band, picked for recognition at a glance.
+ * The band header renders the icon alongside the step number so a
+ * recruiter can land on the page and parse the funnel without reading.
+ */
+const STAGE_ICON: Record<PipelineStageKey, typeof Target> = {
+  source: Target,
+  review: Search,
+  shortlist: Star,
+  apply: Send,
+  interview: Users,
+  offer: Handshake,
+  placed: UserCheck,
+};
+
 const NEXT_STAGE: Record<PipelineStageKey, PipelineStage | null> = {
   source: 'shortlist',
   review: 'shortlist',
@@ -459,6 +516,44 @@ const ADVANCE_LABEL: Record<PipelineStageKey, string | null> = {
   apply: 'Move to Interview',
   interview: 'Move to Offer',
   offer: 'Accept offer',
+  placed: null,
+};
+
+/**
+ * Phase 1 blueprint §1.1 — three different tables feed the pipeline:
+ * candidateMatches, shortlistEntries, jobApplications (plus placements
+ * as the terminal). Operators got confused because the pipeline wall
+ * surfaced all four as "one funnel" with no indication of which
+ * backing record a given card represented. Advancing a Shortlist card
+ * created a NEW application row; advancing an Application card
+ * UPDATED the existing one — same visible click, different DB effect.
+ *
+ * This badge is non-interactive; it just tells the operator which
+ * "layer" they're acting on so advance moves aren't surprising.
+ */
+const SOURCE_LAYER_LABEL: Record<PipelineStageKey, string> = {
+  source: 'Match',
+  review: 'Match',
+  shortlist: 'Shortlist',
+  apply: 'Application',
+  interview: 'Application',
+  offer: 'Application',
+  placed: 'Placement',
+};
+
+/**
+ * Short sentence that spells out what the advance action actually
+ * does, so an operator doesn't accidentally fire a different DB
+ * mutation than they expected. Rendered as a sub-line under the
+ * advance button.
+ */
+const ADVANCE_HINT: Record<PipelineStageKey, string | null> = {
+  source: 'Moves to the manual shortlist.',
+  review: 'Moves to the manual shortlist.',
+  shortlist: 'Creates a formal application row.',
+  apply: 'Updates application status to Interview.',
+  interview: 'Updates application status to Offer.',
+  offer: 'Marks the application as placed + creates a placement record.',
   placed: null,
 };
 
@@ -485,19 +580,6 @@ function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean).slice(0, 2);
   if (parts.length === 0) return '?';
   return parts.map((p) => p.charAt(0).toUpperCase()).join('');
-}
-
-function formatSalary(r: RequisitionListRow): string | null {
-  const currency = r.salaryCurrencyCode;
-  const min = r.salaryMin;
-  const max = r.salaryMax;
-  if (!currency) return null;
-  const opts = { maximumFractionDigits: 0 } as const;
-  if (min && max) {
-    return `${formatCurrency(min, currency, opts)} – ${formatCurrency(max, currency, opts)}`;
-  }
-  if (min) return `From ${formatCurrency(min, currency, opts)}`;
-  return null;
 }
 
 // Age helper reserved for a future card variant. Kept close to

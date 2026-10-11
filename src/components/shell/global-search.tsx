@@ -272,11 +272,23 @@ export function GlobalSearch() {
 
   return (
     <>
+      {/* Session 37 — collapses to an icon on narrow viewports so the
+          hamburger + search + clock + bell + theme + avatar don't
+          fight each other in the top bar. The full search button
+          returns at `md`. Both buttons open the same modal. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open global search"
-        className="relative flex h-9 w-full max-w-md items-center gap-2 rounded-md border border-input bg-transparent pl-9 pr-3 text-left text-sm text-muted-foreground transition-colors hover:bg-accent/40 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+        className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/50 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 md:hidden"
+      >
+        <Search className="size-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Open global search"
+        className="relative hidden h-9 w-full max-w-md items-center gap-2 rounded-md border border-input bg-transparent pl-9 pr-3 text-left text-sm text-muted-foreground transition-colors hover:bg-accent/40 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 md:flex"
       >
         <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2" />
         <span className="truncate">Search candidates, employers, cases…</span>

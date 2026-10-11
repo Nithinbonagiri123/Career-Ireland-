@@ -94,7 +94,7 @@ function AccountDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="email">Email address *</Label>
               <Input
@@ -133,7 +133,7 @@ function AccountDialog({
               Encrypted at rest with AES-256-GCM. Never logged.
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="imap">IMAP host</Label>
               <Input id="imap" value={imapHost} onChange={(e) => setImapHost(e.target.value)} />
@@ -148,7 +148,7 @@ function AccountDialog({
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="smtp">SMTP host</Label>
               <Input id="smtp" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} />
@@ -330,7 +330,7 @@ export function EmailAccountPanel({
               )}
             </div>
             {(account.imapHost || account.smtpHost) && (
-              <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3 text-xs">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-md border bg-muted/30 p-3 text-xs">
                 {account.imapHost && (
                   <div>
                     <p className="uppercase tracking-wide text-muted-foreground">IMAP</p>

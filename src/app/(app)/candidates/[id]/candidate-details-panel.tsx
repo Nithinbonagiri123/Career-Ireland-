@@ -406,7 +406,7 @@ function QualificationDialog({
               />
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="awardedOn">Awarded on</Label>
               <Input
@@ -615,7 +615,7 @@ function EmploymentDialog({
               required
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="jobTitle">Job title</Label>
               <Input id="jobTitle" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
@@ -625,7 +625,7 @@ function EmploymentDialog({
               <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor="startDate">Start date</Label>
               <Input

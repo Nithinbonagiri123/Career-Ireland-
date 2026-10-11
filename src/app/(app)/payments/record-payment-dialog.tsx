@@ -105,7 +105,7 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
             </Select>
           </FormField>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField id="p-amount" label="Amount" error={errors.amount?.message}>
               <Input
                 id="p-amount"
@@ -125,7 +125,7 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
             </FormField>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField id="p-method" label="Method">
               <Select id="p-method" {...register('method')}>
                 <option value="BANK_TRANSFER">Bank transfer</option>

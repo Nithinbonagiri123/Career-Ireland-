@@ -35,6 +35,7 @@ import {
   finaliseDraftWithoutPaymentAction,
   updateDraftPersonAction,
 } from '@/modules/candidates/onboarding-actions';
+import { CvSuggestionsPanel } from '../[id]/cv-suggestions-panel';
 
 type Draft = {
   personId: string;
@@ -400,7 +401,7 @@ export function OnboardingForm({
               }
             />
             {uploads.length > 0 && (
-              <ul className="mt-4 divide-y rounded-md border">
+              <ul className="mt-4 divide-y rounded-md border" data-ic-uploads="list">
                 {uploads.map((u) => {
                   const typeName =
                     docTypes.find((t) => t.id === u.documentTypeId)?.name ?? 'Document';
@@ -427,6 +428,21 @@ export function OnboardingForm({
           </CardContent>
         </Card>
       </FadeUp>
+
+      {/* Phase 2 blueprint §2.2 — CV extraction integrated into
+          onboarding. Previously the suggestions panel only existed on
+          the candidate detail page AFTER onboarding; operators had to
+          re-type information already in the CV during onboarding, then
+          discover the extraction panel later. Rendering it inline here
+          means the extraction becomes part of the flow, not a
+          post-flow afterthought. The panel is a no-op when no CV has
+          been uploaded yet, so the ordering (Documents → Suggestions
+          → Payment) is natural. */}
+      {uploads.length > 0 && (
+        <FadeUp delay={0.175}>
+          <CvSuggestionsPanel personId={draft.personId} />
+        </FadeUp>
+      )}
 
       <FadeUp delay={0.2}>
         <Card>

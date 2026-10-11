@@ -60,7 +60,7 @@ export default async function AuditLogPage({
   ].filter(Boolean).length;
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp className="mb-6 flex items-start justify-between gap-4">
         <div>
           <div className="mb-1 flex items-center gap-2">

@@ -2,10 +2,15 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { InvoicePrintable } from '@/components/billing/invoice-printable';
+import { IssueRefundControls } from '@/components/billing/issue-refund-controls';
 import { PrintButton } from '@/components/print-button';
 import { buttonVariants } from '@/components/ui/button';
 import { requireInternalStaff } from '@/lib/auth/session';
-import { fetchCreditNotesForInvoice, fetchInvoiceForPrint } from '@/modules/billing/read';
+import {
+  fetchCreditNotesForInvoice,
+  fetchInvoiceForPrint,
+  fetchRefundablePaymentsForInvoice,
+} from '@/modules/billing/read';
 import { fetchAppSettings } from '@/modules/settings/service';
 import { CreditNoteControls } from '../../../../candidates/[id]/invoices/[number]/credit-note-controls';
 
@@ -37,6 +42,10 @@ export default async function EmployerInvoicePrintPage({
     data.invoice.status !== 'VOIDED';
 
   const existingCreditNotes = await fetchCreditNotesForInvoice(data.invoice.id);
+  const refundablePayments =
+    canCredit && data.invoice.status !== 'VOIDED'
+      ? await fetchRefundablePaymentsForInvoice(data.invoice.id)
+      : [];
   const alreadyCreditedCents = existingCreditNotes.reduce(
     (sum, c) => sum + Math.round(Number.parseFloat(c.amount) * 100),
     0,
@@ -62,6 +71,13 @@ export default async function EmployerInvoicePrintPage({
               profileHref={`/employers/${id}`}
               currencyCode={data.invoice.currencyCode}
               maxCreditAmount={maxCreditAmount}
+            />
+          )}
+          {refundablePayments.length > 0 && (
+            <IssueRefundControls
+              invoiceNumber={data.invoice.number}
+              profileHref={`/employers/${id}`}
+              refundablePayments={refundablePayments}
             />
           )}
           <PrintButton />

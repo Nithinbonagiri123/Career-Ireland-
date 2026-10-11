@@ -67,7 +67,7 @@ export function CurrencyDialog({ trigger, initial }: Props) {
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <FormField id="cu-code" label="Code" error={errors.code?.message}>
               <Input
                 id="cu-code"

@@ -116,7 +116,7 @@ export function RequisitionDialog({
             <FormField id="jr-title" label="Job title" error={errors.title?.message}>
               <Input id="jr-title" aria-invalid={Boolean(errors.title)} {...register('title')} />
             </FormField>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <FormField id="jr-occupation" label="Occupation">
                 <input type="hidden" {...register('occupationId')} />
                 <OccupationPicker
@@ -162,7 +162,7 @@ export function RequisitionDialog({
             description="Salary band shown to candidates during matching."
             collapsible
           >
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <FormField id="jr-smin" label="Salary min">
                 <Input id="jr-smin" inputMode="decimal" {...register('salaryMin')} />
               </FormField>
@@ -189,7 +189,7 @@ export function RequisitionDialog({
             description="Lifecycle status and a target fill date for forecasting."
             collapsible
           >
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField id="jr-status" label="Status">
                 <Select id="jr-status" {...register('status')}>
                   <option value="DRAFT">Draft</option>

@@ -134,7 +134,7 @@ export function CaseDialog({
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-6" noValidate>
           <FormSection title="Case">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField id="ic-type" label="Case type">
                 <Select id="ic-type" {...register('caseType')}>
                   <option value="EMPLOYMENT_PERMIT">Employment permit</option>
@@ -244,7 +244,7 @@ export function CaseDialog({
             description="Dates and the authority reference once this case is in motion."
             collapsible
           >
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <FormField id="ic-submitted" label="Submitted">
                 <Input id="ic-submitted" type="date" {...register('submittedAt')} />
               </FormField>

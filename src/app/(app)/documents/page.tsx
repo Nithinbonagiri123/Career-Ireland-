@@ -61,7 +61,7 @@ export default async function DocumentsPage({
       resolveOwnerName(client, ownerKind),
     ]);
     return (
-      <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
         <FadeUp>
           <PageHeader
             icon={FileText}
@@ -99,7 +99,7 @@ export default async function DocumentsPage({
   const folders = await fetchDocumentClientFolders({ ownerQ: q });
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={FileText}

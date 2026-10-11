@@ -75,7 +75,7 @@ export function CreateTaskDialog({ users, persons, employers }: Props) {
           <FormField id="tk-desc" label="Description">
             <Textarea id="tk-desc" rows={3} {...register('description')} />
           </FormField>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField id="tk-due" label="Due">
               <Input id="tk-due" type="datetime-local" {...register('dueAt')} />
             </FormField>
@@ -99,7 +99,7 @@ export function CreateTaskDialog({ users, persons, employers }: Props) {
                 ))}
             </Select>
           </FormField>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField id="tk-person" label="Person" error={errors.personId?.message}>
               <Select id="tk-person" {...register('personId')}>
                 <option value="">— none —</option>

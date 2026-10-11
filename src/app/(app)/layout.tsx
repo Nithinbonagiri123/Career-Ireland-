@@ -5,13 +5,15 @@ import { TopBar } from '@/components/shell/top-bar';
 import { BUSINESSES, MODULES, VERBS } from '@/lib/auth/permissions';
 import { requireSession } from '@/lib/auth/session';
 import { resolveCurrentWorkspace } from '@/lib/workspace';
+import { fetchMyTodayStatus } from '@/modules/hr/service';
 import { countMyUnread } from '@/modules/notifications/service';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
-  const [unreadCount, workspaceState] = await Promise.all([
+  const [unreadCount, workspaceState, todayStatus] = await Promise.all([
     countMyUnread(session.user.id).catch(() => 0),
     resolveCurrentWorkspace(),
+    fetchMyTodayStatus(session.user.id).catch(() => null),
   ]);
 
   // Fallback: if permission resolution fails (should be impossible for an
@@ -79,6 +81,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             workspace={workspace}
             reachable={reachable}
             visibleModules={visibleModules}
+            clockInitial={
+              todayStatus
+                ? {
+                    status: todayStatus.openBreak
+                      ? 'on_break'
+                      : todayStatus.openSession
+                        ? 'working'
+                        : 'off',
+                    openSessionAt: todayStatus.openSession?.clockInAt ?? null,
+                    openBreakAt: todayStatus.openBreak?.breakStartedAt ?? null,
+                  }
+                : { status: 'off', openSessionAt: null, openBreakAt: null }
+            }
           />
         </div>
         {/*

@@ -23,7 +23,7 @@ export default async function YearEndClosePage() {
   const statuses = await Promise.all(years.map((y) => fetchYearEndCloseStatus(y)));
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={CalendarCheck}

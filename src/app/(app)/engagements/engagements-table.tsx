@@ -1,8 +1,8 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { Archive, MoreHorizontal } from 'lucide-react';
-import { useMemo, useState, useTransition } from 'react';
+import { Archive, CheckCircle2, MoreHorizontal, Play } from 'lucide-react';
+import { useCallback, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
 import { PromptDialog } from '@/components/prompt-dialog';
@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { statusTone } from '@/lib/ui/status-tone';
-import { archiveEngagementAction } from '@/modules/commerce/actions';
+import { archiveEngagementAction, updateEngagementStatusAction } from '@/modules/commerce/actions';
 import type { EngagementListRow } from '@/modules/commerce/repository';
 
 export function EngagementsTable({ engagements }: { engagements: EngagementListRow[] }) {
@@ -39,6 +39,23 @@ export function EngagementsTable({ engagements }: { engagements: EngagementListR
       }
     });
   };
+
+  // Session 11: direct verb for starting/completing the service.
+  // Transitions the engagement status one hop and audits via the shared
+  // updateEngagementStatus action.
+  const transition = useCallback(
+    (e: EngagementListRow, status: 'ACTIVE' | 'COMPLETED', verb: string) => {
+      if (status === 'COMPLETED' && !window.confirm('Mark this service as complete?')) return;
+      setBusyId(e.id);
+      startTransition(async () => {
+        const r = await updateEngagementStatusAction({ engagementId: e.id, status });
+        setBusyId(null);
+        if (r.ok) toast.success(`Service ${verb}`);
+        else toast.error(r.error.message);
+      });
+    },
+    [],
+  );
 
   const columns = useMemo<ColumnDef<EngagementListRow>[]>(
     () => [
@@ -106,6 +123,16 @@ export function EngagementsTable({ engagements }: { engagements: EngagementListR
                 <MoreHorizontal className="size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {(e.status === 'REQUESTED' || e.status === 'PENDING_PAYMENT') && (
+                  <DropdownMenuItem onSelect={() => transition(e, 'ACTIVE', 'started')}>
+                    <Play className="mr-2 size-4" /> Start service
+                  </DropdownMenuItem>
+                )}
+                {e.status === 'ACTIVE' && (
+                  <DropdownMenuItem onSelect={() => transition(e, 'COMPLETED', 'completed')}>
+                    <CheckCircle2 className="mr-2 size-4" /> Complete service
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem variant="destructive" onSelect={() => setArchiveTarget(e)}>
                   <Archive className="mr-2 size-4" /> Archive
                 </DropdownMenuItem>
@@ -115,7 +142,7 @@ export function EngagementsTable({ engagements }: { engagements: EngagementListR
         },
       },
     ],
-    [busyId],
+    [busyId, transition],
   );
 
   return (
