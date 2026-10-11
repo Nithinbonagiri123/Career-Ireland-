@@ -35,10 +35,7 @@ export function NextActionCard({
 }: NextActionCardProps) {
   const isUrgent = tone === 'urgent';
   return (
-    <section
-      aria-label="Next step"
-      className={cn('border-t border-border/60 py-5', className)}
-    >
+    <section aria-label="Next step" className={cn('border-t border-border/60 py-5', className)}>
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
