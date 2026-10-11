@@ -130,10 +130,11 @@ test('sidebar: clicking a bottom item keeps that item visible in the sidebar vie
   // Scroll the sidebar's own container to the bottom.
   await sidebarNav.evaluate((el) => el.scrollTo(0, el.scrollHeight));
 
-  // Click a link near the bottom of the Main workspace sidebar (Accounts
-  // is the last item in the Business section).
-  const accountsLink = page.getByRole('link', { name: /^Accounts$/ });
-  await accountsLink.click();
+  // Click a link near the bottom of the Main workspace sidebar.
+  // Session 41 renamed Main's "Accounts" entry → "Payments" to end the
+  // Accounts/Accounting collision; the URL still points at /payments.
+  const paymentsLink = page.getByRole('link', { name: /^Payments$/ });
+  await paymentsLink.click();
   await expect(page).toHaveURL(/\/payments/);
 
   // The active nav item should be within the sidebar's own scroll box.

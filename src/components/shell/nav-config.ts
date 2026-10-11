@@ -81,7 +81,12 @@ export const WORKSPACES: Record<Business, WorkspaceConfig> = {
       {
         label: 'Overview',
         items: [
-          { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, module: 'overview' },
+          { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, module: 'overview' },
+          // Owner-facing cross-business KPIs. The page gates on
+          // `main.overview.view`, so this item inherits that gate — anyone
+          // who can see the Main dashboard sees Reports. Hidden route
+          // pre-Session 41.
+          { label: 'Reports', href: '/reports', icon: BarChart3, module: 'overview' },
         ],
       },
       {
@@ -100,13 +105,18 @@ export const WORKSPACES: Record<Business, WorkspaceConfig> = {
             module: 'activities',
           },
           { label: 'HR Board', href: '/hr/admin', icon: Users2, module: 'hr_board' },
+          // Who's clocked in right now — complements HR Board (full timesheet
+          // review) with the live roll-call owners want at a glance.
+          { label: 'Team on duty', href: '/hr/team', icon: Users, module: 'hr_board' },
           { label: 'Admin', href: '/admin', icon: UserCog, module: 'admin' },
-          { label: 'Accounts', href: '/payments', icon: Coins, module: 'accounts' },
-          // Double-entry ledger lives at /admin/accounting. Distinct from the
-          // operational "Accounts" entry above (which is the payments list):
-          // this is the GL / journal / chart-of-accounts side introduced by
-          // the Phase 1 accounting foundation. Visible to anyone with
-          // main.accounting.view (FINANCE preset grants it).
+          // Operational payments list. Previously labelled "Accounts" which
+          // collided with the Accounting (GL) entry one line below. Session 41
+          // disambiguates: "Payments" = the operational invoices/receipts
+          // list, "Accounting" = the double-entry ledger.
+          { label: 'Payments', href: '/payments', icon: Coins, module: 'accounts' },
+          // Double-entry ledger — journal, chart of accounts, VAT return,
+          // year-end close. Visible to anyone with main.accounting.view
+          // (FINANCE preset grants it).
           {
             label: 'Accounting',
             href: '/admin/accounting',
@@ -198,6 +208,10 @@ export const WORKSPACES: Record<Business, WorkspaceConfig> = {
         label: 'Match & hire',
         items: [
           { label: 'Matching', href: '/matching', icon: SearchCheck, module: 'matching' },
+          // Named candidate lists for employer presentation. Gates on
+          // `recruitment.matching.view` (the page itself does the same).
+          // Hidden route pre-Session 41.
+          { label: 'Shortlists', href: '/shortlists', icon: ListChecks, module: 'matching' },
           { label: 'Interviews', href: '/interviews', icon: CalendarClock, module: 'interviews' },
           { label: 'Placements', href: '/placements', icon: Trophy, module: 'placements' },
         ],
@@ -315,15 +329,13 @@ export function workspaceFromPathname(pathname: string): Business | null {
  * Kept here as a source of truth so search / bookmarks keep working;
  * add them back into a workspace if the product needs them surfaced.
  *
- * Reachable via direct URL:
- *   /shortlists   /notifications   /reports   /hr/team
+ * Reachable via direct URL only (as of Session 41 — Reports, Shortlists,
+ * and Team on duty were just surfaced in the sidebar):
+ *   /notifications (lives in the TopBar bell)
  *   /admin/persons  /admin/occupations  /admin/skills
  *   /admin/qualifications  /admin/document-types
  *   /admin/document-rules  /admin/services  /admin/currencies
- *   /admin/audit
  *
- * Icons kept as a reference list — no longer imported from this file,
- * but the lookups above (BarChart3, Bell, GitMerge, ...) are here so
- * future re-additions have the icon set to choose from.
+ * Icons kept as a reference list for future re-additions.
  */
-void [BarChart3, Bell, GitMerge, GraduationCap, ListChecks, Package, ScrollText, Tags, Globe];
+void [Bell, GitMerge, GraduationCap, Package, ScrollText, Tags, Globe];
