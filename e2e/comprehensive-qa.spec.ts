@@ -133,7 +133,9 @@ test('sidebar: clicking a bottom item keeps that item visible in the sidebar vie
   // Click a link near the bottom of the Main workspace sidebar.
   // Session 41 renamed Main's "Accounts" entry → "Payments" to end the
   // Accounts/Accounting collision; the URL still points at /payments.
-  const paymentsLink = page.getByRole('link', { name: /^Payments$/ });
+  // Scope to the sidebar — the dashboard's finance-kpi-card also has a
+  // "Payments →" link in <main>, which would collide with page.getByRole.
+  const paymentsLink = sidebarNav.getByRole('link', { name: /^Payments$/ });
   await paymentsLink.click();
   await expect(page).toHaveURL(/\/payments/);
 
