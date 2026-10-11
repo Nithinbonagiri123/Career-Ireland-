@@ -91,6 +91,9 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
       personId = data.personId;
     } else if (data.mode === 'NEW_EMPLOYER') {
       const e = data.employer;
+      // Session 33 — auto-assign the new employer to the creator (same
+      // rule as the direct /employers → New employer flow). See memory
+      // `record-ownership-rules`.
       const [created] = await tx
         .insert(employers)
         .values({
@@ -101,7 +104,7 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
           country: blankToNull(e.country),
           city: blankToNull(e.city),
           relationshipStatus: e.relationshipStatus,
-          assignedUserId: blankToNull(e.assignedUserId),
+          assignedUserId: session.user.id,
           notes: blankToNull(e.notes),
         })
         .returning();
@@ -126,7 +129,9 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
       employerId,
       status: 'NEW',
       serviceOfInterestId: data.serviceOfInterestId,
-      assignedUserId: data.assignedUserId,
+      // Session 33 — auto-assign leads to the creator. Owner-only
+      // reassign afterwards.
+      assignedUserId: session.user.id,
       notes: blankToNull(data.notes),
     });
 
@@ -213,7 +218,13 @@ export async function convertLead(input: ConvertLeadInput) {
     if (existingProfile) {
       profileId = existingProfile.id;
     } else {
-      const [newProfile] = await tx.insert(candidateProfiles).values({ personId }).returning();
+      // Session 33 — auto-assign the newly-materialised candidate to
+      // the operator accepting the lead (see memory
+      // `record-ownership-rules`).
+      const [newProfile] = await tx
+        .insert(candidateProfiles)
+        .values({ personId, assignedUserId: session.user.id })
+        .returning();
       if (!newProfile) throw new Error('candidate_profiles insert returned no row');
       profileId = newProfile.id;
       createdNewProfile = true;
@@ -369,9 +380,10 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
       if (existingProfile) {
         entityId = existingProfile.id;
       } else {
+        // Session 33 — same auto-assign rule on lead accept.
         const [newProfile] = await tx
           .insert(candidateProfiles)
-          .values({ personId: lead.personId })
+          .values({ personId: lead.personId, assignedUserId: session.user.id })
           .returning();
         if (!newProfile) throw new Error('candidate_profiles insert returned no row');
         entityId = newProfile.id;
@@ -380,7 +392,7 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
           entityType: 'candidate_profile',
           entityId: newProfile.id,
           action: 'CREATED',
-          after: { personId: lead.personId },
+          after: { personId: lead.personId, assignedUserId: session.user.id },
           context: { via: 'lead_accept', leadId: lead.id, reason: parsed.reason },
         });
       }

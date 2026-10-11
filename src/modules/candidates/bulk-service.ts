@@ -1,7 +1,7 @@
 import { inArray, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requireInternalStaff, requireOwner } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { candidateProfiles } from '@/lib/db/schema/persons';
 import { ValidationError } from '@/lib/errors';
@@ -24,7 +24,9 @@ export type LifecycleStatus = z.infer<typeof LifecycleStatusSchema>;
 export async function bulkAssignCandidates(
   input: BulkAssignCandidatesInput,
 ): Promise<{ changed: number }> {
-  const session = await requireInternalStaff();
+  // Session 33 — bulk reassign is a business-owner action, same gate as
+  // the per-record Reassign flow. See memory `record-ownership-rules`.
+  const session = await requireOwner();
   const parsed = BulkAssignCandidatesSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(

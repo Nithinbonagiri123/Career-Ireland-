@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requireOwner } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { immigrationCases } from '@/lib/db/schema/immigration';
 import { leads } from '@/lib/db/schema/leads';
@@ -76,7 +76,11 @@ export async function assignEntity(input: {
   userId: string | null;
   reason?: string;
 }): Promise<{ before: string | null; after: string | null } | null> {
-  const session = await requireInternalStaff();
+  // Session 33 blueprint — reassignment is a business-owner action.
+  // Records auto-assign to the creator on insert, so a normal staff
+  // member never needs to call this flow themselves. Owners use it
+  // for absence handoffs. See memory `record-ownership-rules`.
+  const session = await requireOwner();
   const target = TARGETS[input.entity];
   if (!target) throw new BusinessRuleError('BAD_ENTITY', `Unknown entity: ${input.entity}`);
 

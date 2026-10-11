@@ -145,12 +145,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (!dbUser?.isActive) return null; // deactivated or gone → force re-login
         const invalidatedAtSec = Math.floor(dbUser.sessionsInvalidatedAfter.getTime() / 1000);
         if (t.iat < invalidatedAtSec) return null; // role/access changed → force re-login
-        // Refresh role + scope in case they changed (belt-and-braces since invalidation should have fired).
+        // Refresh role + scope + isOwner in case they changed (belt-and-
+        // braces since invalidation should have fired). Keeping isOwner
+        // fresh matters for the reassign gate — demotion must take
+        // effect within one request cycle.
         return {
           ...token,
           role: dbUser.role as UserRole,
           personId: dbUser.personId,
           employerId: dbUser.employerId,
+          isOwner: dbUser.isOwner === true,
         };
       } catch (e) {
         logger.error({ err: e, userId: t.id }, 'jwt DB revalidation failed');

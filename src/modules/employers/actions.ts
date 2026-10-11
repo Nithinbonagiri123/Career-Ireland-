@@ -11,6 +11,7 @@ import type {
 import {
   archiveEmployer,
   findSimilarEmployers,
+  markEmployerOnboardingComplete,
   unarchiveEmployer,
   upsertEmployer,
   upsertEmployerContact,
@@ -21,6 +22,15 @@ export async function upsertEmployerAction(input: UpsertEmployerInput) {
   if (r.ok) {
     revalidatePath('/employers');
     if (input.id) revalidatePath(`/employers/${input.id}`);
+  }
+  return r;
+}
+
+export async function markEmployerOnboardingCompleteAction(employerId: string) {
+  const r = await toActionResult(() => markEmployerOnboardingComplete(employerId));
+  if (r.ok) {
+    revalidatePath('/employers');
+    revalidatePath(`/employers/${employerId}`);
   }
   return r;
 }

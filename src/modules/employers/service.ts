@@ -179,6 +179,9 @@ export async function upsertEmployer(input: UpsertEmployerInput): Promise<Employ
     );
   }
   const d = parsed.data;
+  // Session 33 — on CREATE, auto-assign to the creator (see memory
+  // `record-ownership-rules`). Edits never re-stamp the owner because
+  // only the business owner can reassign, via the dedicated action.
   const values = {
     legalName: d.legalName.trim(),
     tradingName: blankToNull(d.tradingName),
@@ -186,8 +189,14 @@ export async function upsertEmployer(input: UpsertEmployerInput): Promise<Employ
     industry: blankToNull(d.industry),
     country: blankToNull(d.country),
     city: blankToNull(d.city),
+    addressLine1: blankToNull(d.addressLine1),
+    addressLine2: blankToNull(d.addressLine2),
+    postcode: blankToNull(d.postcode),
+    billingEmail: blankToNull(d.billingEmail),
+    vatId: blankToNull(d.vatId),
+    vatTreatment: d.vatTreatment,
+    paymentTermsDays: d.paymentTermsDays ?? null,
     relationshipStatus: d.relationshipStatus,
-    assignedUserId: blankToNull(d.assignedUserId),
     notes: blankToNull(d.notes),
   };
 
@@ -214,7 +223,10 @@ export async function upsertEmployer(input: UpsertEmployerInput): Promise<Employ
       });
       return after;
     }
-    const [created] = await tx.insert(employers).values(values).returning();
+    const [created] = await tx
+      .insert(employers)
+      .values({ ...values, assignedUserId: session.user.id })
+      .returning();
     if (!created) throw new Error('insert returned no row');
     await recordAudit(tx, {
       actorUserId: session.user.id,
@@ -224,6 +236,75 @@ export async function upsertEmployer(input: UpsertEmployerInput): Promise<Employ
       after: { legalName: created.legalName, relationshipStatus: created.relationshipStatus },
     });
     return created;
+  });
+}
+
+/**
+ * Mark an employer's onboarding as complete. Blueprint §4.1 — gives the
+ * flow a defined "done" moment instead of a dialog that silently saves
+ * fields and leaves the operator wondering whether they're finished.
+ *
+ * Guards:
+ *   - Legal name must be set (always required)
+ *   - At least one primary contact must exist (so invoices have a human
+ *     to chase)
+ *   - If VAT treatment = STANDARD, billing email must be set (otherwise
+ *     invoices have nowhere to go)
+ */
+export async function markEmployerOnboardingComplete(employerId: string): Promise<Employer> {
+  const session = await requireInternalStaff();
+  return db.transaction(async (tx) => {
+    const [emp] = await tx.select().from(employers).where(eq(employers.id, employerId)).limit(1);
+    if (!emp) throw new BusinessRuleError('EMPLOYER_NOT_FOUND', 'Employer not found');
+    if (emp.onboardingCompletedAt) return emp; // Idempotent
+
+    const [primary] = await tx
+      .select({ id: employerContacts.id })
+      .from(employerContacts)
+      .where(and(eq(employerContacts.employerId, employerId), eq(employerContacts.isPrimary, true)))
+      .limit(1);
+    if (!primary) {
+      throw new BusinessRuleError(
+        'MISSING_PRIMARY_CONTACT',
+        'Add a primary contact before marking onboarding complete.',
+      );
+    }
+
+    if (emp.vatTreatment === 'STANDARD' && !emp.billingEmail) {
+      throw new BusinessRuleError(
+        'MISSING_BILLING_EMAIL',
+        'An invoice email is required for Standard VAT treatment. Add one under Billing & VAT.',
+      );
+    }
+
+    const now = new Date();
+    const [after] = await tx
+      .update(employers)
+      .set({
+        onboardingCompletedAt: now,
+        relationshipStatus:
+          emp.relationshipStatus === 'PROSPECT' ? 'ACTIVE' : emp.relationshipStatus,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(employers.id, employerId))
+      .returning();
+    if (!after) throw new Error('update returned no row');
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'employer',
+      entityId: after.id,
+      action: 'ONBOARDING_COMPLETED',
+      before: {
+        relationshipStatus: emp.relationshipStatus,
+      },
+      after: {
+        relationshipStatus: after.relationshipStatus,
+        onboardingCompletedAt: after.onboardingCompletedAt?.toISOString() ?? null,
+      },
+    });
+
+    return after;
   });
 }
 

@@ -20,6 +20,12 @@ export const authEdgeConfig: NextAuthConfig = {
           role: (user as { role?: UserRole }).role,
           personId: (user as { personId?: string | null }).personId ?? null,
           employerId: (user as { employerId?: string | null }).employerId ?? null,
+          // Session 33 — owner bit lives on the token so the edge
+          // middleware and server components can short-circuit without
+          // a DB round-trip. Node-side jwt callback refreshes it from
+          // the users row on every request so demotion takes effect
+          // within one request cycle.
+          isOwner: (user as { isOwner?: boolean }).isOwner ?? false,
         };
       }
       return token;
@@ -30,12 +36,14 @@ export const authEdgeConfig: NextAuthConfig = {
         role?: UserRole;
         personId?: string | null;
         employerId?: string | null;
+        isOwner?: boolean;
       };
       if (session.user && t.id) {
         session.user.id = t.id;
         if (t.role) session.user.role = t.role;
         (session.user as { personId?: string | null }).personId = t.personId ?? null;
         (session.user as { employerId?: string | null }).employerId = t.employerId ?? null;
+        (session.user as { isOwner?: boolean }).isOwner = t.isOwner === true;
       }
       return session;
     },

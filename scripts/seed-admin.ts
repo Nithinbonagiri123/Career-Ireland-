@@ -7,7 +7,7 @@ config({ path: '.env.local' });
 
 async function main() {
   // Deferred imports so dotenv has populated process.env first.
-  const { eq } = await import('drizzle-orm');
+  const { eq, sql } = await import('drizzle-orm');
   const { db } = await import('../src/lib/db/client');
   const { users } = await import('../src/lib/db/schema/users');
   const { hashPassword } = await import('../src/modules/auth/service');
@@ -49,14 +49,23 @@ async function main() {
     process.exit(1);
   }
 
+  // Session 33 — if the users table is empty, the seeded admin IS the
+  // first business owner (otherwise nobody could log in and reassign
+  // records). Subsequent seed runs create plain ADMINs (which can be
+  // promoted later from the user admin page by an existing owner).
+  const [{ count: existingCount }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(users);
+  const makeOwner = (existingCount ?? 0) === 0;
+
   const passwordHash = await hashPassword(password);
 
   // Atomic: insert user + audit row succeed or fail together.
   const created = await db.transaction(async (tx) => {
     const [row] = await tx
       .insert(users)
-      .values({ email, fullName, passwordHash, role: 'ADMIN' })
-      .returning({ id: users.id, email: users.email, role: users.role });
+      .values({ email, fullName, passwordHash, role: 'ADMIN', isOwner: makeOwner })
+      .returning({ id: users.id, email: users.email, role: users.role, isOwner: users.isOwner });
     if (!row) throw new Error('user insert returned no row');
 
     await recordAudit(tx, {
@@ -64,14 +73,16 @@ async function main() {
       entityType: 'user',
       entityId: row.id,
       action: 'CREATED',
-      after: { email: row.email, role: row.role, fullName },
-      context: { source: 'seed-admin' },
+      after: { email: row.email, role: row.role, fullName, isOwner: row.isOwner },
+      context: { source: 'seed-admin', firstUser: makeOwner },
     });
 
     return row;
   });
 
-  console.log(`\n✓ Created ADMIN: ${created.email} (id=${created.id})`);
+  console.log(
+    `\n✓ Created ${created.isOwner ? 'OWNER (first user) ' : ''}ADMIN: ${created.email} (id=${created.id})`,
+  );
   process.exit(0);
 }
 

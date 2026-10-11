@@ -5,7 +5,7 @@ import { type User, type UserRole, users } from '@/lib/db/schema/users';
 
 export type UserListRow = Pick<
   User,
-  'id' | 'email' | 'fullName' | 'role' | 'isActive' | 'lastLoginAt' | 'createdAt'
+  'id' | 'email' | 'fullName' | 'role' | 'isActive' | 'isOwner' | 'lastLoginAt' | 'createdAt'
 >;
 
 export async function listUsers(): Promise<UserListRow[]> {
@@ -16,11 +16,17 @@ export async function listUsers(): Promise<UserListRow[]> {
       fullName: users.fullName,
       role: users.role,
       isActive: users.isActive,
+      isOwner: users.isOwner,
       lastLoginAt: users.lastLoginAt,
       createdAt: users.createdAt,
     })
     .from(users)
     .orderBy(desc(users.createdAt));
+}
+
+export async function findUserById(id: string): Promise<User | null> {
+  const [row] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return row ?? null;
 }
 
 export async function updateUserRole(tx: DbExecutor, id: string, role: UserRole) {

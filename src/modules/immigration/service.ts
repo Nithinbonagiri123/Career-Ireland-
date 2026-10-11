@@ -251,6 +251,44 @@ export async function listCasesForPerson(personId: string): Promise<CaseListRow[
   }));
 }
 
+/**
+ * All non-archived immigration cases sponsored by this employer. Powers
+ * the "Immigration cases" panel on the employer profile (Session 11) so
+ * a recruitment operator can see every permit tied to someone the
+ * employer sponsored without hunting through /immigration.
+ */
+export async function listCasesForEmployer(employerId: string): Promise<CaseListRow[]> {
+  await requireInternalStaff();
+  const rows = await db
+    .select({
+      c: immigrationCases,
+      firstName: persons.firstName,
+      lastName: persons.lastName,
+      sponsorName: employers.legalName,
+      ownerName: users.fullName,
+      applicationTypeName: immigrationApplicationTypes.name,
+    })
+    .from(immigrationCases)
+    .innerJoin(persons, eq(persons.id, immigrationCases.beneficiaryPersonId))
+    .leftJoin(employers, eq(employers.id, immigrationCases.sponsorEmployerId))
+    .leftJoin(users, eq(users.id, immigrationCases.assignedUserId))
+    .leftJoin(
+      immigrationApplicationTypes,
+      eq(immigrationApplicationTypes.id, immigrationCases.applicationTypeId),
+    )
+    .where(
+      and(eq(immigrationCases.sponsorEmployerId, employerId), isNull(immigrationCases.archivedAt)),
+    )
+    .orderBy(desc(immigrationCases.createdAt));
+  return rows.map((r) => ({
+    ...r.c,
+    beneficiaryName: `${r.firstName} ${r.lastName}`,
+    sponsorName: r.sponsorName,
+    ownerName: r.ownerName,
+    applicationTypeName: r.applicationTypeName,
+  }));
+}
+
 export async function upsertCase(input: UpsertCaseInput): Promise<ImmigrationCase> {
   const session = await requireInternalStaff();
   const parsed = UpsertCaseSchema.safeParse(input);
@@ -328,7 +366,12 @@ export async function upsertCase(input: UpsertCaseInput): Promise<ImmigrationCas
       }
       return after;
     }
-    const [created] = await tx.insert(immigrationCases).values(values).returning();
+    // Session 33 — auto-assign the case to its creator. Reassignment
+    // is owner-only (see memory `record-ownership-rules`).
+    const [created] = await tx
+      .insert(immigrationCases)
+      .values({ ...values, assignedUserId: session.user.id })
+      .returning();
     if (!created) throw new Error('insert returned no row');
     await recordAudit(tx, {
       actorUserId: session.user.id,

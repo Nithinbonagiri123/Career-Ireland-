@@ -214,7 +214,10 @@ export async function upsertRequisition(input: UpsertRequisitionInput): Promise<
     description: blankToNull(d.description),
     candidateRequirements: blankToNull(d.candidateRequirements),
     status: d.status,
-    assignedUserId: blankToNull(d.assignedUserId) ?? undefined,
+    // Session 33 — assignedUserId is set from session on INSERT only
+    // (see memory `record-ownership-rules`). The schema still accepts
+    // the field for backwards compatibility with older clients, but
+    // the service ignores it on both insert and update.
     targetFillDate: blankToNull(d.targetFillDate),
   };
 
@@ -242,7 +245,10 @@ export async function upsertRequisition(input: UpsertRequisitionInput): Promise<
       });
       return after;
     }
-    const [created] = await tx.insert(jobRequisitions).values(values).returning();
+    const [created] = await tx
+      .insert(jobRequisitions)
+      .values({ ...values, assignedUserId: session.user.id })
+      .returning();
     if (!created) throw new Error('insert returned no row');
     await recordAudit(tx, {
       actorUserId: session.user.id,

@@ -94,27 +94,37 @@ export function UsersTable({ users, currentUserId }: Props) {
       cell: ({ row }) => {
         const isSelf = row.original.id === currentUserId;
         return (
-          <div className="flex flex-col">
+          <Link
+            href={`/admin/users/${row.original.id}`}
+            className="flex flex-col -my-1 py-1 hover:text-foreground"
+          >
             <span className="text-sm font-medium">
               {row.original.fullName}
               {isSelf && <span className="ml-1.5 text-xs text-muted-foreground">(you)</span>}
             </span>
             <span className="text-xs text-muted-foreground">{row.original.email}</span>
-          </div>
+          </Link>
         );
       },
     },
     {
       header: 'Role',
       accessorKey: 'role',
-      size: 130,
+      size: 180,
       cell: ({ row }) => (
-        <Badge
-          variant={row.original.role === 'ADMIN' ? 'default' : 'secondary'}
-          className="rounded-full"
-        >
-          {STAFF_ROLE_LABEL[row.original.role as StaffRole] ?? row.original.role}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge
+            variant={row.original.role === 'ADMIN' ? 'default' : 'secondary'}
+            className="rounded-full"
+          >
+            {STAFF_ROLE_LABEL[row.original.role as StaffRole] ?? row.original.role}
+          </Badge>
+          {row.original.isOwner && (
+            <Badge variant="warning" className="rounded-full">
+              OWNER
+            </Badge>
+          )}
+        </div>
       ),
     },
     {

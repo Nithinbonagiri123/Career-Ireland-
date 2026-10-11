@@ -14,14 +14,14 @@ export default async function UsersAdminPage() {
   const [users, settings] = await Promise.all([fetchUsers(), fetchAppSettings()]);
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={UserCog}
           badge="Admin"
           title="Users"
           description={`${settings.legalName} staff accounts. Role changes and deactivations immediately invalidate the affected user's session.`}
-          action={<CreateUserDialog />}
+          action={<CreateUserDialog canGrantOwner={session.user.isOwner} />}
         />
       </FadeUp>
       <FadeUp delay={0.05}>

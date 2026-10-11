@@ -43,6 +43,13 @@ type Props = {
   staffUsers: StaffUser[];
   triggerVariant?: 'outline' | 'ghost' | 'default';
   triggerSize?: 'sm' | 'default';
+  /**
+   * Session 33 — reassignment is an owner-only action. The caller
+   * passes `session.user.isOwner`; the component short-circuits to
+   * null for everyone else so the trigger doesn't even render.
+   * Server-side `assignEntity` also gates on requireOwner().
+   */
+  canReassign: boolean;
 };
 
 export function ReassignButton({
@@ -54,6 +61,7 @@ export function ReassignButton({
   staffUsers,
   triggerVariant = 'outline',
   triggerSize = 'sm',
+  canReassign,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [nextUserId, setNextUserId] = useState<string>(currentAssignedUserId ?? '');
@@ -80,6 +88,10 @@ export function ReassignButton({
       }
     });
   };
+
+  // Session 33 — short-circuit AFTER all hooks (Rules of Hooks) so the
+  // trigger doesn't render for non-owners.
+  if (!canReassign) return null;
 
   return (
     <Dialog

@@ -48,13 +48,24 @@ export type Session = {
     role: UserRole;
     personId: string | null;
     employerId: string | null;
+    /**
+     * Business owner flag (multi-owner model — Session 33). Owners
+     * bypass every permission check AND are the only users who can
+     * reassign ownership of a record. Rendered as a short-circuit
+     * on the token so UI gates don't need a per-render DB round-trip.
+     */
+    isOwner: boolean;
   };
 };
 
 export async function getSession(): Promise<Session | null> {
   const raw = await auth();
   if (!raw?.user?.id || !raw.user.role) return null;
-  const u = raw.user as typeof raw.user & { personId?: string | null; employerId?: string | null };
+  const u = raw.user as typeof raw.user & {
+    personId?: string | null;
+    employerId?: string | null;
+    isOwner?: boolean;
+  };
   return {
     user: {
       id: u.id ?? '',
@@ -63,6 +74,7 @@ export async function getSession(): Promise<Session | null> {
       role: u.role as UserRole,
       personId: u.personId ?? null,
       employerId: u.employerId ?? null,
+      isOwner: u.isOwner === true,
     },
   };
 }
@@ -117,6 +129,22 @@ export async function requireRole(roles: UserRole[]): Promise<Session> {
  */
 export async function requireInternalStaff(): Promise<Session> {
   return requireRole([...INTERNAL_STAFF_ROLES]);
+}
+
+/**
+ * Session 33 — gate reserved for the business owner(s). Only owners can
+ * reassign records between staff (absence handoffs) and only owners can
+ * grant/revoke the owner flag on other users. Multiple owners are
+ * supported; this check succeeds for any user whose `isOwner` flag is
+ * true, not just the first-seeded owner.
+ */
+export async function requireOwner(): Promise<Session> {
+  const s = await requireSession();
+  if (!s.user.isOwner) {
+    await logAuthDenied(s.user.id, 'role', { required: ['OWNER'], actual: s.user.role });
+    throw new AuthorizationError();
+  }
+  return s;
 }
 
 // ─── Fine-grained permission checks ───────────────────────────────────────

@@ -8,20 +8,25 @@ import { assignEntityAction } from '@/modules/assignments/actions';
 import type { AssignableEntity } from '@/modules/assignments/service';
 
 /**
- * Small button for the detail-page header: quick claim ("Assign to me") or unassign.
- * `currentAssignedUserId` and `currentUserId` are passed by the server component so
- * we can render the right state without a fetch.
+ * Session 33 — "Assign to me" and "Unassign" are both ownership
+ * mutations, which under the new model only the business owner can
+ * perform. Records auto-assign to their creator; staff don't need
+ * (and shouldn't be able to) claim or release records. Non-owners
+ * see nothing; the server action also gates on requireOwner().
  */
 export function AssignToMeButton({
   entity,
   id,
   currentUserId,
   currentAssignedUserId,
+  canReassign,
 }: {
   entity: AssignableEntity;
   id: string;
   currentUserId: string;
   currentAssignedUserId: string | null;
+  /** Session's `isOwner` flag. Non-owners never see this control. */
+  canReassign: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const isMine = currentAssignedUserId === currentUserId;
@@ -37,6 +42,8 @@ export function AssignToMeButton({
       else toast.error(r.error.message);
     });
   };
+
+  if (!canReassign) return null;
 
   return (
     <Button variant="outline" size="sm" disabled={pending} onClick={click}>

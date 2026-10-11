@@ -12,6 +12,7 @@ export type AuthorizedUser = {
   role: UserRole;
   personId: string | null;
   employerId: string | null;
+  isOwner: boolean;
 };
 
 const ARGON2_OPTIONS: argon2.HashOptions = {
@@ -65,6 +66,7 @@ export async function verifyCredentials(
     role: user.role,
     personId: user.personId,
     employerId: user.employerId,
+    isOwner: user.isOwner === true,
   };
 }
 
