@@ -1,8 +1,9 @@
 'use client';
 
 import { format, formatDistanceToNowStrict } from 'date-fns';
-import { Building2, CalendarDays, Filter, Grid3x3 } from 'lucide-react';
+import { Building2, CalendarDays, Filter, Grid3x3, PlaneTakeoff } from 'lucide-react';
 import Link from 'next/link';
+import { EmptyState } from '@/components/empty-state';
 import { OwnerAvatar } from '@/components/owner-avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -73,13 +74,13 @@ export function CaseCard({ case: c }: { case: CaseListRow }) {
 export function CasesCardGrid({ cases }: { cases: CaseListRow[] }) {
   if (cases.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed p-10 text-center">
-        <p className="text-sm font-medium">No immigration cases yet</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Employment Permits, Visas, and Visa Extensions will appear here. Click “Open case” above
-          to record the first one.
-        </p>
-      </div>
+      <EmptyState
+        icon={PlaneTakeoff}
+        title="No immigration cases yet"
+        description={
+          'Employment Permits, Visas, and Visa Extensions all live here. Click "Open case" above to record the first one.'
+        }
+      />
     );
   }
   return (

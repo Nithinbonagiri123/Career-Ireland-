@@ -14,11 +14,13 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
+import { EmptyState } from '@/components/empty-state';
 import { MetaList, MetaRow } from '@/components/meta-row';
 import { OwnerAvatar } from '@/components/owner-avatar';
 import { PipelineChip } from '@/components/pipeline-chip';
 import { RingCounter } from '@/components/ring-counter';
 import { StatusPill, type StatusTone } from '@/components/status-pill';
+import { buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { CandidateListRow } from '@/modules/candidates/repository';
@@ -193,19 +195,16 @@ function initialsFrom(name: string): string {
 export function CandidatesCardGrid({ candidates }: { candidates: CandidateListRow[] }) {
   if (candidates.length === 0) {
     return (
-      <Card>
-        <div className="flex flex-col items-center gap-3 p-10 text-center">
-          <div className="rounded-full bg-muted p-3 text-muted-foreground">
-            <User2 className="size-6" />
-          </div>
-          <div>
-            <p className="text-sm font-medium">No candidates to display</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Change the filters at the top of the page, or add a new candidate.
-            </p>
-          </div>
-        </div>
-      </Card>
+      <EmptyState
+        icon={User2}
+        title="No candidates yet"
+        description="Candidates land here once a lead is accepted — automatically when payment is verified, or manually from the lead row."
+        action={
+          <Link href="/leads" className={buttonVariants({ size: 'sm' })}>
+            Go to Leads <ArrowRight className="ml-1.5 size-3.5" />
+          </Link>
+        }
+      />
     );
   }
   return (

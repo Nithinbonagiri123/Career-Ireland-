@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
+import { EmptyState } from '@/components/empty-state';
 import { MetaList, MetaRow } from '@/components/meta-row';
 import { OwnerAvatar } from '@/components/owner-avatar';
 import { PipelineChip } from '@/components/pipeline-chip';
@@ -246,19 +247,11 @@ function trimDescription(desc: string | null): string | null {
 export function RequisitionsCardGrid({ requisitions }: { requisitions: RequisitionCardRow[] }) {
   if (requisitions.length === 0) {
     return (
-      <Card>
-        <div className="flex flex-col items-center gap-3 p-10 text-center">
-          <div className="rounded-full bg-muted p-3 text-muted-foreground">
-            <Briefcase className="size-6" />
-          </div>
-          <div>
-            <p className="text-sm font-medium">No requisitions to display</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Change the filters at the top of the page, or create a new requisition to get started.
-            </p>
-          </div>
-        </div>
-      </Card>
+      <EmptyState
+        icon={Briefcase}
+        title="No requisitions yet"
+        description="Every recruitment engagement starts with a Job Requisition from an Employer. Add an employer first, then raise a requisition against them."
+      />
     );
   }
   return (
