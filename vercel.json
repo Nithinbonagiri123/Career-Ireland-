@@ -14,7 +14,7 @@
     },
     {
       "path": "/api/cron/drain-financial-events",
-      "schedule": "0 * * * *"
+      "schedule": "0 3 * * *"
     }
   ]
 }
