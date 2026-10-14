@@ -3,7 +3,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { requirePermission } from '@/lib/auth/session';
 import { fetchDashboardRevenue, fetchRevenueTrendBySource } from '@/modules/dashboard/revenue';
-import { fetchDashboardMetrics } from '@/modules/dashboard/service';
+import { fetchRecruitmentDashMetrics } from '@/modules/dashboard/service';
 import { RevenueBusinessChart } from '../revenue-business-chart';
 import { StatChip } from '../stat-chip';
 
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export default async function RecruitmentDashboard() {
   await requirePermission('recruitment', 'dashboard', 'view');
   const [m, revenue, revenueTrend] = await Promise.all([
-    fetchDashboardMetrics(),
+    fetchRecruitmentDashMetrics(),
     fetchDashboardRevenue(),
     fetchRevenueTrendBySource(),
   ]);
