@@ -9,16 +9,7 @@ import { db } from '@/lib/db/client';
 import { users } from '@/lib/db/schema/users';
 import { isBusiness, WORKSPACE_COOKIE } from '@/lib/workspace';
 
-/**
- * Switch the user's active workspace and land them on that workspace's
- * default page. Called from the business-switcher dropdown.
- *
- * Writes both the cookie (fast — read on every render) and the
- * `users.current_workspace` column (persistent — used when a user logs
- * in fresh on a new device). Silently ignores an unknown value so a
- * hand-crafted form post can't crash the app.
- */
-export async function switchWorkspaceAction(nextWorkspace: string): Promise<void> {
+async function writeWorkspaceChoice(nextWorkspace: string): Promise<void> {
   const session = await requireSession();
   if (!isBusiness(nextWorkspace)) return;
 
@@ -36,7 +27,26 @@ export async function switchWorkspaceAction(nextWorkspace: string): Promise<void
     .update(users)
     .set({ currentWorkspace: nextWorkspace })
     .where(eq(users.id, session.user.id));
+}
 
-  const landing = WORKSPACES[nextWorkspace].landingPath;
-  redirect(landing);
+/**
+ * Switch workspace + redirect. Still exported for any flow that needs
+ * a server-driven navigation (e.g. non-JS fallback). The dropdown no
+ * longer uses this — see `persistWorkspaceChoiceAction` below.
+ */
+export async function switchWorkspaceAction(nextWorkspace: string): Promise<void> {
+  if (!isBusiness(nextWorkspace)) return;
+  await writeWorkspaceChoice(nextWorkspace);
+  redirect(WORKSPACES[nextWorkspace].landingPath);
+}
+
+/**
+ * Fire-and-forget variant used by the dropdown. The client navigates
+ * optimistically via a <Link> (so the destination is prefetched); this
+ * writes the cookie + DB in the background so a future render — or a
+ * cold login on another device — resolves to the same workspace. No
+ * redirect; the client already has the user on the right page.
+ */
+export async function persistWorkspaceChoiceAction(nextWorkspace: string): Promise<void> {
+  await writeWorkspaceChoice(nextWorkspace);
 }

@@ -2,10 +2,11 @@
 
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, ChevronsUpDown } from 'lucide-react';
-import { useEffect, useRef, useState, useTransition } from 'react';
+import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
 import type { Business } from '@/lib/auth/permissions';
 import { cn } from '@/lib/utils';
-import { switchWorkspaceAction } from '@/modules/workspace/actions';
+import { persistWorkspaceChoiceAction } from '@/modules/workspace/actions';
 import { WORKSPACES } from './nav-config';
 
 /**
@@ -29,7 +30,6 @@ export function BusinessSwitcher({
   reachable: Business[];
 }) {
   const [open, setOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,13 +53,19 @@ export function BusinessSwitcher({
   const currentConfig = WORKSPACES[current];
   const CurrentIcon = currentConfig.icon;
 
+  // Fire-and-forget: the <Link> below navigates immediately (destination
+  // is prefetched on hover), and this persists the choice in the
+  // background so the next cold render / new device lands on the same
+  // workspace. The sidebar resolves current-workspace from the URL first,
+  // so the UI already reflects the right workspace by the time this
+  // settles.
   const pick = (next: Business) => {
-    if (next === current) {
-      setOpen(false);
-      return;
-    }
-    startTransition(() => {
-      switchWorkspaceAction(next);
+    setOpen(false);
+    if (next === current) return;
+    persistWorkspaceChoiceAction(next).catch(() => {
+      // Swallow — the user is already on the destination page.
+      // Worst case: cookie/DB stay on the previous workspace, next
+      // navigation picks it up again.
     });
   };
 
@@ -71,11 +77,10 @@ export function BusinessSwitcher({
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label="Switch workspace"
-        disabled={pending || reachable.length <= 1}
+        disabled={reachable.length <= 1}
         className={cn(
           'flex w-full items-center justify-between gap-2 rounded-md border border-sidebar-border bg-sidebar px-2.5 py-1.5 text-left text-xs transition-colors',
-          !pending && reachable.length > 1 && 'hover:bg-sidebar-accent/50',
-          pending && 'opacity-70',
+          reachable.length > 1 && 'hover:bg-sidebar-accent/50',
           reachable.length <= 1 && 'cursor-default',
         )}
       >
@@ -106,8 +111,9 @@ export function BusinessSwitcher({
               const isCurrent = key === current;
               return (
                 <li key={key}>
-                  <button
-                    type="button"
+                  <Link
+                    href={w.landingPath}
+                    prefetch
                     role="option"
                     aria-selected={isCurrent}
                     onClick={() => pick(key)}
@@ -128,7 +134,7 @@ export function BusinessSwitcher({
                     {isCurrent && (
                       <Check className="mt-0.5 size-3.5 shrink-0 text-foreground" aria-hidden />
                     )}
-                  </button>
+                  </Link>
                 </li>
               );
             })}
