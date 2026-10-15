@@ -178,7 +178,7 @@ export async function buildCvSuggestions(personId: string): Promise<CvSuggestion
     ['skills', 'competencies', 'technologies', 'tools', 'proficiencies'],
     takenForSkills,
   );
-  const customQuals = customCandidatesFrom(
+  const customQualsRaw = customCandidatesFrom(
     text,
     [
       'qualifications',
@@ -195,6 +195,12 @@ export async function buildCvSuggestions(personId: string): Promise<CvSuggestion
     ],
     takenForQuals,
   );
+  // Education sections also contain institution names, locations, dates,
+  // and course descriptions. Only accept phrases that look like actual
+  // qualifications — a degree prefix (MSc, BTech, PhD, etc.), a degree
+  // word (Bachelor, Master, Diploma), or a well-known professional cert.
+  // Everything else is noise that was polluting the Qualifications card.
+  const customQuals = customQualsRaw.filter((c) => looksLikeQualification(c.phrase));
 
   const employmentCandidates = extractEmploymentCandidates(text, excludeEmp);
 
@@ -207,4 +213,15 @@ export async function buildCvSuggestions(personId: string): Promise<CvSuggestion
     qualifications: { catalogHits: qualHits, customCandidates: customQuals },
     employment: { candidates: employmentCandidates },
   };
+}
+
+// Degree prefixes (MSc, BTech, PhD, …), full words (Bachelor, Master,
+// Diploma, Certificate), and the most common standalone professional
+// certifications. Case-insensitive whole-word match — a phrase like
+// "National College of Ireland" has none of these, so it drops out.
+const QUALIFICATION_PATTERN =
+  /\b(MSc|BSc|MA|BA|MBA|MEng|BEng|MTech|BTech|MPhil|PhD|DPhil|MD|DO|JD|LLB|LLM|BE|ME|BCom|MCom|BBA|BCA|MCA|HDip|PGDip|PGCert|HNC|HND|Bachelor|Masters?|Doctorate|Doctoral|Diploma|Certificate|Certified|Qualified|CFA|CPA|ACCA|CIMA|FRM|CISA|CISM|CISSP|PMP|PRINCE2|CCNA|CCNP|AWS\s+Certified|Azure\s+Certified|GCP\s+Certified|Google\s+Certified|Microsoft\s+Certified|Scrum\s+Master|Six\s+Sigma)\b/i;
+
+export function looksLikeQualification(phrase: string): boolean {
+  return QUALIFICATION_PATTERN.test(phrase);
 }

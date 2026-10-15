@@ -93,6 +93,11 @@ jobs:
         # safe.
         run: pnpm db:seed:accounting
 
+      - name: Seed skills catalog
+        # The CV-parser catalog-hit path needs a populated skills table
+        # to find skills embedded in CV text. Idempotent via UNIQUE(name).
+        run: pnpm db:seed:skills
+
       - name: Seed E2E minimal fixtures
         run: pnpm db:seed:e2e-minimal
 
