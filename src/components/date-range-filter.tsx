@@ -18,7 +18,10 @@ import { cn } from '@/lib/utils';
  * `dateRangeWhere` — see `src/lib/date-range.ts`.
  */
 
-const PRESETS: Array<{ value: '7d' | '30d' | '90d'; label: string }> = [
+type Preset = 'month' | '7d' | '30d' | '90d';
+
+const PRESETS: Array<{ value: Preset; label: string }> = [
+  { value: 'month', label: 'This month' },
   { value: '7d', label: '7 days' },
   { value: '30d', label: '30 days' },
   { value: '90d', label: '90 days' },
@@ -64,7 +67,7 @@ export function DateRangeFilter({ className }: { className?: string }) {
     };
   }, [customOpen]);
 
-  const setPreset = (preset: '' | '7d' | '30d' | '90d') => {
+  const setPreset = (preset: '' | Preset) => {
     const usp = new URLSearchParams(params?.toString() ?? '');
     usp.delete('from');
     usp.delete('to');

@@ -24,13 +24,26 @@ export type DateRangeParams = {
 
 const PRESETS: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90 };
 
+/** Returns [1st 00:00, last-day 23:59] of the current calendar month in UTC. */
+export function currentMonthRange(): DateRange {
+  const now = new Date();
+  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+  const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+  return { from, to };
+}
+
 /**
  * Read the created/from/to search params and normalise into a
  * `{ from, to }` window. Invalid values are silently ignored so a
  * malformed URL doesn't blow the page up.
+ *
+ * `created=month` is a special preset that spans the current calendar
+ * month (1st 00:00 → last-day 23:59). Used by pages that want a
+ * finance-style default rather than "Anytime".
  */
 export function parseDateRangeParams(params: DateRangeParams): DateRange {
   const preset = params.created;
+  if (preset === 'month') return currentMonthRange();
   if (preset && preset in PRESETS) {
     const days = PRESETS[preset] as number;
     const from = new Date();

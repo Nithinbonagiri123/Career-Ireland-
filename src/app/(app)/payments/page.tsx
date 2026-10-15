@@ -5,7 +5,8 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { requireAnyPermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
-import { fetchEngagements, fetchPayments } from '@/modules/commerce/service';
+import { fetchEngagements, fetchPayments, fetchPaymentsSummary } from '@/modules/commerce/service';
+import { PaymentsKpiCards } from './payments-kpi-cards';
 import { PaymentsTable } from './payments-table';
 import { RecordPaymentDialog } from './record-payment-dialog';
 
@@ -23,10 +24,16 @@ export default async function PaymentsPage({
     { business: 'main', module: 'accounts', verb: 'view' },
   ]);
   const { created, from, to } = await searchParams;
-  const createdRange = parseDateRangeParams({ created, from, to });
-  const [payments, engagements] = await Promise.all([
+  // Default the Payments view to the current calendar month when the
+  // URL has no filter — finance workflow is calendar-month shaped, so
+  // "Anytime" was the wrong default here even though it's correct for
+  // other list pages (Candidates, Leads, etc.).
+  const effectiveCreated = created ?? (from || to ? undefined : 'month');
+  const createdRange = parseDateRangeParams({ created: effectiveCreated, from, to });
+  const [payments, engagements, summary] = await Promise.all([
     fetchPayments(createdRange),
     fetchEngagements(),
+    fetchPaymentsSummary(createdRange),
   ]);
 
   return (
@@ -46,7 +53,10 @@ export default async function PaymentsPage({
           }
         />
       </FadeUp>
-      <FadeUp delay={0.05}>
+      <FadeUp delay={0.05} className="mt-6">
+        <PaymentsKpiCards summary={summary} />
+      </FadeUp>
+      <FadeUp delay={0.1} className="mt-6">
         <PaymentsTable payments={payments} role={session.user.role} />
       </FadeUp>
     </div>
