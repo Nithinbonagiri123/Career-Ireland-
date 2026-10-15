@@ -1,6 +1,7 @@
 'use client';
 
 import { Award, Briefcase, GraduationCap, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
@@ -73,6 +74,7 @@ function SkillDialog({
   const [years, setYears] = useState(editingRow?.yearsExperience?.toString() ?? '');
   const [notes, setNotes] = useState(editingRow?.notes ?? '');
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const excludeIds = new Set([...existing].filter((id): id is string => Boolean(id)));
 
@@ -93,6 +95,7 @@ function SkillDialog({
           toast.success('Skill updated');
           setOpen(false);
           onDone();
+          router.refresh();
         } else {
           toast.error(r.error.message);
         }
@@ -114,6 +117,7 @@ function SkillDialog({
         toast.success('Skill added');
         setOpen(false);
         onDone();
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -215,6 +219,7 @@ export function SkillsSection({
   const [, startTransition] = useTransition();
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((t) => t + 1);
+  const router = useRouter();
   // Only catalog IDs — custom entries aren't offered by autosuggest anyway.
   const existing = new Set(rows.map((r) => r.skillId).filter((id): id is string => id !== null));
 
@@ -222,8 +227,10 @@ export function SkillsSection({
     if (!confirm('Remove this skill?')) return;
     startTransition(async () => {
       const r = await removeCandidateSkillAction({ id }, personId);
-      if (r.ok) toast.success('Skill removed');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Skill removed');
+        router.refresh();
+      } else toast.error(r.error.message);
       refresh();
     });
   };
@@ -324,6 +331,7 @@ function QualificationDialog({
   const [refNumber, setRefNumber] = useState(editingRow?.referenceNumber ?? '');
   const [notes, setNotes] = useState(editingRow?.notes ?? '');
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const excludeIds = new Set([...existing].filter((id): id is string => Boolean(id)));
 
@@ -344,6 +352,7 @@ function QualificationDialog({
           toast.success('Qualification updated');
           setOpen(false);
           onDone();
+          router.refresh();
         } else {
           toast.error(r.error.message);
         }
@@ -366,6 +375,7 @@ function QualificationDialog({
         toast.success('Qualification added');
         setOpen(false);
         onDone();
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -459,6 +469,7 @@ export function QualificationsSection({
   const [, startTransition] = useTransition();
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((t) => t + 1);
+  const router = useRouter();
   const existing = new Set(
     rows.map((r) => r.qualificationId).filter((id): id is string => id !== null),
   );
@@ -467,8 +478,10 @@ export function QualificationsSection({
     if (!confirm('Remove this qualification?')) return;
     startTransition(async () => {
       const r = await removeCandidateQualificationAction({ id }, personId);
-      if (r.ok) toast.success('Qualification removed');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Qualification removed');
+        router.refresh();
+      } else toast.error(r.error.message);
       refresh();
     });
   };
@@ -562,6 +575,7 @@ function EmploymentDialog({
   const [isCurrent, setIsCurrent] = useState(editingRow?.isCurrent ?? false);
   const [description, setDescription] = useState(editingRow?.description ?? '');
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const submit = () => {
     startTransition(async () => {
@@ -580,6 +594,7 @@ function EmploymentDialog({
         toast.success(editingRow ? 'Employment updated' : 'Employment added');
         setOpen(false);
         onDone();
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -689,13 +704,16 @@ export function EmploymentHistorySection({
   const [, startTransition] = useTransition();
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((t) => t + 1);
+  const router = useRouter();
 
   const remove = (id: string) => {
     if (!confirm('Remove this employment entry?')) return;
     startTransition(async () => {
       const r = await removeEmploymentHistoryAction({ id }, personId);
-      if (r.ok) toast.success('Employment removed');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Employment removed');
+        router.refresh();
+      } else toast.error(r.error.message);
       refresh();
     });
   };

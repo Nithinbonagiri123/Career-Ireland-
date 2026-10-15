@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { AlertCircle, RotateCcw, Save } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { easeStandard, FadeUp } from '@/components/motion/motion-primitives';
@@ -100,6 +101,7 @@ export function PermissionsEditor({ snapshot }: { snapshot: UserPermissionSnapsh
   // on save to compute the grants/revokes delta.
   const [current, setCurrent] = useState<Set<string>>(new Set(snapshot.granted));
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const toggle = (business: Business, module: string, verb: Verb, next: boolean) => {
     if (readOnly) return;
@@ -154,6 +156,7 @@ export function PermissionsEditor({ snapshot }: { snapshot: UserPermissionSnapsh
       });
       if (r.ok) {
         toast.success(`Saved — ${grants.length} granted, ${revokes.length} revoked`);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -174,6 +177,7 @@ export function PermissionsEditor({ snapshot }: { snapshot: UserPermissionSnapsh
         toast.success(`Reset to ${snapshot.role} preset — ${r.data.count} grants`);
         // The page will revalidate; the fresh snapshot re-mounts this
         // component with the new set.
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

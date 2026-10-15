@@ -2,6 +2,7 @@
 
 import { format, formatDistanceToNow } from 'date-fns';
 import { Briefcase, CheckCircle2, FileScan, Loader2, Plus, ScanLine } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
@@ -41,6 +42,7 @@ export function CvSuggestionsPanel({ personId }: { personId: string }) {
     employment: new Set(),
   });
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const scan = () => {
     startTransition(async () => {
@@ -109,7 +111,10 @@ export function CvSuggestionsPanel({ personId }: { personId: string }) {
         return;
       }
       const { added, errors } = r.data;
-      if (added > 0) toast.success(`Added ${added} row${added === 1 ? '' : 's'}`);
+      if (added > 0) {
+        toast.success(`Added ${added} row${added === 1 ? '' : 's'}`);
+        router.refresh();
+      }
       if (errors.length > 0) {
         for (const e of errors.slice(0, 3)) toast.warning(e);
       }

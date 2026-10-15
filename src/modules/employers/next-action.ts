@@ -50,7 +50,7 @@ export function computeEmployerNextAction(
       Number.parseFloat(p.latestInvoice.outstandingAmount) > 0 &&
       daysBetween(now, p.latestInvoice.issuedAt) > OVERDUE_DAYS,
   );
-  if (overduePlacement && overduePlacement.latestInvoice) {
+  if (overduePlacement?.latestInvoice) {
     const days = daysBetween(now, overduePlacement.latestInvoice.issuedAt);
     return {
       label: 'NEXT STEP',

@@ -13,6 +13,7 @@ import {
   UploadCloud,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { type DocumentTypeOption, DocumentTypePicker } from '@/components/document-type-picker';
@@ -66,6 +67,7 @@ function AddRequirementDialog({
   const [isMandatory, setIsMandatory] = useState<'MANDATORY' | 'OPTIONAL'>('MANDATORY');
   const [notes, setNotes] = useState('');
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const submit = () => {
     startTransition(async () => {
@@ -80,6 +82,7 @@ function AddRequirementDialog({
         setOpen(false);
         setTypeId('');
         setNotes('');
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -158,6 +161,7 @@ function AttachDocDialog({
   const [open, setOpen] = useState(false);
   const [docId, setDocId] = useState('');
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const available = beneficiaryDocuments.filter((d) => !alreadyAttachedIds.has(d.id));
 
@@ -172,6 +176,7 @@ function AttachDocDialog({
         toast.success('Document attached');
         setOpen(false);
         setDocId('');
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -239,6 +244,7 @@ export function CaseDocumentsSection({
   beneficiaryDocuments: DocumentInstance[];
 }) {
   const [, startTransition] = useTransition();
+  const router = useRouter();
   const attachedIds = new Set(attachedDocs.map((d) => d.documentInstanceId));
   const existingReqTypeIds = new Set(requirements.map((r) => r.documentTypeId));
   // Beneficiary docs that haven't yet been attached to this case — the
@@ -252,8 +258,10 @@ export function CaseDocumentsSection({
         { requirementId, status, notes: '' },
         caseId,
       );
-      if (r.ok) toast.success('Status updated');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Status updated');
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 
@@ -261,8 +269,10 @@ export function CaseDocumentsSection({
     if (!confirm('Remove this requirement from the case?')) return;
     startTransition(async () => {
       const r = await removeCaseDocumentRequirementAction({ requirementId }, caseId);
-      if (r.ok) toast.success('Requirement removed');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Requirement removed');
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 
@@ -272,8 +282,10 @@ export function CaseDocumentsSection({
         immigrationCaseId: caseId,
         documentInstanceId,
       });
-      if (r.ok) toast.success('Document detached');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Document detached');
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 
@@ -298,8 +310,10 @@ export function CaseDocumentsSection({
         documentInstanceId,
         caseRequirementId: requirementId,
       });
-      if (r.ok) toast.success('Attached to case');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Attached to case');
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 

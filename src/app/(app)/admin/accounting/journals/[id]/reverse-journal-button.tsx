@@ -1,6 +1,7 @@
 'use client';
 
 import { Undo2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { PromptDialog } from '@/components/prompt-dialog';
@@ -16,6 +17,7 @@ export function ReverseJournalButton({
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const onConfirm = (reason: string) => {
     startTransition(async () => {
@@ -26,6 +28,7 @@ export function ReverseJournalButton({
       }
       toast.success(`Posted reversal ${r.data.number}`);
       setOpen(false);
+      router.refresh();
     });
   };
 

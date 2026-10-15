@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { FormErrorAlert } from '@/components/form-error-alert';
@@ -49,6 +50,7 @@ export function StaffProfileDialog({
   const [managerUserId, setManagerUserId] = useState<string>('');
   const [status, setStatus] = useState<'ACTIVE' | 'ON_LEAVE' | 'TERMINATED'>('ACTIVE');
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (target) {
@@ -76,6 +78,7 @@ export function StaffProfileDialog({
       if (r.ok) {
         toast.success('Staff profile updated');
         onOpenChange(false);
+        router.refresh();
       } else {
         setError(r.error.message);
         toast.error(r.error.message);

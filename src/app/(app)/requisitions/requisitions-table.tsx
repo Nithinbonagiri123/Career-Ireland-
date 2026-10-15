@@ -3,6 +3,7 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { Archive, ArrowRight, MoreHorizontal } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -33,6 +34,7 @@ export function RequisitionsTable({
   const [archiveTarget, setArchiveTarget] = useState<RequisitionListRow | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const confirmArchive = (reason: string) => {
     if (!archiveTarget) return;
@@ -44,6 +46,7 @@ export function RequisitionsTable({
       if (r.ok) {
         toast.success(`${target.title} archived`);
         setArchiveTarget(null);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

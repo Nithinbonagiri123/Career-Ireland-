@@ -3,6 +3,7 @@
 import { format, formatDistanceToNow } from 'date-fns';
 import { FileText, RefreshCw, Trash2 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import type { DocumentTypeOption } from '@/components/document-type-picker';
@@ -31,6 +32,7 @@ export function DocumentsSection({
   const [pending, startTransition] = useTransition();
   const [voidTarget, setVoidTarget] = useState<DocumentInstance | null>(null);
   const [voidBusy, setVoidBusy] = useState(false);
+  const router = useRouter();
 
   const refresh = () => {
     startTransition(async () => {
@@ -41,6 +43,7 @@ export function DocumentsSection({
             ? `${r.data.created} new requirement(s) added from occupation/global rules`
             : 'No new requirements — all applicable rules already covered',
         );
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -57,6 +60,7 @@ export function DocumentsSection({
       if (r.ok) {
         toast.success('Document deleted');
         setVoidTarget(null);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

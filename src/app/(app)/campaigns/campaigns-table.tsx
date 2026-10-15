@@ -4,6 +4,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Archive, ArrowRight, MoreHorizontal } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -25,6 +26,7 @@ export function CampaignsTable({ campaigns }: { campaigns: CampaignListRow[] }) 
   const [archiveTarget, setArchiveTarget] = useState<CampaignListRow | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const confirmArchive = (reason: string) => {
     if (!archiveTarget) return;
@@ -36,6 +38,7 @@ export function CampaignsTable({ campaigns }: { campaigns: CampaignListRow[] }) 
       if (r.ok) {
         toast.success(`${target.name} archived`);
         setArchiveTarget(null);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

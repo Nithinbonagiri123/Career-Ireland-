@@ -3,6 +3,7 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { Archive, ArrowRight, Pencil } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -31,6 +32,7 @@ export function EmployersTable({
   const [archiveTarget, setArchiveTarget] = useState<Employer | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const confirmArchive = (reason: string) => {
     if (!archiveTarget) return;
@@ -42,6 +44,7 @@ export function EmployersTable({
       if (r.ok) {
         toast.success(`${target.legalName} archived`);
         setArchiveTarget(null);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

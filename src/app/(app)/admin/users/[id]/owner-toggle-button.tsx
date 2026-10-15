@@ -1,6 +1,7 @@
 'use client';
 
 import { ShieldCheck, ShieldOff } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ export function OwnerToggleButton({
   currentIsOwner: boolean;
 }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const click = () => {
     const next = !currentIsOwner;
@@ -37,6 +39,7 @@ export function OwnerToggleButton({
         toast.success(
           next ? `${userName} is now a business owner` : `${userName} is no longer an owner`,
         );
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

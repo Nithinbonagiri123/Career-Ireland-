@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from 'framer-motion';
 import { Save } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { easeStandard } from '@/components/motion/motion-primitives';
@@ -43,6 +44,7 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
   const [invoiceFooter, setInvoiceFooter] = useState(initial.invoiceFooter);
   const [receiptFooter, setReceiptFooter] = useState(initial.receiptFooter);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const currentPayload = useMemo(
     () => ({
@@ -124,8 +126,10 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
     }
     startTransition(async () => {
       const r = await updateAppSettingsAction(currentPayload);
-      if (r.ok) toast.success('Settings saved — the change is live on the next print');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Settings saved — the change is live on the next print');
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 

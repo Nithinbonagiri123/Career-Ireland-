@@ -3,6 +3,7 @@
 import { format, formatDistanceToNow } from 'date-fns';
 import { ExternalLink, Globe, Plus, Send } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { CvPicker } from '@/components/cv-picker';
@@ -67,6 +68,7 @@ function AddExternalDialog({
   const [notes, setNotes] = useState('');
   const [cv, setCv] = useState<DocumentInstance | null>(null);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const reset = () => {
     setCompany('');
@@ -95,6 +97,7 @@ function AddExternalDialog({
         toast.success('External application recorded');
         setOpen(false);
         reset();
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

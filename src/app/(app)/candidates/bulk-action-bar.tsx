@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from 'framer-motion';
 import { UserCheck, UserX, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -85,6 +86,7 @@ function AssignDialog({
   const [open, setOpen] = useState(false);
   const [userId, setUserId] = useState<string>('');
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const submit = (assignTo: string | null) => {
     startTransition(async () => {
@@ -100,6 +102,7 @@ function AssignDialog({
         );
         setOpen(false);
         onDone();
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -172,6 +175,7 @@ function LifecycleDialog({ selectedIds, onDone }: { selectedIds: string[]; onDon
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<LifecycleStatus>('ACTIVE');
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const submit = () => {
     startTransition(async () => {
@@ -187,6 +191,7 @@ function LifecycleDialog({ selectedIds, onDone }: { selectedIds: string[]; onDon
         );
         setOpen(false);
         onDone();
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

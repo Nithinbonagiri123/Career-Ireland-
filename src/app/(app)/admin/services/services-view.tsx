@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { Pencil, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -32,6 +33,7 @@ const PAYER_LABEL: Record<ServiceCatalogItem['payerType'], string> = {
 export function ServicesView({ services, packages, currencies, categories }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const serviceById = useMemo(() => new Map(services.map((s) => [s.id, s])), [services]);
   const currencyByCode = useMemo(() => new Map(currencies.map((c) => [c.code, c])), [currencies]);
@@ -43,8 +45,10 @@ export function ServicesView({ services, packages, currencies, categories }: Pro
     startTransition(async () => {
       const r = await setServiceItemActiveAction({ id: s.id, isActive: !s.isActive });
       setBusy(null);
-      if (r.ok) toast.success(`${s.name} ${s.isActive ? 'deactivated' : 'activated'}`);
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success(`${s.name} ${s.isActive ? 'deactivated' : 'activated'}`);
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 
@@ -53,8 +57,10 @@ export function ServicesView({ services, packages, currencies, categories }: Pro
     startTransition(async () => {
       const r = await setServicePackageActiveAction({ id: p.id, isActive: !p.isActive });
       setBusy(null);
-      if (r.ok) toast.success(`${p.name} ${p.isActive ? 'deactivated' : 'activated'}`);
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success(`${p.name} ${p.isActive ? 'deactivated' : 'activated'}`);
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 

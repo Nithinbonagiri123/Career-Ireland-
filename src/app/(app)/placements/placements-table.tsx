@@ -3,6 +3,7 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { Archive, ArrowRight, FileText, MoreHorizontal, PlaneTakeoff, Trophy } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -31,14 +32,17 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
   const [restoreTarget, setRestoreTarget] = useState<PlacementListRow | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<PlacementListRow | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const setStatus = (p: PlacementListRow, next: PlacementListRow['status']) => {
     setBusy(p.id);
     startTransition(async () => {
       const r = await updatePlacementStatusAction({ placementId: p.id, status: next });
       setBusy(null);
-      if (r.ok) toast.success(`Placement moved to ${next.replace(/_/g, ' ')}`);
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success(`Placement moved to ${next.replace(/_/g, ' ')}`);
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 
@@ -55,6 +59,7 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
       if (r.ok) {
         toast.success(`${target.personName} is now available again`);
         setRestoreTarget(null);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -71,6 +76,7 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
       if (r.ok) {
         toast.success(`Placement archived`);
         setArchiveTarget(null);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
@@ -58,6 +59,7 @@ export function NotificationsList({ notifications }: { notifications: Notificati
   const [items, setItems] = useState(notifications);
   const [pending, startTransition] = useTransition();
   const [dismissingId, setDismissingId] = useState<string | null>(null);
+  const router = useRouter();
 
   const markAll = () => {
     startTransition(async () => {
@@ -65,6 +67,7 @@ export function NotificationsList({ notifications }: { notifications: Notificati
       if (r.ok) {
         setItems((prev) => prev.map((n) => (n.readAt ? n : { ...n, readAt: new Date() })));
         toast.success(`Marked ${r.data.updated} read`);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -83,6 +86,7 @@ export function NotificationsList({ notifications }: { notifications: Notificati
         setItems((prev) =>
           prev.map((it) => (it.id === n.id && !it.readAt ? { ...it, readAt: new Date() } : it)),
         );
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

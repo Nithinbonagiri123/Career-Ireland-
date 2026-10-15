@@ -3,6 +3,7 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { KeyRound, MoreHorizontal, UserCog, UserX } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -55,6 +56,7 @@ type Props = {
 export function UsersTable({ users, currentUserId }: Props) {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const handleChangeRole = (user: UserListRow, role: StaffRole) => {
     if (user.role === role) return;
@@ -64,6 +66,7 @@ export function UsersTable({ users, currentUserId }: Props) {
       setPendingId(null);
       if (result.ok) {
         toast.success(`${user.fullName} is now ${role}. Their existing sessions were invalidated.`);
+        router.refresh();
       } else {
         toast.error(result.error.message);
       }
@@ -81,6 +84,7 @@ export function UsersTable({ users, currentUserId }: Props) {
             ? `${user.fullName} reactivated.`
             : `${user.fullName} deactivated and signed out.`,
         );
+        router.refresh();
       } else {
         toast.error(result.error.message);
       }

@@ -1,6 +1,7 @@
 'use client';
 
 import { Lock, LockOpen, ShieldCheck, StepForward } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { PromptDialog } from '@/components/prompt-dialog';
@@ -85,6 +86,7 @@ export function PeriodTransitionMenu({
 }) {
   const [target, setTarget] = useState<Status | null>(null);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const transitions = ALLOWED[currentStatus];
   if (transitions.length === 0) {
@@ -105,6 +107,7 @@ export function PeriodTransitionMenu({
       }
       toast.success(`${periodLabel} → ${target}`);
       setTarget(null);
+      router.refresh();
     });
   };
 

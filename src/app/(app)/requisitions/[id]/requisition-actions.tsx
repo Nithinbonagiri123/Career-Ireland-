@@ -1,6 +1,7 @@
 'use client';
 
 import { Lock, Sparkles } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,7 @@ import { updateRequisitionStatusAction } from '@/modules/requisitions/actions';
 
 export function RunMatchingButton({ requisitionId }: { requisitionId: string }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   return (
     <Button
       size="sm"
@@ -17,8 +19,10 @@ export function RunMatchingButton({ requisitionId }: { requisitionId: string }) 
       onClick={() =>
         startTransition(async () => {
           const r = await runAssistedMatchingAction(requisitionId);
-          if (r.ok) toast.success(`Matching complete — ${r.data.upserted} candidates scored`);
-          else toast.error(r.error.message);
+          if (r.ok) {
+            toast.success(`Matching complete — ${r.data.upserted} candidates scored`);
+            router.refresh();
+          } else toast.error(r.error.message);
         })
       }
     >
@@ -36,6 +40,7 @@ export function RunMatchingButton({ requisitionId }: { requisitionId: string }) 
  */
 export function CloseRequisitionButton({ requisitionId }: { requisitionId: string }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   return (
     <Button
       size="sm"
@@ -46,8 +51,10 @@ export function CloseRequisitionButton({ requisitionId }: { requisitionId: strin
           return;
         startTransition(async () => {
           const r = await updateRequisitionStatusAction({ requisitionId, status: 'CLOSED' });
-          if (r.ok) toast.success('Requisition closed');
-          else toast.error(r.error.message);
+          if (r.ok) {
+            toast.success('Requisition closed');
+            router.refresh();
+          } else toast.error(r.error.message);
         });
       }}
     >

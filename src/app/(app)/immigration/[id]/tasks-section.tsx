@@ -2,6 +2,7 @@
 
 import { format, formatDistanceToNow, isPast } from 'date-fns';
 import { AlertTriangle, CheckCircle2, Circle, CircleDot, Clock } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
@@ -22,14 +23,17 @@ const STATUS_ICON: Record<Task['status'], typeof Circle> = {
 
 export function CaseTasksSection({ caseId, rows }: { caseId: string; rows: TaskRow[] }) {
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const setStatus = (task: TaskRow, status: Task['status']) => {
     startTransition(async () => {
       const r = await updateTaskStatusAction({ taskId: task.id, status }, [
         `/immigration/${caseId}`,
       ]);
-      if (r.ok) toast.success(`Task ${status.toLowerCase().replace(/_/g, ' ')}`);
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success(`Task ${status.toLowerCase().replace(/_/g, ' ')}`);
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 

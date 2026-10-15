@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -64,6 +65,7 @@ export function DocumentsTable({ documents }: { documents: DocumentsHubRow[] }) 
   } | null>(null);
   const [voidTarget, setVoidTarget] = useState<DocumentsHubRow | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const confirmVoid = (reason: string) => {
     if (!voidTarget?.documentInstanceId) return;
@@ -78,6 +80,7 @@ export function DocumentsTable({ documents }: { documents: DocumentsHubRow[] }) 
       if (r.ok) {
         toast.success('Document voided');
         setVoidTarget(null);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -93,8 +96,10 @@ export function DocumentsTable({ documents }: { documents: DocumentsHubRow[] }) 
         reviewNotes: '',
       });
       setBusy(null);
-      if (r.ok) toast.success('Document accepted');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Document accepted');
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 
@@ -112,6 +117,7 @@ export function DocumentsTable({ documents }: { documents: DocumentsHubRow[] }) 
       if (r.ok) {
         toast.success(`Document ${target.decision.toLowerCase()}`);
         setDecideTarget(null);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

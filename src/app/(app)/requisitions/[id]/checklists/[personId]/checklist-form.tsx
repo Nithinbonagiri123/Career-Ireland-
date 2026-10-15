@@ -1,6 +1,7 @@
 'use client';
 
 import { Save, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -69,6 +70,7 @@ export function ChecklistForm({
   );
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const save = () => {
     startTransition(async () => {
@@ -84,6 +86,7 @@ export function ChecklistForm({
       });
       if (r.ok) {
         toast.success('Checklist saved');
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

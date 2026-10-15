@@ -1,6 +1,7 @@
 'use client';
 
 import { AtSign, Eye, KeyRound, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
@@ -46,6 +47,7 @@ function AccountDialog({
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [markShared, setMarkShared] = useState(false);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const submit = () => {
     startTransition(async () => {
@@ -67,6 +69,7 @@ function AccountDialog({
         toast.success(existing ? 'Password rotated' : 'Account saved');
         setOpen(false);
         setPassword('');
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -278,12 +281,15 @@ export function EmailAccountPanel({
   account: EmailAccountView | null;
 }) {
   const [, startTransition] = useTransition();
+  const router = useRouter();
   const remove = () => {
     if (!confirm('Delete this email account? The password is gone forever.')) return;
     startTransition(async () => {
       const r = await removeEmailAccountAction({ personId });
-      if (r.ok) toast.success('Email account removed');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Email account removed');
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 

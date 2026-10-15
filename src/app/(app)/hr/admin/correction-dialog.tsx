@@ -1,6 +1,7 @@
 'use client';
 
 import { AlertCircle, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,7 @@ export function CorrectionDialog({
   const [clockOutAt, setClockOutAt] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (target) {
@@ -61,6 +63,7 @@ export function CorrectionDialog({
       if (r.ok) {
         toast.success('Attendance corrected');
         onOpenChange(false);
+        router.refresh();
       } else {
         setError(r.error.message);
         toast.error(r.error.message);

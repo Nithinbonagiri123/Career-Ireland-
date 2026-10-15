@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { Pencil } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -15,6 +16,7 @@ type Props = { currencies: Currency[] };
 export function CurrenciesTable({ currencies }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const toggle = (c: Currency) => {
     setBusy(c.code);
@@ -23,6 +25,7 @@ export function CurrenciesTable({ currencies }: Props) {
       setBusy(null);
       if (result.ok) {
         toast.success(`${c.code} ${c.isActive ? 'deactivated' : 'activated'}`);
+        router.refresh();
       } else {
         toast.error(result.error.message);
       }

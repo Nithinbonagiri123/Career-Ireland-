@@ -3,6 +3,7 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowRight, Check, Coins, MoreHorizontal, X } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -26,6 +27,7 @@ import { rejectPaymentAction, verifyPaymentAction } from '@/modules/commerce/act
 type Row = Payment & { serviceName: string };
 
 export function PaymentsTable({ payments, role }: { payments: Row[]; role: UserRole }) {
+  const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<Row | null>(null);
   const [, startTransition] = useTransition();
@@ -35,8 +37,10 @@ export function PaymentsTable({ payments, role }: { payments: Row[]; role: UserR
     startTransition(async () => {
       const r = await verifyPaymentAction({ paymentId: p.id });
       setBusy(null);
-      if (r.ok) toast.success('Payment verified — engagement moved to ACTIVE');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Payment verified — engagement moved to ACTIVE');
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 
@@ -50,6 +54,7 @@ export function PaymentsTable({ payments, role }: { payments: Row[]; role: UserR
       if (r.ok) {
         toast.success('Payment rejected');
         setRejectTarget(null);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

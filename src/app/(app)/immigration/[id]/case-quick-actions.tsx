@@ -1,6 +1,7 @@
 'use client';
 
 import { Bell, CheckCircle2, Lock, XCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ export function SetReminderDialog({
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(currentReminderOn ?? '');
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const submit = () => {
     startTransition(async () => {
@@ -42,6 +44,7 @@ export function SetReminderDialog({
       if (r.ok) {
         toast.success(date ? 'Reminder set' : 'Reminder cleared');
         setOpen(false);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -102,13 +105,16 @@ export function SetReminderDialog({
 
 export function RecordDecisionButtons({ caseId }: { caseId: string }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   const change = (status: 'APPROVED' | 'REJECTED') => {
     const label = status === 'APPROVED' ? 'approved' : 'rejected';
     if (!window.confirm(`Mark this case as ${label}? Decision date will be set to today.`)) return;
     startTransition(async () => {
       const r = await updateCaseStatusAction({ caseId, status });
-      if (r.ok) toast.success(`Marked ${label}`);
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success(`Marked ${label}`);
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
   return (
@@ -125,6 +131,7 @@ export function RecordDecisionButtons({ caseId }: { caseId: string }) {
 
 export function CloseCaseButton({ caseId }: { caseId: string }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   return (
     <Button
       size="sm"
@@ -134,8 +141,10 @@ export function CloseCaseButton({ caseId }: { caseId: string }) {
         if (!window.confirm('Close this case? It will be hidden from the active list.')) return;
         startTransition(async () => {
           const r = await updateCaseStatusAction({ caseId, status: 'CLOSED' });
-          if (r.ok) toast.success('Case closed');
-          else toast.error(r.error.message);
+          if (r.ok) {
+            toast.success('Case closed');
+            router.refresh();
+          } else toast.error(r.error.message);
         });
       }}
     >

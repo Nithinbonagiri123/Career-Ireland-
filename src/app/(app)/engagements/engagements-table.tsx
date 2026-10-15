@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { Archive, CheckCircle2, MoreHorizontal, Play } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -20,6 +21,7 @@ import { archiveEngagementAction, updateEngagementStatusAction } from '@/modules
 import type { EngagementListRow } from '@/modules/commerce/repository';
 
 export function EngagementsTable({ engagements }: { engagements: EngagementListRow[] }) {
+  const router = useRouter();
   const [archiveTarget, setArchiveTarget] = useState<EngagementListRow | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -34,6 +36,7 @@ export function EngagementsTable({ engagements }: { engagements: EngagementListR
       if (r.ok) {
         toast.success('Engagement archived');
         setArchiveTarget(null);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -42,7 +45,9 @@ export function EngagementsTable({ engagements }: { engagements: EngagementListR
 
   // Session 11: direct verb for starting/completing the service.
   // Transitions the engagement status one hop and audits via the shared
-  // updateEngagementStatus action.
+  // updateEngagementStatus action. router.refresh() re-pulls the server
+  // RSC payload so the row's status badge reflects the new state —
+  // without it the DB updates but the UI looks like nothing happened.
   const transition = useCallback(
     (e: EngagementListRow, status: 'ACTIVE' | 'COMPLETED', verb: string) => {
       if (status === 'COMPLETED' && !window.confirm('Mark this service as complete?')) return;
@@ -50,11 +55,13 @@ export function EngagementsTable({ engagements }: { engagements: EngagementListR
       startTransition(async () => {
         const r = await updateEngagementStatusAction({ engagementId: e.id, status });
         setBusyId(null);
-        if (r.ok) toast.success(`Service ${verb}`);
-        else toast.error(r.error.message);
+        if (r.ok) {
+          toast.success(`Service ${verb}`);
+          router.refresh();
+        } else toast.error(r.error.message);
       });
     },
-    [],
+    [router],
   );
 
   const columns = useMemo<ColumnDef<EngagementListRow>[]>(

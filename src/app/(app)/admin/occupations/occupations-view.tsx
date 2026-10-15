@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { Pencil, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -25,6 +26,7 @@ export function OccupationsView({ categories, occupations }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const router = useRouter();
 
   const activeCategoriesForDialog = useMemo(
     () => categories.filter((c) => c.isActive || selectedCategory === c.id),
@@ -44,8 +46,10 @@ export function OccupationsView({ categories, occupations }: Props) {
     startTransition(async () => {
       const result = await setCategoryActiveAction({ id: c.id, isActive: !c.isActive });
       setBusy(null);
-      if (result.ok) toast.success(`${c.name} ${c.isActive ? 'deactivated' : 'activated'}`);
-      else toast.error(result.error.message);
+      if (result.ok) {
+        toast.success(`${c.name} ${c.isActive ? 'deactivated' : 'activated'}`);
+        router.refresh();
+      } else toast.error(result.error.message);
     });
   };
 
@@ -54,8 +58,10 @@ export function OccupationsView({ categories, occupations }: Props) {
     startTransition(async () => {
       const result = await setOccupationActiveAction({ id: o.id, isActive: !o.isActive });
       setBusy(null);
-      if (result.ok) toast.success(`${o.name} ${o.isActive ? 'deactivated' : 'activated'}`);
-      else toast.error(result.error.message);
+      if (result.ok) {
+        toast.success(`${o.name} ${o.isActive ? 'deactivated' : 'activated'}`);
+        router.refresh();
+      } else toast.error(result.error.message);
     });
   };
 

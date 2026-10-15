@@ -2,6 +2,7 @@
 
 import { format, formatDistanceToNow } from 'date-fns';
 import { Ban, Copy, Loader2, Mail, MailWarning } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +43,7 @@ export function RequestDocumentsPanel({
   const [freshUrl, setFreshUrl] = useState<string | null>(null);
   const [emailWarn, setEmailWarn] = useState(false);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const canIssue = Boolean(personEmail) && missingRequirementCount > 0;
   const disabledReason = !personEmail
@@ -68,6 +70,7 @@ export function RequestDocumentsPanel({
       } else {
         toast.warning('Link created — email delivery failed, share the URL manually.');
       }
+      router.refresh();
     });
   };
 
@@ -79,6 +82,7 @@ export function RequestDocumentsPanel({
         return;
       }
       toast.success('Link revoked');
+      router.refresh();
     });
   };
 

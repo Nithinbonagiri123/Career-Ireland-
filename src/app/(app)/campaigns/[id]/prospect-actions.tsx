@@ -1,6 +1,7 @@
 'use client';
 
 import { CheckCircle2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -27,14 +28,17 @@ const CHANGEABLE_STATUSES: Array<ProspectListRow['status']> = [
 export function ProspectRowActions({ prospect }: { prospect: ProspectListRow }) {
   const [busy, setBusy] = useState(false);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const setStatus = (next: ProspectListRow['status']) => {
     setBusy(true);
     startTransition(async () => {
       const r = await updateProspectStatusAction({ prospectId: prospect.id, status: next });
       setBusy(false);
-      if (r.ok) toast.success(`Prospect marked ${next.toLowerCase().replace(/_/g, ' ')}`);
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success(`Prospect marked ${next.toLowerCase().replace(/_/g, ' ')}`);
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 
@@ -49,6 +53,7 @@ export function ProspectRowActions({ prospect }: { prospect: ProspectListRow }) 
             ? `${prospect.personName} converted to candidate`
             : `${prospect.personName} linked to existing candidate profile`,
         );
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

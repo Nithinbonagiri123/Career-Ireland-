@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import type { ColumnDef } from '@tanstack/react-table';
 import { motion } from 'framer-motion';
 import { AlertCircle, Loader2, Pencil, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { type ReactElement, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -53,6 +54,7 @@ function TypeDialog({
   const [open, setOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const isEdit = Boolean(initial);
+  const router = useRouter();
 
   const {
     register,
@@ -80,6 +82,7 @@ function TypeDialog({
     toast.success(isEdit ? 'Application type updated' : 'Application type added');
     reset(data);
     setOpen(false);
+    router.refresh();
   });
 
   return (
@@ -164,14 +167,17 @@ function TypeDialog({
 export function ApplicationTypesTable({ types }: { types: ImmigrationApplicationType[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const toggle = (row: ImmigrationApplicationType) => {
     setBusy(row.id);
     startTransition(async () => {
       const r = await setApplicationTypeActiveAction({ id: row.id, isActive: !row.isActive });
       setBusy(null);
-      if (r.ok) toast.success(`${row.name} ${row.isActive ? 'deactivated' : 'activated'}`);
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success(`${row.name} ${row.isActive ? 'deactivated' : 'activated'}`);
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 

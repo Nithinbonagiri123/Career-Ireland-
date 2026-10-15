@@ -1,6 +1,7 @@
 'use client';
 
 import { Bell } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -37,6 +38,7 @@ export function SetRequisitionReminderDialog({
   const [date, setDate] = useState('');
   const [title, setTitle] = useState(`Follow up on "${requisitionTitle}"`);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const submit = () => {
     if (!date) {
@@ -60,6 +62,7 @@ export function SetRequisitionReminderDialog({
       if (r.ok) {
         toast.success('Reminder set');
         setOpen(false);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

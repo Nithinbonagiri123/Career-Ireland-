@@ -1,6 +1,7 @@
 'use client';
 
 import { Award, GraduationCap, Plus, Star, StarOff, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
@@ -49,6 +50,7 @@ function AttachSkillDialog({
   const [isRequired, setIsRequired] = useState(true);
   const [weight, setWeight] = useState('1');
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const options = useMemo(
     () => allSkills.map((s) => ({ id: s.id, name: s.name, isActive: s.isActive })),
@@ -76,6 +78,7 @@ function AttachSkillDialog({
         toast.success('Skill added to requisition');
         setOpen(false);
         reset();
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -168,6 +171,7 @@ export function RequisitionSkillsSection({
   allSkills: Skill[];
 }) {
   const [, startTransition] = useTransition();
+  const router = useRouter();
   const existing = new Set(rows.map((r) => r.skillId));
 
   const detach = (skillId: string) => {
@@ -176,8 +180,10 @@ export function RequisitionSkillsSection({
         jobRequisitionId: requisitionId,
         skillId,
       });
-      if (r.ok) toast.success('Skill removed');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Skill removed');
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 
@@ -250,6 +256,7 @@ function AttachQualDialog({
   const [selection, setSelection] = useState<Selection>(null);
   const [isRequired, setIsRequired] = useState(true);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const options = useMemo(
     () => allQuals.map((q) => ({ id: q.id, name: q.name, isActive: q.isActive })),
@@ -275,6 +282,7 @@ function AttachQualDialog({
         toast.success('Qualification added');
         setOpen(false);
         reset();
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -353,6 +361,7 @@ export function RequisitionQualificationsSection({
   allQualifications: Qualification[];
 }) {
   const [, startTransition] = useTransition();
+  const router = useRouter();
   const existing = new Set(rows.map((r) => r.qualificationId));
 
   const detach = (qualificationId: string) => {
@@ -361,8 +370,10 @@ export function RequisitionQualificationsSection({
         jobRequisitionId: requisitionId,
         qualificationId,
       });
-      if (r.ok) toast.success('Qualification removed');
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success('Qualification removed');
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 

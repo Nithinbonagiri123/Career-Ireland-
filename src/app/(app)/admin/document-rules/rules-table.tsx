@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -15,6 +16,7 @@ type Row = DocumentRequirementRule & { documentTypeCode: string; documentTypeNam
 export function RulesTable({ rules }: { rules: Row[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const remove = (r: Row) => {
     if (!window.confirm(`Delete rule for ${r.documentTypeName}? Existing requirements stay.`))
@@ -23,8 +25,10 @@ export function RulesTable({ rules }: { rules: Row[] }) {
     startTransition(async () => {
       const result = await deleteRequirementRuleAction(r.id);
       setBusy(null);
-      if (result.ok) toast.success('Rule deleted');
-      else toast.error(result.error.message);
+      if (result.ok) {
+        toast.success('Rule deleted');
+        router.refresh();
+      } else toast.error(result.error.message);
     });
   };
 

@@ -3,6 +3,7 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { ArrowRight, CheckCircle2, MoreHorizontal } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -50,33 +51,43 @@ const CHANGEABLE_STATUSES: Status[] = ['NEW', 'SCREENED', 'RETAINED_IN_POOL', 'N
 export function ProspectsTable({ prospects }: { prospects: ProspectRow[] }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
-  const setStatus = useCallback((p: ProspectRow, next: Status) => {
-    setBusyId(p.id);
-    startTransition(async () => {
-      const r = await updateProspectStatusAction({ prospectId: p.id, status: next });
-      setBusyId(null);
-      if (r.ok) toast.success(`${p.personName} marked ${STATUS_LABEL[next].toLowerCase()}`);
-      else toast.error(r.error.message);
-    });
-  }, []);
+  const setStatus = useCallback(
+    (p: ProspectRow, next: Status) => {
+      setBusyId(p.id);
+      startTransition(async () => {
+        const r = await updateProspectStatusAction({ prospectId: p.id, status: next });
+        setBusyId(null);
+        if (r.ok) {
+          toast.success(`${p.personName} marked ${STATUS_LABEL[next].toLowerCase()}`);
+          router.refresh();
+        } else toast.error(r.error.message);
+      });
+    },
+    [router],
+  );
 
-  const convert = useCallback((p: ProspectRow) => {
-    setBusyId(p.id);
-    startTransition(async () => {
-      const r = await convertProspectToCandidateAction({ prospectId: p.id });
-      setBusyId(null);
-      if (r.ok) {
-        toast.success(
-          r.data.created
-            ? `${p.personName} converted to candidate`
-            : `${p.personName} linked to existing candidate profile`,
-        );
-      } else {
-        toast.error(r.error.message);
-      }
-    });
-  }, []);
+  const convert = useCallback(
+    (p: ProspectRow) => {
+      setBusyId(p.id);
+      startTransition(async () => {
+        const r = await convertProspectToCandidateAction({ prospectId: p.id });
+        setBusyId(null);
+        if (r.ok) {
+          toast.success(
+            r.data.created
+              ? `${p.personName} converted to candidate`
+              : `${p.personName} linked to existing candidate profile`,
+          );
+          router.refresh();
+        } else {
+          toast.error(r.error.message);
+        }
+      });
+    },
+    [router],
+  );
 
   const columns = useMemo<ColumnDef<ProspectRow>[]>(
     () => [

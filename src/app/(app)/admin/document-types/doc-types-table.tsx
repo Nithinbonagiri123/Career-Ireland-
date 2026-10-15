@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { Pencil, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -20,14 +21,17 @@ const APPLIES_LABEL: Record<DocumentType['appliesTo'], string> = {
 export function DocTypesTable({ types }: { types: DocumentType[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const toggle = (t: DocumentType) => {
     setBusy(t.id);
     startTransition(async () => {
       const result = await setDocumentTypeActiveAction({ id: t.id, isActive: !t.isActive });
       setBusy(null);
-      if (result.ok) toast.success(`${t.name} ${t.isActive ? 'deactivated' : 'activated'}`);
-      else toast.error(result.error.message);
+      if (result.ok) {
+        toast.success(`${t.name} ${t.isActive ? 'deactivated' : 'activated'}`);
+        router.refresh();
+      } else toast.error(result.error.message);
     });
   };
 

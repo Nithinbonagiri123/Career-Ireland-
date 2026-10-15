@@ -1,6 +1,7 @@
 'use client';
 
 import { Archive } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { PromptDialog } from '@/components/prompt-dialog';
@@ -16,6 +17,7 @@ export function ArchiveCaseButton({
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const submit = (reason: string) => {
     startTransition(async () => {
@@ -23,6 +25,7 @@ export function ArchiveCaseButton({
       if (r.ok) {
         toast.success('Case archived');
         setOpen(false);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

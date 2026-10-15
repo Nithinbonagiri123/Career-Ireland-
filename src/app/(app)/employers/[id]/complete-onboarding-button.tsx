@@ -1,6 +1,7 @@
 'use client';
 
 import { CheckCircle2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ import { markEmployerOnboardingCompleteAction } from '@/modules/employers/action
  */
 export function CompleteOnboardingButton({ employerId }: { employerId: string }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   return (
     <Button
       size="sm"
@@ -22,8 +24,10 @@ export function CompleteOnboardingButton({ employerId }: { employerId: string })
       onClick={() =>
         startTransition(async () => {
           const r = await markEmployerOnboardingCompleteAction(employerId);
-          if (r.ok) toast.success('Onboarding complete — this client is ready for business.');
-          else toast.error(r.error.message);
+          if (r.ok) {
+            toast.success('Onboarding complete — this client is ready for business.');
+            router.refresh();
+          } else toast.error(r.error.message);
         })
       }
     >

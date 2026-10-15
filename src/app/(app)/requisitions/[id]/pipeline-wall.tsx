@@ -20,6 +20,7 @@ import {
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
@@ -69,6 +70,7 @@ export function PipelineWall({
 }) {
   const [, startTransition] = useTransition();
   const [busyPersonId, setBusyPersonId] = useState<string | null>(null);
+  const router = useRouter();
 
   const totals = useMemo(
     () => STAGE_ORDER.map((stage) => ({ stage, count: data[stage].length })),
@@ -81,10 +83,10 @@ export function PipelineWall({
       try {
         if (stage === 'source') {
           const r = await shortlistMatchAction(entry.entryId, requisition.id);
-          toastResult(r, { success: `${entry.personName} shortlisted` });
+          if (toastResult(r, { success: `${entry.personName} shortlisted` })) router.refresh();
         } else if (stage === 'review') {
           const r = await shortlistMatchAction(entry.entryId, requisition.id);
-          toastResult(r, { success: `${entry.personName} shortlisted` });
+          if (toastResult(r, { success: `${entry.personName} shortlisted` })) router.refresh();
         } else if (stage === 'shortlist') {
           const r = await createApplicationAction({
             jobRequisitionId: requisition.id,
@@ -92,25 +94,27 @@ export function PipelineWall({
             cvDocumentInstanceId: '',
             notes: '',
           });
-          toastResult(r, { success: `${entry.personName} promoted to Applied` });
+          if (toastResult(r, { success: `${entry.personName} promoted to Applied` }))
+            router.refresh();
         } else if (stage === 'apply') {
           const r = await updateApplicationStatusAction(
             { applicationId: entry.entryId, status: 'INTERVIEW' },
             requisition.id,
           );
-          toastResult(r, { success: `${entry.personName} moved to Interview` });
+          if (toastResult(r, { success: `${entry.personName} moved to Interview` }))
+            router.refresh();
         } else if (stage === 'interview') {
           const r = await updateApplicationStatusAction(
             { applicationId: entry.entryId, status: 'OFFER' },
             requisition.id,
           );
-          toastResult(r, { success: `${entry.personName} moved to Offer` });
+          if (toastResult(r, { success: `${entry.personName} moved to Offer` })) router.refresh();
         } else if (stage === 'offer') {
           // Atomically: mark application ACCEPTED + create a CONFIRMED
           // placement + flip candidate availability to PLACED + recompute
           // requisition fill count. One click, everything consistent.
           const r = await markApplicationPlacedAction(entry.entryId);
-          toastResult(r, { success: `${entry.personName} placed` });
+          if (toastResult(r, { success: `${entry.personName} placed` })) router.refresh();
         }
       } finally {
         setBusyPersonId(null);
@@ -139,7 +143,8 @@ export function PipelineWall({
             },
             requisition.id,
           );
-          toastResult(r, { success: `Offer to ${entry.personName} declined` });
+          if (toastResult(r, { success: `Offer to ${entry.personName} declined` }))
+            router.refresh();
         } finally {
           setBusyPersonId(null);
         }
@@ -151,7 +156,7 @@ export function PipelineWall({
     startTransition(async () => {
       try {
         const r = await dismissMatchAction(entry.entryId, requisition.id);
-        toastResult(r, { success: `${entry.personName} dismissed` });
+        if (toastResult(r, { success: `${entry.personName} dismissed` })) router.refresh();
       } catch (e) {
         toast.error((e as Error).message ?? 'Could not dismiss match');
       } finally {

@@ -1,6 +1,7 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,7 @@ export function SupplierDialog({
   const [currency, setCurrency] = useState(initial?.currencyCode ?? 'EUR');
   const [terms, setTerms] = useState(String(initial?.paymentTermsDays ?? 30));
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const onSubmit = () => {
     if (!legalName.trim()) {
@@ -78,6 +80,7 @@ export function SupplierDialog({
       }
       toast.success(isEdit ? 'Supplier updated' : 'Supplier added');
       setOpen(false);
+      router.refresh();
     });
   };
 

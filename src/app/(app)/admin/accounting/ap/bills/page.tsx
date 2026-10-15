@@ -1,4 +1,3 @@
-import { format } from 'date-fns';
 import { ArrowRight, Plus, Receipt } from 'lucide-react';
 import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';

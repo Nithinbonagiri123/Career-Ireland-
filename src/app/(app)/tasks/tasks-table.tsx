@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -37,14 +38,17 @@ export function TasksTable({ tasks, staffUsers }: { tasks: TaskRow[]; staffUsers
   const [editTarget, setEditTarget] = useState<TaskRow | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<TaskRow | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const setStatus = (task: TaskRow, next: TaskRow['status']) => {
     setBusy(task.id);
     startTransition(async () => {
       const r = await updateTaskStatusAction({ taskId: task.id, status: next });
       setBusy(null);
-      if (r.ok) toast.success(`Task ${next.toLowerCase().replace(/_/g, ' ')}`);
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success(`Task ${next.toLowerCase().replace(/_/g, ' ')}`);
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 
@@ -58,6 +62,7 @@ export function TasksTable({ tasks, staffUsers }: { tasks: TaskRow[]; staffUsers
       if (r.ok) {
         toast.success('Task archived');
         setArchiveTarget(null);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

@@ -29,7 +29,7 @@ import { ReassignButton } from '@/components/reassign-button';
 import { RecordHeaderActions } from '@/components/record-header-actions';
 import { RelatedWorkPanel } from '@/components/related-work-panel';
 import { Badge } from '@/components/ui/badge';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusDot } from '@/components/ui/status-dot';
 import { requireInternalStaff } from '@/lib/auth/session';

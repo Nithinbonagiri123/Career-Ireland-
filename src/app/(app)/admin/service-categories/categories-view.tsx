@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { Pencil, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -19,14 +20,17 @@ import { CategoryDialog } from './category-dialog';
 export function CategoriesView({ categories }: { categories: ServiceCategory[] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const toggle = (c: ServiceCategory) => {
     setBusy(c.id);
     startTransition(async () => {
       const r = await setServiceCategoryActiveAction({ id: c.id, isActive: !c.isActive });
       setBusy(null);
-      if (r.ok) toast.success(`${c.name} ${c.isActive ? 'deactivated' : 'activated'}`);
-      else toast.error(r.error.message);
+      if (r.ok) {
+        toast.success(`${c.name} ${c.isActive ? 'deactivated' : 'activated'}`);
+        router.refresh();
+      } else toast.error(r.error.message);
     });
   };
 

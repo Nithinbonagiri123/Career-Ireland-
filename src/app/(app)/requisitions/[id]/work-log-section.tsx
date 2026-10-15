@@ -2,6 +2,7 @@
 
 import { format } from 'date-fns';
 import { CheckCircle2, Circle, ClipboardList, Loader2, Sparkles } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useOptimistic, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,7 @@ export function WorkLogSection({
   const [seeding, startSeedTransition] = useTransition();
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [, startStatusTransition] = useTransition();
+  const router = useRouter();
 
   const activeTasks = optimistic.filter((t) => t.status !== 'CANCELLED');
   const doneCount = activeTasks.filter((t) => t.status === 'DONE').length;
@@ -51,6 +53,7 @@ export function WorkLogSection({
             ? `${r.data.length} standard milestone${r.data.length === 1 ? '' : 's'} added`
             : 'Standard milestones already exist',
         );
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }
@@ -67,6 +70,8 @@ export function WorkLogSection({
       if (!r.ok) {
         toast.error(r.error.message);
         setOptimistic(task); // revert
+      } else {
+        router.refresh();
       }
     });
   };

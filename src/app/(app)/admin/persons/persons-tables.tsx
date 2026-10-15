@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { Archive, GitMerge } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
@@ -59,6 +60,7 @@ export function ActivePersonsTable({ persons }: { persons: Person[] }) {
   const [archiveTarget, setArchiveTarget] = useState<Person | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
 
   const confirmArchive = (reason: string) => {
     if (!archiveTarget) return;
@@ -70,6 +72,7 @@ export function ActivePersonsTable({ persons }: { persons: Person[] }) {
       if (r.ok) {
         toast.success(`${target.firstName} ${target.lastName} archived`);
         setArchiveTarget(null);
+        router.refresh();
       } else {
         toast.error(r.error.message);
       }

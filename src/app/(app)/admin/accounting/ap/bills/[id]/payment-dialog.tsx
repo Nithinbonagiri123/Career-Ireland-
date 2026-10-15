@@ -1,6 +1,7 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,7 @@ export function BillPaymentDialog({
   >('BANK_TRANSFER');
   const [reference, setReference] = useState('');
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const onSubmit = () => {
     if (!/^\d+(\.\d{1,2})?$/.test(amount)) {
@@ -58,6 +60,7 @@ export function BillPaymentDialog({
       }
       toast.success(`Recorded ${amount} ${currencyCode} payment`);
       setOpen(false);
+      router.refresh();
     });
   };
 
