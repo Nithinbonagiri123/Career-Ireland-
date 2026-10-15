@@ -52,8 +52,13 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
   const selectedEngagementId = watch('serviceEngagementId');
   const selectedEngagement = openEngagements.find((e) => e.id === selectedEngagementId);
 
+  // ADMIN / FINANCE record payments after confirming the money arrived,
+  // so recordPayment now auto-verifies for them on the server side
+  // (receipt issued, engagement advanced to ACTIVE, invoice recomputed).
+  // Toast reflects that so the user doesn't go looking for a Verify step
+  // that no longer applies.
   const onSubmit = handleSubmit((data) =>
-    submit(data, recordPaymentAction, { successMessage: 'Payment recorded' }),
+    submit(data, recordPaymentAction, { successMessage: 'Payment recorded and verified' }),
   );
 
   const onEngagementSelect = (id: string) => {

@@ -1,13 +1,19 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import type { DateRange } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
-import { invoices } from '@/lib/db/schema/billing';
-import { type Payment, type ServiceEngagement, serviceEngagements } from '@/lib/db/schema/commerce';
+import { creditNotes, invoices, receipts } from '@/lib/db/schema/billing';
+import {
+  type Payment,
+  payments,
+  type ServiceEngagement,
+  serviceEngagements,
+} from '@/lib/db/schema/commerce';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { emitFinancialEvent } from '@/modules/accounting/events';
 import { resolveDivisionForInvoice } from '@/modules/accounting/rule-engine';
+import { OVERDUE_THRESHOLD_DAYS } from '@/modules/billing/aging';
 import {
   assertNoOverpayment,
   insertReceipt,
@@ -53,6 +59,134 @@ export async function fetchEngagements(createdRange?: DateRange): Promise<Engage
 export async function fetchPayments(createdRange?: DateRange) {
   await requireInternalStaff();
   return listPayments(createdRange);
+}
+
+export type PaymentsSummary = {
+  /** ISSUED + PARTIALLY_PAID invoices whose issuedAt falls in the range,
+   *  with per-invoice outstanding balance computed in-DB. */
+  outstandingCount: number;
+  outstandingByCurrency: Record<string, string>;
+  /** Subset of outstanding where issuedAt is older than the overdue
+   *  threshold (14 days) — always evaluated against *now*, not range. */
+  overdueCount: number;
+  overdueByCurrency: Record<string, string>;
+  /** Receipts whose receivedAt falls in the range, summed per currency. */
+  receivedCount: number;
+  receivedByCurrency: Record<string, string>;
+};
+
+/**
+ * KPI rollup for the Payments page's "This month" / date-filtered view.
+ * Outstanding + Overdue walk the invoices table (currency, status,
+ * computed-outstanding) grouped by currency so EUR + ZAR never collapse
+ * into a dishonest total. Received counts the receipts table — a receipt
+ * is only written when a payment is VERIFIED, so this is "money we have".
+ */
+export async function fetchPaymentsSummary(createdRange?: DateRange): Promise<PaymentsSummary> {
+  await requireInternalStaff();
+  const now = new Date();
+  const overdueThresholdIso = new Date(
+    now.getTime() - OVERDUE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  // Filter clauses — pushed into both queries so the same date range
+  // slices both panels symmetrically.
+  const invoiceDateConds = [inArray(invoices.status, ['ISSUED', 'PARTIALLY_PAID'])];
+  if (createdRange?.from) invoiceDateConds.push(gte(invoices.issuedAt, createdRange.from));
+  if (createdRange?.to) invoiceDateConds.push(lte(invoices.issuedAt, createdRange.to));
+
+  const receiptDateConds = [];
+  if (createdRange?.from) receiptDateConds.push(gte(receipts.receivedAt, createdRange.from));
+  if (createdRange?.to) receiptDateConds.push(lte(receipts.receivedAt, createdRange.to));
+
+  const [invoicingRollup, receivedRows] = await Promise.all([
+    // Same shape as the dashboard rollup: per-invoice outstanding balance
+    // in cents (int math only, no float), aggregated per currency.
+    db
+      .select({
+        currencyCode: invoices.currencyCode,
+        totalCount: sql<number>`COUNT(*)::int`,
+        overdueCount: sql<number>`COALESCE(SUM(CASE WHEN ${invoices.issuedAt} < ${overdueThresholdIso}::timestamptz THEN 1 ELSE 0 END), 0)::int`,
+        outstandingCents: sql<number>`COALESCE(SUM(
+          GREATEST(
+            0,
+            ROUND(${invoices.totalAmount} * 100)::bigint
+              - COALESCE((
+                  SELECT SUM(ROUND(${payments.amount} * 100)::bigint)
+                  FROM ${payments}
+                  WHERE ${payments.serviceEngagementId} = ${invoices.serviceEngagementId}
+                    AND ${payments.status} = 'VERIFIED'
+                ), 0)
+              - COALESCE((
+                  SELECT SUM(ROUND(${creditNotes.amount} * 100)::bigint)
+                  FROM ${creditNotes}
+                  WHERE ${creditNotes.invoiceId} = ${invoices.id}
+                ), 0)
+          )
+        ), 0)::bigint`,
+        overdueCents: sql<number>`COALESCE(SUM(
+          CASE WHEN ${invoices.issuedAt} < ${overdueThresholdIso}::timestamptz THEN
+            GREATEST(
+              0,
+              ROUND(${invoices.totalAmount} * 100)::bigint
+                - COALESCE((
+                    SELECT SUM(ROUND(${payments.amount} * 100)::bigint)
+                    FROM ${payments}
+                    WHERE ${payments.serviceEngagementId} = ${invoices.serviceEngagementId}
+                      AND ${payments.status} = 'VERIFIED'
+                  ), 0)
+                - COALESCE((
+                    SELECT SUM(ROUND(${creditNotes.amount} * 100)::bigint)
+                    FROM ${creditNotes}
+                    WHERE ${creditNotes.invoiceId} = ${invoices.id}
+                  ), 0)
+            )
+          ELSE 0 END
+        ), 0)::bigint`,
+      })
+      .from(invoices)
+      .where(and(...invoiceDateConds))
+      .groupBy(invoices.currencyCode),
+    db
+      .select({
+        currencyCode: receipts.currencyCode,
+        totalCount: sql<number>`COUNT(*)::int`,
+        totalCents: sql<number>`COALESCE(SUM(ROUND(${receipts.amount} * 100)::bigint), 0)::bigint`,
+      })
+      .from(receipts)
+      .where(receiptDateConds.length > 0 ? and(...receiptDateConds) : undefined)
+      .groupBy(receipts.currencyCode),
+  ]);
+
+  let outstandingCount = 0;
+  let overdueCount = 0;
+  const outstandingByCurrency: Record<string, string> = {};
+  const overdueByCurrency: Record<string, string> = {};
+  for (const row of invoicingRollup) {
+    outstandingCount += row.totalCount;
+    overdueCount += row.overdueCount;
+    const out = Number(row.outstandingCents);
+    if (out > 0) outstandingByCurrency[row.currencyCode] = (out / 100).toFixed(2);
+    const ovd = Number(row.overdueCents);
+    if (ovd > 0) overdueByCurrency[row.currencyCode] = (ovd / 100).toFixed(2);
+  }
+
+  let receivedCount = 0;
+  const receivedByCurrency: Record<string, string> = {};
+  for (const row of receivedRows) {
+    receivedCount += row.totalCount;
+    const cents = Number(row.totalCents);
+    if (cents > 0) receivedByCurrency[row.currencyCode] = (cents / 100).toFixed(2);
+  }
+
+  return {
+    outstandingCount,
+    outstandingByCurrency,
+    overdueCount,
+    overdueByCurrency,
+    receivedCount,
+    receivedByCurrency,
+  };
 }
 
 export async function createEngagement(input: CreateEngagementInput): Promise<ServiceEngagement> {
@@ -132,6 +266,14 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Payment>
   }
   const data = parsed.data;
 
+  // Fast path: ADMIN + FINANCE record payments after confirming the money
+  // in the bank statement, so the two-step record → verify dance is pure
+  // friction. When they record, we insert at VERIFIED directly and run
+  // the full verification side-effect chain inline (receipt, engagement
+  // ACTIVE, invoice recompute, ledger event). Lesser roles still land at
+  // PENDING / PROOF_UPLOADED so an ADMIN can review and verify later.
+  const canAutoVerify = session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
+
   return db.transaction(async (tx) => {
     const engagement = await getEngagement(data.serviceEngagementId);
     if (!engagement) {
@@ -144,7 +286,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Payment>
       );
     }
 
-    const status = data.proofReference?.trim() ? 'PROOF_UPLOADED' : 'PENDING';
+    const initialStatus = data.proofReference?.trim() ? 'PROOF_UPLOADED' : 'PENDING';
     const created = await insertPayment(tx, {
       serviceEngagementId: data.serviceEngagementId,
       amount: data.amount,
@@ -152,7 +294,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Payment>
       method: data.method,
       proofReference: blankToNull(data.proofReference),
       receivedAt: data.receivedAt ? new Date(data.receivedAt) : null,
-      status,
+      status: initialStatus,
     });
 
     await recordAudit(tx, {
@@ -168,6 +310,10 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Payment>
       },
       context: { serviceEngagementId: engagement.id },
     });
+
+    if (canAutoVerify) {
+      return performPaymentVerification(tx, created, session.user.id);
+    }
     return created;
   });
 }
@@ -189,166 +335,167 @@ export async function verifyPayment(input: VerifyPaymentInput): Promise<Payment>
         'Rejected payments cannot be verified — record a new payment instead',
       );
     }
+    return performPaymentVerification(tx, before, session.user.id);
+  });
+}
 
-    // Overpayment guard: if this payment would take the settled amount
-    // past the invoice total (existing verified payments + credit notes
-    // + this payment), refuse. Prevents accidental double-verification
-    // when staff record the same bank line twice.
-    const [invoiceOnEngagement] = await tx
-      .select({ id: invoices.id })
-      .from(invoices)
-      .where(eq(invoices.serviceEngagementId, before.serviceEngagementId))
-      .limit(1);
-    if (invoiceOnEngagement) {
-      const additional = Math.round(Number.parseFloat(before.amount) * 100);
-      await assertNoOverpayment(tx, invoiceOnEngagement.id, additional);
-    }
+// Shared verification body — called from `verifyPayment` (admin manually
+// confirming a PENDING / PROOF_UPLOADED row) and from `recordPayment`'s
+// fast-path (ADMIN / FINANCE recording a payment they've already
+// confirmed in the bank statement, so the second click is pure friction).
+//
+// Caller must have already fetched `before` inside `tx` and confirmed
+// it's not already VERIFIED or REJECTED.
+async function performPaymentVerification(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  before: Payment,
+  actorUserId: string,
+): Promise<Payment> {
+  // Overpayment guard: if this payment would take the settled amount
+  // past the invoice total (existing verified payments + credit notes
+  // + this payment), refuse. Prevents accidental double-verification
+  // when staff record the same bank line twice.
+  const [invoiceOnEngagement] = await tx
+    .select({ id: invoices.id })
+    .from(invoices)
+    .where(eq(invoices.serviceEngagementId, before.serviceEngagementId))
+    .limit(1);
+  if (invoiceOnEngagement) {
+    const additional = Math.round(Number.parseFloat(before.amount) * 100);
+    await assertNoOverpayment(tx, invoiceOnEngagement.id, additional);
+  }
 
-    const after = await updatePayment(tx, parsed.paymentId, {
-      status: 'VERIFIED',
-      verifiedByUserId: session.user.id,
-      verifiedAt: new Date(),
-      rejectionReason: null,
+  const after = await updatePayment(tx, before.id, {
+    status: 'VERIFIED',
+    verifiedByUserId: actorUserId,
+    verifiedAt: new Date(),
+    rejectionReason: null,
+  });
+  await recordAudit(tx, {
+    actorUserId,
+    entityType: 'payment',
+    entityId: after.id,
+    action: 'VERIFIED',
+    before: { status: before.status },
+    after: { status: after.status },
+  });
+
+  // Advance engagement PENDING_PAYMENT → ACTIVE now that funds are confirmed.
+  const engagement = await getEngagement(after.serviceEngagementId);
+  if (engagement && engagement.status === 'PENDING_PAYMENT') {
+    const advanced = await updateEngagement(tx, engagement.id, { status: 'ACTIVE' });
+    await recordAudit(tx, {
+      actorUserId,
+      entityType: 'service_engagement',
+      entityId: advanced.id,
+      action: 'STATUS_CHANGED',
+      before: { status: engagement.status },
+      after: { status: advanced.status },
+      context: { via: 'payment_verified', paymentId: after.id },
+    });
+  }
+
+  // Auto-issue a receipt so every VERIFIED payment leaves a
+  // printable trail without the operator having to remember. If an
+  // invoice is attached to the engagement, we also link the receipt
+  // to it and flip the invoice to PAID. The `receipts.payment_id`
+  // UNIQUE constraint keeps this idempotent.
+  const [issuedInvoice] = await tx
+    .select({
+      id: invoices.id,
+      payerPersonId: invoices.payerPersonId,
+      payerEmployerId: invoices.payerEmployerId,
+      currencyCode: invoices.currencyCode,
+      // Back-link columns so the shadow-ledger emit below can resolve
+      // the correct division — a payment belongs to whichever
+      // workspace raised the invoice it settles.
+      immigrationCaseId: invoices.immigrationCaseId,
+      jobRequisitionId: invoices.jobRequisitionId,
+      placementId: invoices.placementId,
+    })
+    .from(invoices)
+    .where(eq(invoices.serviceEngagementId, after.serviceEngagementId))
+    .limit(1);
+
+  const payerPersonId = issuedInvoice?.payerPersonId ?? engagement?.payerPersonId ?? null;
+  const payerEmployerId = issuedInvoice?.payerEmployerId ?? engagement?.payerEmployerId ?? null;
+
+  if (payerPersonId || payerEmployerId) {
+    const receipt = await insertReceipt(tx, {
+      paymentId: after.id,
+      invoiceId: issuedInvoice?.id ?? null,
+      payerPersonId,
+      payerEmployerId,
+      amount: after.amount,
+      currencyCode: after.currencyCode,
+      receivedAt: after.receivedAt ?? after.verifiedAt ?? new Date(),
+      issuedByUserId: actorUserId,
     });
     await recordAudit(tx, {
-      actorUserId: session.user.id,
-      entityType: 'payment',
-      entityId: after.id,
-      action: 'VERIFIED',
-      before: { status: before.status },
-      after: { status: after.status },
-    });
-
-    // Advance engagement PENDING_PAYMENT → ACTIVE now that funds are confirmed.
-    const engagement = await getEngagement(after.serviceEngagementId);
-    if (engagement && engagement.status === 'PENDING_PAYMENT') {
-      const advanced = await updateEngagement(tx, engagement.id, { status: 'ACTIVE' });
-      await recordAudit(tx, {
-        actorUserId: session.user.id,
-        entityType: 'service_engagement',
-        entityId: advanced.id,
-        action: 'STATUS_CHANGED',
-        before: { status: engagement.status },
-        after: { status: advanced.status },
-        context: { via: 'payment_verified', paymentId: after.id },
-      });
-    }
-
-    // Auto-issue a receipt so every VERIFIED payment leaves a
-    // printable trail without the operator having to remember. If an
-    // invoice is attached to the engagement, we also link the receipt
-    // to it and flip the invoice to PAID. The `receipts.payment_id`
-    // UNIQUE constraint keeps this idempotent — if a receipt was
-    // already issued (shouldn't happen since we early-returned on
-    // already-VERIFIED, but defensively) the insert will throw and
-    // the transaction rolls back.
-    const [issuedInvoice] = await tx
-      .select({
-        id: invoices.id,
-        payerPersonId: invoices.payerPersonId,
-        payerEmployerId: invoices.payerEmployerId,
-        currencyCode: invoices.currencyCode,
-        // Back-link columns so the shadow-ledger emit below can resolve
-        // the correct division — a payment belongs to whichever
-        // workspace raised the invoice it settles.
-        immigrationCaseId: invoices.immigrationCaseId,
-        jobRequisitionId: invoices.jobRequisitionId,
-        placementId: invoices.placementId,
-      })
-      .from(invoices)
-      .where(eq(invoices.serviceEngagementId, after.serviceEngagementId))
-      .limit(1);
-
-    // Resolve payer from the invoice if there is one, otherwise from
-    // the engagement (both are enforced to have exactly one payer by
-    // the xor CHECK constraints).
-    const payerPersonId = issuedInvoice?.payerPersonId ?? engagement?.payerPersonId ?? null;
-    const payerEmployerId = issuedInvoice?.payerEmployerId ?? engagement?.payerEmployerId ?? null;
-
-    if (payerPersonId || payerEmployerId) {
-      const receipt = await insertReceipt(tx, {
+      actorUserId,
+      entityType: 'receipt',
+      entityId: receipt.id,
+      action: 'CREATED',
+      after: {
+        number: receipt.number,
         paymentId: after.id,
         invoiceId: issuedInvoice?.id ?? null,
-        payerPersonId,
-        payerEmployerId,
-        amount: after.amount,
-        currencyCode: after.currencyCode,
-        receivedAt: after.receivedAt ?? after.verifiedAt ?? new Date(),
-        issuedByUserId: session.user.id,
-      });
-      await recordAudit(tx, {
-        actorUserId: session.user.id,
-        entityType: 'receipt',
-        entityId: receipt.id,
-        action: 'CREATED',
-        after: {
-          number: receipt.number,
-          paymentId: after.id,
-          invoiceId: issuedInvoice?.id ?? null,
-          via: 'payment_verified',
-        },
-      });
-
-      if (issuedInvoice) {
-        // Recompute — flips ISSUED → PARTIALLY_PAID → PAID based on the
-        // actual sum of verified payments minus credit notes. Never
-        // blindly sets PAID like the old code did.
-        const change = await recomputeInvoiceStatus(tx, issuedInvoice.id);
-        if (change.before !== change.after) {
-          await recordAudit(tx, {
-            actorUserId: session.user.id,
-            entityType: 'invoice',
-            entityId: issuedInvoice.id,
-            action: 'STATUS_CHANGED',
-            before: { status: change.before },
-            after: { status: change.after },
-            context: {
-              via: 'payment_verified',
-              paymentId: after.id,
-              paidCents: change.paidCents,
-              totalCents: change.totalCents,
-            },
-          });
-        }
-      }
-    }
-
-    // Shadow-record the payment in the ledger. A VERIFIED payment is
-    // the moment cash counts as received; the rule engine turns this
-    // into DR Bank / CR Accounts Receivable (via the matched rule).
-    // Division resolves from the attached invoice if one exists; else
-    // defaults to candidate_services via the resolver's fallback. The
-    // event's subtotal is the payment amount — no tax split because the
-    // tax was already recognised at invoice-posting time.
-    await emitFinancialEvent(tx, {
-      eventType: 'PAYMENT_RECEIVED',
-      sourceSystem: 'ireland_careers',
-      sourceModule: 'commerce',
-      sourceEntity: 'payment',
-      sourceId: after.id,
-      sourceEventId: after.id,
-      eventDate: after.verifiedAt ?? after.receivedAt ?? new Date(),
-      payload: {
-        actorUserId: session.user.id,
-        paymentId: after.id,
-        invoiceId: issuedInvoice?.id ?? null,
-        divisionCode: resolveDivisionForInvoice({
-          immigrationCaseId: issuedInvoice?.immigrationCaseId,
-          jobRequisitionId: issuedInvoice?.jobRequisitionId,
-          placementId: issuedInvoice?.placementId,
-        }),
-        currencyCode: after.currencyCode,
-        subtotal: after.amount,
-        taxAmount: '0',
-        total: after.amount,
-        description: issuedInvoice
-          ? `Payment on invoice ${issuedInvoice.id}`
-          : `Payment ${after.id}`,
+        via: 'payment_verified',
       },
     });
 
-    return after;
+    if (issuedInvoice) {
+      // Recompute — flips ISSUED → PARTIALLY_PAID → PAID based on the
+      // actual sum of verified payments minus credit notes.
+      const change = await recomputeInvoiceStatus(tx, issuedInvoice.id);
+      if (change.before !== change.after) {
+        await recordAudit(tx, {
+          actorUserId,
+          entityType: 'invoice',
+          entityId: issuedInvoice.id,
+          action: 'STATUS_CHANGED',
+          before: { status: change.before },
+          after: { status: change.after },
+          context: {
+            via: 'payment_verified',
+            paymentId: after.id,
+            paidCents: change.paidCents,
+            totalCents: change.totalCents,
+          },
+        });
+      }
+    }
+  }
+
+  // Shadow-record the payment in the ledger. A VERIFIED payment is
+  // the moment cash counts as received; the rule engine turns this
+  // into DR Bank / CR Accounts Receivable.
+  await emitFinancialEvent(tx, {
+    eventType: 'PAYMENT_RECEIVED',
+    sourceSystem: 'ireland_careers',
+    sourceModule: 'commerce',
+    sourceEntity: 'payment',
+    sourceId: after.id,
+    sourceEventId: after.id,
+    eventDate: after.verifiedAt ?? after.receivedAt ?? new Date(),
+    payload: {
+      actorUserId,
+      paymentId: after.id,
+      invoiceId: issuedInvoice?.id ?? null,
+      divisionCode: resolveDivisionForInvoice({
+        immigrationCaseId: issuedInvoice?.immigrationCaseId,
+        jobRequisitionId: issuedInvoice?.jobRequisitionId,
+        placementId: issuedInvoice?.placementId,
+      }),
+      currencyCode: after.currencyCode,
+      subtotal: after.amount,
+      taxAmount: '0',
+      total: after.amount,
+      description: issuedInvoice ? `Payment on invoice ${issuedInvoice.id}` : `Payment ${after.id}`,
+    },
   });
+
+  return after;
 }
 
 export async function rejectPayment(input: RejectPaymentInput): Promise<Payment> {
