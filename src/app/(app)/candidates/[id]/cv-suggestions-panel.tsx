@@ -45,6 +45,18 @@ export function CvSuggestionsPanel({ personId }: { personId: string }) {
   const router = useRouter();
 
   const scan = () => {
+    // Clear picked state up-front so the UI doesn't flash a stale
+    // "N selected" summary from a previous scan while the new request
+    // is in flight. Suggestions are kept visible but the Accept button
+    // is disabled via the `pending` flag so the operator can't double-
+    // accept items from the stale list.
+    setPicked({
+      skillIds: new Set(),
+      customSkills: new Set(),
+      qualificationIds: new Set(),
+      customQualifications: new Set(),
+      employment: new Set(),
+    });
     startTransition(async () => {
       const r = await buildCvSuggestionsAction({ personId });
       if (!r.ok) {
@@ -194,7 +206,11 @@ export function CvSuggestionsPanel({ personId }: { personId: string }) {
         catalogs, picks free-text candidates from typical CV sections, and parses the Employment
         History block. No LLM, no external calls.
       </SectionHeader>
-      <CardContent>
+      <CardContent
+        className={
+          pending && suggestions ? 'pointer-events-none opacity-50 transition-opacity' : undefined
+        }
+      >
         {!suggestions ? (
           <EmptyState
             icon={FileScan}

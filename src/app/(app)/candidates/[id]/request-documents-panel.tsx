@@ -65,10 +65,19 @@ export function RequestDocumentsPanel({
       }
       setFreshUrl(r.data.uploadUrl);
       setEmailWarn(!r.data.emailSent);
+      // Auto-copy the fresh link so even if email fails the operator
+      // can immediately paste it into WhatsApp / SMS / etc. Non-fatal
+      // if the clipboard API refuses (e.g. http context without user
+      // gesture); the Copy button next to the URL still works.
+      try {
+        await navigator.clipboard.writeText(r.data.uploadUrl);
+      } catch {
+        /* ignore — operator still sees the URL on screen */
+      }
       if (r.data.emailSent) {
-        toast.success(`Email sent to ${personEmail}`);
+        toast.success(`Email sent to ${personEmail} — link also copied to clipboard`);
       } else {
-        toast.warning('Link created — email delivery failed, share the URL manually.');
+        toast.warning('Link created and copied to clipboard — email delivery failed.');
       }
       router.refresh();
     });

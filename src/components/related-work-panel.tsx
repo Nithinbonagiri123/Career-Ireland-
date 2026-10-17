@@ -52,29 +52,53 @@ function countByKind(items: PersonTimelineItem[]): Counts {
   return c;
 }
 
+// Scope deep-links to the candidate's own tabs where the information is
+// grouped per-person. The alternative (routing to unfiltered /requisitions
+// etc.) dumps the operator on a page listing everyone and makes them
+// search for the right row — which was the pre-fix behaviour.
 const ROW_ORDER: Array<{
   key: keyof Counts;
   label: string;
   icon: typeof Briefcase;
   href: (personId: string) => string;
 }> = [
-  { key: 'lead', label: 'leads', icon: UserPlus, href: () => '/leads' },
-  { key: 'application', label: 'applications', icon: Briefcase, href: () => '/requisitions' },
-  { key: 'placement', label: 'placements', icon: Trophy, href: () => '/placements' },
+  { key: 'lead', label: 'leads', icon: UserPlus, href: (id) => `/candidates/${id}?tab=overview` },
+  {
+    key: 'application',
+    label: 'applications',
+    icon: Briefcase,
+    href: (id) => `/candidates/${id}?tab=applications`,
+  },
+  {
+    key: 'placement',
+    label: 'placements',
+    icon: Trophy,
+    href: (id) => `/candidates/${id}?tab=applications`,
+  },
   {
     key: 'immigration',
     label: 'immigration cases',
     icon: PlaneTakeoff,
-    href: () => '/immigration',
+    href: (id) => `/candidates/${id}?tab=overview`,
   },
-  { key: 'engagement', label: 'services', icon: Coins, href: () => '/engagements' },
+  {
+    key: 'engagement',
+    label: 'services',
+    icon: Coins,
+    href: (id) => `/candidates/${id}?tab=billing`,
+  },
   {
     key: 'communication',
     label: 'communications',
     icon: MessagesSquare,
     href: (id) => `/candidates/${id}?tab=activity`,
   },
-  { key: 'task', label: 'open tasks', icon: CheckSquare, href: () => '/tasks' },
+  {
+    key: 'task',
+    label: 'open tasks',
+    icon: CheckSquare,
+    href: (id) => `/candidates/${id}?tab=activity`,
+  },
 ];
 
 export function RelatedWorkPanel({

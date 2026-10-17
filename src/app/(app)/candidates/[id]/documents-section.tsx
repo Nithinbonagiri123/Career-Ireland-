@@ -1,10 +1,10 @@
 'use client';
 
 import { format, formatDistanceToNow } from 'date-fns';
-import { FileText, RefreshCw, Trash2 } from 'lucide-react';
+import { AlertTriangle, Check, Clock, FileText, RefreshCw, Trash2, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import type { DocumentTypeOption } from '@/components/document-type-picker';
 import { DocumentUploader } from '@/components/document-uploader';
@@ -15,7 +15,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
 import { statusTone } from '@/lib/ui/status-tone';
-import { materialiseRequirementsAction, voidDocumentAction } from '@/modules/documents/actions';
+import {
+  materialiseRequirementsAction,
+  reviewDocumentAction,
+  voidDocumentAction,
+} from '@/modules/documents/actions';
 import type { PersonRequirementRow } from '@/modules/documents/service';
 
 export function DocumentsSection({
@@ -34,6 +38,24 @@ export function DocumentsSection({
   const [voidBusy, setVoidBusy] = useState(false);
   const router = useRouter();
 
+  // Auto-materialise requirements once per mount when the candidate has
+  // none yet — common immediately after conversion when occupation /
+  // global rules haven't been projected onto the person. Keeps the
+  // operator from staring at "no requirements" and wondering why.
+  const didAutoRefresh = useRef(false);
+  useEffect(() => {
+    if (didAutoRefresh.current) return;
+    if (requirements.length > 0) return;
+    didAutoRefresh.current = true;
+    startTransition(async () => {
+      const r = await materialiseRequirementsAction({ personId });
+      if (r.ok && r.data.created > 0) {
+        toast.info(`${r.data.created} requirement(s) auto-added from occupation / global rules`);
+        router.refresh();
+      }
+    });
+  }, [requirements.length, personId, router]);
+
   const refresh = () => {
     startTransition(async () => {
       const r = await materialiseRequirementsAction({ personId });
@@ -43,6 +65,22 @@ export function DocumentsSection({
             ? `${r.data.created} new requirement(s) added from occupation/global rules`
             : 'No new requirements — all applicable rules already covered',
         );
+        router.refresh();
+      } else {
+        toast.error(r.error.message);
+      }
+    });
+  };
+
+  // Inline Accept / Reject so operators don't need to leave the candidate
+  // page to approve a doc. Available only for UPLOADED / UNDER_REVIEW
+  // instances; terminal statuses (ACCEPTED, REJECTED, EXPIRED) hide the
+  // buttons.
+  const review = (d: DocumentInstance, decision: 'ACCEPTED' | 'REJECTED') => {
+    startTransition(async () => {
+      const r = await reviewDocumentAction({ documentInstanceId: d.id, decision });
+      if (r.ok) {
+        toast.success(decision === 'ACCEPTED' ? 'Document accepted' : 'Document rejected');
         router.refresh();
       } else {
         toast.error(r.error.message);
@@ -95,7 +133,18 @@ export function DocumentsSection({
           {requirements.map((req) => (
             <li key={req.id} className="flex items-center justify-between px-4 py-3">
               <div className="min-w-0">
-                <p className="text-sm font-medium">{req.documentTypeName}</p>
+                <p className="flex items-center gap-1.5 text-sm font-medium">
+                  {req.documentTypeName}
+                  {req.hasExpiry && (
+                    <Clock className="size-3 text-muted-foreground" aria-label="Expiry tracked" />
+                  )}
+                  {req.status === 'MISSING' && (
+                    <AlertTriangle
+                      className="size-3 text-status-warning"
+                      aria-label="Missing document"
+                    />
+                  )}
+                </p>
                 <p className="text-[10px] font-mono text-muted-foreground">
                   {req.documentTypeCode}
                   {req.hasExpiry ? ' · expiry tracked' : ''}
@@ -164,7 +213,7 @@ export function DocumentsSection({
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="rounded-full text-[10px]">
+                  <Badge variant={statusTone(d.status)} className="rounded-full text-[10px]">
                     {d.status.replace(/_/g, ' ')}
                   </Badge>
                   <Link
@@ -174,6 +223,30 @@ export function DocumentsSection({
                   >
                     Download
                   </Link>
+                  {(d.status === 'UPLOADED' || d.status === 'UNDER_REVIEW') && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Accept ${d.displayName ?? d.originalFilename}`}
+                        onClick={() => review(d, 'ACCEPTED')}
+                        disabled={pending}
+                        className="text-muted-foreground hover:text-status-success"
+                      >
+                        <Check className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Reject ${d.displayName ?? d.originalFilename}`}
+                        onClick={() => review(d, 'REJECTED')}
+                        disabled={pending}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    </>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
