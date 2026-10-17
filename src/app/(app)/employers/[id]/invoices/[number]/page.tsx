@@ -108,6 +108,7 @@ export default async function EmployerInvoicePrintPage({
             employer.website ? { label: 'Customer Website', value: employer.website } : null,
           ].filter((r): r is { label: string; value: string } => r !== null),
         }}
+        lineItems={data.lineItems}
         creditNotes={existingCreditNotes}
       />
     </div>

@@ -1,7 +1,13 @@
 import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
-import { creditNotes, invoices, receipts, refunds } from '@/lib/db/schema/billing';
+import {
+  creditNotes,
+  invoiceLineItems,
+  invoices,
+  receipts,
+  refunds,
+} from '@/lib/db/schema/billing';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { persons } from '@/lib/db/schema/persons';
 import { employers } from '@/lib/db/schema/recruitment';
@@ -135,6 +141,9 @@ export type InvoicePrintable = {
   payer: PrintablePayer;
   engagement: typeof serviceEngagements.$inferSelect;
   catalogItem: typeof serviceCatalogItems.$inferSelect;
+  /** Stage 3+ multi-line items. Backfilled for historical invoices by
+   *  migration 0053 so this is always non-empty for any invoice. */
+  lineItems: Array<typeof invoiceLineItems.$inferSelect>;
 };
 
 export async function fetchInvoiceForPrint(number: string): Promise<InvoicePrintable | null> {
@@ -164,11 +173,17 @@ export async function fetchInvoiceForPrint(number: string): Promise<InvoicePrint
       ? { kind: 'EMPLOYER', employer: row.employer }
       : null;
   if (!payer) return null;
+  const lineItems = await db
+    .select()
+    .from(invoiceLineItems)
+    .where(eq(invoiceLineItems.invoiceId, row.invoice.id))
+    .orderBy(invoiceLineItems.sortOrder);
   return {
     invoice: row.invoice,
     payer,
     engagement: row.engagement,
     catalogItem: row.catalogItem,
+    lineItems,
   };
 }
 

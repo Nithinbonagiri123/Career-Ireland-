@@ -2,7 +2,7 @@ import { format } from 'date-fns';
 import Image from 'next/image';
 import { formatCurrency } from '@/lib/currency';
 import type { AppSettings } from '@/lib/db/schema/app_settings';
-import type { Invoice } from '@/lib/db/schema/billing';
+import type { Invoice, InvoiceLineItem } from '@/lib/db/schema/billing';
 import type { CreditNoteRow } from '@/modules/billing/read';
 
 /**
@@ -68,13 +68,22 @@ export function InvoicePrintable({
   payer,
   settings,
   lineDescription,
+  lineItems,
   creditNotes,
 }: {
   invoice: Invoice;
   payer: InvoicePayerView;
   settings: AppSettings;
-  /** Description shown on the QTY row. Falls back to invoice.lineDescription. */
+  /** Description shown on the QTY row. Falls back to invoice.lineDescription.
+   *  Ignored when `lineItems` is provided — the multi-line table replaces
+   *  the single-line view. */
   lineDescription?: string;
+  /** Stage 3+ multi-line invoices. When non-empty, this replaces the
+   *  single-line body with a full services table. The legacy columns
+   *  (qty, unit_price, line_description) are still populated on the
+   *  invoice row for historical compat but the renderer prefers lines
+   *  when available. */
+  lineItems?: InvoiceLineItem[];
   /** Credit notes already issued against this invoice. Renders a
    *  "Credit notes" section below the totals — critical for the
    *  audit trail on any invoice that's been partially reversed. */
@@ -202,18 +211,38 @@ export function InvoicePrintable({
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td className="border border-slate-300 px-3 py-2 text-center tabular-nums">
-              {invoice.qty}
-            </td>
-            <td className="border border-slate-300 px-3 py-2">{desc}</td>
-            <td className="border border-slate-300 px-3 py-2 text-right tabular-nums">
-              {money(invoice.unitPrice)}
-            </td>
-            <td className="border border-slate-300 px-3 py-2 text-right tabular-nums">
-              {money(invoice.subtotal)}
-            </td>
-          </tr>
+          {lineItems && lineItems.length > 0 ? (
+            lineItems.map((li) => (
+              <tr key={li.id}>
+                <td className="border border-slate-300 px-3 py-2 text-center tabular-nums">
+                  {Number.parseFloat(li.quantity).toLocaleString(undefined, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 3,
+                  })}
+                </td>
+                <td className="border border-slate-300 px-3 py-2">{li.description}</td>
+                <td className="border border-slate-300 px-3 py-2 text-right tabular-nums">
+                  {money(li.unitPrice)}
+                </td>
+                <td className="border border-slate-300 px-3 py-2 text-right tabular-nums">
+                  {money(li.lineSubtotal)}
+                </td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td className="border border-slate-300 px-3 py-2 text-center tabular-nums">
+                {invoice.qty}
+              </td>
+              <td className="border border-slate-300 px-3 py-2">{desc}</td>
+              <td className="border border-slate-300 px-3 py-2 text-right tabular-nums">
+                {money(invoice.unitPrice)}
+              </td>
+              <td className="border border-slate-300 px-3 py-2 text-right tabular-nums">
+                {money(invoice.subtotal)}
+              </td>
+            </tr>
+          )}
         </tbody>
         <tfoot>
           <tr>

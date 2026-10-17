@@ -148,10 +148,12 @@ export const invoices = pgTable(
     check('invoices_totals_positive', sql`${t.totalAmount} >= 0 AND ${t.subtotal} >= 0`),
     check('invoices_totals_add_up', sql`${t.totalAmount} = ${t.subtotal} + ${t.taxAmount}`),
     check('invoices_qty_positive', sql`${t.qty} > 0`),
-    check(
-      'invoices_subtotal_matches_qty_times_unit_price',
-      sql`${t.subtotal} = ${t.qty} * ${t.unitPrice}`,
-    ),
+    // Stage 3 removed the `subtotal = qty * unit_price` CHECK: multi-line
+    // invoices make that per-row invariant meaningless. The DB still enforces
+    // (a) totals add up (subtotal + tax = total) and (b) the per-line
+    // invariant `line_subtotal = quantity * unit_price` on invoice_line_items.
+    // Legacy single-line invoices continue to populate qty / unit_price so
+    // historical readers / printables keep working until Stage 4 drops them.
     // Exactly one payer type — mirrors the service_engagements_payer_xor
     // pattern so the row can't be ambiguous.
     check(
@@ -163,6 +165,46 @@ export const invoices = pgTable(
 
 export type Invoice = typeof invoices.$inferSelect;
 export type NewInvoice = typeof invoices.$inferInsert;
+
+/**
+ * Multi-line child table for `invoices`. Mirrors `pro_forma_line_items`
+ * so a pro forma → invoice issuance can copy lines verbatim (Stage 3).
+ *
+ * Historical / legacy single-line invoices are backfilled with one row
+ * here (see migration 0053). The invoice header's legacy columns
+ * (`qty`, `unit_price`, `line_description`) are still populated for
+ * backward compat with the Stage 1 printable + aging report; Stage 4
+ * migrates those readers to this table and drops the legacy columns.
+ */
+export const invoiceLineItems = pgTable(
+  'invoice_line_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    invoiceId: uuid('invoice_id')
+      .notNull()
+      .references(() => invoices.id, { onDelete: 'cascade' }),
+    serviceCatalogItemId: uuid('service_catalog_item_id'),
+    /** Line description — copied from pro forma or set at issue time. */
+    description: text('description').notNull(),
+    /** 3-decimal quantity (matches pro forma line items). */
+    quantity: numeric('quantity', { precision: 10, scale: 3 }).notNull(),
+    unitPrice: numeric('unit_price', { precision: 14, scale: 2 }).notNull(),
+    lineSubtotal: numeric('line_subtotal', { precision: 14, scale: 2 }).notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    index('invoice_line_items_invoice_idx').on(t.invoiceId),
+    index('invoice_line_items_service_idx').on(t.serviceCatalogItemId),
+    check('invoice_line_items_quantity_pos', sql`${t.quantity} > 0`),
+    check('invoice_line_items_unit_price_nonneg', sql`${t.unitPrice} >= 0`),
+    check('invoice_line_items_subtotal_nonneg', sql`${t.lineSubtotal} >= 0`),
+  ],
+);
+
+export type InvoiceLineItem = typeof invoiceLineItems.$inferSelect;
+export type NewInvoiceLineItem = typeof invoiceLineItems.$inferInsert;
 
 /**
  * Receipt — proof that a payment was received. One receipt per settled

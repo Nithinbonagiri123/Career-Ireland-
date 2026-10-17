@@ -118,6 +118,7 @@ export default async function InvoicePrintPage({
             person.phone ? { label: 'Customer Telephone Contact', value: person.phone } : null,
           ].filter((r): r is { label: string; value: string } => r !== null),
         }}
+        lineItems={data.lineItems}
         creditNotes={existingCreditNotes}
       />
     </div>
