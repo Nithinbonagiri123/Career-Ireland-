@@ -12,6 +12,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { citext, createdAt, updatedAt } from './_shared';
+import { occupations } from './occupations';
 import { users } from './users';
 
 /**
@@ -24,6 +25,9 @@ export const persons = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     firstName: varchar('first_name', { length: 100 }).notNull(),
+    /** Optional middle name — captured on CS lead creation form; nullable
+     *  so historical persons stay valid without backfill. */
+    middleName: varchar('middle_name', { length: 100 }),
     lastName: varchar('last_name', { length: 100 }).notNull(),
     email: citext('email'),
     /** Application-normalized (lower-cased, trimmed) — populated on insert/update. */
@@ -35,6 +39,21 @@ export const persons = pgTable(
     nationality: varchar('nationality', { length: 80 }),
     currentCountry: varchar('current_country', { length: 80 }),
     currentCity: varchar('current_city', { length: 120 }),
+    /** Street address lines — captured on CS lead creation. Nullable
+     *  so historical persons (and recruitment / immigration persons
+     *  that don't collect address today) stay valid. */
+    addressLine1: varchar('address_line_1', { length: 255 }),
+    addressLine2: varchar('address_line_2', { length: 255 }),
+    /** Primary profession at the identity level. Chosen as the single
+     *  source of truth over candidate_profiles.primary_occupation_id
+     *  because profession is an attribute of the human, not of their
+     *  lead/candidate role — so it's readable pre-conversion and
+     *  consistent across business lines. candidate_profiles still has
+     *  its own column for backward compatibility; lead-to-candidate
+     *  conversion (Stage 3) copies this value into the candidate profile. */
+    primaryOccupationId: uuid('primary_occupation_id').references(
+      (): AnyPgColumn => occupations.id,
+    ),
     source: text('source', {
       enum: ['DIRECT', 'REFERRAL', 'ADVERTISEMENT', 'EMPLOYER_REFERRAL', 'OTHER'],
     }).default('DIRECT'),

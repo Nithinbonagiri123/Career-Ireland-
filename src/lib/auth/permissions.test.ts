@@ -161,6 +161,7 @@ describe('presetForRole', () => {
       new Set([
         'candidate_services.payments',
         'candidate_services.engagements',
+        'candidate_services.proformas',
         'candidate_services.candidates',
         'candidate_services.leads',
         'recruitment.employers',
@@ -178,10 +179,10 @@ describe('presetForRole', () => {
     const money = preset.filter(
       (p) =>
         p.business === 'candidate_services' &&
-        (p.module === 'payments' || p.module === 'engagements'),
+        (p.module === 'payments' || p.module === 'engagements' || p.module === 'proformas'),
     );
-    // 3 verbs (view, create, edit) × 2 modules = 6 rows
-    expect(money.length).toBe(6);
+    // 3 verbs (view, create, edit) × 3 modules = 9 rows
+    expect(money.length).toBe(9);
     const adjacent = preset.filter(
       (p) =>
         (p.business === 'recruitment' &&

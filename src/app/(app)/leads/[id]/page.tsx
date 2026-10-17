@@ -1,0 +1,202 @@
+import { eq } from 'drizzle-orm';
+import { ChevronLeft, FileText } from 'lucide-react';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import { FadeUp } from '@/components/motion/motion-primitives';
+import { PageHeader } from '@/components/page-header';
+import { Badge } from '@/components/ui/badge';
+import { buttonVariants } from '@/components/ui/button';
+import { requirePermission } from '@/lib/auth/session';
+import { formatCurrency } from '@/lib/currency';
+import { db } from '@/lib/db/client';
+import { persons } from '@/lib/db/schema/persons';
+import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
+import { fetchCurrencies } from '@/modules/currencies/service';
+import { fetchLead } from '@/modules/leads/service';
+import { fetchProFormasForLead, type ProFormaView } from '@/modules/proformas/service';
+import { ProFormaComposer } from './pro-formas/pro-forma-composer';
+
+export const dynamic = 'force-dynamic';
+
+function statusTone(status: ProFormaView['status']) {
+  switch (status) {
+    case 'DRAFT':
+      return 'secondary';
+    case 'ISSUED':
+      return 'default';
+    case 'ACCEPTED':
+      return 'default';
+    case 'CONVERTED':
+      return 'default';
+    case 'REJECTED':
+    case 'CANCELLED':
+    case 'SUPERSEDED':
+      return 'destructive';
+    default:
+      return 'secondary';
+  }
+}
+
+export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission('candidate_services', 'leads', 'view');
+  const { id } = await params;
+
+  const [lead, services, currencies] = await Promise.all([
+    fetchLead(id),
+    fetchInvoiceableServicesFor('PERSON'),
+    fetchCurrencies(),
+  ]);
+  if (!lead) notFound();
+
+  // Pro-formas are a Candidate Services feature. For non-CS leads we
+  // just render the summary without a pro-forma panel.
+  const isCS = lead.targetBusiness === 'CANDIDATE_SERVICES';
+  const proFormas = isCS ? await fetchProFormasForLead(lead.id) : [];
+
+  const [person] = lead.personId
+    ? await db
+        .select({
+          firstName: persons.firstName,
+          middleName: persons.middleName,
+          lastName: persons.lastName,
+          email: persons.email,
+          phone: persons.phone,
+          currentCity: persons.currentCity,
+          currentCountry: persons.currentCountry,
+        })
+        .from(persons)
+        .where(eq(persons.id, lead.personId))
+        .limit(1)
+    : [null];
+
+  const payerName = person
+    ? [person.firstName, person.middleName, person.lastName].filter(Boolean).join(' ')
+    : 'Unknown';
+
+  return (
+    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+      <FadeUp>
+        <div className="mb-4">
+          <Link href="/leads" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+            <ChevronLeft className="mr-1 h-4 w-4" /> All leads
+          </Link>
+        </div>
+        <PageHeader
+          icon={FileText}
+          iconTone="yellow"
+          title={payerName}
+          description={`${lead.targetBusiness.replaceAll('_', ' ').toLowerCase()} · ${lead.status.toLowerCase()}`}
+        />
+      </FadeUp>
+
+      <FadeUp delay={0.05}>
+        <section className="mt-6 rounded-md border bg-card p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Lead details
+          </h2>
+          <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+            {person?.email && (
+              <>
+                <dt className="text-muted-foreground">Email</dt>
+                <dd>{person.email}</dd>
+              </>
+            )}
+            {person?.phone && (
+              <>
+                <dt className="text-muted-foreground">Phone</dt>
+                <dd>{person.phone}</dd>
+              </>
+            )}
+            {person?.currentCity && (
+              <>
+                <dt className="text-muted-foreground">Location</dt>
+                <dd>{[person.currentCity, person.currentCountry].filter(Boolean).join(', ')}</dd>
+              </>
+            )}
+            <dt className="text-muted-foreground">Created</dt>
+            <dd>
+              {new Date(lead.createdAt).toLocaleString(undefined, {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })}
+            </dd>
+          </dl>
+        </section>
+      </FadeUp>
+
+      {isCS && (
+        <FadeUp delay={0.1}>
+          <section className="mt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Pro formas
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Composed offers. Multiple pro formas form a competing group — accepting one
+                  supersedes the siblings.
+                </p>
+              </div>
+              <ProFormaComposer
+                mode="create"
+                leadId={lead.id}
+                services={services}
+                currencies={currencies}
+                triggerLabel="New pro forma"
+              />
+            </div>
+
+            {proFormas.length === 0 ? (
+              <div className="mt-3 rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+                No pro formas yet. Create one to propose services and pricing.
+              </div>
+            ) : (
+              <ul className="mt-3 divide-y rounded-md border bg-card">
+                {proFormas.map((pf) => (
+                  <li key={pf.id} className="flex items-center justify-between gap-4 p-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/leads/${lead.id}/pro-formas/${pf.id}`}
+                          className="font-mono text-sm hover:underline"
+                        >
+                          {pf.number}
+                        </Link>
+                        <Badge variant={statusTone(pf.status)}>{pf.status}</Badge>
+                        <span className="text-xs text-muted-foreground">rev {pf.revision}</span>
+                      </div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {pf.lineItems.length} line{pf.lineItems.length === 1 ? '' : 's'}
+                        {' · '}
+                        {pf.issuedAt
+                          ? `issued ${new Date(pf.issuedAt).toLocaleString(undefined, {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })}`
+                          : `drafted ${new Date(pf.createdAt).toLocaleString(undefined, {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })}`}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-base font-semibold tabular-nums">
+                        {formatCurrency(pf.subtotal, pf.currencyCode)}
+                      </div>
+                      <Link
+                        href={`/leads/${lead.id}/pro-formas/${pf.id}`}
+                        className={`${buttonVariants({ variant: 'outline', size: 'sm' })} mt-1`}
+                      >
+                        Open
+                      </Link>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </FadeUp>
+      )}
+    </div>
+  );
+}

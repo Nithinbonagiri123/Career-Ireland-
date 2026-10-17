@@ -27,7 +27,7 @@ import { resolveDivisionForInvoice } from '@/modules/accounting/rule-engine';
  */
 export async function allocateNextNumber(
   tx: DbExecutor,
-  prefix: 'INV' | 'RCT' | 'CRN',
+  prefix: 'INV' | 'RCT' | 'CRN' | 'PROF',
   year: number,
 ): Promise<string> {
   // Take a row-level lock on the sequence row for this (prefix, year), or

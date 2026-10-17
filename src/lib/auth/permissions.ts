@@ -45,6 +45,7 @@ export const MODULES = {
     'applications',
     'engagements',
     'payments',
+    'proformas',
   ],
   recruitment: [
     'dashboard',
@@ -198,7 +199,7 @@ export function presetForRole(role: Role): PermissionKey[] {
         // Money-touching modules: full CRUD across every business.
         ...modulesWithVerbs(
           'candidate_services',
-          ['payments', 'engagements'],
+          ['payments', 'engagements', 'proformas'],
           ['view', 'create', 'edit'],
         ),
         // View-only into the recruitment + immigration entities that
