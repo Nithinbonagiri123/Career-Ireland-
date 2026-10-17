@@ -21,7 +21,7 @@ import { DataTable } from '@/components/data-table/data-table';
 import { PromptDialog } from '@/components/prompt-dialog';
 import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -283,10 +283,11 @@ export function LeadsTable({
       header: 'Person / Employer',
       accessorKey: 'displayName',
       cell: ({ row }) => {
-        // For CS/Immigration → deep-link to the candidate profile. For
-        // Recruitment (employer-payer) → link to the employer detail page.
+        // Stage 6B — person-based leads (CS, Immigration) now navigate
+        // to the unified Client Workspace. Recruitment leads keep the
+        // employer destination because the workspace is person-scoped.
         const href = row.original.personId
-          ? `/candidates/${row.original.personId}`
+          ? `/clients/${row.original.personId}`
           : row.original.employerId
             ? `/employers/${row.original.employerId}`
             : '/leads';
@@ -317,20 +318,31 @@ export function LeadsTable({
             <Badge variant={statusTone(lead.status)} className="rounded-full">
               {lead.status.replace(/_/g, ' ')}
             </Badge>
-            {readyToConvert && (
-              // A verified payment landed for this lead — the operator's
-              // next action is to convert to a candidate. Prompt sits
-              // inline so it's impossible to miss when scanning the list.
-              <button
-                type="button"
-                onClick={() => openConvert(lead)}
-                className="inline-flex items-center gap-1 rounded-full border border-status-success/40 bg-status-success-soft px-2 py-0.5 text-[10px] font-medium text-status-success hover:brightness-95"
-                title="Payment verified — convert this lead to a candidate"
-              >
-                <CheckCircle2 className="size-3" aria-hidden />
-                Ready to convert
-              </button>
-            )}
+            {readyToConvert &&
+              (lead.targetBusiness === 'CANDIDATE_SERVICES' && lead.personId ? (
+                // Stage 6B — CS activation lives on the Client Workspace
+                // as a lightweight confirmation. The chip now routes
+                // operators to the workspace instead of opening the
+                // legacy finance dialog.
+                <Link
+                  href={`/clients/${lead.personId}`}
+                  className="inline-flex items-center gap-1 rounded-full border border-status-success/40 bg-status-success-soft px-2 py-0.5 text-[10px] font-medium text-status-success hover:brightness-95"
+                  title="Payment verified — open the workspace to activate the candidate"
+                >
+                  <CheckCircle2 className="size-3" aria-hidden />
+                  Ready to activate
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => openConvert(lead)}
+                  className="inline-flex items-center gap-1 rounded-full border border-status-success/40 bg-status-success-soft px-2 py-0.5 text-[10px] font-medium text-status-success hover:brightness-95"
+                  title="Payment verified — convert this lead to a candidate"
+                >
+                  <CheckCircle2 className="size-3" aria-hidden />
+                  Ready to convert
+                </button>
+              ))}
             {lead.isExpiryEligible && (
               <span
                 className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-100/60 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
@@ -381,12 +393,30 @@ export function LeadsTable({
         let primary: React.ReactNode = null;
         if (canTransition) {
           if (lead.hasVerifiedPayment) {
-            primary = (
-              <Button size="sm" onClick={() => openConvert(lead)} disabled={isBusy} className="h-8">
-                <UserCheck className="mr-1.5 size-3.5" />
-                Convert
-              </Button>
-            );
+            // Stage 6B — CS leads route to the workspace where
+            // "Activate candidate" is a lightweight confirmation.
+            // Non-CS leads keep the legacy single-step convert flow
+            // because they don't have a Client Workspace yet.
+            primary =
+              lead.targetBusiness === 'CANDIDATE_SERVICES' && lead.personId ? (
+                <Link
+                  href={`/clients/${lead.personId}`}
+                  className={`${buttonVariants({ variant: 'default', size: 'sm' })} h-8`}
+                >
+                  <UserCheck className="mr-1.5 size-3.5" />
+                  Open workspace
+                </Link>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={() => openConvert(lead)}
+                  disabled={isBusy}
+                  className="h-8"
+                >
+                  <UserCheck className="mr-1.5 size-3.5" />
+                  Convert
+                </Button>
+              );
           } else if (!isMine && lead.assignedUserId === null) {
             primary = (
               <Button
@@ -471,39 +501,39 @@ export function LeadsTable({
                 <DropdownMenuItem disabled={!canTransition} onClick={() => setInvoicingLead(lead)}>
                   <FileText className="mr-2 size-4" /> Add another invoice…
                 </DropdownMenuItem>
-                {/* Convert = Record payment, atomic one-step flow. Opens
-                    a dialog that collects service + amount + method, then
-                    atomically creates the operational entity (candidate /
-                    case / requisition), engagement, payment (auto-verified),
-                    receipt, and marks the lead CONVERTED. The old separate
-                    'Accept' flow is gone — a lead can no longer bypass
-                    payment to become anything. */}
+                {/* Stage 6B — the atomic one-step convert path is now
+                    "advanced" for Candidate Services (operators activate
+                    on the workspace after confirming payment separately).
+                    Immigration and Recruitment keep it as the default
+                    because they don't have a Client Workspace yet. */}
                 <DropdownMenuItem disabled={!canTransition} onClick={() => openConvert(lead)}>
                   <UserCheck className="mr-2 size-4" />{' '}
                   {lead.targetBusiness === 'RECRUITMENT'
                     ? 'Convert → open requisition…'
                     : lead.targetBusiness === 'IMMIGRATION'
                       ? 'Convert → open case…'
-                      : 'Convert → activate candidate…'}
+                      : 'Record payment outside a quote (advanced)…'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                {/* Edit details opens the candidate profile — the underlying
-                    person record. Works for a lead even before conversion:
-                    fetchPersonDetail loads any person, and the profile page's
-                    'Edit details' button is unconditional (see the candidate
-                    detail page action bar). */}
-                <DropdownMenuItem
-                  render={
-                    <Link href={`/candidates/${lead.personId}`}>
-                      <Pencil className="mr-2 size-4" /> Edit details
-                    </Link>
-                  }
-                />
+                {/* Stage 6B — person-based leads route operators to the
+                    unified Client Workspace (identity, next action,
+                    engagements, quotes, invoices, timeline). The legacy
+                    candidate operational profile is still linked from the
+                    workspace header for CV / Documents / Applications. */}
+                {lead.personId && (
+                  <DropdownMenuItem
+                    render={
+                      <Link href={`/clients/${lead.personId}`}>
+                        <Pencil className="mr-2 size-4" /> Open client workspace
+                      </Link>
+                    }
+                  />
+                )}
                 {lead.targetBusiness === 'CANDIDATE_SERVICES' && (
                   <DropdownMenuItem
                     render={
                       <Link href={`/leads/${lead.id}`}>
-                        <Receipt className="mr-2 size-4" /> Pro formas
+                        <Receipt className="mr-2 size-4" /> Quotes (pro formas)
                       </Link>
                     }
                   />
@@ -589,22 +619,40 @@ export function LeadsTable({
                 ? 'Convert → open requisition'
                 : convertTarget?.targetBusiness === 'IMMIGRATION'
                   ? 'Convert → open immigration case'
-                  : 'Convert → activate candidate'}
+                  : 'Record payment outside a quote'}
             </DialogTitle>
           </DialogHeader>
           {convertTarget && (
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Converting <span className="font-medium">{convertTarget.displayName}</span>. A lead
-                can only become a{' '}
-                {convertTarget.targetBusiness === 'RECRUITMENT'
-                  ? 'requisition'
-                  : convertTarget.targetBusiness === 'IMMIGRATION'
-                    ? 'case'
-                    : 'candidate'}{' '}
-                once the payment is in — record it here and conversion + entity + payment + receipt
-                all happen atomically in one step.
-              </p>
+              {convertTarget.targetBusiness === 'CANDIDATE_SERVICES' ? (
+                // Stage 6B — explicit warning for the CS exceptional
+                // path. The ordinary journey is: create quote → issue →
+                // record payment → confirm payment received → activate
+                // candidate (all on the Client Workspace). This dialog
+                // short-circuits that in one step and is reserved for
+                // cases where the client already paid without a quote.
+                <div className="space-y-2 rounded-md border border-amber-400/40 bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
+                  <div className="font-medium">Exceptional path — advanced use only</div>
+                  <p>
+                    This creates an engagement, an invoice, a payment and a receipt in one step
+                    without a client-visible quote. Use only when the client has already paid
+                    outside the normal quote flow. The reason you give below is written to the audit
+                    log.
+                  </p>
+                  <p>
+                    Prefer the standard flow: open the Client Workspace, create a quote, record the
+                    payment against it, then activate the candidate.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Converting <span className="font-medium">{convertTarget.displayName}</span>. A
+                  lead can only become a{' '}
+                  {convertTarget.targetBusiness === 'RECRUITMENT' ? 'requisition' : 'case'} once the
+                  payment is in — record it here and conversion + entity + payment + receipt all
+                  happen atomically in one step.
+                </p>
+              )}
 
               <div className="space-y-1">
                 <Label htmlFor="convertService">Service *</Label>

@@ -87,6 +87,24 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           title={payerName}
           description={`${lead.targetBusiness.replaceAll('_', ' ').toLowerCase()} · ${lead.status.toLowerCase()}`}
         />
+        {lead.personId && (
+          /* Stage 6B compatibility banner — this detail page keeps the
+             quote composer and the pro-forma lifecycle actions. Everything
+             else about this person now lives on the unified Client
+             Workspace. */
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+            <span>
+              This is the quote composer for {payerName}. For the full client picture — identity,
+              status, invoices, payments and activation — open the workspace.
+            </span>
+            <Link
+              href={`/clients/${lead.personId}`}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
+              Open workspace
+            </Link>
+          </div>
+        )}
       </FadeUp>
 
       <FadeUp delay={0.05}>

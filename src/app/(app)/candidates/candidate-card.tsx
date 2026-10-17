@@ -291,11 +291,11 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
       {/* 7. Dual-action footer — View Profile + Reach Out */}
       <div className="mt-3 grid grid-cols-2 gap-0 border-t">
         <Link
-          href={`/candidates/${candidate.personId}`}
+          href={`/clients/${candidate.personId}`}
           className="group flex items-center justify-center gap-1.5 bg-note-green py-2.5 text-xs font-semibold text-note-green-ink transition-all hover:brightness-95"
-          aria-label={`View profile of ${candidate.fullName}`}
+          aria-label={`Open workspace for ${candidate.fullName}`}
         >
-          <User2 className="size-3.5" /> View profile
+          <User2 className="size-3.5" /> Open workspace
           <ArrowRight className="size-3 opacity-70 transition-transform group-hover:translate-x-0.5" />
         </Link>
         <Link

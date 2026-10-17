@@ -179,7 +179,7 @@ export function CandidatesTable({
             <UserPlus className="mr-1.5 size-4" /> Go to Leads
           </Link>
         }
-        onRowClick={(row) => router.push(`/candidates/${row.personId}`)}
+        onRowClick={(row) => router.push(`/clients/${row.personId}`)}
         enableRowSelection
         onSelectionChange={handleSelectionChange}
         selectionResetKey={resetKey}

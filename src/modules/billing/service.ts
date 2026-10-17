@@ -406,6 +406,28 @@ export async function voidInvoice(invoiceId: string, reason: string): Promise<In
       );
     }
 
+    // Stage 6B — tighten the void guard. Previously an ISSUED or
+    // PARTIALLY_PAID invoice could be voided even when verified payments
+    // had already been applied, which silently extinguished the demand
+    // without a credit-note trail — out of step with Irish VAT practice
+    // where every money reversal must be documented. The correct path
+    // once money has moved is: issue a credit note (which may be
+    // accompanied by a refund). We block the shortcut here.
+    const [paidAgg] = await tx.execute<{ paid_cents: string }>(sql`
+      SELECT COALESCE(SUM((p.amount * 100)::bigint), 0)::text AS paid_cents
+      FROM payments p
+      WHERE p.service_engagement_id = ${before.serviceEngagementId}
+        AND p.currency_code = ${before.currencyCode}
+        AND p.status IN ('VERIFIED', 'PARTIALLY_REFUNDED', 'REFUNDED')
+    `);
+    const paidCents = Number.parseInt(paidAgg?.paid_cents ?? '0', 10);
+    if (paidCents > 0) {
+      throw new BusinessRuleError(
+        'INVOICE_HAS_VERIFIED_PAYMENTS',
+        'This invoice has verified payments against it and cannot be voided. Issue a credit note (and a refund if the money needs to leave the account) so the reversal is documented.',
+      );
+    }
+
     const [after] = await tx
       .update(invoices)
       .set({

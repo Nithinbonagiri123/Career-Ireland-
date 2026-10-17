@@ -520,6 +520,21 @@ export default async function CandidateDetail({
           />
         </FadeUp>
       )}
+      {/* Stage 6B — this operational detail page keeps CV, Documents,
+          Applications, Immigration and Email. Financial journey + the
+          lightweight activation CTA live on the unified Client Workspace. */}
+      <div className="mb-3 flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+        <span>
+          Operational detail for {fullName}. For status, quotes, invoices, payments and activation,
+          open the Client Workspace.
+        </span>
+        <Link
+          href={`/clients/${id}`}
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+        >
+          Open workspace
+        </Link>
+      </div>
       <FadeUp>
         <PageHeader
           icon={User}

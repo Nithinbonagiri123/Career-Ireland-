@@ -269,19 +269,19 @@ export function ProFormaComposer({
           </Button>
         }
       />
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-2xl sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
             {mode === 'revise'
               ? "Snapshots the current issued version into revision history, then applies your changes. Won't touch accepted agreements."
-              : 'All lines share one currency. The server recomputes totals from quantity × unit price.'}
+              : 'All lines share one currency. The server recomputes the total from quantity × unit price.'}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
+        <div className="grid gap-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1.5fr]">
+            <div className="space-y-1.5">
               <Label htmlFor="pf-currency">Currency</Label>
               <Select
                 id="pf-currency"
@@ -295,8 +295,10 @@ export function ProFormaComposer({
                 ))}
               </Select>
             </div>
-            <div>
-              <Label htmlFor="pf-terms">Payment terms (optional)</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="pf-terms">
+                Payment terms <span className="text-muted-foreground">(optional)</span>
+              </Label>
               <Input
                 id="pf-terms"
                 value={paymentTerms}
@@ -307,70 +309,81 @@ export function ProFormaComposer({
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <Label>Line items</Label>
-              <Button variant="outline" size="sm" type="button" onClick={addLine}>
+              <Label className="text-sm font-medium">Line items</Label>
+              <Button variant="ghost" size="sm" type="button" onClick={addLine}>
                 <Plus className="mr-1 h-3.5 w-3.5" /> Add line
               </Button>
             </div>
             <div className="space-y-2">
-              {lines.map((l, _idx) => {
+              {lines.map((l) => {
                 const linePreview = parseLine(l);
+                const canRemove = lines.length > 1;
                 return (
-                  <div
-                    key={l.id}
-                    className="rounded-md border p-3 grid grid-cols-12 gap-2 items-end"
-                  >
-                    <div className="col-span-12 sm:col-span-5">
-                      <Label className="text-xs">Service</Label>
-                      <Select
-                        value={l.serviceCatalogItemId}
-                        onChange={(e) => onPickService(l.id, e.target.value)}
-                      >
-                        {services.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-                    <div className="col-span-6 sm:col-span-2">
-                      <Label className="text-xs">Qty</Label>
-                      <Input
-                        inputMode="decimal"
-                        value={l.quantity}
-                        onChange={(e) => updateLine(l.id, { quantity: e.target.value })}
-                      />
-                    </div>
-                    <div className="col-span-6 sm:col-span-2">
-                      <Label className="text-xs">Unit price</Label>
-                      <Input
-                        inputMode="decimal"
-                        value={l.unitPrice}
-                        onChange={(e) => updateLine(l.id, { unitPrice: e.target.value })}
-                      />
-                    </div>
-                    <div className="col-span-10 sm:col-span-2 text-right text-sm tabular-nums">
-                      <div className="text-xs text-muted-foreground">Subtotal</div>
-                      <div className={linePreview.ok ? '' : 'text-destructive'}>
-                        {linePreview.ok ? formatCurrency(linePreview.subtotal, currency) : '—'}
+                  <div key={l.id} className="rounded-lg border bg-card p-3.5 space-y-3">
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Service</Label>
+                        <Select
+                          value={l.serviceCatalogItemId}
+                          onChange={(e) => onPickService(l.id, e.target.value)}
+                        >
+                          {services.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </Select>
                       </div>
-                    </div>
-                    <div className="col-span-2 sm:col-span-1 flex justify-end">
                       <Button
                         variant="ghost"
-                        size="icon"
+                        size="icon-sm"
                         type="button"
                         onClick={() => removeLine(l.id)}
-                        disabled={lines.length === 1}
-                        title="Remove line"
+                        disabled={!canRemove}
+                        title={canRemove ? 'Remove line' : 'A pro forma needs at least one line'}
+                        className="mt-6 shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-30"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    <div className="col-span-12">
-                      <Label className="text-xs">Description</Label>
+
+                    <div className="grid grid-cols-[auto_auto_1fr] items-end gap-x-3 gap-y-1.5">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Qty</Label>
+                        <Input
+                          inputMode="decimal"
+                          value={l.quantity}
+                          onChange={(e) => updateLine(l.id, { quantity: e.target.value })}
+                          className="w-20 text-right tabular-nums"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Unit price</Label>
+                        <Input
+                          inputMode="decimal"
+                          value={l.unitPrice}
+                          onChange={(e) => updateLine(l.id, { unitPrice: e.target.value })}
+                          className="w-28 text-right tabular-nums"
+                        />
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                          Subtotal
+                        </div>
+                        <div
+                          className={`text-base font-semibold tabular-nums ${linePreview.ok ? '' : 'text-destructive'}`}
+                        >
+                          {linePreview.ok ? formatCurrency(linePreview.subtotal, currency) : '—'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">
+                        Description <span className="text-muted-foreground/70">(on the PDF)</span>
+                      </Label>
                       <Input
                         value={l.description}
                         onChange={(e) => updateLine(l.id, { description: e.target.value })}
@@ -384,10 +397,10 @@ export function ProFormaComposer({
             </div>
           </div>
 
-          <div className="flex items-start justify-between gap-4 rounded-md border bg-muted/30 p-3">
-            <div className="flex-1">
-              <Label htmlFor="pf-notes" className="text-xs">
-                Internal notes (optional)
+          <div className="flex items-end justify-between gap-4 border-t pt-3">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Label htmlFor="pf-notes" className="text-xs text-muted-foreground">
+                Internal notes <span className="text-muted-foreground/70">(not on the PDF)</span>
               </Label>
               <Textarea
                 id="pf-notes"
@@ -395,11 +408,13 @@ export function ProFormaComposer({
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
                 maxLength={2000}
-                placeholder="Not shown on the PDF"
+                placeholder="Context for the team — not shown on the PDF"
               />
             </div>
-            <div className="text-right">
-              <div className="text-xs text-muted-foreground">Document total</div>
+            <div className="shrink-0 text-right">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                Document total
+              </div>
               <div className="text-2xl font-semibold tabular-nums">
                 {formatCurrency(totals.subtotal, currency)}
               </div>
@@ -407,7 +422,7 @@ export function ProFormaComposer({
           </div>
 
           {mode === 'revise' && (
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="pf-reason">Reason for revision</Label>
               <Input
                 id="pf-reason"
