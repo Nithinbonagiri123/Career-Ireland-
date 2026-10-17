@@ -3,10 +3,12 @@
 import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
 import { recordPaymentForProForma, verifyPaymentForProForma } from './payments';
+import { issuePreIssuanceRefund } from './refunds';
 import {
   CancelProFormaSchema,
   CreateProFormaSchema,
   EditDraftProFormaSchema,
+  IssuePreIssuanceRefundSchema,
   IssueProFormaSchema,
   RecordAcceptanceSchema,
   RecordProFormaPaymentSchema,
@@ -163,6 +165,36 @@ export async function verifyProFormaPaymentAction(input: unknown) {
     };
   }
   const r = await toActionResult(() => verifyPaymentForProForma(parsed.data.paymentId));
+  if (r.ok) {
+    revalidatePath('/leads');
+    revalidatePath('/payments');
+  }
+  return r;
+}
+
+/**
+ * Pre-issuance refund — Finance / Admin only. Called from the UI when a
+ * client cancels mid-partial-payment and no official invoice exists yet.
+ * Idempotency key MUST be supplied; the server dedups retries.
+ */
+export async function issuePreIssuanceRefundAction(input: unknown) {
+  const parsed = IssuePreIssuanceRefundSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false as const,
+      error: { code: 'VALIDATION_ERROR', message: parsed.error.message },
+    };
+  }
+  const r = await toActionResult(() =>
+    issuePreIssuanceRefund({
+      paymentId: parsed.data.paymentId,
+      amount: parsed.data.amount,
+      method: parsed.data.method,
+      reason: parsed.data.reason,
+      reference: parsed.data.reference || null,
+      idempotencyKey: parsed.data.idempotencyKey,
+    }),
+  );
   if (r.ok) {
     revalidatePath('/leads');
     revalidatePath('/payments');

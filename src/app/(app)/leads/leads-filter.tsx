@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 
@@ -82,6 +83,8 @@ export function LeadsFilterControl({
       source: parseList(params.get('source')),
       country: parseList(params.get('country')),
       profession: parseList(params.get('profession')),
+      createdFrom: params.get('createdFrom') ?? '',
+      createdTo: params.get('createdTo') ?? '',
     }),
     [params],
   );
@@ -92,7 +95,9 @@ export function LeadsFilterControl({
     (current.expired ? 1 : 0) +
     current.source.length +
     current.country.length +
-    current.profession.length;
+    current.profession.length +
+    (current.createdFrom ? 1 : 0) +
+    (current.createdTo ? 1 : 0);
 
   function applyPatch(patch: {
     status?: LeadStatus[];
@@ -101,6 +106,8 @@ export function LeadsFilterControl({
     source?: string[];
     country?: string[];
     profession?: string[];
+    createdFrom?: string;
+    createdTo?: string;
   }) {
     const next = new URLSearchParams(params);
     const set = (k: string, v: string | null) => {
@@ -113,6 +120,8 @@ export function LeadsFilterControl({
     if (patch.source !== undefined) set('source', joinList(patch.source));
     if (patch.country !== undefined) set('country', joinList(patch.country));
     if (patch.profession !== undefined) set('profession', joinList(patch.profession));
+    if (patch.createdFrom !== undefined) set('createdFrom', patch.createdFrom || null);
+    if (patch.createdTo !== undefined) set('createdTo', patch.createdTo || null);
     router.replace(`?${next.toString()}`);
   }
 
@@ -122,7 +131,16 @@ export function LeadsFilterControl({
 
   function clearAll() {
     const next = new URLSearchParams(params);
-    for (const k of ['status', 'active', 'expired', 'source', 'country', 'profession']) {
+    for (const k of [
+      'status',
+      'active',
+      'expired',
+      'source',
+      'country',
+      'profession',
+      'createdFrom',
+      'createdTo',
+    ]) {
       next.delete(k);
     }
     router.replace(`?${next.toString()}`);
@@ -163,6 +181,45 @@ export function LeadsFilterControl({
         </div>
 
         <DropdownMenuSeparator className="my-2" />
+
+        {/* Created date range */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Created</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label
+                htmlFor="leads-filter-created-from"
+                className="text-[10px] text-muted-foreground"
+              >
+                From
+              </Label>
+              <Input
+                id="leads-filter-created-from"
+                type="date"
+                value={current.createdFrom}
+                onChange={(e) => applyPatch({ createdFrom: e.target.value })}
+                className="h-7 text-xs"
+              />
+            </div>
+            <div>
+              <Label
+                htmlFor="leads-filter-created-to"
+                className="text-[10px] text-muted-foreground"
+              >
+                To
+              </Label>
+              <Input
+                id="leads-filter-created-to"
+                type="date"
+                value={current.createdTo}
+                onChange={(e) => applyPatch({ createdTo: e.target.value })}
+                className="h-7 text-xs"
+              />
+            </div>
+          </div>
+        </div>
+
+        <DropdownMenuSeparator className="my-3" />
 
         {/* Active / Expired quick toggles */}
         <div className="space-y-2">

@@ -91,12 +91,32 @@ export async function fetchProFormaBalance(proFormaInvoiceId: string): Promise<P
     .where(eq(payments.proFormaInvoiceId, proFormaInvoiceId))
     .orderBy(payments.createdAt);
 
+  // Pre-issuance refunds reduce the verified contribution. Fetch the
+  // per-payment refund sums for this pro forma in one query.
+  const refundSumRows = await db.execute<{ payment_id: string; sum_cents: string }>(sql`
+    SELECT payment_id, COALESCE(SUM((amount::numeric * 100)::bigint), 0)::text AS sum_cents
+    FROM pro_forma_payment_refunds
+    WHERE pro_forma_invoice_id = ${proFormaInvoiceId}
+    GROUP BY payment_id
+  `);
+  const refundByPayment = new Map<string, number>();
+  for (const r of refundSumRows) {
+    refundByPayment.set(r.payment_id, Number(r.sum_cents));
+  }
+
   const totalCents = moneyToCents(pf.subtotal);
   let verifiedCents = 0;
   for (const p of paymentRows) {
-    if (p.status === 'VERIFIED' && p.currencyCode === pf.currencyCode) {
-      verifiedCents += moneyToCents(p.amount);
-    }
+    // Count VERIFIED, PARTIALLY_REFUNDED and REFUNDED payments toward
+    // the gross; refunds against those payments then offset. Only
+    // same-currency payments contribute (cross-currency is Stage N+1).
+    const isCountable =
+      (p.status === 'VERIFIED' || p.status === 'PARTIALLY_REFUNDED' || p.status === 'REFUNDED') &&
+      p.currencyCode === pf.currencyCode;
+    if (!isCountable) continue;
+    const grossCents = moneyToCents(p.amount);
+    const refundedCents = refundByPayment.get(p.id) ?? 0;
+    verifiedCents += Math.max(grossCents - refundedCents, 0);
   }
   const outstandingCents = Math.max(totalCents - verifiedCents, 0);
   const overpaidCents = Math.max(verifiedCents - totalCents, 0);
@@ -328,16 +348,25 @@ export async function verifyPaymentForProFormaAs(
       );
     }
 
-    // Overpayment guard. Compute verified-sum + this payment's amount.
-    // If it exceeds pf.subtotal by more than a 1-cent rounding tolerance,
-    // refuse. Operator must refund excess or route via exception before
-    // verifying.
+    // Overpayment guard. Compute net verified sum (VERIFIED +
+    // PARTIALLY_REFUNDED + REFUNDED gross, minus pre-issuance refunds
+    // against those payments) + this payment's amount. If the result
+    // exceeds pf.subtotal by more than a 1-cent rounding tolerance,
+    // refuse. Operator must refund excess or route via exception
+    // before verifying.
     const alreadyVerified = await tx.execute<{ sum_cents: string }>(sql`
-      SELECT COALESCE(SUM((amount::numeric * 100)::bigint), 0)::text AS sum_cents
-      FROM payments
-      WHERE pro_forma_invoice_id = ${pf.id}
-        AND status = 'VERIFIED'
-        AND currency_code = ${pf.currencyCode}
+      SELECT COALESCE(SUM(net_cents), 0)::text AS sum_cents
+      FROM (
+        SELECT (p.amount::numeric * 100)::bigint - COALESCE((
+          SELECT SUM((rfd.amount::numeric * 100)::bigint)
+          FROM pro_forma_payment_refunds rfd
+          WHERE rfd.payment_id = p.id
+        ), 0) AS net_cents
+        FROM payments p
+        WHERE p.pro_forma_invoice_id = ${pf.id}
+          AND p.status IN ('VERIFIED','PARTIALLY_REFUNDED','REFUNDED')
+          AND p.currency_code = ${pf.currencyCode}
+      ) t
     `);
     const alreadyCents = Number(alreadyVerified[0]?.sum_cents ?? '0');
     const thisCents = moneyToCents(payment.amount);

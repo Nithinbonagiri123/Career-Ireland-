@@ -379,6 +379,13 @@
       "when": 1792262321628,
       "tag": "0053_tricky_tinkerer",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1792266601792,
+      "tag": "0054_wild_jackal",
+      "breakpoints": true
     }
   ]
 }

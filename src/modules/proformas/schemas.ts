@@ -97,3 +97,13 @@ export const VerifyProFormaPaymentSchema = z.object({
   paymentId: z.string().uuid(),
 });
 export type VerifyProFormaPaymentInput = z.infer<typeof VerifyProFormaPaymentSchema>;
+
+export const IssuePreIssuanceRefundSchema = z.object({
+  paymentId: z.string().uuid(),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  method: z.enum(['BANK_TRANSFER', 'CASH', 'OTHER']),
+  reason: z.string().min(3).max(500),
+  reference: z.string().max(500).optional().or(z.literal('')),
+  idempotencyKey: z.string().min(1).max(100),
+});
+export type IssuePreIssuanceRefundInput = z.infer<typeof IssuePreIssuanceRefundSchema>;

@@ -327,3 +327,69 @@ export const proFormaRevisions = pgTable(
 
 export type ProFormaRevision = typeof proFormaRevisions.$inferSelect;
 export type NewProFormaRevision = typeof proFormaRevisions.$inferInsert;
+
+/**
+ * Pre-issuance refund — Stage 4.1.
+ *
+ * ── Why a separate table (not `refunds`) ─────────────────────────────
+ * `refunds.credit_note_id` is NOT NULL, and credit_notes require an
+ * invoice. Pre-issuance means no invoice exists yet, so the existing
+ * refund mechanism cannot apply — creating a dummy invoice + credit
+ * note just to allow the refund would pollute the official ledger
+ * with fictional documents (explicitly forbidden by the Stage 4.1
+ * brief). This table captures the operation as a first-class entity:
+ * a verified payment against an ACCEPTED pro forma is partially or
+ * fully returned to the payer before any INV number is minted.
+ *
+ * ── Idempotency ──────────────────────────────────────────────────────
+ * UNIQUE (payment_id, idempotency_key) — caller supplies the key.
+ * Retries with the same key return the existing row rather than
+ * creating a second refund. Simultaneous attempts race-safe via the
+ * payment-row FOR UPDATE lock in the writer + the UNIQUE as backstop.
+ *
+ * ── Payment status transitions ───────────────────────────────────────
+ *   VERIFIED  → PARTIALLY_REFUNDED (if cumulative refunds < payment.amount)
+ *            → REFUNDED            (if cumulative refunds == payment.amount)
+ * The original payment row is never deleted; refund amounts simply
+ * offset it in the balance query.
+ *
+ * ── Ledger ───────────────────────────────────────────────────────────
+ * Emits REFUND_ISSUED into financial_events via the same outbox so the
+ * accounting cron picks it up. Payload includes payment_id, pro_forma
+ * number, amount, currency, actor.
+ */
+export const proFormaPaymentRefunds = pgTable(
+  'pro_forma_payment_refunds',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    paymentId: uuid('payment_id').notNull(),
+    proFormaInvoiceId: uuid('pro_forma_invoice_id')
+      .notNull()
+      .references(() => proFormaInvoices.id),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    currencyCode: text('currency_code').notNull(),
+    reason: text('reason').notNull(),
+    method: text('method', { enum: ['BANK_TRANSFER', 'CASH', 'OTHER'] }).notNull(),
+    reference: text('reference'),
+    /** Caller-supplied dedup key. Simultaneous Finance operators
+     *  retrying the same request get the existing row returned
+     *  instead of a second refund. */
+    idempotencyKey: text('idempotency_key').notNull(),
+    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
+    issuedByUserId: uuid('issued_by_user_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    index('pf_payment_refunds_payment_idx').on(t.paymentId),
+    index('pf_payment_refunds_proforma_idx').on(t.proFormaInvoiceId),
+    unique('pf_payment_refunds_idempotency_unique').on(t.paymentId, t.idempotencyKey),
+    check('pf_payment_refunds_amount_pos', sql`${t.amount} > 0`),
+    check('pf_payment_refunds_method_check', sql`${t.method} IN ('BANK_TRANSFER','CASH','OTHER')`),
+  ],
+);
+
+export type ProFormaPaymentRefund = typeof proFormaPaymentRefunds.$inferSelect;
+export type NewProFormaPaymentRefund = typeof proFormaPaymentRefunds.$inferInsert;

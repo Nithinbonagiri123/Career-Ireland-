@@ -8,6 +8,7 @@ import {
   MoreHorizontal,
   Pencil,
   Receipt,
+  RotateCcw,
   UserCheck,
   UserX,
 } from 'lucide-react';
@@ -44,6 +45,7 @@ import type { InvoiceableService } from '@/modules/billing/read';
 import {
   acceptLeadAction,
   archiveLeadAction,
+  reactivateExpiredLeadAction,
   updateLeadStatusAction,
 } from '@/modules/leads/actions';
 import type { LeadListRow } from '@/modules/leads/repository';
@@ -89,6 +91,12 @@ export function LeadsTable({
     const sourceFilter = new Set(parseList(params.get('source')));
     const countryFilter = new Set(parseList(params.get('country')));
     const professionFilter = new Set(parseList(params.get('profession')));
+    const createdFrom = params.get('createdFrom');
+    const createdTo = params.get('createdTo');
+    const fromDate = createdFrom ? new Date(`${createdFrom}T00:00:00Z`) : null;
+    // Inclusive end of day: add 24h so a lead created on the `to` date
+    // itself still matches.
+    const toDate = createdTo ? new Date(`${createdTo}T23:59:59.999Z`) : null;
     return leads.filter((l) => {
       if (statusFilter.size > 0 && !statusFilter.has(l.status)) return false;
       if (activeOnly && !ACTIVE_STATUSES.has(l.status)) return false;
@@ -102,6 +110,8 @@ export function LeadsTable({
         (!l.personPrimaryOccupationId || !professionFilter.has(l.personPrimaryOccupationId))
       )
         return false;
+      if (fromDate && new Date(l.createdAt) < fromDate) return false;
+      if (toDate && new Date(l.createdAt) > toDate) return false;
       return true;
     });
   }, [leads, params]);
@@ -109,6 +119,7 @@ export function LeadsTable({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [convertTarget, setConvertTarget] = useState<LeadListRow | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<LeadListRow | null>(null);
+  const [reactivateTarget, setReactivateTarget] = useState<LeadListRow | null>(null);
   const [reason, setReason] = useState('');
   // Convert dialog is now a Record Payment form — see acceptLead service.
   const [convertServiceId, setConvertServiceId] = useState<string>('');
@@ -134,6 +145,25 @@ export function LeadsTable({
       if (r.ok) {
         toast.success(`${target.displayName}'s lead archived`);
         setArchiveTarget(null);
+      } else {
+        toast.error(r.error.message);
+      }
+    });
+  };
+
+  const confirmReactivate = (reactivateReason: string) => {
+    if (!reactivateTarget) return;
+    const target = reactivateTarget;
+    setBusyId(target.id);
+    startTransition(async () => {
+      const r = await reactivateExpiredLeadAction({
+        leadId: target.id,
+        reason: reactivateReason,
+      });
+      setBusyId(null);
+      if (r.ok) {
+        toast.success(`${target.displayName}'s lead reactivated`);
+        setReactivateTarget(null);
       } else {
         toast.error(r.error.message);
       }
@@ -300,6 +330,14 @@ export function LeadsTable({
                 <CheckCircle2 className="size-3" aria-hidden />
                 Ready to convert
               </button>
+            )}
+            {lead.isExpiryEligible && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-100/60 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                title="This lead is >30 days old with no commitments; the daily 02:00 UTC sweep will expire it."
+              >
+                Will expire at next sweep
+              </span>
             )}
           </div>
         );
@@ -470,6 +508,17 @@ export function LeadsTable({
                     }
                   />
                 )}
+                {lead.status === 'EXPIRED' && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setReactivateTarget(lead)}
+                      className="text-emerald-700 focus:text-emerald-700 dark:text-emerald-400 dark:focus:text-emerald-400"
+                    >
+                      <RotateCcw className="mr-2 size-4" /> Reactivate lead…
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => setArchiveTarget(lead)}
@@ -515,6 +564,17 @@ export function LeadsTable({
         confirmLabel="Archive"
         confirmVariant="destructive"
         pending={busyId === archiveTarget?.id}
+      />
+      <PromptDialog
+        open={reactivateTarget !== null}
+        onCancel={() => setReactivateTarget(null)}
+        onConfirm={confirmReactivate}
+        title={`Reactivate ${reactivateTarget?.displayName ?? ''}'s lead?`}
+        description="Returns an EXPIRED lead to CONTACTED. The original expired_at timestamp is preserved for audit. Admin / Manager / Finance only."
+        label="Reason (audited)"
+        placeholder="e.g. Client re-engaged after 2 months of silence"
+        confirmLabel="Reactivate"
+        pending={busyId === reactivateTarget?.id}
       />
       <Dialog
         open={convertTarget !== null}

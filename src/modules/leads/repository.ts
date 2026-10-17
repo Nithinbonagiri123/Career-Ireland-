@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import type { DbExecutor } from '@/lib/audit/withAudit';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
@@ -39,6 +39,13 @@ export type LeadListRow = {
   /** True if any payment (across any engagement for this person) is
       VERIFIED. Drives the "ready to convert" affordance on the row. */
   hasVerifiedPayment: boolean;
+  /** Stage 4.1 — true if this lead meets the expiry eligibility rules
+   *  today but the daily sweep hasn't flipped it yet. Lets the UI show
+   *  a "will expire tomorrow at 02:00 UTC" badge so operators aren't
+   *  surprised by the overnight transition. Computed server-side using
+   *  the same predicates as fetchExpirableLeadIds — this one row's
+   *  worth of overhead per request is negligible. */
+  isExpiryEligible: boolean;
 };
 
 export async function listLeads(opts?: {
@@ -111,6 +118,51 @@ export async function listLeads(opts?: {
     );
   }
 
+  // Third round-trip: which leads are eligible for the daily expiry
+  // sweep RIGHT NOW? Mirrors the SQL in src/modules/leads/expiry.ts;
+  // the UI shows a "will expire at next sweep" badge for the matching
+  // rows so operators aren't surprised by the overnight transition.
+  const leadIds = rows.map((r) => r.id);
+  let expiryEligibleIds = new Set<string>();
+  if (leadIds.length > 0) {
+    // Build a Postgres UUID array literal explicitly — Drizzle's sql
+    // template passes JS arrays as scalar params by default, which
+    // trips the ANY(...) operator.
+    const eligible = await db.execute<{ id: string }>(sql`
+      SELECT l.id
+      FROM leads l
+      WHERE l.id IN (${sql.join(
+        leadIds.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )})
+        AND l.target_business = 'CANDIDATE_SERVICES'
+        AND l.status IN ('NEW', 'CONTACTED')
+        AND l.converted_at IS NULL
+        AND l.archived_at IS NULL
+        AND l.created_at < NOW() - INTERVAL '30 days'
+        AND NOT EXISTS (
+          SELECT 1 FROM pro_forma_invoices pf
+          WHERE pf.source_lead_id = l.id
+            AND pf.status IN ('DRAFT','ISSUED','ACCEPTED','CONVERTED')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM service_engagements e
+          WHERE e.payer_person_id = l.person_id
+            AND e.status IN ('ACTIVE','PENDING_PAYMENT')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM payments p
+          JOIN pro_forma_invoices pf ON pf.id = p.pro_forma_invoice_id
+          WHERE pf.source_lead_id = l.id AND p.status IN ('PENDING','VERIFIED')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM invoices i
+          WHERE i.source_lead_id = l.id AND i.status NOT IN ('VOIDED','PAID')
+        )
+    `);
+    expiryEligibleIds = new Set((eligible as Array<{ id: string }>).map((r) => r.id));
+  }
+
   return rows.map((r) => {
     const personFullName =
       r.personId && r.personName ? `${r.personName} ${r.lastName ?? ''}`.trim() : null;
@@ -134,6 +186,7 @@ export async function listLeads(opts?: {
       createdAt: r.createdAt,
       convertedAt: r.convertedAt,
       hasVerifiedPayment: r.personId ? personsWithVerifiedPayment.has(r.personId) : false,
+      isExpiryEligible: expiryEligibleIds.has(r.id),
     };
   });
 }

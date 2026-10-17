@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 /**
  * Stage 4 — full Candidate Services flow walkthrough.
@@ -150,10 +150,7 @@ test.describe('Stage 4 — full CS workflow', () => {
 
     // Open the print view and confirm the multi-line invoice shows both services.
     const printLink = page.getByRole('link', { name: /View \/ print PDF/ });
-    const [printPage] = await Promise.all([
-      page.context().waitForEvent('page'),
-      printLink.click(),
-    ]);
+    const [printPage] = await Promise.all([page.context().waitForEvent('page'), printLink.click()]);
     await printPage.waitForLoadState();
     await expect(printPage.getByText('Stage 4 — Service A')).toBeVisible();
     await expect(printPage.getByText('Stage 4 — Add-on')).toBeVisible();

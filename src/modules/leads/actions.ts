@@ -2,8 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireRole } from '@/lib/auth/session';
+import { db } from '@/lib/db/client';
 import { toActionResult } from '@/lib/result';
-import { reactivateExpiredLead } from './expiry';
+import { expireLeads, fetchExpirableLeadIds, reactivateExpiredLead } from './expiry';
 import type {
   AcceptLeadInput,
   ArchiveLeadInput,
@@ -64,6 +65,31 @@ export async function reactivateExpiredLeadAction(input: { leadId: string; reaso
       reason: input.reason,
     }),
   );
+  if (result.ok) revalidate();
+  return result;
+}
+
+/**
+ * Admin-only manual sweep. Mirrors the cron endpoint for operators
+ * who want to run expiry on demand (QA, debugging, catching up after
+ * a cron outage). `dryRun` returns the eligible set without flipping
+ * anything.
+ */
+export async function runLeadExpirySweepAction(input: { dryRun?: boolean }) {
+  const session = await requireRole(['ADMIN']);
+  const result = await toActionResult(async () => {
+    if (input.dryRun) {
+      const ids = await fetchExpirableLeadIds(db, {});
+      return { dryRun: true as const, eligibleCount: ids.length, eligibleIds: ids };
+    }
+    const r = await expireLeads({ actorUserId: session.user.id });
+    return {
+      dryRun: false as const,
+      expiredCount: r.expiredIds.length,
+      skippedCount: r.skippedIds.length,
+      expiredIds: r.expiredIds,
+    };
+  });
   if (result.ok) revalidate();
   return result;
 }
