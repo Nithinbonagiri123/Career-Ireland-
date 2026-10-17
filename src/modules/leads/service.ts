@@ -516,6 +516,7 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
         payerPersonId: lead.targetBusiness === 'RECRUITMENT' ? null : lead.personId,
         payerEmployerId: lead.targetBusiness === 'RECRUITMENT' ? lead.employerId : null,
         serviceEngagementId: engagementId,
+        serviceCatalogItemId: service.id,
         qty: 1,
         unitPrice: parsed.amount,
         vatRatePercent: effectiveVatRate,

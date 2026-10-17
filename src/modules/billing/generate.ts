@@ -186,6 +186,7 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
       payerPersonId: data.payerMode === 'PERSON' ? data.payerId : null,
       payerEmployerId: data.payerMode === 'EMPLOYER' ? data.payerId : null,
       serviceEngagementId: engagement.id,
+      serviceCatalogItemId: service.id,
       qty: data.qty,
       unitPrice: data.unitPrice,
       vatRatePercent: effectiveVatRate,

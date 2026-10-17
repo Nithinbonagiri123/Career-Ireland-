@@ -4,17 +4,21 @@ import { requireInternalStaff, type Session } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { invoices, refunds } from '@/lib/db/schema/billing';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
+import type { Currency } from '@/lib/db/schema/currencies';
 import { leads } from '@/lib/db/schema/leads';
 import { occupations } from '@/lib/db/schema/occupations';
 import type { CandidateProfile, Person } from '@/lib/db/schema/persons';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import {
   proFormaInvoices,
+  proFormaLineItems,
   proFormaOfficialInvoices,
   proFormaPaymentRefunds,
 } from '@/lib/db/schema/proformas';
 import { serviceCatalogItems } from '@/lib/db/schema/services';
 import { users } from '@/lib/db/schema/users';
+import { fetchInvoiceableServicesFor, type InvoiceableService } from '@/modules/billing/read';
+import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchUserPermissionSnapshot } from '@/modules/permissions/service';
 import type { CurrencyRollup, EngagementBalance, PendingQuoteBalance } from './balance';
 import { buildClientBalance } from './balance';
@@ -67,12 +71,21 @@ export type ClientWorkspace = {
     number: string;
     status: 'DRAFT' | 'ISSUED' | 'ACCEPTED' | 'CONVERTED' | 'REJECTED' | 'CANCELLED' | 'SUPERSEDED';
     sourceLeadId: string;
+    proposalGroupId: string | null;
     currencyCode: string;
     subtotal: string;
     revision: number;
     issuedAt: Date | null;
     acceptedAt: Date | null;
     engagementId: string | null;
+    paymentTerms: string | null;
+    notes: string | null;
+    lines: Array<{
+      serviceCatalogItemId: string;
+      description: string;
+      quantity: string;
+      unitPrice: string;
+    }>;
   }>;
   invoices: Array<{
     id: string;
@@ -87,6 +100,7 @@ export type ClientWorkspace = {
   payments: Array<{
     id: string;
     serviceEngagementId: string;
+    proFormaInvoiceId: string | null;
     amount: string;
     currencyCode: string;
     status:
@@ -108,6 +122,11 @@ export type ClientWorkspace = {
   timeline: ClientTimelineItem[];
   nextAction: ClientNextAction | null;
   canVerifyPayments: boolean;
+  /** Service catalog + currencies for the inline quote composer. Loaded
+   *  once per workspace fetch so the dialog can render without a
+   *  secondary round-trip. */
+  services: InvoiceableService[];
+  currencies: Array<Pick<Currency, 'code' | 'name' | 'symbol'>>;
 };
 
 /**
@@ -172,11 +191,14 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
             number: proFormaInvoices.number,
             status: proFormaInvoices.status,
             sourceLeadId: proFormaInvoices.sourceLeadId,
+            proposalGroupId: proFormaInvoices.proposalGroupId,
             currencyCode: proFormaInvoices.currencyCode,
             subtotal: proFormaInvoices.subtotal,
             revision: proFormaInvoices.revision,
             issuedAt: proFormaInvoices.issuedAt,
             acceptedAt: proFormaInvoices.acceptedAt,
+            paymentTerms: proFormaInvoices.paymentTerms,
+            notes: proFormaInvoices.notes,
           })
           .from(proFormaInvoices)
           .where(inArray(proFormaInvoices.sourceLeadId, leadIds))
@@ -246,6 +268,7 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
           .select({
             id: payments.id,
             serviceEngagementId: payments.serviceEngagementId,
+            proFormaInvoiceId: payments.proFormaInvoiceId,
             amount: payments.amount,
             currencyCode: payments.currencyCode,
             status: payments.status,
@@ -332,10 +355,58 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
     const inv = invoiceRows.find((x) => x.id === link.invoiceId);
     if (inv) engagementIdByPf.set(link.proFormaInvoiceId, inv.serviceEngagementId);
   }
+
+  // Pro-forma line items — needed by the inline composer in edit + revise
+  // modes. One IN() query across all this person's pro-formas; small
+  // volume per client so no pagination needed.
+  const lineRows =
+    pfIds.length > 0
+      ? await db
+          .select({
+            proFormaInvoiceId: proFormaLineItems.proFormaInvoiceId,
+            serviceCatalogItemId: proFormaLineItems.serviceCatalogItemId,
+            description: proFormaLineItems.description,
+            quantity: proFormaLineItems.quantity,
+            unitPrice: proFormaLineItems.unitPrice,
+            sortOrder: proFormaLineItems.sortOrder,
+          })
+          .from(proFormaLineItems)
+          .where(inArray(proFormaLineItems.proFormaInvoiceId, pfIds))
+          .orderBy(proFormaLineItems.sortOrder)
+      : [];
+  const linesByPf = new Map<
+    string,
+    Array<{
+      serviceCatalogItemId: string;
+      description: string;
+      quantity: string;
+      unitPrice: string;
+    }>
+  >();
+  for (const l of lineRows) {
+    const arr = linesByPf.get(l.proFormaInvoiceId) ?? [];
+    arr.push({
+      serviceCatalogItemId: l.serviceCatalogItemId,
+      description: l.description,
+      quantity: l.quantity,
+      unitPrice: l.unitPrice,
+    });
+    linesByPf.set(l.proFormaInvoiceId, arr);
+  }
+
   const proFormasOut = pfRows.map((p) => ({
     ...p,
     engagementId: engagementIdByPf.get(p.id) ?? null,
+    lines: linesByPf.get(p.id) ?? [],
   }));
+
+  // Catalog + currencies for the inline composer. Both are small reference
+  // tables; one trip each. Running in parallel with the other reads keeps
+  // the overall request latency flat.
+  const [services, currencies] = await Promise.all([
+    fetchInvoiceableServicesFor('PERSON'),
+    fetchCurrencies(),
+  ]);
 
   const balance = buildClientBalance({
     engagements: engagementRows.map((e) => ({
@@ -507,5 +578,7 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
     timeline,
     nextAction,
     canVerifyPayments,
+    services,
+    currencies: currencies.map((c) => ({ code: c.code, name: c.name, symbol: c.symbol })),
   };
 }

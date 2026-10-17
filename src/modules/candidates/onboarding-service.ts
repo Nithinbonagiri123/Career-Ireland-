@@ -355,6 +355,7 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
     const invoice = await insertInvoice(tx, {
       payerPersonId: draft.id,
       serviceEngagementId: engagement.id,
+      serviceCatalogItemId: catalogItemId,
       qty: 1,
       unitPrice: d.payment.amount,
       vatRatePercent: effectiveVatRate,

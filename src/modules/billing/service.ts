@@ -6,6 +6,7 @@ import {
   creditNotes,
   documentSequences,
   type Invoice,
+  invoiceLineItems,
   invoices,
   type Receipt,
   receipts,
@@ -102,6 +103,11 @@ export async function insertInvoice(
     jobRequisitionId?: string | null;
     placementId?: string | null;
     sourceLeadId?: string | null;
+    /** Optional catalog reference for the single-line invoices produced
+     *  by this helper. Mirrored into `invoice_line_items.service_catalog_item_id`
+     *  so the invoice detail view can resolve the service. Nullable
+     *  because historic callers predate this field. */
+    serviceCatalogItemId?: string | null;
   },
 ): Promise<Invoice> {
   const hasPerson = Boolean(args.payerPersonId);
@@ -156,6 +162,22 @@ export async function insertInvoice(
     })
     .returning();
   if (!row) throw new Error('invoices insert returned no row');
+
+  // Stage 6B+1 — every live invoice MUST have at least one line_items
+  // row (Migration 0053 made the table a hard requirement and its
+  // one-time backfill assumed every future insert path matches). Insert
+  // the single derived line for this header. Quantity + unit price map
+  // 1-to-1 onto the invoice totals; the line subtotal equals the invoice
+  // subtotal because this helper only ever produces one-line invoices.
+  await tx.insert(invoiceLineItems).values({
+    invoiceId: row.id,
+    serviceCatalogItemId: args.serviceCatalogItemId ?? null,
+    description: args.lineDescription,
+    quantity: String(args.qty),
+    unitPrice: args.unitPrice,
+    lineSubtotal: centsToString(subtotalCents),
+    sortOrder: 0,
+  });
 
   // Shadow-record into the ledger. The outbox-drain cron will pick this
   // up and generate a balanced journal via the accounting_rules engine.

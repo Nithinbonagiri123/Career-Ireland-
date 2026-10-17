@@ -66,6 +66,11 @@ export type ClientNextActionInput = {
       | 'REJECTED'
       | 'PARTIALLY_REFUNDED'
       | 'REFUNDED';
+    /** Which pro-forma this payment belongs to. Lets the resolver scope
+     *  "has a payment?" checks to a specific quote rather than the
+     *  whole client, so one PF's completed payment can't suppress
+     *  another PF's missing one. Null-tolerant for historic rows. */
+    proFormaInvoiceId?: string | null;
   }>;
   invoices: Array<{
     number: string;
@@ -158,18 +163,28 @@ export function computeClientNextAction(input: ClientNextActionInput): ClientNex
     };
   }
 
-  // 3. Accepted quote with no payment recorded yet → record payment.
-  const acceptedPf = proFormas.find((p) => p.status === 'ACCEPTED');
-  if (acceptedPf && payments.length === 0) {
+  // 3. Any ACCEPTED quote whose own payments do not yet cover it. Scoped
+  //    per-pro-forma so a client with (PF-A paid + PF-B unpaid) still
+  //    surfaces PF-B — previously a sibling's completed payment hid the
+  //    outstanding one. Order: oldest acceptance first so overdue chases
+  //    rise above fresh wins.
+  const acceptedPfs = proFormas.filter((p) => p.status === 'ACCEPTED');
+  const acceptedPfNeedingPayment = acceptedPfs.find((pf) => {
+    const pfPayments = payments.filter(
+      (pay) => pay.proFormaInvoiceId === pf.id && pay.status !== 'REJECTED',
+    );
+    return pfPayments.length === 0;
+  });
+  if (acceptedPfNeedingPayment) {
     return {
       label: 'NEXT STEP',
       dueHint: null,
-      sentence: `Client accepted quote ${acceptedPf.number} — record the payment when it arrives.`,
+      sentence: `Client accepted quote ${acceptedPfNeedingPayment.number} — record the payment when it arrives.`,
       tone: 'default',
       primary: {
         kind: 'link',
         label: 'Record payment',
-        href: `/leads/${acceptedPf.sourceLeadId}/pro-formas/${acceptedPf.id}`,
+        href: `/leads/${acceptedPfNeedingPayment.sourceLeadId}/pro-formas/${acceptedPfNeedingPayment.id}`,
       },
     };
   }

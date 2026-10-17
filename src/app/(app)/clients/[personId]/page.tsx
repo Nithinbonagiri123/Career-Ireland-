@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { VerifyPaymentButton } from '@/app/(app)/leads/[id]/pro-formas/record-payment-dialog';
+import { RefundPaymentButton } from '@/app/(app)/leads/[id]/pro-formas/refund-payment-dialog';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
@@ -25,6 +27,7 @@ import { cn } from '@/lib/utils';
 import { fetchClientWorkspace } from '@/modules/clients/workspace-data';
 import { ClientWorkspaceTabs } from './client-workspace-tabs';
 import { ClientNextActionIsland } from './next-action-island';
+import { NewQuoteButton, QuoteActionsRow } from './quote-actions-row';
 
 export const dynamic = 'force-dynamic';
 
@@ -365,42 +368,94 @@ export default async function ClientWorkspacePage({
         </Card>
       )}
 
-      {proFormas.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Quotes (pro-formas)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            {proFormas.map((p) => (
+      <Card>
+        <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
+          <CardTitle className="text-base">Quotes (pro-formas)</CardTitle>
+          <NewQuoteButton
+            leadId={csLeadForActivation?.id ?? liveLead?.id ?? ''}
+            services={data.services}
+            currencies={data.currencies}
+          />
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {proFormas.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No quotes yet — click "+ New quote" to create the first one.
+            </p>
+          ) : (
+            proFormas.map((p) => (
               <div
                 key={p.id}
-                className="flex items-center justify-between gap-2 border-b pb-2 text-xs last:border-b-0 last:pb-0"
+                className="rounded-md border p-3"
+                data-testid={`quote-row-${p.number}`}
               >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{p.number}</span>
-                    <Badge variant={statusTone(p.status)} className="rounded-full text-[10px]">
-                      {PF_LABEL[p.status] ?? p.status}
-                    </Badge>
-                    {p.revision > 1 && (
-                      <span className="text-[10px] text-muted-foreground">rev {p.revision}</span>
-                    )}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground tabular-nums">
-                    {formatCurrency(p.subtotal, p.currencyCode)} ·{' '}
-                    {p.issuedAt
-                      ? `issued ${format(p.issuedAt, 'dd MMM yyyy · HH:mm')}`
-                      : 'not yet issued'}
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{p.number}</span>
+                      <Badge variant={statusTone(p.status)} className="rounded-full text-[10px]">
+                        {PF_LABEL[p.status] ?? p.status}
+                      </Badge>
+                      {p.revision > 1 && (
+                        <span className="text-[10px] text-muted-foreground">rev {p.revision}</span>
+                      )}
+                      {p.proposalGroupId && (
+                        <span
+                          className="text-[10px] text-muted-foreground"
+                          title="Belongs to a proposal group with sibling quotes"
+                        >
+                          grouped
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground tabular-nums">
+                      {formatCurrency(p.subtotal, p.currencyCode)} ·{' '}
+                      {p.issuedAt
+                        ? `issued ${format(p.issuedAt, 'dd MMM yyyy · HH:mm')}`
+                        : 'not yet issued'}
+                    </div>
                   </div>
                 </div>
-                <Link
-                  href={`/leads/${p.sourceLeadId}/pro-formas/${p.id}`}
-                  className="shrink-0 text-foreground underline-offset-2 hover:underline"
-                >
-                  Open
-                </Link>
+                <div className="mt-2 border-t pt-2">
+                  <QuoteActionsRow pf={p} services={data.services} currencies={data.currencies} />
+                </div>
               </div>
-            ))}
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      {payments.some((p) => p.status === 'PENDING' || p.status === 'PROOF_UPLOADED') && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Awaiting finance confirmation</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {payments
+              .filter((p) => p.status === 'PENDING' || p.status === 'PROOF_UPLOADED')
+              .map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between gap-2 rounded-md border bg-status-warning-soft/60 p-3 text-xs"
+                >
+                  <div>
+                    <div className="font-medium tabular-nums">
+                      {formatCurrency(p.amount, p.currencyCode)} · {p.method.replace(/_/g, ' ')}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      recorded {format(p.createdAt, 'dd MMM yyyy · HH:mm')}
+                      {p.receivedAt && ` · received ${format(p.receivedAt, 'dd MMM yyyy')}`}
+                    </div>
+                  </div>
+                  {data.canVerifyPayments ? (
+                    <VerifyPaymentButton paymentId={p.id} />
+                  ) : (
+                    <span className="text-[11px] italic text-muted-foreground">
+                      Finance will confirm
+                    </span>
+                  )}
+                </div>
+              ))}
           </CardContent>
         </Card>
       )}
@@ -449,29 +504,65 @@ export default async function ClientWorkspacePage({
             <CardTitle className="text-base">Payments</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            {payments.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center justify-between gap-2 border-b pb-2 text-xs last:border-b-0 last:pb-0"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="tabular-nums font-medium">
-                      {formatCurrency(p.amount, p.currencyCode)}
-                    </span>
-                    <Badge variant={statusTone(p.status)} className="rounded-full text-[10px]">
-                      {PAYMENT_LABEL[p.status] ?? p.status}
-                    </Badge>
+            {payments.map((p) => {
+              // Resolve the parent pro-forma so we can decide which refund
+              // path applies: pre-issuance refunds target ACCEPTED PFs
+              // (no invoice issued yet) and post-issuance refunds against
+              // CONVERTED PFs must go through a credit note on the
+              // invoice. Shows the appropriate affordance per state.
+              const parentPf = proFormas.find((pf) => pf.engagementId === p.serviceEngagementId);
+              const canPreIssuanceRefund =
+                parentPf?.status === 'ACCEPTED' &&
+                (p.status === 'VERIFIED' || p.status === 'PARTIALLY_REFUNDED');
+              const relatedInvoice = invoices.find(
+                (i) => i.serviceEngagementId === p.serviceEngagementId && i.status !== 'VOIDED',
+              );
+              const canPostIssuanceRefund =
+                parentPf?.status === 'CONVERTED' &&
+                relatedInvoice != null &&
+                (p.status === 'VERIFIED' || p.status === 'PARTIALLY_REFUNDED');
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between gap-2 border-b pb-2 text-xs last:border-b-0 last:pb-0"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="tabular-nums font-medium">
+                        {formatCurrency(p.amount, p.currencyCode)}
+                      </span>
+                      <Badge variant={statusTone(p.status)} className="rounded-full text-[10px]">
+                        {PAYMENT_LABEL[p.status] ?? p.status}
+                      </Badge>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {p.method.replace(/_/g, ' ')}
+                      {p.receivedAt && ` · received ${format(p.receivedAt, 'dd MMM yyyy')}`}
+                      {' · recorded '}
+                      {format(p.createdAt, 'dd MMM yyyy · HH:mm')}
+                    </div>
                   </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {p.method.replace(/_/g, ' ')}
-                    {p.receivedAt && ` · received ${format(p.receivedAt, 'dd MMM yyyy')}`}
-                    {' · recorded '}
-                    {format(p.createdAt, 'dd MMM yyyy · HH:mm')}
+                  <div className="shrink-0">
+                    {canPreIssuanceRefund && (
+                      <RefundPaymentButton
+                        paymentId={p.id}
+                        paymentAmount={p.amount}
+                        currencyCode={p.currencyCode}
+                      />
+                    )}
+                    {canPostIssuanceRefund && relatedInvoice && (
+                      <Link
+                        href={`/candidates/${personId}/invoices/${relatedInvoice.number}`}
+                        className="text-[11px] text-foreground underline-offset-2 hover:underline"
+                        title="Post-issuance refund — issue a credit note from the invoice detail page"
+                      >
+                        Refund via credit note →
+                      </Link>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       )}

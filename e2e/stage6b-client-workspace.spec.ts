@@ -39,7 +39,6 @@ async function seedPerson(firstName: string) {
     .values({
       personId: p.id,
       targetBusiness: 'CANDIDATE_SERVICES',
-      source: 'DIRECT',
       status: 'NEW',
     })
     .returning({ id: leads.id });
@@ -54,6 +53,32 @@ async function seedPerson(firstName: string) {
     },
   };
 }
+
+test('inline quote composer opens from the workspace Billing tab', async ({ page }) => {
+  const stamp = Math.random().toString(36).slice(2, 6);
+  const seeded = await seedPerson(`S6B1C${stamp}`);
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`/clients/${seeded.personId}?tab=billing`);
+    // Billing tab shows the Quotes card with a "+ New quote" trigger.
+    await expect(page.getByText(/no quotes yet/i)).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: /\+ New quote/i }).click();
+    // The composer opens inline; the dialog title is "Create pro forma"
+    // (reused from the existing lead-page composer).
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(/create pro forma/i)).toBeVisible();
+    await page.screenshot({
+      path: path.join(SHOTS_DIR, 'desktop-inline-create-quote-dialog.png'),
+      fullPage: true,
+    });
+    // Close the dialog — we don't need to actually submit to prove the
+    // inline wiring.
+    await page.keyboard.press('Escape');
+  } finally {
+    await seeded.cleanup();
+  }
+});
 
 test('workspace renders for a fresh lead-stage client (desktop + mobile)', async ({ page }) => {
   const stamp = Math.random().toString(36).slice(2, 6);
@@ -82,9 +107,7 @@ test('workspace renders for a fresh lead-stage client (desktop + mobile)', async
 
     // Switch to Billing — empty state because no quotes/invoices yet.
     await page.getByRole('tab', { name: 'Billing' }).click();
-    await expect(
-      page.getByText(/no quotes, invoices or payments on file yet/i),
-    ).toBeVisible();
+    await expect(page.getByText(/no quotes, invoices or payments on file yet/i)).toBeVisible();
     await page.screenshot({
       path: path.join(SHOTS_DIR, 'desktop-billing-empty.png'),
       fullPage: true,

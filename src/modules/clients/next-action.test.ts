@@ -222,6 +222,53 @@ describe('computeClientNextAction — quote lifecycle', () => {
   });
 });
 
+describe('computeClientNextAction — multiple accepted PFs do not shadow each other', () => {
+  it('one ACCEPTED PF with payment + one ACCEPTED PF without → surfaces the unpaid one', () => {
+    const PF_PAID = '77777777-7777-4777-a777-777777777777';
+    const PF_UNPAID = '88888888-8888-4888-a888-888888888888';
+    const r = computeClientNextAction(
+      baseline({
+        leads: [{ id: LID, status: 'AWAITING_PAYMENT', targetBusiness: 'CANDIDATE_SERVICES' }],
+        proFormas: [
+          { id: PF_PAID, number: 'PROF-PAID', status: 'ACCEPTED', sourceLeadId: LID },
+          { id: PF_UNPAID, number: 'PROF-UNPAID', status: 'ACCEPTED', sourceLeadId: LID },
+        ],
+        // A payment exists against PF_PAID only. Previously the whole-
+        // client payments.length === 0 check would skip prompting for
+        // PF_UNPAID; this regression test locks the per-PF check.
+        payments: [{ status: 'VERIFIED', proFormaInvoiceId: PF_PAID }],
+      }),
+    );
+    expect(r?.sentence).toContain('PROF-UNPAID');
+  });
+
+  it('two ACCEPTED PFs both unpaid → surfaces one of them (first match)', () => {
+    const r = computeClientNextAction(
+      baseline({
+        leads: [{ id: LID, status: 'AWAITING_PAYMENT', targetBusiness: 'CANDIDATE_SERVICES' }],
+        proFormas: [
+          { id: 'pf-a', number: 'PROF-A', status: 'ACCEPTED', sourceLeadId: LID },
+          { id: 'pf-b', number: 'PROF-B', status: 'ACCEPTED', sourceLeadId: LID },
+        ],
+      }),
+    );
+    expect(r?.primary.label).toBe('Record payment');
+    expect(r?.sentence).toMatch(/PROF-[AB]/);
+  });
+
+  it('a REJECTED payment does not satisfy the ACCEPTED PF — still prompts for payment', () => {
+    const PF = '99999999-9999-4999-a999-999999999999';
+    const r = computeClientNextAction(
+      baseline({
+        leads: [{ id: LID, status: 'AWAITING_PAYMENT', targetBusiness: 'CANDIDATE_SERVICES' }],
+        proFormas: [{ id: PF, number: 'PROF-REJ', status: 'ACCEPTED', sourceLeadId: LID }],
+        payments: [{ status: 'REJECTED', proFormaInvoiceId: PF }],
+      }),
+    );
+    expect(r?.sentence).toContain('PROF-REJ');
+  });
+});
+
 describe('computeClientNextAction — post-activation engagement management', () => {
   it('completed engagement + candidate not AVAILABLE → prompt to mark Available', () => {
     const r = computeClientNextAction(
