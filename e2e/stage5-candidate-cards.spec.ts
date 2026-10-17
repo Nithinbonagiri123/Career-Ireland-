@@ -39,6 +39,10 @@ async function seedCandidate(args: {
   occupationName: string | null;
   withImmigration: boolean;
   immigrationApplicationTypeName?: string;
+  /** Case status to insert — defaults to APPROVED with a future expiry so
+   *  the card renders a CURRENT_PERMISSION state. SUBMITTED exercises the
+   *  "Immigration case" neutral-label branch. */
+  immigrationStatus?: 'APPROVED' | 'SUBMITTED';
   withApplicationsAndShortlist?: boolean;
 }): Promise<Seeded> {
   const { config: loadEnv } = await import('dotenv');
@@ -135,14 +139,18 @@ async function seedCandidate(args: {
         .returning({ id: immigrationApplicationTypes.id });
       typeId = newType?.id ?? null;
     }
+    const immStatus = args.immigrationStatus ?? 'APPROVED';
     const [newCase] = await db
       .insert(immigrationCases)
       .values({
         caseType: 'EMPLOYMENT_PERMIT',
         applicationTypeId: typeId,
         beneficiaryPersonId: p.id,
-        status: 'APPROVED',
-        expiresOn: '2027-06-30',
+        status: immStatus,
+        // Only APPROVED cases carry a meaningful expiry — pending/submitted
+        // ones leave it null so the card renders the neutral case headline
+        // without an "expires" line.
+        expiresOn: immStatus === 'APPROVED' ? '2027-06-30' : null,
       })
       .returning({ id: immigrationCases.id });
     immigrationCaseId = newCase?.id ?? null;
@@ -280,6 +288,25 @@ test.describe('Stage 5 — Candidate Cards', () => {
           immigrationApplicationTypeName: 'General Employment Permit',
         }),
       );
+      // 5. Pending immigration case — must be rendered as a neutral
+      //    "Immigration case" label, never as a currently-held permission.
+      //    This is the Stage 5 regression: a SUBMITTED Stamp 4 case used
+      //    to render with the permit name prominent and the status pill
+      //    small, which could be misread as holding Stamp 4 today.
+      seeded.push(
+        await seedCandidate({
+          firstName: `S5Pending${stamp}`,
+          lastName: 'Full',
+          email: `s5-pending-${stamp}@example.test`,
+          phone: '+353871234571',
+          city: 'Waterford',
+          country: 'Ireland',
+          occupationName: 'Chef',
+          withImmigration: true,
+          immigrationApplicationTypeName: 'Stamp 4',
+          immigrationStatus: 'SUBMITTED',
+        }),
+      );
 
       await page.setViewportSize({ width: 1440, height: 900 });
       // Scope to the seeded candidates via search so screenshots focus
@@ -296,6 +323,7 @@ test.describe('Stage 5 — Candidate Cards', () => {
       await expect(page.getByText(`S5NoOcc${stamp} Full`)).toBeVisible();
       await expect(page.getByText(`S5NoImm${stamp} Full`)).toBeVisible();
       await expect(page.getByText(`S5Long${stamp} Full`)).toBeVisible();
+      await expect(page.getByText(`S5Pending${stamp} Full`)).toBeVisible();
 
       // Priority-order checks — the first visible card for the Complete
       // candidate should have occupation under the name + immigration
@@ -308,8 +336,12 @@ test.describe('Stage 5 — Candidate Cards', () => {
         .first();
       await expect(completeCard.getByText(/^Nurse$/)).toBeVisible();
       await expect(completeCard.getByText(/^Stamp 4$/)).toBeVisible();
-      // approved status pill
-      await expect(completeCard.getByText(/approved/i)).toBeVisible();
+      // Stage 5 regression — APPROVED + future expiry must render as a
+      // currently-held permission (green banner), not as a case with an
+      // "approved" status pill. The old rendering could be misread as a
+      // pending permission; the new one cannot.
+      await expect(completeCard.getByText(/current permission/i)).toBeVisible();
+      await expect(completeCard.getByText(/^expires /i)).toBeVisible();
       // apps / shortlists / placed counters all have the inserted "1"
       // (one of each).
       await expect(completeCard.getByText(/apps/i)).toBeVisible();
@@ -343,6 +375,20 @@ test.describe('Stage 5 — Candidate Cards', () => {
         })
         .first();
       await expect(longCard).toBeVisible();
+
+      // Pending-case card renders the neutral "Immigration case" label
+      // and the "Not a currently-held permission." subtitle, never as a
+      // currently-held permission. The permit label still appears but
+      // trailing the application word so operators read it as the case
+      // type, not the active permission.
+      const pendingCard = page
+        .locator('article, [aria-label]')
+        .filter({ hasText: `S5Pending${stamp} Full` })
+        .first();
+      await expect(pendingCard.getByText(/immigration case/i)).toBeVisible();
+      await expect(pendingCard.getByText(/Stamp 4 application/i)).toBeVisible();
+      await expect(pendingCard.getByText(/not a currently-held permission/i)).toBeVisible();
+      await expect(pendingCard.getByText(/current permission/i)).toHaveCount(0);
 
       // Scroll the first seeded card into view so the screenshot
       // captures the grid rather than the hero + aurora backdrop.

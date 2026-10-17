@@ -59,7 +59,14 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
   const immigrationExpiresAbsolute = candidate.immigrationExpiresOn
     ? format(new Date(candidate.immigrationExpiresOn), 'd MMM yyyy')
     : null;
-  const immigrationTone: StatusTone = (() => {
+  const immigrationStatusLabel = candidate.immigrationStatus
+    ? candidate.immigrationStatus.toLowerCase().replaceAll('_', ' ')
+    : null;
+  // Status pill tone — used for PENDING_CASE / REJECTED_CASE / CLOSED_CASE
+  // where we want to show the raw case status alongside the "Immigration
+  // case:" label. CURRENT_PERMISSION / EXPIRED_PERMISSION have their own
+  // headline treatment and don't use this pill.
+  const caseStatusTone: StatusTone = (() => {
     switch (candidate.immigrationStatus) {
       case 'APPROVED':
         return 'success';
@@ -144,48 +151,101 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
         </div>
       </div>
 
-      {/* 3. Immigration permission / stamp — only when a case exists.
-          Status is NEVER inferred from country or nationality. */}
-      <div className="mx-4 mt-2 rounded-md border bg-background px-2.5 py-2">
-        <div className="flex items-start gap-2">
-          <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-pipeline-review" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Immigration
-            </div>
-            {candidate.immigrationPermitLabel ? (
-              <>
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <span
-                    className="truncate text-xs font-medium"
-                    title={candidate.immigrationPermitLabel}
-                  >
-                    {candidate.immigrationPermitLabel}
-                  </span>
-                  {candidate.immigrationStatus && (
-                    <StatusPill tone={immigrationTone}>
-                      {candidate.immigrationStatus.toLowerCase().replaceAll('_', ' ')}
-                    </StatusPill>
-                  )}
+      {/* 3. Immigration — rendered differently per immigrationKind so
+          a pending / rejected / closed case is NEVER presented as a
+          currently-held permission. The schema can only establish a
+          current permission reliably when status = APPROVED + expiry
+          is in the future; everything else is labelled as a case.
+          Expired permissions get a distinct destructive tone. */}
+      {candidate.immigrationKind === 'CURRENT_PERMISSION' ? (
+        <div className="mx-4 mt-2 rounded-md border border-status-success/40 bg-status-success-soft px-2.5 py-2">
+          <div className="flex items-start gap-2">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-status-success" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] uppercase tracking-wider text-status-success">
+                Current permission
+              </div>
+              <div
+                className="truncate text-xs font-medium"
+                title={candidate.immigrationPermitLabel ?? ''}
+              >
+                {candidate.immigrationPermitLabel}
+              </div>
+              {immigrationExpiresAbsolute && (
+                <div
+                  className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground"
+                  title={immigrationExpiresAbsolute}
+                >
+                  <CalendarCheck className="size-3" aria-hidden />
+                  expires {immigrationExpiresAbsolute}
                 </div>
-                {candidate.immigrationExpiresOn && immigrationExpiresAbsolute && (
-                  <div
-                    className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground"
-                    title={immigrationExpiresAbsolute}
-                  >
-                    <CalendarCheck className="size-3" aria-hidden />
-                    expires {immigrationExpiresAbsolute}
-                  </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : candidate.immigrationKind === 'EXPIRED_PERMISSION' ? (
+        <div className="mx-4 mt-2 rounded-md border border-status-danger/40 bg-status-danger-soft px-2.5 py-2">
+          <div className="flex items-start gap-2">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-status-danger" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] uppercase tracking-wider text-status-danger">
+                Expired permission
+              </div>
+              <div
+                className="truncate text-xs font-medium"
+                title={candidate.immigrationPermitLabel ?? ''}
+              >
+                {candidate.immigrationPermitLabel}
+              </div>
+              {immigrationExpiresAbsolute && (
+                <div className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-status-danger">
+                  <CalendarCheck className="size-3" aria-hidden />
+                  expired {immigrationExpiresAbsolute}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : candidate.immigrationKind !== 'NONE' ? (
+        <div className="mx-4 mt-2 rounded-md border bg-background px-2.5 py-2">
+          <div className="flex items-start gap-2">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-pipeline-review" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Immigration case
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <span
+                  className="truncate text-xs font-medium"
+                  title={candidate.immigrationPermitLabel ?? ''}
+                >
+                  {candidate.immigrationPermitLabel} application
+                </span>
+                {immigrationStatusLabel && (
+                  <StatusPill tone={caseStatusTone}>{immigrationStatusLabel}</StatusPill>
                 )}
-              </>
-            ) : (
+              </div>
+              <div className="mt-0.5 text-[11px] italic text-muted-foreground">
+                Not a currently-held permission.
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mx-4 mt-2 rounded-md border bg-background px-2.5 py-2">
+          <div className="flex items-start gap-2">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-pipeline-review" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Immigration
+              </div>
               <div className="text-[12px] italic text-muted-foreground">
                 Immigration not on file
               </div>
-            )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 4+5. Location, phone, assigned staff, activation date */}
       <MetaList className="px-4 pt-3">

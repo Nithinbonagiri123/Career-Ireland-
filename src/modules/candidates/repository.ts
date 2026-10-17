@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
+import type { DbExecutor } from '@/lib/audit/withAudit';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import { occupations } from '@/lib/db/schema/occupations';
@@ -26,10 +27,11 @@ export type CandidateListRow = {
    *  is kept in sync at conversion time (Stage 4). */
   primaryOccupationName: string | null;
   /** Most-recent non-archived immigration case for this person. NULL
-   *  when the person has no cases — do not infer status from country or
-   *  nationality. The label prefers the application-type name
-   *  ("Stamp 4", "Critical Skills Work Permit") and falls back to the
-   *  case_type enum when the catalog row is missing (legacy cases). */
+   *  when the person has no cases — never inferred from country or
+   *  nationality. The label is the application-type name
+   *  ("Stamp 4", "Critical Skills Work Permit"); when the catalog
+   *  row is missing (legacy cases) it falls back to the case_type
+   *  enum ("EMPLOYMENT_PERMIT", "VISA", "VISA_EXTENSION"). */
   immigrationPermitLabel: string | null;
   immigrationStatus:
     | 'OPEN'
@@ -41,6 +43,29 @@ export type CandidateListRow = {
     | 'CLOSED'
     | null;
   immigrationExpiresOn: Date | null;
+  /**
+   * Classification of the immigration record for display, derived from
+   * (status, expiresOn):
+   *   - CURRENT_PERMISSION  — status = APPROVED AND (expiresOn is NULL
+   *                            OR expiresOn > today)
+   *   - EXPIRED_PERMISSION  — status = APPROVED AND expiresOn <= today
+   *   - PENDING_CASE        — status in (OPEN, DOCUMENTS_PENDING,
+   *                            SUBMITTED, UNDER_AUTHORITY_REVIEW)
+   *   - REJECTED_CASE       — status = REJECTED
+   *   - CLOSED_CASE         — status = CLOSED
+   *   - NONE                — no case on file
+   * The card renders a different headline per kind so a pending or
+   * rejected application is never presented as a currently-held
+   * permission. For any non-APPROVED status the card uses the
+   * neutral "Immigration case" label with the status pill alongside.
+   */
+  immigrationKind:
+    | 'CURRENT_PERMISSION'
+    | 'EXPIRED_PERMISSION'
+    | 'PENDING_CASE'
+    | 'REJECTED_CASE'
+    | 'CLOSED_CASE'
+    | 'NONE';
   /** Live counts for the card's ring counters. Zero when the person has
    *  no rows in that table — the card renders zero as a quiet 0, not a
    *  placeholder, since zero IS the fact. */
@@ -49,11 +74,27 @@ export type CandidateListRow = {
   placementsCount: number;
 };
 
+/**
+ * Query cost — one page of N candidates issues exactly 5 round-trips
+ * independent of N:
+ *   (1) main SELECT with 3 joins (persons / users / occupations)
+ *   (2) one IN() lookup against immigration_cases
+ *   (3) one IN() grouped lookup against job_applications
+ *   (4) one IN() grouped lookup against shortlist_entries
+ *   (5) one IN() grouped lookup against placements
+ * If this ever regresses to N+1 the perf regression test in
+ * repository.test.ts will time out on 100 seeded candidates.
+ *
+ * `executor` is optional so the regression test can hand in a
+ * counting proxy; production callers default to the shared `db`.
+ */
 export async function listCandidates(opts?: {
   scope?: AssignmentScope;
   currentUserId?: string;
   createdRange?: DateRange;
+  executor?: DbExecutor;
 }): Promise<CandidateListRow[]> {
+  const exec = opts?.executor ?? db;
   const scopeCond =
     opts?.scope && opts.currentUserId
       ? assignmentCondition(opts.scope, candidateProfiles.assignedUserId, opts.currentUserId)
@@ -70,7 +111,7 @@ export async function listCandidates(opts?: {
   if (scopeCond) whereConds.push(scopeCond);
   if (createdCond) whereConds.push(createdCond);
 
-  const rows = await db
+  const rows = await exec
     .select({
       candidateProfileId: candidateProfiles.id,
       personId: persons.id,
@@ -112,7 +153,7 @@ export async function listCandidates(opts?: {
     }
   >();
   if (personIds.length > 0) {
-    const immRows = await db.execute<{
+    const immRows = await exec.execute<{
       beneficiary_person_id: string;
       permit_label: string;
       status: string;
@@ -152,7 +193,7 @@ export async function listCandidates(opts?: {
   const shortlistsByPerson = new Map<string, number>();
   const placementsByPerson = new Map<string, number>();
   if (personIds.length > 0) {
-    const appRows = await db.execute<{ person_id: string; n: string }>(sql`
+    const appRows = await exec.execute<{ person_id: string; n: string }>(sql`
       SELECT person_id, COUNT(*)::text AS n FROM job_applications
       WHERE person_id IN (${sql.join(
         personIds.map((id) => sql`${id}::uuid`),
@@ -163,7 +204,7 @@ export async function listCandidates(opts?: {
     for (const r of appRows as Array<{ person_id: string; n: string }>) {
       applicationsByPerson.set(r.person_id, Number(r.n));
     }
-    const slRows = await db.execute<{ person_id: string; n: string }>(sql`
+    const slRows = await exec.execute<{ person_id: string; n: string }>(sql`
       SELECT person_id, COUNT(*)::text AS n FROM shortlist_entries
       WHERE person_id IN (${sql.join(
         personIds.map((id) => sql`${id}::uuid`),
@@ -174,7 +215,7 @@ export async function listCandidates(opts?: {
     for (const r of slRows as Array<{ person_id: string; n: string }>) {
       shortlistsByPerson.set(r.person_id, Number(r.n));
     }
-    const plRows = await db.execute<{ person_id: string; n: string }>(sql`
+    const plRows = await exec.execute<{ person_id: string; n: string }>(sql`
       SELECT person_id, COUNT(*)::text AS n FROM placements
       WHERE person_id IN (${sql.join(
         personIds.map((id) => sql`${id}::uuid`),
@@ -190,8 +231,13 @@ export async function listCandidates(opts?: {
   // Reference inArray to silence lint when no scope path used it.
   void inArray;
 
+  // Today, computed once at request time. Used to classify APPROVED
+  // cases with a non-null expires_on as current vs expired.
+  const todayStr = new Date().toISOString().slice(0, 10);
+
   return rows.map((r) => {
     const imm = immigrationByPerson.get(r.personId);
+    const immigrationKind = classifyImmigration(imm, todayStr);
     return {
       candidateProfileId: r.candidateProfileId,
       personId: r.personId,
@@ -210,9 +256,46 @@ export async function listCandidates(opts?: {
       immigrationPermitLabel: imm?.label ?? null,
       immigrationStatus: imm?.status ?? null,
       immigrationExpiresOn: imm?.expiresOn ?? null,
+      immigrationKind,
       applicationsCount: applicationsByPerson.get(r.personId) ?? 0,
       shortlistsCount: shortlistsByPerson.get(r.personId) ?? 0,
       placementsCount: placementsByPerson.get(r.personId) ?? 0,
     };
   });
+}
+
+/**
+ * Pure classifier — exported so unit tests can lock the matrix without
+ * seeding immigration rows. Operates on the shape stored in the
+ * immigrationByPerson map inside listCandidates.
+ */
+export function classifyImmigration(
+  imm:
+    | {
+        status: CandidateListRow['immigrationStatus'];
+        expiresOn: Date | null;
+      }
+    | undefined
+    | null,
+  todayStr: string,
+): CandidateListRow['immigrationKind'] {
+  if (!imm?.status) return 'NONE';
+  switch (imm.status) {
+    case 'APPROVED': {
+      if (!imm.expiresOn) return 'CURRENT_PERMISSION';
+      const expiryStr = imm.expiresOn.toISOString().slice(0, 10);
+      return expiryStr > todayStr ? 'CURRENT_PERMISSION' : 'EXPIRED_PERMISSION';
+    }
+    case 'OPEN':
+    case 'DOCUMENTS_PENDING':
+    case 'SUBMITTED':
+    case 'UNDER_AUTHORITY_REVIEW':
+      return 'PENDING_CASE';
+    case 'REJECTED':
+      return 'REJECTED_CASE';
+    case 'CLOSED':
+      return 'CLOSED_CASE';
+    default:
+      return 'NONE';
+  }
 }
