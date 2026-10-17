@@ -363,6 +363,29 @@ export async function fetchHrDashboard(): Promise<HrDashboard> {
 export async function clockIn(ip: string | null): Promise<AttendanceSession> {
   const session = await requireSession();
   return db.transaction(async (tx) => {
+    // One clock-in per calendar day — once you've clocked in (even if
+    // you've also clocked out), you can't start a second session the
+    // same day. Prevents staff from accidentally logging two shifts
+    // against the same date or using re-clock-in to pad hours.
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const [existingToday] = await tx
+      .select({ id: attendanceSessions.id })
+      .from(attendanceSessions)
+      .where(
+        and(
+          eq(attendanceSessions.userId, session.user.id),
+          gte(attendanceSessions.clockInAt, startOfDay),
+        ),
+      )
+      .limit(1);
+    if (existingToday) {
+      throw new BusinessRuleError(
+        'ALREADY_CLOCKED_IN_TODAY',
+        'You have already clocked in today. Come back tomorrow — or ask an admin to log a correction.',
+      );
+    }
+
     let inserted: AttendanceSession | undefined;
     try {
       const [row] = await tx
@@ -373,6 +396,8 @@ export async function clockIn(ip: string | null): Promise<AttendanceSession> {
     } catch (err) {
       // Postgres error code 23505 = unique_violation. The only unique
       // index in play here is the "one open per user" partial index.
+      // Shouldn't trip now that the once-per-day check above runs first,
+      // but keep the handler as a belt-and-braces guard.
       const code = (err as { code?: string }).code;
       if (code === '23505') {
         throw new BusinessRuleError(
