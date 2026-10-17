@@ -26,6 +26,12 @@ export type LeadListRow = {
   displayName: string;
   personEmail: string | null;
   personPhone: string | null;
+  /** Person's self-reported source channel. */
+  personSource: string | null;
+  /** Person's current country. Used by the leads filter. */
+  personCountry: string | null;
+  /** Person's primary profession id. Used by the leads filter. */
+  personPrimaryOccupationId: string | null;
   assignedUserId: string | null;
   assignedUserName: string | null;
   createdAt: Date;
@@ -70,6 +76,9 @@ export async function listLeads(opts?: {
       lastName: persons.lastName,
       personEmail: persons.email,
       personPhone: persons.phone,
+      personSource: persons.source,
+      personCountry: persons.currentCountry,
+      personPrimaryOccupationId: persons.primaryOccupationId,
       employerName: employers.legalName,
       assignedUserId: leads.assignedUserId,
       assignedUserName: users.fullName,
@@ -117,6 +126,9 @@ export async function listLeads(opts?: {
       displayName,
       personEmail: r.personEmail,
       personPhone: r.personPhone,
+      personSource: r.personSource ?? null,
+      personCountry: r.personCountry ?? null,
+      personPrimaryOccupationId: r.personPrimaryOccupationId ?? null,
       assignedUserId: r.assignedUserId,
       assignedUserName: r.assignedUserName,
       createdAt: r.createdAt,

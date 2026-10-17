@@ -7,12 +7,13 @@ import {
   FileText,
   MoreHorizontal,
   Pencil,
+  Receipt,
   UserCheck,
   UserX,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState, useTransition } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { DataTable } from '@/components/data-table/data-table';
@@ -46,6 +47,7 @@ import {
   updateLeadStatusAction,
 } from '@/modules/leads/actions';
 import type { LeadListRow } from '@/modules/leads/repository';
+import { LeadsFilterControl } from './leads-filter';
 
 type Props = {
   leads: LeadListRow[];
@@ -54,9 +56,56 @@ type Props = {
       server page once and passed in so every row's invoice dialog gets
       the same option list (no extra round-trip per menu-open). */
   invoiceableServices: InvoiceableService[];
+  /** Occupation catalog + known countries for the Filter dropdown. */
+  occupations: Array<{ id: string; name: string }>;
+  countries: string[];
 };
 
-export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props) {
+const ACTIVE_STATUSES = new Set(['NEW', 'CONTACTED', 'AWAITING_PAYMENT']);
+
+function parseList(value: string | null): string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function LeadsTable({
+  leads,
+  currentUserId,
+  invoiceableServices,
+  occupations,
+  countries,
+}: Props) {
+  const params = useSearchParams();
+  // Client-side filtering so search / sort / pagination keep working on
+  // the resulting array. All filter inputs come from URL params written
+  // by <LeadsFilterControl>.
+  const filteredLeads = useMemo(() => {
+    const statusFilter = new Set(parseList(params.get('status')));
+    const activeOnly = params.get('active') === 'true';
+    const expiredOnly = params.get('expired') === 'true';
+    const sourceFilter = new Set(parseList(params.get('source')));
+    const countryFilter = new Set(parseList(params.get('country')));
+    const professionFilter = new Set(parseList(params.get('profession')));
+    return leads.filter((l) => {
+      if (statusFilter.size > 0 && !statusFilter.has(l.status)) return false;
+      if (activeOnly && !ACTIVE_STATUSES.has(l.status)) return false;
+      if (expiredOnly && l.status !== 'EXPIRED') return false;
+      if (sourceFilter.size > 0 && (!l.personSource || !sourceFilter.has(l.personSource)))
+        return false;
+      if (countryFilter.size > 0 && (!l.personCountry || !countryFilter.has(l.personCountry)))
+        return false;
+      if (
+        professionFilter.size > 0 &&
+        (!l.personPrimaryOccupationId || !professionFilter.has(l.personPrimaryOccupationId))
+      )
+        return false;
+      return true;
+    });
+  }, [leads, params]);
+
   const [busyId, setBusyId] = useState<string | null>(null);
   const [convertTarget, setConvertTarget] = useState<LeadListRow | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<LeadListRow | null>(null);
@@ -412,6 +461,15 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
                     </Link>
                   }
                 />
+                {lead.targetBusiness === 'CANDIDATE_SERVICES' && (
+                  <DropdownMenuItem
+                    render={
+                      <Link href={`/leads/${lead.id}`}>
+                        <Receipt className="mr-2 size-4" /> Pro formas
+                      </Link>
+                    }
+                  />
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => setArchiveTarget(lead)}
@@ -431,12 +489,20 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
     <>
       <DataTable
         columns={columns}
-        data={leads}
-        emptyTitle="No leads yet"
-        emptyDescription="Every candidate starts as a Lead. Create the first one with the button above."
+        data={filteredLeads}
+        emptyTitle={
+          filteredLeads.length === 0 && leads.length > 0
+            ? 'No leads match your filters'
+            : 'No leads yet'
+        }
+        emptyDescription={
+          filteredLeads.length === 0 && leads.length > 0
+            ? 'Clear or adjust the filter in the top right.'
+            : 'Every candidate starts as a Lead. Create the first one with the button above.'
+        }
         enableGlobalFilter
         globalFilterPlaceholder="Search leads…"
-        enableColumnVisibility
+        toolbarRight={<LeadsFilterControl countries={countries} occupations={occupations} />}
       />
       <PromptDialog
         open={archiveTarget !== null}

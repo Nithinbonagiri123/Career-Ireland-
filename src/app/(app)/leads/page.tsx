@@ -14,6 +14,7 @@ import { resolveCurrentWorkspace } from '@/lib/workspace';
 import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchLeads } from '@/modules/leads/service';
+import { fetchOccupations } from '@/modules/occupations/service';
 import { CreateLeadDialog } from './create-lead-dialog';
 import { LeadsTable } from './leads-table';
 
@@ -42,12 +43,16 @@ export default async function LeadsPage({
   // dashboard shows every lead combined — the owner needs the full view.
   const workspace = await resolveCurrentWorkspace();
   const targetBusiness = workspace ? targetBusinessForWorkspace(workspace.current) : undefined;
-  const [leads, invoiceableServices, currencies] = await Promise.all([
+  const [leads, invoiceableServices, currencies, occupations] = await Promise.all([
     fetchLeads(scope, createdRange, targetBusiness),
     // PERSON-payable services + packages; the row-menu "Generate
     // invoice" dialog needs the full option list to render locally.
     fetchInvoiceableServicesFor('PERSON'),
     fetchCurrencies(),
+    // Occupation catalog for the CS lead-creation form's profession
+    // picker. Reused same options everywhere; inline-created rows
+    // appear in the picker's local state until the next refetch.
+    fetchOccupations(),
   ]);
 
   const mineCount = leads.filter((l) => l.assignedUserId === session.user.id).length;
@@ -83,7 +88,15 @@ export default async function LeadsPage({
               <DateRangeFilter />
               <ScopeFilter current={scope} />
               <CsvExportButton href="/api/export/leads" />
-              <CreateLeadDialog invoiceableServices={invoiceableServices} currencies={currencies} />
+              <CreateLeadDialog
+                invoiceableServices={invoiceableServices}
+                currencies={currencies}
+                occupations={occupations.map((o) => ({
+                  id: o.id,
+                  name: o.name,
+                  isActive: o.isActive,
+                }))}
+              />
             </div>
           }
         />
@@ -106,6 +119,10 @@ export default async function LeadsPage({
           leads={leads}
           currentUserId={session.user.id}
           invoiceableServices={invoiceableServices}
+          occupations={occupations.map((o) => ({ id: o.id, name: o.name }))}
+          countries={Array.from(
+            new Set(leads.map((l) => l.personCountry).filter((c): c is string => Boolean(c))),
+          ).sort((a, b) => a.localeCompare(b))}
         />
       </FadeUp>
     </div>

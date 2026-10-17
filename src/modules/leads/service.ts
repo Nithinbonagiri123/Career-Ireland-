@@ -6,7 +6,7 @@ import { db } from '@/lib/db/client';
 import { invoices } from '@/lib/db/schema/billing';
 import { immigrationCases } from '@/lib/db/schema/immigration';
 import { type Lead, leads } from '@/lib/db/schema/leads';
-import { candidateProfiles } from '@/lib/db/schema/persons';
+import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import { employers, jobRequisitions } from '@/lib/db/schema/recruitment';
 import { serviceCatalogItems } from '@/lib/db/schema/services';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
@@ -73,6 +73,7 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
       const p = data.person;
       const created = await insertPerson(tx, {
         firstName: p.firstName.trim(),
+        middleName: blankToNull(p.middleName),
         lastName: p.lastName.trim(),
         email: blankToNull(p.email),
         phone: blankToNull(p.phone),
@@ -80,6 +81,9 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
         nationality: blankToNull(p.nationality),
         currentCountry: blankToNull(p.currentCountry),
         currentCity: blankToNull(p.currentCity),
+        addressLine1: blankToNull(p.addressLine1),
+        addressLine2: blankToNull(p.addressLine2),
+        primaryOccupationId: blankToNull(p.primaryOccupationId),
         source: p.source,
         notes: blankToNull(p.notes),
       });
@@ -278,6 +282,27 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
       );
     }
 
+    // Stage 4 — detect ordinary (pro-forma-origin) vs manual-override
+    // conversion. Ordinary: a CONVERTED pro forma already issued an
+    // invoice for this lead, so the money record exists. Manual:
+    // operator is accepting without a pro forma, so the audit log
+    // needs a reason to explain why.
+    const [hasPfInvoice] = await tx.execute<{ exists: boolean }>(sql`
+      SELECT EXISTS(
+        SELECT 1 FROM invoices i
+        INNER JOIN pro_forma_official_invoices pfi ON pfi.invoice_id = i.id
+        WHERE i.source_lead_id = ${lead.id}
+      ) AS exists
+    `);
+    const isOrdinaryPfConversion = Boolean(hasPfInvoice?.exists);
+    const reason = (parsed.reason ?? '').trim();
+    if (!isOrdinaryPfConversion && reason.length < 3) {
+      throw new ValidationError(
+        'Reason required for manual conversion (min 3 characters). For ordinary pro-forma conversions no reason is needed because the invoice itself is the audit record.',
+        { reason: 'Please note why this lead is being accepted outside the pro-forma flow.' },
+      );
+    }
+
     let entityId: string;
     let invoiceUpdate: { column: 'immigrationCaseId' | 'jobRequisitionId'; value: string } | null =
       null;
@@ -293,9 +318,23 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
         entityId = existingProfile.id;
       } else {
         // Session 33 — same auto-assign rule on lead accept.
+        // Stage 4 — transfer the person's primary profession (which may
+        // have been set at lead-creation time) onto the newly-created
+        // candidate profile. Middle name + address live on `persons` so
+        // the profile inherits them via the FK; profession lives on both
+        // tables and the identity-level value is the source of truth.
+        const [personRow] = await tx
+          .select({ primaryOccupationId: persons.primaryOccupationId })
+          .from(persons)
+          .where(eq(persons.id, lead.personId))
+          .limit(1);
         const [newProfile] = await tx
           .insert(candidateProfiles)
-          .values({ personId: lead.personId, assignedUserId: session.user.id })
+          .values({
+            personId: lead.personId,
+            assignedUserId: session.user.id,
+            primaryOccupationId: personRow?.primaryOccupationId ?? null,
+          })
           .returning();
         if (!newProfile) throw new Error('candidate_profiles insert returned no row');
         entityId = newProfile.id;
@@ -304,7 +343,11 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
           entityType: 'candidate_profile',
           entityId: newProfile.id,
           action: 'CREATED',
-          after: { personId: lead.personId, assignedUserId: session.user.id },
+          after: {
+            personId: lead.personId,
+            assignedUserId: session.user.id,
+            primaryOccupationId: personRow?.primaryOccupationId ?? null,
+          },
           context: { via: 'lead_accept', leadId: lead.id, reason: parsed.reason },
         });
       }
@@ -500,34 +543,66 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
       });
     }
 
-    const proofRef =
-      parsed.proofReference && parsed.proofReference.trim().length > 0
-        ? parsed.proofReference.trim()
-        : null;
-    const payment = await insertPayment(tx, {
-      serviceEngagementId: engagementId,
-      amount: parsed.amount,
-      currencyCode: parsed.currencyCode,
-      method: parsed.method,
-      proofReference: proofRef,
-      receivedAt: parsed.receivedAt ? new Date(parsed.receivedAt) : null,
-      status: proofRef ? 'PROOF_UPLOADED' : 'PENDING',
-    });
-    await recordAudit(tx, {
-      actorUserId: session.user.id,
-      entityType: 'payment',
-      entityId: payment.id,
-      action: 'CREATED',
-      after: {
-        amount: payment.amount,
-        currency: payment.currencyCode,
-        method: payment.method,
-        status: payment.status,
-      },
-      context: { via: 'lead_accept', leadId: lead.id, engagementId },
-    });
+    // Stage 3 guard: if the lead's existing invoice originated from a
+    // pro forma (i.e. a `pro_forma_official_invoices` row references
+    // it), the money chain is already in place — engagement, invoice,
+    // one or more verified payments, and the full line-items table all
+    // exist. Creating ANOTHER payment here (the legacy path below) would
+    // double-count. Skip payment creation entirely for the pro-forma
+    // origin case; the operational entity is still materialised above
+    // and the lead is stamped CONVERTED below.
+    const isProFormaOriginInvoice = existingLeadInvoice
+      ? await (async () => {
+          const [row] = await tx.execute<{ exists: boolean }>(
+            sql`SELECT EXISTS(SELECT 1 FROM pro_forma_official_invoices WHERE invoice_id = ${existingLeadInvoice.id}) AS exists`,
+          );
+          return Boolean(row?.exists);
+        })()
+      : false;
 
-    await performPaymentVerification(tx, payment, session.user.id);
+    if (!isProFormaOriginInvoice) {
+      const proofRef =
+        parsed.proofReference && parsed.proofReference.trim().length > 0
+          ? parsed.proofReference.trim()
+          : null;
+      const payment = await insertPayment(tx, {
+        serviceEngagementId: engagementId,
+        amount: parsed.amount,
+        currencyCode: parsed.currencyCode,
+        method: parsed.method,
+        proofReference: proofRef,
+        receivedAt: parsed.receivedAt ? new Date(parsed.receivedAt) : null,
+        status: proofRef ? 'PROOF_UPLOADED' : 'PENDING',
+      });
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'payment',
+        entityId: payment.id,
+        action: 'CREATED',
+        after: {
+          amount: payment.amount,
+          currency: payment.currencyCode,
+          method: payment.method,
+          status: payment.status,
+        },
+        context: { via: 'lead_accept', leadId: lead.id, engagementId },
+      });
+
+      await performPaymentVerification(tx, payment, session.user.id);
+    } else {
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'invoice',
+        entityId: existingLeadInvoice.id,
+        action: 'REUSED_FROM_PRO_FORMA',
+        context: {
+          via: 'lead_accept',
+          leadId: lead.id,
+          engagementId,
+          note: 'Pro-forma-originated invoice detected; skipped duplicate payment creation.',
+        },
+      });
+    }
 
     // Stamp the acceptance on the lead itself so a repeat click can't
     // create a duplicate case.
