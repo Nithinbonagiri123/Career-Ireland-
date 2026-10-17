@@ -18,6 +18,7 @@ import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
 import { FinancialSummaryCard } from '@/components/billing/financial-summary-card';
+import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { EditPersonDialog } from '@/components/edit-person-dialog';
 import { EmptyState } from '@/components/empty-state';
 import { ImmigrationCasesPanel } from '@/components/immigration-cases-panel';
@@ -40,6 +41,7 @@ import { candidateProfiles } from '@/lib/db/schema/persons';
 import { statusTone } from '@/lib/ui/status-tone';
 import { listApplicationsForPerson } from '@/modules/applications/service';
 import {
+  fetchInvoiceableServicesFor,
   fetchLatestBillingLinksForPerson,
   fetchPersonBillingHistory,
 } from '@/modules/billing/read';
@@ -69,6 +71,7 @@ import {
   SkillsSection,
 } from './candidate-details-panel';
 import { CandidateTabs } from './candidate-tabs';
+import { CloseCandidateButton } from './close-candidate-button';
 import { CvSuggestionsPanel } from './cv-suggestions-panel';
 import { DocumentsSection } from './documents-section';
 import { EmailAccountPanel } from './email-account-panel';
@@ -129,6 +132,7 @@ export default async function CandidateDetail({
     allDocumentTypes,
     staffUsers,
     allOccupations,
+    invoiceableServices,
   ] = await Promise.all([
     fetchPersonRequirements(id),
     fetchPersonDocuments(id),
@@ -144,6 +148,7 @@ export default async function CandidateDetail({
     fetchDocumentTypes(),
     fetchStaffUserOptions(),
     fetchOccupations(),
+    fetchInvoiceableServicesFor('PERSON'),
   ]);
   // Immigration cross-business hooks: preload employers + application
   // types + this person's existing cases so we can render the Raise
@@ -425,8 +430,16 @@ export default async function CandidateDetail({
         </div>
       )}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="text-base">Billing history</CardTitle>
+          <GenerateInvoiceDialog
+            payerMode="PERSON"
+            payerId={id}
+            payerLabel={fullName}
+            services={invoiceableServices}
+            triggerLabel="Generate invoice"
+            triggerVariant="outline"
+          />
         </CardHeader>
         <CardContent>
           <BillingSection
@@ -587,6 +600,14 @@ export default async function CandidateDetail({
                   applicationTypes={immigrationApplicationTypes}
                   prefill={{ beneficiaryPersonId: person.id }}
                 />,
+                candidateProfile && (
+                  <CloseCandidateButton
+                    key="close"
+                    personId={person.id}
+                    candidateName={fullName}
+                    currentLifecycleStatus={candidateProfile.lifecycleStatus}
+                  />
+                ),
               ]}
             />
           }

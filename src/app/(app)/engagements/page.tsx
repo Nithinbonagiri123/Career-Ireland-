@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchEngagements } from '@/modules/commerce/service';
 import { fetchCurrencies } from '@/modules/currencies/service';
+import { fetchEmployers } from '@/modules/employers/service';
 import { fetchPersons } from '@/modules/persons/service';
 import { fetchServiceCatalog } from '@/modules/services-catalog/service';
 import { fetchAppSettings } from '@/modules/settings/service';
@@ -22,11 +23,12 @@ export default async function EngagementsPage({
   await requirePermission('candidate_services', 'engagements', 'view');
   const { created, from, to } = await searchParams;
   const createdRange = parseDateRangeParams({ created, from, to });
-  const [engagements, services, currencies, persons, settings] = await Promise.all([
+  const [engagements, services, currencies, persons, employers, settings] = await Promise.all([
     fetchEngagements(createdRange),
     fetchServiceCatalog(),
     fetchCurrencies(),
     fetchPersons(),
+    fetchEmployers('all'),
     fetchAppSettings(),
   ]);
 
@@ -45,6 +47,7 @@ export default async function EngagementsPage({
                 services={services}
                 currencies={currencies}
                 persons={persons}
+                employers={employers}
               />
             </div>
           }

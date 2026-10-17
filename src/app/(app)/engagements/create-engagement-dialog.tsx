@@ -23,6 +23,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { Currency } from '@/lib/db/schema/currencies';
 import type { Person } from '@/lib/db/schema/persons';
+import type { Employer } from '@/lib/db/schema/recruitment';
 import type { ServiceCatalogItem } from '@/lib/db/schema/services';
 import { useFormDialog } from '@/lib/hooks/use-form-dialog';
 import { createEngagementAction } from '@/modules/commerce/actions';
@@ -33,9 +34,10 @@ type Props = {
   services: ServiceCatalogItem[];
   currencies: Currency[];
   persons: Person[];
+  employers: Employer[];
 };
 
-export function CreateEngagementDialog({ services, currencies, persons }: Props) {
+export function CreateEngagementDialog({ services, currencies, persons, employers }: Props) {
   const activeServices = useMemo(() => services.filter((s) => s.isActive), [services]);
   const activeCurrencies = useMemo(() => currencies.filter((c) => c.isActive), [currencies]);
 
@@ -139,9 +141,7 @@ export function CreateEngagementDialog({ services, currencies, persons }: Props)
           <FormField id="e-payer-mode" label="Payer">
             <Select id="e-payer-mode" {...register('payerMode')}>
               <option value="PERSON">Person (candidate pays)</option>
-              <option value="EMPLOYER" disabled>
-                Employer (needs 5.9 — coming soon)
-              </option>
+              <option value="EMPLOYER">Employer (business pays)</option>
             </Select>
           </FormField>
 
@@ -160,6 +160,28 @@ export function CreateEngagementDialog({ services, currencies, persons }: Props)
                 {persons.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.firstName} {p.lastName} — {p.email ?? p.phone ?? 'no contact'}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+          )}
+
+          {payerMode === 'EMPLOYER' && (
+            <FormField
+              id="e-payer-employer"
+              label="Payer employer"
+              error={errors.payerEmployerId?.message}
+            >
+              <Select
+                id="e-payer-employer"
+                aria-invalid={Boolean(errors.payerEmployerId)}
+                {...register('payerEmployerId')}
+              >
+                <option value="">— select employer —</option>
+                {employers.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.legalName}
+                    {e.tradingName && e.tradingName !== e.legalName ? ` (${e.tradingName})` : ''}
                   </option>
                 ))}
               </Select>

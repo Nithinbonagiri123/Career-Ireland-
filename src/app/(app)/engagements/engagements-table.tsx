@@ -1,7 +1,8 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { Archive, CheckCircle2, MoreHorizontal, Play } from 'lucide-react';
+import { Archive, CheckCircle2, Clock, MoreHorizontal, Play } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -49,7 +50,7 @@ export function EngagementsTable({ engagements }: { engagements: EngagementListR
   // RSC payload so the row's status badge reflects the new state —
   // without it the DB updates but the UI looks like nothing happened.
   const transition = useCallback(
-    (e: EngagementListRow, status: 'ACTIVE' | 'COMPLETED', verb: string) => {
+    (e: EngagementListRow, status: 'ACTIVE' | 'COMPLETED' | 'PENDING_PAYMENT', verb: string) => {
       if (status === 'COMPLETED' && !window.confirm('Mark this service as complete?')) return;
       setBusyId(e.id);
       startTransition(async () => {
@@ -75,17 +76,42 @@ export function EngagementsTable({ engagements }: { engagements: EngagementListR
         header: 'Payer',
         accessorKey: 'payerLabel',
         size: 180,
-        cell: ({ row }) => <span className="text-xs">{row.original.payerLabel}</span>,
+        cell: ({ row }) =>
+          row.original.payerPersonId ? (
+            <Link
+              href={`/candidates/${row.original.payerPersonId}`}
+              className="text-xs underline-offset-2 hover:underline"
+            >
+              {row.original.payerLabel}
+            </Link>
+          ) : row.original.payerEmployerId ? (
+            <Link
+              href={`/employers/${row.original.payerEmployerId}`}
+              className="text-xs underline-offset-2 hover:underline"
+            >
+              {row.original.payerLabel}
+            </Link>
+          ) : (
+            <span className="text-xs">{row.original.payerLabel}</span>
+          ),
       },
       {
         header: 'Beneficiary',
         accessorKey: 'beneficiaryName',
         size: 180,
-        cell: ({ row }) => (
-          <span className="text-xs text-muted-foreground">
-            {row.original.beneficiaryName ?? '—'}
-          </span>
-        ),
+        cell: ({ row }) =>
+          row.original.beneficiaryPersonId ? (
+            <Link
+              href={`/candidates/${row.original.beneficiaryPersonId}`}
+              className="text-xs text-muted-foreground underline-offset-2 hover:underline hover:text-foreground"
+            >
+              {row.original.beneficiaryName ?? '—'}
+            </Link>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              {row.original.beneficiaryName ?? '—'}
+            </span>
+          ),
       },
       {
         header: 'Amount',
@@ -130,6 +156,13 @@ export function EngagementsTable({ engagements }: { engagements: EngagementListR
                 <MoreHorizontal className="size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {e.status === 'REQUESTED' && (
+                  <DropdownMenuItem
+                    onSelect={() => transition(e, 'PENDING_PAYMENT', 'moved to awaiting payment')}
+                  >
+                    <Clock className="mr-2 size-4" /> Mark awaiting payment
+                  </DropdownMenuItem>
+                )}
                 {(e.status === 'REQUESTED' || e.status === 'PENDING_PAYMENT') && (
                   <DropdownMenuItem onSelect={() => transition(e, 'ACTIVE', 'started')}>
                     <Play className="mr-2 size-4" /> Start service
