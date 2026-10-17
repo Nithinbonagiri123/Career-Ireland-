@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
-import { requirePermission } from '@/lib/auth/session';
+import { requirePermission, requireSession } from '@/lib/auth/session';
 import { formatCurrency } from '@/lib/currency';
 import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
 import { fetchCurrencies } from '@/modules/currencies/service';
@@ -18,6 +18,7 @@ import {
 } from '../pro-forma-actions';
 import { ProFormaComposer } from '../pro-forma-composer';
 import { RecordPaymentDialog, VerifyPaymentButton } from '../record-payment-dialog';
+import { RefundPaymentButton } from '../refund-payment-dialog';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +34,13 @@ export default async function ProFormaDetailPage({
   params: Promise<{ id: string; pfId: string }>;
 }) {
   await requirePermission('candidate_services', 'proformas', 'view');
+  const session = await requireSession();
   const { id: leadId, pfId } = await params;
+  // Pre-issuance refund is Finance-only (ADMIN/FINANCE/owner). Render
+  // the button exclusively for those roles; the server action also
+  // enforces this but the UI gate keeps the surface honest.
+  const canRefund =
+    session.user.isOwner || session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
 
   const [pf, services, currencies, revisions] = await Promise.all([
     fetchProForma(pfId).catch(() => null),
@@ -277,9 +284,26 @@ export default async function ProFormaDetailPage({
                         )}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {(p.status === 'PENDING' || p.status === 'PROOF_UPLOADED') && (
-                          <VerifyPaymentButton paymentId={p.id} />
-                        )}
+                        <div className="flex items-center justify-end gap-1.5">
+                          {(p.status === 'PENDING' || p.status === 'PROOF_UPLOADED') && (
+                            <VerifyPaymentButton paymentId={p.id} />
+                          )}
+                          {/* Pre-issuance refund: Finance only, and only
+                              while the pro forma is still ACCEPTED (an
+                              invoice-side refund path handles CONVERTED
+                              via credit note). Shown on verified or
+                              partially-refunded payments; the service
+                              re-checks the role + state. */}
+                          {canRefund &&
+                            pf.status === 'ACCEPTED' &&
+                            (p.status === 'VERIFIED' || p.status === 'PARTIALLY_REFUNDED') && (
+                              <RefundPaymentButton
+                                paymentId={p.id}
+                                paymentAmount={p.amount}
+                                currencyCode={p.currencyCode}
+                              />
+                            )}
+                        </div>
                       </td>
                     </tr>
                   ))}
