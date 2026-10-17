@@ -158,6 +158,9 @@ jobs:
       CRON_SECRET: ci-placeholder-cron-secret
       EMAIL_CRED_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       E2E_SKIP_UPLOAD: '1'
+      # qa-supplement.spec.ts hr test resets state via Clock out →
+      # Clock in. Disables the once-per-day guard in modules/hr/service.
+      E2E_SKIP_HR_DAILY_LIMIT: '1'
 
     steps:
       - name: Checkout

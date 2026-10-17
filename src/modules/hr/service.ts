@@ -368,11 +368,12 @@ export async function clockIn(ip: string | null): Promise<AttendanceSession> {
     // same day. Prevents staff from accidentally logging two shifts
     // against the same date or using re-clock-in to pad hours.
     //
-    // Skipped in tests: the HR e2e (qa-supplement) deliberately
-    // Clock out → Clock in to reset state before asserting the
-    // Working-state UI. Running the guard in CI would make the test
-    // depend on real wall-clock time, which is unreliable.
-    if (process.env.NODE_ENV !== 'test') {
+    // Skipped when E2E_SKIP_HR_DAILY_LIMIT is set: the HR e2e
+    // (qa-supplement) deliberately Clock out → Clock in to reset
+    // state before asserting the Working-state UI. We can't gate on
+    // NODE_ENV because the CI build runs `next start` which bakes in
+    // NODE_ENV=production — a dedicated flag is the honest signal.
+    if (process.env.E2E_SKIP_HR_DAILY_LIMIT !== '1') {
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
       const [existingToday] = await tx
