@@ -175,21 +175,21 @@ export function ClockWidget({
       <DropdownMenuContent align="end" className="min-w-[180px]">
         {status === 'working' ? (
           <>
-            <DropdownMenuItem onSelect={onStartBreak}>
+            <DropdownMenuItem onClick={onStartBreak}>
               <Coffee className="mr-2 size-4" /> Start break
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onSelect={onClockOut}>
+            <DropdownMenuItem variant="destructive" onClick={onClockOut}>
               <LogOut className="mr-2 size-4" /> Clock out
             </DropdownMenuItem>
           </>
         ) : (
           <>
-            <DropdownMenuItem onSelect={onEndBreak}>
+            <DropdownMenuItem onClick={onEndBreak}>
               <Play className="mr-2 size-4" /> End break
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onSelect={onClockOut}>
+            <DropdownMenuItem variant="destructive" onClick={onClockOut}>
               <LogOut className="mr-2 size-4" /> Clock out
             </DropdownMenuItem>
           </>
