@@ -1,5 +1,15 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, integer, jsonb, numeric, pgTable, text, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  date,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  text,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { createdAt, updatedAt } from './_shared';
 import { users } from './users';
 
@@ -70,6 +80,18 @@ export const appSettings = pgTable(
     vatRatePercent: numeric('vat_rate_percent', { precision: 5, scale: 2 })
       .notNull()
       .default('0.00'),
+
+    /**
+     * Stage 1 additive: date on which VAT registration becomes effective.
+     * Nullable while the business is not VAT registered. When set, the
+     * Stage 2 invoice issuer must consult this date — invoices issued
+     * BEFORE the effective date use rate 0 / treatment OUTSIDE_SCOPE
+     * regardless of `vatRegistered`, and invoices issued ON or AFTER
+     * use `vatRatePercent` with treatment STANDARD. Historical invoices
+     * snapshot their rate on the row (already true via billing.ts), so
+     * flipping the switch does NOT retro-tax prior documents.
+     */
+    vatRegistrationEffectiveDate: date('vat_registration_effective_date'),
 
     /**
      * Phase 3 blueprint §7.2 — app-wide default payment terms applied

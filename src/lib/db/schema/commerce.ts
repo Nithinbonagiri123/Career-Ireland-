@@ -4,6 +4,7 @@ import { createdAt, updatedAt } from './_shared';
 import { currencies } from './currencies';
 import { documentInstances } from './documents';
 import { persons } from './persons';
+import { proFormaInvoices } from './proformas';
 import { employers } from './recruitment';
 import { serviceCatalogItems, servicePackages } from './services';
 import { users } from './users';
@@ -71,6 +72,16 @@ export const payments = pgTable(
     serviceEngagementId: uuid('service_engagement_id')
       .notNull()
       .references(() => serviceEngagements.id),
+    /** Stage 1 additive: lets a payment be reconciled against an accepted
+     *  pro forma without changing the engagement-based accounting path.
+     *  Nullable so (a) historical payments keep working untouched and
+     *  (b) non-CS payments (recruitment / immigration) that have no
+     *  pro-forma concept stay valid. The Stage 2 payment service uses
+     *  this column to decide when to trigger official-invoice issuance;
+     *  until then it has no behavioural effect. No FK here — see the
+     *  table below (proformas.ts doesn't import from commerce.ts so the
+     *  one-way reference is safe). */
+    proFormaInvoiceId: uuid('pro_forma_invoice_id').references(() => proFormaInvoices.id),
     amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
     currencyCode: char('currency_code', { length: 3 })
       .notNull()
@@ -96,6 +107,7 @@ export const payments = pgTable(
   (t) => [
     index('payments_engagement_idx').on(t.serviceEngagementId),
     index('payments_status_idx').on(t.status),
+    index('payments_pro_forma_idx').on(t.proFormaInvoiceId),
   ],
 );
 

@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
+import { type OccupationOption, OccupationPicker } from '@/components/occupation-picker';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -52,9 +53,11 @@ import { createServiceItemFromNameAction } from '@/modules/services-catalog/acti
 export function CreateLeadDialog({
   invoiceableServices,
   currencies,
+  occupations,
 }: {
   invoiceableServices: InvoiceableService[];
   currencies: Currency[];
+  occupations: OccupationOption[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -83,11 +86,13 @@ export function CreateLeadDialog({
     reset,
     watch,
     getValues,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<CreatePersonInput>({
     resolver: zodResolver(CreatePersonSchema),
     defaultValues: {
       firstName: '',
+      middleName: '',
       lastName: '',
       email: '',
       phone: '',
@@ -95,10 +100,17 @@ export function CreateLeadDialog({
       nationality: '',
       currentCountry: '',
       currentCity: '',
+      addressLine1: '',
+      addressLine2: '',
+      primaryOccupationId: '',
       source: 'DIRECT',
       notes: '',
     },
   });
+  // Local list of occupations so inline-created ones appear immediately
+  // without a refetch. See occupation-picker for the pattern.
+  const [localOccupations, setLocalOccupations] = useState<OccupationOption[]>(occupations);
+  const selectedOccupationId = watch('primaryOccupationId') ?? '';
 
   // ── Optional first-invoice state ──────────────────────────────
   const [serviceId, setServiceId] = useState<string>('');
@@ -505,23 +517,81 @@ export function CreateLeadDialog({
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="cl-email">Email</Label>
-                  <Input id="cl-email" type="email" {...register('email')} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="cl-phone">Phone</Label>
-                  <Input id="cl-phone" type="tel" {...register('phone')} />
-                </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cl-middle">Middle name (optional)</Label>
+                <Input id="cl-middle" {...register('middleName')} />
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="cl-country">Country</Label>
+                  <Label htmlFor="cl-email">
+                    Email
+                    {targetBusiness === 'CANDIDATE_SERVICES' && (
+                      <span className="text-destructive"> *</span>
+                    )}
+                  </Label>
+                  <Input id="cl-email" type="email" {...register('email')} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="cl-phone">
+                    Phone
+                    {targetBusiness === 'CANDIDATE_SERVICES' && (
+                      <span className="text-destructive"> *</span>
+                    )}
+                  </Label>
+                  <Input id="cl-phone" type="tel" {...register('phone')} />
+                </div>
+              </div>
+              {targetBusiness === 'CANDIDATE_SERVICES' && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="cl-profession">
+                    Primary profession
+                    <span className="text-destructive"> *</span>
+                  </Label>
+                  <input type="hidden" {...register('primaryOccupationId')} />
+                  <OccupationPicker
+                    inputId="cl-profession"
+                    options={localOccupations}
+                    value={selectedOccupationId}
+                    onChange={(id) => setValue('primaryOccupationId', id, { shouldDirty: true })}
+                    onOptionsChanged={(opt) =>
+                      setLocalOccupations((prev) =>
+                        prev.some((o) => o.id === opt.id) ? prev : [opt, ...prev],
+                      )
+                    }
+                    placeholder="Pick profession…"
+                  />
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="cl-addr1">
+                  Address line 1
+                  {targetBusiness === 'CANDIDATE_SERVICES' && (
+                    <span className="text-destructive"> *</span>
+                  )}
+                </Label>
+                <Input id="cl-addr1" {...register('addressLine1')} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cl-addr2">Address line 2 (optional)</Label>
+                <Input id="cl-addr2" {...register('addressLine2')} />
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="cl-country">
+                    Country
+                    {targetBusiness === 'CANDIDATE_SERVICES' && (
+                      <span className="text-destructive"> *</span>
+                    )}
+                  </Label>
                   <Input id="cl-country" {...register('currentCountry')} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="cl-city">City</Label>
+                  <Label htmlFor="cl-city">
+                    City
+                    {targetBusiness === 'CANDIDATE_SERVICES' && (
+                      <span className="text-destructive"> *</span>
+                    )}
+                  </Label>
                   <Input id="cl-city" {...register('currentCity')} />
                 </div>
               </div>

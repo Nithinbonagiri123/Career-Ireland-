@@ -8,8 +8,18 @@ export const PersonSourceSchema = z.enum([
   'OTHER',
 ]);
 
+/**
+ * Base person schema — used by lead creation for all three business
+ * lines. All new fields are optional here so Recruitment and Immigration
+ * flows keep working unchanged. The Candidate Services lead-creation
+ * schema (modules/leads/schemas.ts) adds a superRefine that marks
+ * email, phone, addressLine1, currentCountry, currentCity, and
+ * primaryOccupationId as required for CS leads only.
+ */
 export const CreatePersonSchema = z.object({
   firstName: z.string().min(1, 'First name required').max(100),
+  /** Optional for every business line. */
+  middleName: z.string().max(100).optional().or(z.literal('')),
   lastName: z.string().min(1, 'Last name required').max(100),
   email: z.string().email().max(200).optional().or(z.literal('')),
   phone: z.string().max(30).optional().or(z.literal('')),
@@ -17,6 +27,13 @@ export const CreatePersonSchema = z.object({
   nationality: z.string().max(80).optional().or(z.literal('')),
   currentCountry: z.string().max(80).optional().or(z.literal('')),
   currentCity: z.string().max(120).optional().or(z.literal('')),
+  /** Street address — Stage 1 adds these; nullable in schema so
+   *  Recruitment / Immigration persons don't need to fill them. */
+  addressLine1: z.string().max(255).optional().or(z.literal('')),
+  addressLine2: z.string().max(255).optional().or(z.literal('')),
+  /** Primary profession at identity level. FK to occupations.id.
+   *  Validated against the occupations catalog in the service. */
+  primaryOccupationId: z.string().uuid().optional().or(z.literal('')),
   source: PersonSourceSchema,
   notes: z.string().max(2000).optional().or(z.literal('')),
 });

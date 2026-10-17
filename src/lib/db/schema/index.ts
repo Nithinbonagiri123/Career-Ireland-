@@ -21,6 +21,7 @@ export * from './notifications';
 export * from './occupations';
 export * from './permissions';
 export * from './persons';
+export * from './proformas';
 export * from './recruitment';
 export * from './reference';
 export * from './services';

@@ -39,7 +39,7 @@ export const leads = pgTable(
     personId: uuid('person_id').references(() => persons.id),
     employerId: uuid('employer_id').references(() => employers.id),
     status: text('status', {
-      enum: ['NEW', 'CONTACTED', 'AWAITING_PAYMENT', 'CONVERTED', 'LOST', 'REJECTED'],
+      enum: ['NEW', 'CONTACTED', 'AWAITING_PAYMENT', 'CONVERTED', 'LOST', 'REJECTED', 'EXPIRED'],
     })
       .notNull()
       .default('NEW'),
@@ -51,6 +51,18 @@ export const leads = pgTable(
     conversionMethod: text('conversion_method', {
       enum: ['PAYMENT_VERIFIED', 'MANUAL_OVERRIDE'],
     }),
+    /** Free-text conversion rationale. Captured on the lead row itself
+     *  (previously audit-only) so Stage 2 UIs can surface it without a
+     *  separate audit-log query. Optional — the business approved
+     *  reason-not-required on the CS Convert flow. */
+    conversionReason: text('conversion_reason'),
+    /** Set by the Stage 2 lead-expiry cron when a stale, unactioned lead
+     *  is soft-expired. Protected cases (CONVERTED, accepted pro forma,
+     *  active engagement, in-flight payment) are excluded by the cron's
+     *  WHERE clause. Preserved for audit; never nulled on reactivation
+     *  (status flip + audit event is the correct reactivation path). */
+    expiredAt: timestamp('expired_at', { withTimezone: true }),
+    expiredByReason: text('expired_by_reason'),
     /** When the lead was Accepted into its target business. Distinct from
      *  convertedAt, which still tracks the classic CS 'became a candidate'
      *  moment; acceptedAt is the generalised handoff for all three targets. */

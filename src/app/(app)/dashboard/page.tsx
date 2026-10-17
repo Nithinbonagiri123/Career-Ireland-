@@ -29,6 +29,7 @@ import { fetchDashboardRevenue, fetchRevenueTrendBySource } from '@/modules/dash
 import { fetchDashboardMetrics } from '@/modules/dashboard/service';
 import { fetchDashboardTrends } from '@/modules/dashboard/trends';
 import { fetchHrDashboard, fetchStaffCurrentlyWorking } from '@/modules/hr/service';
+import { fetchOccupations } from '@/modules/occupations/service';
 import { fetchAppSettings } from '@/modules/settings/service';
 import { CreateLeadDialog } from '../leads/create-lead-dialog';
 import { ActivityFeed } from './activity-feed';
@@ -71,6 +72,7 @@ export default async function DashboardPage({
     invoiceableServices,
     currencies,
     myWork,
+    occupations,
   ] = await Promise.all([
     fetchDashboardMetrics(),
     fetchDashboardDrilldowns(),
@@ -89,6 +91,8 @@ export default async function DashboardPage({
     fetchInvoiceableServicesFor('PERSON'),
     fetchCurrencies(),
     fetchMyWorkCounts(),
+    // Occupation catalog for the CS lead-creation profession picker.
+    fetchOccupations(),
   ]);
 
   const today = new Date();
@@ -138,7 +142,15 @@ export default async function DashboardPage({
       <FadeUp delay={0.03}>
         <QuickActionsBar
           primary={
-            <CreateLeadDialog invoiceableServices={invoiceableServices} currencies={currencies} />
+            <CreateLeadDialog
+              invoiceableServices={invoiceableServices}
+              currencies={currencies}
+              occupations={occupations.map((o) => ({
+                id: o.id,
+                name: o.name,
+                isActive: o.isActive,
+              }))}
+            />
           }
         />
       </FadeUp>
