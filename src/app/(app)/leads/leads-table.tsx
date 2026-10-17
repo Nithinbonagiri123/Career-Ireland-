@@ -16,7 +16,6 @@ import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { DataTable } from '@/components/data-table/data-table';
-import { DocumentUploader } from '@/components/document-uploader';
 import { PromptDialog } from '@/components/prompt-dialog';
 import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
@@ -41,7 +40,6 @@ import { Label } from '@/components/ui/label';
 import { statusTone } from '@/lib/ui/status-tone';
 import { assignEntityAction } from '@/modules/assignments/actions';
 import type { InvoiceableService } from '@/modules/billing/read';
-import { ensurePaymentProofTypeAction } from '@/modules/document-types/actions';
 import {
   acceptLeadAction,
   archiveLeadAction,
@@ -548,6 +546,9 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
                     <option value="CASH">Cash</option>
                     <option value="OTHER">Other</option>
                   </select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Change if the money came via cash or another route.
+                  </p>
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="convertReceivedAt">Received at</Label>
