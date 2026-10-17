@@ -4,11 +4,13 @@ import { format, formatDistanceToNowStrict } from 'date-fns';
 import {
   ArrowRight,
   Briefcase,
+  CalendarCheck,
   Filter,
   Grid3x3,
   Mail,
   MapPin,
   Phone,
+  ShieldCheck,
   User2,
   UserCheck,
 } from 'lucide-react';
@@ -26,11 +28,21 @@ import { cn } from '@/lib/utils';
 import type { CandidateListRow } from '@/modules/candidates/repository';
 
 /**
- * Candidate tile — mirrors RequisitionCard so /candidates ?view=grid
- * feels like a natural sibling of /requisitions ?view=grid. Same
- * skeleton (source-chip → status → title → meta → tags → counters →
- * dual-action footer), driven by design-system primitives (StatusPill,
- * PipelineChip, RingCounter, MetaRow, Note tones).
+ * Candidate card — Stage 4.2 priority order:
+ *   1. Candidate name + email
+ *   2. Primary occupation (prominent, right under the name)
+ *   3. Immigration permission / stamp (when available)
+ *   4. Location + phone
+ *   5. Assigned staff + activation date
+ *   6. Apps / shortlists / placements counts (live, not placeholders)
+ *   7. View Profile + Reach Out actions
+ *   TALENT chip + availability status badge preserved in the header.
+ *
+ * Missing-data policy: a neutral placeholder ("No profession set",
+ * "Immigration not on file") replaces the field — never inferred from
+ * country or nationality. Long values truncate on a single line with
+ * the title attribute exposing the full string on hover + for screen
+ * readers.
  */
 export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
   const availability = availabilityTone(candidate.availabilityStatus);
@@ -44,15 +56,39 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
     addSuffix: true,
   });
   const activatedAbsolute = format(new Date(candidate.activatedAt), 'd MMM yyyy · HH:mm');
+  const immigrationExpiresAbsolute = candidate.immigrationExpiresOn
+    ? format(new Date(candidate.immigrationExpiresOn), 'd MMM yyyy')
+    : null;
+  const immigrationTone: StatusTone = (() => {
+    switch (candidate.immigrationStatus) {
+      case 'APPROVED':
+        return 'success';
+      case 'REJECTED':
+        return 'danger';
+      case 'CLOSED':
+        return 'neutral';
+      case 'SUBMITTED':
+      case 'UNDER_AUTHORITY_REVIEW':
+        return 'info';
+      default:
+        return 'warning';
+    }
+  })();
 
   return (
-    <Card className="flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 shadow-sm transition-shadow hover:shadow-md">
-      {/* Header — source chip + availability status + created ago */}
+    <Card
+      className="flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 shadow-sm transition-shadow hover:shadow-md"
+      aria-label={`Candidate ${candidate.fullName}`}
+    >
+      {/* Header — TALENT chip + availability status + added timestamp */}
       <div className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2">
         <PipelineChip stage="source" variant="solid" className="text-[10px] uppercase">
           Talent
         </PipelineChip>
         <StatusPill tone={availability.tone}>{availability.label}</StatusPill>
+        {candidate.lifecycleStatus !== 'ACTIVE' && (
+          <StatusPill tone={lifecycle.tone}>{lifecycle.label}</StatusPill>
+        )}
         <time
           dateTime={new Date(candidate.createdAt).toISOString()}
           title={postedAbsolute}
@@ -62,31 +98,110 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
         </time>
       </div>
 
-      {/* Title strip — avatar + name */}
-      <div className="flex items-center justify-between gap-3 px-4 pt-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span
-            aria-hidden
-            className="grid size-9 shrink-0 place-items-center rounded-full bg-note-blue text-xs font-semibold text-note-blue-ink"
-          >
-            {initials}
-          </span>
+      {/* 1. Name + email */}
+      <div className="flex items-center gap-2.5 px-4 pt-3">
+        <span
+          aria-hidden
+          className="grid size-9 shrink-0 place-items-center rounded-full bg-note-blue text-xs font-semibold text-note-blue-ink"
+        >
+          {initials}
+        </span>
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-semibold leading-tight" title={candidate.fullName}>
+            {candidate.fullName}
+          </h3>
+          {candidate.email ? (
+            <p className="truncate text-[11px] text-muted-foreground" title={candidate.email}>
+              {candidate.email}
+            </p>
+          ) : (
+            <p className="truncate text-[11px] italic text-muted-foreground">no email on file</p>
+          )}
+        </div>
+      </div>
+
+      {/* 2. Primary occupation — PROMINENT. Dedicated row directly under
+          the name so recruiters can scan a grid of cards for the right
+          profession without opening every profile. */}
+      <div className="mx-4 mt-3 rounded-md border border-pipeline-interview/30 bg-pipeline-interview/5 px-2.5 py-2">
+        <div className="flex items-start gap-2">
+          <Briefcase className="mt-0.5 size-3.5 shrink-0 text-pipeline-interview" aria-hidden />
           <div className="min-w-0">
-            <h3 className="truncate text-sm font-semibold leading-tight">{candidate.fullName}</h3>
-            {candidate.email && (
-              <p className="truncate text-[11px] text-muted-foreground">{candidate.email}</p>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Primary occupation
+            </div>
+            {candidate.primaryOccupationName ? (
+              <div
+                className="truncate text-sm font-medium leading-snug"
+                title={candidate.primaryOccupationName}
+              >
+                {candidate.primaryOccupationName}
+              </div>
+            ) : (
+              <div className="text-[12px] italic text-muted-foreground">No profession set</div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Meta */}
+      {/* 3. Immigration permission / stamp — only when a case exists.
+          Status is NEVER inferred from country or nationality. */}
+      <div className="mx-4 mt-2 rounded-md border bg-background px-2.5 py-2">
+        <div className="flex items-start gap-2">
+          <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-pipeline-review" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Immigration
+            </div>
+            {candidate.immigrationPermitLabel ? (
+              <>
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span
+                    className="truncate text-xs font-medium"
+                    title={candidate.immigrationPermitLabel}
+                  >
+                    {candidate.immigrationPermitLabel}
+                  </span>
+                  {candidate.immigrationStatus && (
+                    <StatusPill tone={immigrationTone}>
+                      {candidate.immigrationStatus.toLowerCase().replaceAll('_', ' ')}
+                    </StatusPill>
+                  )}
+                </div>
+                {candidate.immigrationExpiresOn && immigrationExpiresAbsolute && (
+                  <div
+                    className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground"
+                    title={immigrationExpiresAbsolute}
+                  >
+                    <CalendarCheck className="size-3" aria-hidden />
+                    expires {immigrationExpiresAbsolute}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-[12px] italic text-muted-foreground">
+                Immigration not on file
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 4+5. Location, phone, assigned staff, activation date */}
       <MetaList className="px-4 pt-3">
         <MetaRow icon={<MapPin className="text-pipeline-source" />}>
-          {candidate.currentCity ?? 'Location not set'}
+          {candidate.currentCity || candidate.currentCountry ? (
+            [candidate.currentCity, candidate.currentCountry].filter(Boolean).join(', ')
+          ) : (
+            <span className="italic text-muted-foreground">Location not set</span>
+          )}
         </MetaRow>
-        {candidate.phone && (
+        {candidate.phone ? (
           <MetaRow icon={<Phone className="text-pipeline-apply" />}>{candidate.phone}</MetaRow>
+        ) : (
+          <MetaRow icon={<Phone className="text-pipeline-apply" />}>
+            <span className="italic text-muted-foreground">No phone</span>
+          </MetaRow>
         )}
         <MetaRow icon={<UserCheck className="text-pipeline-review" />}>
           <OwnerAvatar
@@ -106,42 +221,29 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
         </MetaRow>
       </MetaList>
 
-      {/* Tags — Session 9: drop the duplicate availability chip (already
-          shown in the header) and only surface the lifecycle when it's
-          worth noticing (anything other than ACTIVE). */}
-      {candidate.lifecycleStatus !== 'ACTIVE' && (
-        <div className="flex flex-wrap gap-1.5 px-4 pt-3">
-          <StatusPill tone={lifecycle.tone}>{lifecycle.label}</StatusPill>
-        </div>
-      )}
-
-      {/* Counters — placeholder cells until we wire per-candidate stats
-          (applications, shortlists, interviews). Ring keeps parity with
-          the requisition card so the grids line up visually. */}
+      {/* 6. Live counters — apps / shortlists / placements */}
       <div className="mt-3 grid grid-cols-3 gap-1 px-4">
-        <RingCounter label="apps" value={0} tone="apply" />
-        <RingCounter label="shortlists" value={0} tone="shortlist" />
-        <RingCounter
-          label="placed"
-          value={candidate.availabilityStatus === 'PLACED' ? 1 : 0}
-          tone="placed"
-        />
+        <RingCounter label="apps" value={candidate.applicationsCount} tone="apply" />
+        <RingCounter label="shortlists" value={candidate.shortlistsCount} tone="shortlist" />
+        <RingCounter label="placed" value={candidate.placementsCount} tone="placed" />
       </div>
 
-      {/* Footer actions — sticky-note tones, same shape as RequisitionCard */}
+      {/* 7. Dual-action footer — View Profile + Reach Out */}
       <div className="mt-3 grid grid-cols-2 gap-0 border-t">
         <Link
           href={`/candidates/${candidate.personId}`}
           className="group flex items-center justify-center gap-1.5 bg-note-green py-2.5 text-xs font-semibold text-note-green-ink transition-all hover:brightness-95"
+          aria-label={`View profile of ${candidate.fullName}`}
         >
-          <User2 className="size-3.5" /> profile
+          <User2 className="size-3.5" /> View profile
           <ArrowRight className="size-3 opacity-70 transition-transform group-hover:translate-x-0.5" />
         </Link>
         <Link
           href={`/candidates/${candidate.personId}?tab=applications`}
           className="group flex items-center justify-center gap-1.5 bg-note-pink py-2.5 text-xs font-semibold text-note-pink-ink transition-all hover:brightness-95"
+          aria-label={`Reach out to ${candidate.fullName}`}
         >
-          <Mail className="size-3.5" /> reach
+          <Mail className="size-3.5" /> Reach out
           <ArrowRight className="size-3 opacity-70 transition-transform group-hover:translate-x-0.5" />
         </Link>
       </div>
@@ -207,8 +309,11 @@ export function CandidatesCardGrid({ candidates }: { candidates: CandidateListRo
       />
     );
   }
+  // Responsive grid: 1 column on mobile, 2 on tablet, 3 on laptop,
+  // 4 on wide desktop. items-stretch keeps rows uniform height even
+  // when some cards have an immigration block + others don't.
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {candidates.map((c) => (
         <CandidateCard key={c.candidateProfileId} candidate={c} />
       ))}

@@ -80,18 +80,16 @@ function main() {
     );
   }
 
-  /* 4. Hobby count ceiling */
+  /* 4. Hobby count ceiling (updated per Vercel docs 2026-07-15) */
   console.log('\n── 4. Hobby plan compatibility');
-  const HOBBY_MAX = 2;
-  if (crons.length > HOBBY_MAX) {
-    console.log(
-      `    ⚠ ${crons.length} cron entries exceed the Hobby ceiling of ${HOBBY_MAX}. If this project is on Pro (40-cron ceiling) this is fine. If still on Hobby, consolidate.`,
-    );
-  }
+  // Vercel's updated Hobby terms (effective 2026-07-15) allow 100 cron
+  // jobs per project with a once-per-day schedule limit per job. Our
+  // 5 daily crons are well within both constraints.
+  const HOBBY_MAX_JOBS = 100;
   check(
-    `cron count ${crons.length} within Pro ceiling (40)`,
-    crons.length <= 40,
-    `${crons.length} / 40`,
+    `cron count ${crons.length} within Hobby ceiling (${HOBBY_MAX_JOBS}, daily-only)`,
+    crons.length <= HOBBY_MAX_JOBS,
+    `${crons.length} / ${HOBBY_MAX_JOBS}`,
   );
 
   /* 5. Shared-resource check for the known pair (expire-leads + attendance) */
