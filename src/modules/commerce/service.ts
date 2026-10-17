@@ -340,13 +340,15 @@ export async function verifyPayment(input: VerifyPaymentInput): Promise<Payment>
 }
 
 // Shared verification body — called from `verifyPayment` (admin manually
-// confirming a PENDING / PROOF_UPLOADED row) and from `recordPayment`'s
+// confirming a PENDING / PROOF_UPLOADED row), from `recordPayment`'s
 // fast-path (ADMIN / FINANCE recording a payment they've already
-// confirmed in the bank statement, so the second click is pure friction).
+// confirmed in the bank statement, so the second click is pure friction),
+// and from `convertLead` in modules/leads (atomic "convert = record
+// payment" flow).
 //
 // Caller must have already fetched `before` inside `tx` and confirmed
 // it's not already VERIFIED or REJECTED.
-async function performPaymentVerification(
+export async function performPaymentVerification(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   before: Payment,
   actorUserId: string,
@@ -381,7 +383,10 @@ async function performPaymentVerification(
   });
 
   // Advance engagement PENDING_PAYMENT → ACTIVE now that funds are confirmed.
-  const engagement = await getEngagement(after.serviceEngagementId);
+  // Pass `tx` so this reads uncommitted writes from the same transaction —
+  // critical for the acceptLead path where the engagement was inserted
+  // moments ago inside this same tx.
+  const engagement = await getEngagement(after.serviceEngagementId, tx);
   if (engagement && engagement.status === 'PENDING_PAYMENT') {
     const advanced = await updateEngagement(tx, engagement.id, { status: 'ACTIVE' });
     await recordAudit(tx, {

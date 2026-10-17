@@ -72,18 +72,23 @@ export const UpdateLeadStatusSchema = z.object({
   notes: z.string().max(500).optional().or(z.literal('')),
 });
 
-export const ConvertLeadSchema = z.object({
-  leadId: z.string().uuid(),
-  method: z.enum(['PAYMENT_VERIFIED', 'MANUAL_OVERRIDE']),
-  reason: z.string().min(3).max(500),
-  /** Optional link to the uploaded payment proof document instance. Captured in audit context. */
-  paymentProofDocumentInstanceId: z.string().uuid().optional().or(z.literal('')),
-});
-
 export const AcceptLeadSchema = z.object({
   leadId: z.string().uuid(),
   /** Free-text rationale ('payment cleared', 'client signed', 'manual accept'). Audited. */
   reason: z.string().min(3).max(500),
+  // Payment-first conversion applies to all three business lines (CS,
+  // Immigration, Recruitment). Accepting a lead atomically creates the
+  // operational entity + engagement + payment + receipt in one tx —
+  // no lead becomes a candidate/case/requisition without the money.
+  // For Recruitment the engagement payer is the employer; for CS and
+  // Immigration it's the person. Resolved from lead.targetBusiness in
+  // the service.
+  serviceCatalogItemId: z.string().uuid(),
+  amount: z.string().refine((v) => !Number.isNaN(Number(v)) && Number(v) > 0, 'Must be > 0'),
+  currencyCode: z.string().length(3),
+  method: z.enum(['BANK_TRANSFER', 'CASH', 'OTHER']),
+  proofReference: z.string().max(500).optional().or(z.literal('')),
+  receivedAt: z.string().date().optional().or(z.literal('')),
 });
 
 export const ArchiveLeadSchema = z.object({
@@ -99,6 +104,5 @@ export const UnarchiveLeadSchema = z.object({
 export type CreateLeadInput = z.infer<typeof CreateLeadSchema>;
 export type AcceptLeadInput = z.infer<typeof AcceptLeadSchema>;
 export type UpdateLeadStatusInput = z.infer<typeof UpdateLeadStatusSchema>;
-export type ConvertLeadInput = z.infer<typeof ConvertLeadSchema>;
 export type ArchiveLeadInput = z.infer<typeof ArchiveLeadSchema>;
 export type UnarchiveLeadInput = z.infer<typeof UnarchiveLeadSchema>;

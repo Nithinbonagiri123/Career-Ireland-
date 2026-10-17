@@ -71,8 +71,18 @@ export async function listEngagements(createdRange?: DateRange): Promise<Engagem
   }));
 }
 
-export async function getEngagement(id: string): Promise<ServiceEngagement | null> {
-  const [row] = await db
+export async function getEngagement(
+  id: string,
+  tx?: DbExecutor,
+): Promise<ServiceEngagement | null> {
+  // Accept an optional tx so callers that just inserted the engagement in
+  // the same transaction can read it back. Without this, the fallback to
+  // `db` runs on a different connection and can't see the uncommitted
+  // insert — which bit the acceptLead flow: engagement stayed at
+  // PENDING_PAYMENT and no receipt was issued because the payer couldn't
+  // be resolved.
+  const executor = tx ?? db;
+  const [row] = await executor
     .select()
     .from(serviceEngagements)
     .where(eq(serviceEngagements.id, id))

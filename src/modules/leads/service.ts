@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import type { DateRange } from '@/lib/date-range';
@@ -8,18 +8,21 @@ import { immigrationCases } from '@/lib/db/schema/immigration';
 import { type Lead, leads } from '@/lib/db/schema/leads';
 import { candidateProfiles } from '@/lib/db/schema/persons';
 import { employers, jobRequisitions } from '@/lib/db/schema/recruitment';
+import { serviceCatalogItems } from '@/lib/db/schema/services';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import type { AssignmentScope } from '@/lib/scope';
 import { assertTransition, LEAD_TRANSITIONS } from '@/lib/state-machine';
+import { insertInvoice } from '@/modules/billing/service';
+import { getEngagement, insertEngagement, insertPayment } from '@/modules/commerce/repository';
+import { performPaymentVerification } from '@/modules/commerce/service';
 import { insertPerson } from '@/modules/persons/repository';
+import { fetchAppSettings } from '@/modules/settings/service';
 import { getLead, insertLead, type LeadListRow, listLeads, updateLead } from './repository';
 import {
   type AcceptLeadInput,
   AcceptLeadSchema,
   type ArchiveLeadInput,
   ArchiveLeadSchema,
-  type ConvertLeadInput,
-  ConvertLeadSchema,
   type CreateLeadInput,
   CreateLeadSchema,
   type UnarchiveLeadInput,
@@ -35,12 +38,14 @@ function blankToNull(v: string | undefined | null): string | null {
 export async function fetchLeads(
   scope?: AssignmentScope,
   createdRange?: DateRange,
+  targetBusiness?: Lead['targetBusiness'],
 ): Promise<LeadListRow[]> {
   const session = await requireInternalStaff();
   return listLeads({
     scope: scope ?? 'all',
     currentUserId: session.user.id,
     createdRange,
+    targetBusiness,
   });
 }
 
@@ -178,99 +183,6 @@ export async function updateLeadStatus(input: UpdateLeadStatusInput): Promise<Le
   });
 }
 
-/**
- * Convert a Lead into an active CandidateProfile.
- *  - MANUAL_OVERRIDE: staff authorises without payment (recorded)
- *  - PAYMENT_VERIFIED: called from Commerce (5.8) once proof is verified
- * If the Person already has a CandidateProfile, we just mark the Lead as CONVERTED
- * (idempotent — merged/returning persons don't get duplicate profiles).
- */
-export async function convertLead(input: ConvertLeadInput) {
-  const session = await requireInternalStaff();
-  const parsed = ConvertLeadSchema.parse(input);
-
-  return db.transaction(async (tx) => {
-    const lead = await getLead(parsed.leadId);
-    if (!lead) throw new BusinessRuleError('LEAD_NOT_FOUND', 'Lead not found');
-    if (lead.status === 'CONVERTED') {
-      throw new BusinessRuleError('LEAD_ALREADY_CONVERTED', 'Lead is already converted');
-    }
-    // convertLead is the classic CS-only 'become a candidate' handoff. A
-    // recruitment lead has no person, so this path can't apply — the new
-    // acceptLead flow (Phase D) handles all three targets uniformly.
-    if (lead.targetBusiness !== 'CANDIDATE_SERVICES' || !lead.personId) {
-      throw new BusinessRuleError(
-        'WRONG_LEAD_TARGET',
-        'convertLead only applies to CANDIDATE_SERVICES leads; use acceptLead for other targets',
-      );
-    }
-    const personId = lead.personId;
-
-    // Check for existing candidate profile on this person
-    const [existingProfile] = await tx
-      .select()
-      .from(candidateProfiles)
-      .where(eq(candidateProfiles.personId, personId))
-      .limit(1);
-
-    let profileId: string;
-    let createdNewProfile = false;
-    if (existingProfile) {
-      profileId = existingProfile.id;
-    } else {
-      // Session 33 — auto-assign the newly-materialised candidate to
-      // the operator accepting the lead (see memory
-      // `record-ownership-rules`).
-      const [newProfile] = await tx
-        .insert(candidateProfiles)
-        .values({ personId, assignedUserId: session.user.id })
-        .returning();
-      if (!newProfile) throw new Error('candidate_profiles insert returned no row');
-      profileId = newProfile.id;
-      createdNewProfile = true;
-
-      await recordAudit(tx, {
-        actorUserId: session.user.id,
-        entityType: 'candidate_profile',
-        entityId: newProfile.id,
-        action: 'CREATED',
-        after: { personId },
-        context: { via: 'lead_conversion', leadId: lead.id, method: parsed.method },
-      });
-    }
-
-    const updatedLead = await updateLead(tx, lead.id, {
-      status: 'CONVERTED',
-      convertedAt: new Date(),
-      convertedByUserId: session.user.id,
-      conversionMethod: parsed.method,
-    });
-
-    const proofId =
-      parsed.paymentProofDocumentInstanceId && parsed.paymentProofDocumentInstanceId.length > 0
-        ? parsed.paymentProofDocumentInstanceId
-        : null;
-
-    await recordAudit(tx, {
-      actorUserId: session.user.id,
-      entityType: 'lead',
-      entityId: lead.id,
-      action: 'CONVERTED',
-      before: { status: lead.status },
-      after: { status: updatedLead.status, conversionMethod: parsed.method },
-      context: {
-        reason: parsed.reason,
-        method: parsed.method,
-        candidateProfileId: profileId,
-        createdNewProfile,
-        ...(proofId ? { paymentProofDocumentInstanceId: proofId } : {}),
-      },
-    });
-
-    return { lead: updatedLead, candidateProfileId: profileId, createdNewProfile };
-  });
-}
-
 /** Soft-archive a lead. List queries filter archived rows out; the record itself is untouched. */
 export async function archiveLead(input: ArchiveLeadInput): Promise<Lead> {
   const session = await requireInternalStaff();
@@ -334,7 +246,7 @@ export async function unarchiveLead(input: UnarchiveLeadInput): Promise<Lead> {
  *
  * Per target:
  *   - CANDIDATE_SERVICES: activates the person's candidate_profile (same
- *     outcome as convertLead — deduped when a profile already exists).
+ *     outcome — profile deduped when one already exists for the person).
  *   - IMMIGRATION: creates an immigration_cases row (default caseType =
  *     EMPLOYMENT_PERMIT, operator picks the correct one on the case).
  *   - RECRUITMENT: creates a job_requisitions row in DRAFT (recruiter
@@ -469,6 +381,153 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
         .returning({ id: invoices.id });
       invoicesLinked = updated.length;
     }
+
+    // Payment-first: now that the operational entity exists, atomically
+    // create an engagement + payment and auto-verify. Payer is the
+    // employer for Recruitment leads and the person otherwise. If any
+    // step throws (overpayment guard, missing service, DB error), the
+    // whole transaction rolls back — no entity half-created, no lead
+    // half-converted.
+    const [service] = await tx
+      .select({ id: serviceCatalogItems.id, name: serviceCatalogItems.name })
+      .from(serviceCatalogItems)
+      .where(eq(serviceCatalogItems.id, parsed.serviceCatalogItemId))
+      .limit(1);
+    if (!service) {
+      throw new BusinessRuleError('SERVICE_NOT_FOUND', 'Selected service no longer exists');
+    }
+
+    // If the operator already generated an invoice on this lead (via the
+    // "+ Invoice" button on the leads table), that invoice already came
+    // with its own engagement — created by generateInvoiceForPayer. We
+    // must reuse that engagement + invoice; creating a second pair
+    // leaves the first invoice orphaned, which is the bug that showed
+    // up as 'INV-000004 ISSUED (unpaid) + INV-000005 PAID' both for the
+    // same conversion.
+    const [existingLeadInvoice] = await tx
+      .select({
+        id: invoices.id,
+        serviceEngagementId: invoices.serviceEngagementId,
+        currencyCode: invoices.currencyCode,
+        totalAmount: invoices.totalAmount,
+      })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.sourceLeadId, lead.id),
+          inArray(invoices.status, ['ISSUED', 'PARTIALLY_PAID']),
+        ),
+      )
+      .orderBy(desc(invoices.issuedAt))
+      .limit(1);
+
+    let engagementId: string;
+    if (existingLeadInvoice) {
+      // Reuse: fetch the engagement the invoice already points at.
+      const existingEng = await getEngagement(existingLeadInvoice.serviceEngagementId, tx);
+      if (!existingEng) {
+        throw new Error('invoice references an engagement that no longer exists');
+      }
+      engagementId = existingEng.id;
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'invoice',
+        entityId: existingLeadInvoice.id,
+        action: 'REUSED',
+        context: {
+          via: 'lead_accept',
+          leadId: lead.id,
+          engagementId,
+          note: 'Pre-existing lead invoice reused; no new invoice issued.',
+        },
+      });
+    } else {
+      const newEngagement = await insertEngagement(tx, {
+        serviceCatalogItemId: service.id,
+        payerPersonId: lead.targetBusiness === 'RECRUITMENT' ? null : lead.personId,
+        payerEmployerId: lead.targetBusiness === 'RECRUITMENT' ? lead.employerId : null,
+        beneficiaryPersonId: lead.personId,
+        agreedAmount: parsed.amount,
+        currencyCode: parsed.currencyCode,
+        status: 'PENDING_PAYMENT',
+      });
+      engagementId = newEngagement.id;
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'service_engagement',
+        entityId: newEngagement.id,
+        action: 'CREATED',
+        after: {
+          serviceCatalogItemId: service.id,
+          amount: newEngagement.agreedAmount,
+          currency: newEngagement.currencyCode,
+        },
+        context: { via: 'lead_accept', leadId: lead.id, targetBusiness: lead.targetBusiness },
+      });
+
+      // VAT rate from settings; treatment stays STANDARD at MVP scale
+      // (per-employer treatment can be layered on later).
+      const settings = await fetchAppSettings();
+      const effectiveVatRate = settings.vatRegistered ? settings.vatRatePercent : '0.00';
+      const newInvoice = await insertInvoice(tx, {
+        payerPersonId: lead.targetBusiness === 'RECRUITMENT' ? null : lead.personId,
+        payerEmployerId: lead.targetBusiness === 'RECRUITMENT' ? lead.employerId : null,
+        serviceEngagementId: engagementId,
+        qty: 1,
+        unitPrice: parsed.amount,
+        vatRatePercent: effectiveVatRate,
+        vatTreatment: 'STANDARD',
+        currencyCode: parsed.currencyCode,
+        lineDescription: service.name,
+        issuedByUserId: session.user.id,
+        paymentTermsDays: settings.defaultPaymentTermsDays,
+        immigrationCaseId: lead.targetBusiness === 'IMMIGRATION' ? entityId : null,
+        jobRequisitionId: lead.targetBusiness === 'RECRUITMENT' ? entityId : null,
+        placementId: null,
+        sourceLeadId: lead.id,
+      });
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'invoice',
+        entityId: newInvoice.id,
+        action: 'ISSUED',
+        after: {
+          number: newInvoice.number,
+          totalAmount: newInvoice.totalAmount,
+          currency: newInvoice.currencyCode,
+        },
+        context: { via: 'lead_accept', leadId: lead.id, engagementId },
+      });
+    }
+
+    const proofRef =
+      parsed.proofReference && parsed.proofReference.trim().length > 0
+        ? parsed.proofReference.trim()
+        : null;
+    const payment = await insertPayment(tx, {
+      serviceEngagementId: engagementId,
+      amount: parsed.amount,
+      currencyCode: parsed.currencyCode,
+      method: parsed.method,
+      proofReference: proofRef,
+      receivedAt: parsed.receivedAt ? new Date(parsed.receivedAt) : null,
+      status: proofRef ? 'PROOF_UPLOADED' : 'PENDING',
+    });
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'payment',
+      entityId: payment.id,
+      action: 'CREATED',
+      after: {
+        amount: payment.amount,
+        currency: payment.currencyCode,
+        method: payment.method,
+        status: payment.status,
+      },
+      context: { via: 'lead_accept', leadId: lead.id, engagementId },
+    });
+
+    await performPaymentVerification(tx, payment, session.user.id);
 
     // Stamp the acceptance on the lead itself so a repeat click can't
     // create a duplicate case.

@@ -5,19 +5,11 @@ import { toActionResult } from '@/lib/result';
 import type {
   AcceptLeadInput,
   ArchiveLeadInput,
-  ConvertLeadInput,
   CreateLeadInput,
   UnarchiveLeadInput,
   UpdateLeadStatusInput,
 } from './schemas';
-import {
-  acceptLead,
-  archiveLead,
-  convertLead,
-  createLead,
-  unarchiveLead,
-  updateLeadStatus,
-} from './service';
+import { acceptLead, archiveLead, createLead, unarchiveLead, updateLeadStatus } from './service';
 
 const revalidate = () => {
   revalidatePath('/leads');
@@ -34,12 +26,6 @@ export async function createLeadAction(input: CreateLeadInput) {
 
 export async function updateLeadStatusAction(input: UpdateLeadStatusInput) {
   const result = await toActionResult(() => updateLeadStatus(input));
-  if (result.ok) revalidate();
-  return result;
-}
-
-export async function convertLeadAction(input: ConvertLeadInput) {
-  const result = await toActionResult(() => convertLead(input));
   if (result.ok) revalidate();
   return result;
 }

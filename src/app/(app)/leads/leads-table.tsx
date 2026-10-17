@@ -45,7 +45,6 @@ import { ensurePaymentProofTypeAction } from '@/modules/document-types/actions';
 import {
   acceptLeadAction,
   archiveLeadAction,
-  convertLeadAction,
   updateLeadStatusAction,
 } from '@/modules/leads/actions';
 import type { LeadListRow } from '@/modules/leads/repository';
@@ -62,46 +61,21 @@ type Props = {
 export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [convertTarget, setConvertTarget] = useState<LeadListRow | null>(null);
-  const [acceptTarget, setAcceptTarget] = useState<LeadListRow | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<LeadListRow | null>(null);
   const [reason, setReason] = useState('');
-  const [paymentProofTypeId, setPaymentProofTypeId] = useState<string | null>(null);
-  const [proofDocId, setProofDocId] = useState<string | null>(null);
-  const [proofFilename, setProofFilename] = useState<string | null>(null);
+  // Convert dialog is now a Record Payment form — see acceptLead service.
+  const [convertServiceId, setConvertServiceId] = useState<string>('');
+  const [convertAmount, setConvertAmount] = useState<string>('');
+  const [convertCurrency, setConvertCurrency] = useState<string>('EUR');
+  const [convertMethod, setConvertMethod] = useState<'BANK_TRANSFER' | 'CASH' | 'OTHER'>(
+    'BANK_TRANSFER',
+  );
+  const [convertReference, setConvertReference] = useState<string>('');
+  const [convertReceivedAt, setConvertReceivedAt] = useState<string>('');
   const [invoicingLead, setInvoicingLead] = useState<LeadListRow | null>(null);
   const [, startTransition] = useTransition();
 
   const router = useRouter();
-  const confirmAccept = (acceptReason: string) => {
-    if (!acceptTarget) return;
-    const target = acceptTarget;
-    setBusyId(target.id);
-    startTransition(async () => {
-      const r = await acceptLeadAction({ leadId: target.id, reason: acceptReason });
-      setBusyId(null);
-      if (r.ok) {
-        toast.success(
-          r.data.targetBusiness === 'RECRUITMENT'
-            ? 'Requisition created — opening it'
-            : r.data.targetBusiness === 'IMMIGRATION'
-              ? 'Immigration case created — opening it'
-              : 'Candidate profile activated — opening it',
-        );
-        setAcceptTarget(null);
-        // Deep-link to the freshly-created entity so the operator lands in
-        // context (invoices + docs will already be attached).
-        if (r.data.targetBusiness === 'IMMIGRATION') {
-          router.push(`/immigration/${r.data.entityId}`);
-        } else if (r.data.targetBusiness === 'RECRUITMENT') {
-          router.push(`/requisitions/${r.data.entityId}`);
-        } else if (target.personId) {
-          router.push(`/candidates/${target.personId}`);
-        }
-      } else {
-        toast.error(r.error.message);
-      }
-    });
-  };
 
   const confirmArchive = (archiveReason: string) => {
     if (!archiveTarget) return;
@@ -119,14 +93,21 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
     });
   };
 
-  // Ensure the PAYMENT_PROOF document type exists as soon as the dialog opens.
+  // Prefill the payment form with the first available service when the
+  // dialog opens — operator can switch. First package's price becomes
+  // the default amount so routine conversions are quick to review.
   useEffect(() => {
-    if (!convertTarget || paymentProofTypeId) return;
-    (async () => {
-      const r = await ensurePaymentProofTypeAction();
-      if (r.ok) setPaymentProofTypeId(r.data.id);
-    })();
-  }, [convertTarget, paymentProofTypeId]);
+    if (!convertTarget) return;
+    const svc = invoiceableServices[0];
+    if (svc) {
+      setConvertServiceId(svc.id);
+      const firstPkg = svc.packages[0];
+      if (firstPkg) {
+        setConvertAmount(firstPkg.price);
+        setConvertCurrency(firstPkg.currencyCode);
+      }
+    }
+  }, [convertTarget, invoiceableServices]);
 
   const setStatus = (
     lead: LeadListRow,
@@ -158,35 +139,62 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
 
   const openConvert = (lead: LeadListRow) => {
     setReason('');
-    setProofDocId(null);
-    setProofFilename(null);
+    setConvertReference('');
+    setConvertReceivedAt('');
     setConvertTarget(lead);
   };
 
   const closeConvert = () => {
     setConvertTarget(null);
     setReason('');
-    setProofDocId(null);
-    setProofFilename(null);
+    setConvertServiceId('');
+    setConvertAmount('');
+    setConvertReference('');
+    setConvertReceivedAt('');
   };
 
+  const convertFormValid =
+    reason.trim().length >= 3 &&
+    convertServiceId.length > 0 &&
+    convertAmount.length > 0 &&
+    Number(convertAmount) > 0 &&
+    convertCurrency.length === 3;
+
   const confirmConvert = () => {
-    if (!convertTarget) return;
-    if (reason.trim().length < 3) return;
+    if (!convertTarget || !convertFormValid) return;
     const target = convertTarget;
-    const method = proofDocId ? 'PAYMENT_VERIFIED' : 'MANUAL_OVERRIDE';
     setBusyId(target.id);
     startTransition(async () => {
-      const result = await convertLeadAction({
+      const result = await acceptLeadAction({
         leadId: target.id,
-        method,
         reason: reason.trim(),
-        paymentProofDocumentInstanceId: proofDocId ?? '',
+        serviceCatalogItemId: convertServiceId,
+        amount: convertAmount,
+        currencyCode: convertCurrency,
+        method: convertMethod,
+        proofReference: convertReference.trim(),
+        receivedAt: convertReceivedAt,
       });
       setBusyId(null);
       if (result.ok) {
-        toast.success(`${target.displayName} is now an active candidate`);
+        const landedAs =
+          result.data.targetBusiness === 'RECRUITMENT'
+            ? 'requisition'
+            : result.data.targetBusiness === 'IMMIGRATION'
+              ? 'immigration case'
+              : 'candidate';
+        toast.success(`${target.displayName} converted — ${landedAs} created`);
         closeConvert();
+        router.refresh();
+        // Deep-link to the freshly-created operational entity so the
+        // operator lands in context (invoices + docs attached).
+        if (result.data.targetBusiness === 'IMMIGRATION') {
+          router.push(`/immigration/${result.data.entityId}`);
+        } else if (result.data.targetBusiness === 'RECRUITMENT') {
+          router.push(`/requisitions/${result.data.entityId}`);
+        } else if (target.personId) {
+          router.push(`/candidates/${target.personId}`);
+        }
       } else {
         toast.error(result.error.message);
       }
@@ -378,25 +386,20 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
                 <DropdownMenuItem disabled={!canTransition} onClick={() => setInvoicingLead(lead)}>
                   <FileText className="mr-2 size-4" /> Add another invoice…
                 </DropdownMenuItem>
-                {/* Accept — universal handoff. Materialises the lead into
-                    its target business (CS → candidate profile, Immigration
-                    → immigration case, Recruitment → job requisition) and
-                    back-links every invoice raised on this lead. Replaces
-                    the classic 'Convert to candidate' flow for non-CS
-                    targets; for CS it does the same thing + a bit more. */}
-                <DropdownMenuItem disabled={!canTransition} onClick={() => setAcceptTarget(lead)}>
-                  <CheckCircle2 className="mr-2 size-4" />{' '}
-                  {lead.targetBusiness === 'RECRUITMENT'
-                    ? 'Accept → open requisition…'
-                    : lead.targetBusiness === 'IMMIGRATION'
-                      ? 'Accept → open case…'
-                      : 'Accept → activate candidate…'}
-                </DropdownMenuItem>
-                {/* Old CS-only convert flow kept as a fallback for the
-                    payment-proof-upload edge case; the new Accept flow
-                    doesn't require the operator to attach proof inline. */}
+                {/* Convert = Record payment, atomic one-step flow. Opens
+                    a dialog that collects service + amount + method, then
+                    atomically creates the operational entity (candidate /
+                    case / requisition), engagement, payment (auto-verified),
+                    receipt, and marks the lead CONVERTED. The old separate
+                    'Accept' flow is gone — a lead can no longer bypass
+                    payment to become anything. */}
                 <DropdownMenuItem disabled={!canTransition} onClick={() => openConvert(lead)}>
-                  <UserCheck className="mr-2 size-4" /> Convert (with payment proof)…
+                  <UserCheck className="mr-2 size-4" />{' '}
+                  {lead.targetBusiness === 'RECRUITMENT'
+                    ? 'Convert → open requisition…'
+                    : lead.targetBusiness === 'IMMIGRATION'
+                      ? 'Convert → open case…'
+                      : 'Convert → activate candidate…'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {/* Edit details opens the candidate profile — the underlying
@@ -449,30 +452,6 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
         confirmVariant="destructive"
         pending={busyId === archiveTarget?.id}
       />
-      <PromptDialog
-        open={acceptTarget !== null}
-        onCancel={() => setAcceptTarget(null)}
-        onConfirm={confirmAccept}
-        title={
-          acceptTarget?.targetBusiness === 'RECRUITMENT'
-            ? `Accept lead for ${acceptTarget?.displayName ?? ''} → open requisition?`
-            : acceptTarget?.targetBusiness === 'IMMIGRATION'
-              ? `Accept lead for ${acceptTarget?.displayName ?? ''} → open immigration case?`
-              : `Accept lead for ${acceptTarget?.displayName ?? ''} → activate candidate?`
-        }
-        description={
-          acceptTarget?.targetBusiness === 'RECRUITMENT'
-            ? 'Creates a job requisition for this employer in DRAFT. Every invoice raised on the lead is linked to the new requisition automatically.'
-            : acceptTarget?.targetBusiness === 'IMMIGRATION'
-              ? "Creates an immigration case for this person. Every invoice raised on the lead is linked to the case, and the case's document section shows any docs the person already has."
-              : "Activates a candidate profile for this person. The person's existing invoices/receipts continue to show in their billing history."
-        }
-        label="Reason (audited)"
-        placeholder="e.g. Payment cleared, client signed"
-        confirmLabel="Accept"
-        confirmVariant="default"
-        pending={busyId === acceptTarget?.id}
-      />
       <Dialog
         open={convertTarget !== null}
         onOpenChange={(open) => {
@@ -481,70 +460,125 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Convert to candidate</DialogTitle>
+            <DialogTitle>
+              {convertTarget?.targetBusiness === 'RECRUITMENT'
+                ? 'Convert → open requisition'
+                : convertTarget?.targetBusiness === 'IMMIGRATION'
+                  ? 'Convert → open immigration case'
+                  : 'Convert → activate candidate'}
+            </DialogTitle>
           </DialogHeader>
           {convertTarget && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Activating <span className="font-medium">{convertTarget.displayName}</span> as a
-                candidate. Upload the payment proof to record method{' '}
-                <span className="font-mono text-[11px]">PAYMENT_VERIFIED</span> — or skip to record
-                a manual override. Both paths are audited.
+                Converting <span className="font-medium">{convertTarget.displayName}</span>. A lead
+                can only become a{' '}
+                {convertTarget.targetBusiness === 'RECRUITMENT'
+                  ? 'requisition'
+                  : convertTarget.targetBusiness === 'IMMIGRATION'
+                    ? 'case'
+                    : 'candidate'}{' '}
+                once the payment is in — record it here and conversion + entity + payment + receipt
+                all happen atomically in one step.
               </p>
 
               <div className="space-y-1">
-                <Label>Payment proof (optional)</Label>
-                {proofDocId ? (
-                  <div className="flex items-center gap-2 rounded-md border bg-status-success-soft px-3 py-2 text-xs">
-                    <CheckCircle2 className="size-3.5 text-status-success" />
-                    <span className="truncate font-medium">{proofFilename ?? 'Uploaded'}</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="ml-auto"
-                      onClick={() => {
-                        setProofDocId(null);
-                        setProofFilename(null);
-                      }}
-                    >
-                      Replace
-                    </Button>
-                  </div>
-                ) : paymentProofTypeId ? (
-                  <DocumentUploader
-                    ownerType="PERSON"
-                    // Convert flow is CS-only → personId always set for these
-                    // leads. `?? ''` keeps TS happy without changing behaviour.
-                    ownerId={convertTarget.personId ?? ''}
-                    documentTypeId={paymentProofTypeId}
-                    accept=".pdf,.png,.doc,.docx"
-                    buttonLabel="Upload payment proof"
-                    onUploaded={(doc) => {
-                      setProofDocId(doc.id);
-                      setProofFilename(doc.originalFilename);
-                    }}
+                <Label htmlFor="convertService">Service *</Label>
+                <select
+                  id="convertService"
+                  value={convertServiceId}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setConvertServiceId(next);
+                    const svc = invoiceableServices.find((s) => s.id === next);
+                    const firstPkg = svc?.packages[0];
+                    if (firstPkg) {
+                      setConvertAmount(firstPkg.price);
+                      setConvertCurrency(firstPkg.currencyCode);
+                    }
+                  }}
+                  className="h-9 w-full rounded-md border bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                >
+                  <option value="">— Pick a service —</option>
+                  {invoiceableServices.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="convertAmount">Amount *</Label>
+                  <Input
+                    id="convertAmount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={convertAmount}
+                    onChange={(e) => setConvertAmount(e.target.value)}
+                    placeholder="100.00"
                   />
-                ) : (
-                  <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                    <FileText className="size-3.5" /> Preparing uploader…
-                  </div>
-                )}
-                <p className="text-[11px] text-muted-foreground">
-                  PNG, PDF, or Word only. Max 10 MB. Attaches to the candidate's documents.
-                </p>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="convertCurrency">Currency *</Label>
+                  <Input
+                    id="convertCurrency"
+                    maxLength={3}
+                    value={convertCurrency}
+                    onChange={(e) => setConvertCurrency(e.target.value.toUpperCase())}
+                    placeholder="EUR"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="convertMethod">Method *</Label>
+                  <select
+                    id="convertMethod"
+                    value={convertMethod}
+                    onChange={(e) =>
+                      setConvertMethod(e.target.value as 'BANK_TRANSFER' | 'CASH' | 'OTHER')
+                    }
+                    className="h-9 w-full rounded-md border bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                  >
+                    <option value="BANK_TRANSFER">Bank transfer</option>
+                    <option value="CASH">Cash</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="convertReceivedAt">Received at</Label>
+                  <Input
+                    id="convertReceivedAt"
+                    type="date"
+                    value={convertReceivedAt}
+                    onChange={(e) => setConvertReceivedAt(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="convertReference">Reference</Label>
+                <Input
+                  id="convertReference"
+                  value={convertReference}
+                  onChange={(e) => setConvertReference(e.target.value)}
+                  placeholder="Bank txn ID, screenshot URL, …"
+                />
               </div>
 
               <div className="space-y-1">
                 <Label htmlFor="convertReason">Reason (audited) *</Label>
                 <Input
                   id="convertReason"
-                  autoFocus
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="e.g. Bank transfer received 2026-08-27"
+                  placeholder="e.g. Bank transfer received 2026-10-17"
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && reason.trim().length >= 3) {
+                    if (e.key === 'Enter' && convertFormValid) {
                       e.preventDefault();
                       confirmConvert();
                     }
@@ -562,9 +596,9 @@ export function LeadsTable({ leads, currentUserId, invoiceableServices }: Props)
             </Button>
             <Button
               onClick={confirmConvert}
-              disabled={reason.trim().length < 3 || busyId === convertTarget?.id}
+              disabled={!convertFormValid || busyId === convertTarget?.id}
             >
-              <UserCheck className="mr-1.5 size-4" /> Convert
+              <UserCheck className="mr-1.5 size-4" /> Convert &amp; record payment
             </Button>
           </DialogFooter>
         </DialogContent>
