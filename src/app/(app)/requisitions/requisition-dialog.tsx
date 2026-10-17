@@ -81,13 +81,17 @@ export function RequisitionDialog({
   const [locallyCreatedOccupations, setLocallyCreatedOccupations] = useState<OccupationOption[]>(
     [],
   );
-  const occupationOptions = useMemo(
-    () => [
-      ...locallyCreatedOccupations,
-      ...occupations.map((o) => ({ id: o.id, name: o.name, isActive: o.isActive })),
-    ],
-    [occupations, locallyCreatedOccupations],
-  );
+  // Dedupe by id: once a server refresh pulls in a locally-created
+  // occupation, it exists in both arrays. React throws a duplicate-key
+  // warning on the picker's <option> map without this.
+  const occupationOptions = useMemo(() => {
+    const byId = new Map<string, OccupationOption>();
+    for (const o of locallyCreatedOccupations) byId.set(o.id, o);
+    for (const o of occupations) {
+      if (!byId.has(o.id)) byId.set(o.id, { id: o.id, name: o.name, isActive: o.isActive });
+    }
+    return [...byId.values()];
+  }, [occupations, locallyCreatedOccupations]);
 
   const onSubmit = handleSubmit((data) =>
     submit(data, upsertRequisitionAction, {

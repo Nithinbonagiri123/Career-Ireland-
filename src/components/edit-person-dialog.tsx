@@ -61,10 +61,17 @@ export function EditPersonDialog({
   const [locallyCreatedOccupations, setLocallyCreatedOccupations] = useState<
     Pick<Occupation, 'id' | 'name' | 'isActive'>[]
   >([]);
-  const allOccupations = useMemo(
-    () => [...locallyCreatedOccupations, ...(occupations ?? [])],
-    [occupations, locallyCreatedOccupations],
-  );
+  // Dedupe by id: once a server refresh pulls in a locally-created
+  // occupation, it exists in both arrays. React throws a duplicate-key
+  // warning on the picker's <option> map without this.
+  const allOccupations = useMemo(() => {
+    const byId = new Map<string, Pick<Occupation, 'id' | 'name' | 'isActive'>>();
+    for (const o of locallyCreatedOccupations) byId.set(o.id, o);
+    for (const o of occupations ?? []) {
+      if (!byId.has(o.id)) byId.set(o.id, o);
+    }
+    return [...byId.values()];
+  }, [occupations, locallyCreatedOccupations]);
 
   const {
     register,
