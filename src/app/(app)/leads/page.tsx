@@ -8,12 +8,23 @@ import { PageHeader } from '@/components/page-header';
 import { ScopeFilter } from '@/components/scope-filter';
 import { requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
+import type { Lead } from '@/lib/db/schema/leads';
 import { parseAssignmentScope } from '@/lib/scope';
+import { resolveCurrentWorkspace } from '@/lib/workspace';
 import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchLeads } from '@/modules/leads/service';
 import { CreateLeadDialog } from './create-lead-dialog';
 import { LeadsTable } from './leads-table';
+
+/** Workspace → lead target business. `main` returns undefined so the
+ *  Main dashboard view keeps showing every lead across all three lines. */
+function targetBusinessForWorkspace(ws: string): Lead['targetBusiness'] | undefined {
+  if (ws === 'candidate_services') return 'CANDIDATE_SERVICES';
+  if (ws === 'recruitment') return 'RECRUITMENT';
+  if (ws === 'immigration') return 'IMMIGRATION';
+  return undefined;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -26,8 +37,13 @@ export default async function LeadsPage({
   const { assigned, created, from, to } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const createdRange = parseDateRangeParams({ created, from, to });
+  // Scope the leads list to the active workspace: Candidate Services /
+  // Recruitment / Immigration workspaces show only their own leads. Main
+  // dashboard shows every lead combined — the owner needs the full view.
+  const workspace = await resolveCurrentWorkspace();
+  const targetBusiness = workspace ? targetBusinessForWorkspace(workspace.current) : undefined;
   const [leads, invoiceableServices, currencies] = await Promise.all([
-    fetchLeads(scope, createdRange),
+    fetchLeads(scope, createdRange, targetBusiness),
     // PERSON-payable services + packages; the row-menu "Generate
     // invoice" dialog needs the full option list to render locally.
     fetchInvoiceableServicesFor('PERSON'),

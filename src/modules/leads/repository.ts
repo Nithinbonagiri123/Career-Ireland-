@@ -39,6 +39,9 @@ export async function listLeads(opts?: {
   scope?: AssignmentScope;
   currentUserId?: string;
   createdRange?: DateRange;
+  /** Workspace-scoped filter: `main` returns everything, any other value
+   *  restricts to leads whose target_business matches. Omit to not filter. */
+  targetBusiness?: Lead['targetBusiness'];
 }): Promise<LeadListRow[]> {
   const scopeCond =
     opts?.scope && opts.currentUserId
@@ -51,6 +54,7 @@ export async function listLeads(opts?: {
   const whereConds: SQL[] = [isNull(leads.archivedAt)];
   if (scopeCond) whereConds.push(scopeCond);
   if (createdCond) whereConds.push(createdCond);
+  if (opts?.targetBusiness) whereConds.push(eq(leads.targetBusiness, opts.targetBusiness));
 
   // Left-join both persons and employers so recruitment leads (employer-payer)
   // and CS/immigration leads (person-payer) both appear. The check constraint

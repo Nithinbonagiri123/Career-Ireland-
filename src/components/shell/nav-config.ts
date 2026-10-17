@@ -280,16 +280,32 @@ export const USER_SCOPED_ITEMS: NavItem[] = [
  * cross-cutting and belong to `main`. Returns `null` for non-app paths
  * so callers can fall through to the existing cookie/DB precedence.
  *
- * When two workspaces claim the same URL (e.g. `/payments` is under
- * Main → Accounts *and* Candidate Services → Payments), the first
- * workspace declared in `WORKSPACES` wins. `main` is declared first, so
- * shared URLs bias to main — this matches the pre-redesign behaviour.
+ * **Shared routes** (appearing in >1 workspace, e.g. `/leads` which is in
+ * all four sidebars) are deliberately NOT mapped here. If we mapped them,
+ * the URL would overrule the cookie — defeating the purpose of per-
+ * workspace filtering since the operator clicked into Recruitment but
+ * `/leads` still resolved to `main`. For shared routes, the cookie / DB
+ * resolution (tier 1-2 of resolveCurrentWorkspace) wins.
  */
+const hrefOccurrences = new Map<string, number>();
+for (const cfg of Object.values(WORKSPACES)) {
+  for (const section of cfg.sections) {
+    for (const item of section.items) {
+      hrefOccurrences.set(item.href, (hrefOccurrences.get(item.href) ?? 0) + 1);
+    }
+  }
+}
+
 const HREF_TO_WORKSPACE = new Map<string, Business>();
 for (const cfg of Object.values(WORKSPACES)) {
   for (const section of cfg.sections) {
     for (const item of section.items) {
-      if (!HREF_TO_WORKSPACE.has(item.href)) HREF_TO_WORKSPACE.set(item.href, cfg.key);
+      // Only register workspace-exclusive routes. Shared routes fall
+      // through so the cookie decides.
+      const count = hrefOccurrences.get(item.href) ?? 0;
+      if (count === 1 && !HREF_TO_WORKSPACE.has(item.href)) {
+        HREF_TO_WORKSPACE.set(item.href, cfg.key);
+      }
     }
   }
   if (!HREF_TO_WORKSPACE.has(cfg.landingPath)) HREF_TO_WORKSPACE.set(cfg.landingPath, cfg.key);
