@@ -23,6 +23,8 @@
     "db:seed:document-types": "tsx scripts/seed-document-types.ts",
     "db:seed:accounting": "tsx scripts/seed-accounting.ts",
     "db:seed:skills": "tsx scripts/seed-skills.ts",
+    "db:reconcile:invoice-lines": "tsx scripts/reconcile-invoice-line-items.ts",
+    "db:audit:financial": "tsx scripts/stage6b2-financial-audit.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"

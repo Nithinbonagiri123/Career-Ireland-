@@ -52,29 +52,14 @@ beforeAll(async () => {
     .limit(1);
   service1 = s?.id ?? null;
 
-  // Stage 6B+1 — repair any invoices that were written through the pre-fix
-  // `insertInvoice` path before line-item insertion was wired in. The
-  // underlying bug is now closed (billing/service.ts always inserts a
-  // line) but this test's DB carries historical orphans we must heal.
-  // Idempotent: NOT EXISTS clause skips invoices that already have lines.
-  // Does NOT delete any data; synthesises the line from the invoice's own
-  // qty/unit_price/description, which is the exact derivation migration
-  // 0053 used.
-  await db.execute(sql`
-    INSERT INTO invoice_line_items
-      (invoice_id, service_catalog_item_id, description, quantity, unit_price, line_subtotal, sort_order)
-    SELECT
-      i.id,
-      se.service_catalog_item_id,
-      i.line_description,
-      i.qty::numeric(10,3),
-      i.unit_price,
-      i.subtotal,
-      0
-    FROM invoices i
-    LEFT JOIN service_engagements se ON se.id = i.service_engagement_id
-    WHERE NOT EXISTS (SELECT 1 FROM invoice_line_items li WHERE li.invoice_id = i.id)
-  `);
+  // Stage 6B+2 — the historical-orphan repair moved out of this test
+  // and into `scripts/reconcile-invoice-line-items.ts`, which an
+  // operator runs explicitly (dry-run by default, --apply to write).
+  // The code bug that produced orphans is closed in insertInvoice
+  // (billing/service.ts) so no new orphans are created. If this test
+  // ever fails again it means either (a) a stale DB snapshot needs the
+  // reconciliation script run, or (b) a new write path is skipping the
+  // line_items insert — in both cases the test is doing its job.
 });
 
 function errorText(err: unknown): string {
