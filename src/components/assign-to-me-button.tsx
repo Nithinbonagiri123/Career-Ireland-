@@ -46,14 +46,14 @@ export function AssignToMeButton({
   if (!canReassign) return null;
 
   return (
-    <Button variant="outline" size="sm" disabled={pending} onClick={click}>
+    <Button variant="outline" disabled={pending} onClick={click}>
       {isMine ? (
         <>
-          <UserX className="mr-1.5 size-3.5" /> Unassign
+          <UserX className="mr-1.5 size-4" /> Unassign
         </>
       ) : (
         <>
-          <UserCheck className="mr-1.5 size-3.5" /> Assign to me
+          <UserCheck className="mr-1.5 size-4" /> Assign to me
         </>
       )}
     </Button>

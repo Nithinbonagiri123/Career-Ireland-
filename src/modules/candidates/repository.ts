@@ -13,6 +13,9 @@ export type CandidateListRow = {
   fullName: string;
   email: string | null;
   phone: string | null;
+  /** Person-level nationality text ("South African") — the card renders
+   *  it with its flag emoji per the approved Screen 03 mockup. */
+  nationality: string | null;
   currentCity: string | null;
   currentCountry: string | null;
   lifecycleStatus: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
@@ -43,6 +46,24 @@ export type CandidateListRow = {
     | 'CLOSED'
     | null;
   immigrationExpiresOn: Date | null;
+  /**
+   * Stage 6E+1 — operator-declared Irish immigration status captured on
+   * the CS lead form (STAMP_4, PENDING, …). Lives on persons, separate
+   * from the immigration-case data above so a current permission is
+   * never confused with an application/case. Null when nothing was
+   * captured (pre-6E+1 persons, non-CS leads).
+   */
+  irishImmigrationStatus:
+    | 'NONE'
+    | 'STAMP_1'
+    | 'STAMP_1G'
+    | 'STAMP_2'
+    | 'STAMP_3'
+    | 'STAMP_4'
+    | 'OTHER'
+    | 'PENDING'
+    | 'NOT_PROVIDED'
+    | null;
   /**
    * Classification of the immigration record for display, derived from
    * (status, expiresOn):
@@ -119,8 +140,10 @@ export async function listCandidates(opts?: {
       lastName: persons.lastName,
       email: persons.email,
       phone: persons.phone,
+      nationality: persons.nationality,
       currentCity: persons.currentCity,
       currentCountry: persons.currentCountry,
+      irishImmigrationStatus: persons.irishImmigrationStatus,
       primaryOccupationName: occupations.name,
       lifecycleStatus: candidateProfiles.lifecycleStatus,
       availabilityStatus: candidateProfiles.availabilityStatus,
@@ -244,6 +267,7 @@ export async function listCandidates(opts?: {
       fullName: `${r.firstName} ${r.lastName}`.trim(),
       email: r.email,
       phone: r.phone,
+      nationality: r.nationality,
       currentCity: r.currentCity,
       currentCountry: r.currentCountry,
       primaryOccupationName: r.primaryOccupationName ?? null,
@@ -256,6 +280,7 @@ export async function listCandidates(opts?: {
       immigrationPermitLabel: imm?.label ?? null,
       immigrationStatus: imm?.status ?? null,
       immigrationExpiresOn: imm?.expiresOn ?? null,
+      irishImmigrationStatus: r.irishImmigrationStatus,
       immigrationKind,
       applicationsCount: applicationsByPerson.get(r.personId) ?? 0,
       shortlistsCount: shortlistsByPerson.get(r.personId) ?? 0,

@@ -3,239 +3,145 @@
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import {
   ArrowRight,
-  Briefcase,
-  CalendarCheck,
-  Filter,
+  ClipboardList,
   Grid3x3,
   Mail,
   MapPin,
+  MoreVertical,
   Phone,
-  ShieldCheck,
+  Table2,
   User2,
-  UserCheck,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { useMemo } from 'react';
 
 import { EmptyState } from '@/components/empty-state';
 import { OwnerAvatar } from '@/components/owner-avatar';
-import { PipelineChip } from '@/components/pipeline-chip';
 import { StatusPill, type StatusTone } from '@/components/status-pill';
 import { buttonVariants } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { flagEmojiFromCountryName, flagEmojiFromNationality } from '@/lib/iso-countries';
 import { cn } from '@/lib/utils';
 import type { CandidateListRow } from '@/modules/candidates/repository';
 
 /**
- * Candidate card — Stage 4.2 priority order:
- *   1. Candidate name + email
- *   2. Primary occupation (prominent, right under the name)
- *   3. Immigration permission / stamp (when available)
- *   4. Location + phone
- *   5. Assigned staff + activation date
- *   6. Apps / shortlists / placements counts (live, not placeholders)
- *   7. View Profile + Reach Out actions
- *   TALENT chip + availability status badge preserved in the header.
- *
- * Missing-data policy: a neutral placeholder ("No profession set",
- * "Immigration not on file") replaces the field — never inferred from
- * country or nationality. Long values truncate on a single line with
- * the title attribute exposing the full string on hover + for screen
- * readers.
+ * Stage 6G Screen 03 — Candidate card, matching the approved mockup
+ * exactly: avatar + status pill + added-ago + overflow menu on top,
+ * name + profession, single-column meta rows (location / phone /
+ * email), a flag-plus-nationality row with the assigned chip, a
+ * three-column Applications / Shortlists / Placed counter strip, and
+ * an "Open profile" + "Reach out" footer.
  */
 export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
-  const availability = availabilityTone(candidate.availabilityStatus);
-  const lifecycle = lifecycleTone(candidate.lifecycleStatus);
+  const status = cardStatus(candidate);
   const initials = initialsFrom(candidate.fullName);
-  const postedLabel = formatDistanceToNowStrict(new Date(candidate.createdAt), {
-    addSuffix: true,
-  });
-  const postedAbsolute = format(new Date(candidate.createdAt), 'd MMM yyyy · HH:mm');
-  const activatedLabel = formatDistanceToNowStrict(new Date(candidate.activatedAt), {
+  const addedLabel = formatDistanceToNowStrict(new Date(candidate.activatedAt), {
     addSuffix: true,
   });
   const activatedAbsolute = format(new Date(candidate.activatedAt), 'd MMM yyyy · HH:mm');
-  const immigrationExpiresAbsolute = candidate.immigrationExpiresOn
-    ? format(new Date(candidate.immigrationExpiresOn), 'd MMM yyyy')
-    : null;
-  const immigrationStatusLabel = candidate.immigrationStatus
-    ? candidate.immigrationStatus.toLowerCase().replaceAll('_', ' ')
-    : null;
-  // Status pill tone — used for PENDING_CASE / REJECTED_CASE / CLOSED_CASE
-  // where we want to show the raw case status alongside the "Immigration
-  // case:" label. CURRENT_PERMISSION / EXPIRED_PERMISSION have their own
-  // headline treatment and don't use this pill.
-  const caseStatusTone: StatusTone = (() => {
-    switch (candidate.immigrationStatus) {
-      case 'APPROVED':
-        return 'success';
-      case 'REJECTED':
-        return 'danger';
-      case 'CLOSED':
-        return 'neutral';
-      case 'SUBMITTED':
-      case 'UNDER_AUTHORITY_REVIEW':
-        return 'info';
-      default:
-        return 'warning';
-    }
-  })();
+  const nationalityFlag =
+    flagEmojiFromNationality(candidate.nationality) ||
+    flagEmojiFromCountryName(candidate.nationality);
 
   return (
-    <Card
-      className="flex h-full flex-col overflow-hidden rounded-xl border border-border/60 shadow-sm transition-shadow hover:shadow-md"
+    <article
+      className="flex h-full flex-col rounded-2xl border border-border/60 bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
       aria-label={`Candidate ${candidate.fullName}`}
     >
-      {/* Header — TALENT chip + availability status + added timestamp.
-          Stage 6E — tighter vertical padding; keeps all pills visible on
-          one row at desktop + tablet widths. */}
-      <div className="flex items-center gap-1.5 border-b bg-muted/40 px-3 py-1.5">
-        <PipelineChip stage="source" variant="solid" className="text-[10px] uppercase">
-          Talent
-        </PipelineChip>
-        <StatusPill tone={availability.tone}>{availability.label}</StatusPill>
-        {candidate.lifecycleStatus !== 'ACTIVE' && (
-          <StatusPill tone={lifecycle.tone}>{lifecycle.label}</StatusPill>
-        )}
-        <time
-          dateTime={new Date(candidate.createdAt).toISOString()}
-          title={postedAbsolute}
-          className="ml-auto text-[10px] italic text-muted-foreground"
-        >
-          added {postedLabel}
-        </time>
-      </div>
-
-      {/* 1. Name + email — Stage 6E — reduced top padding so the name sits
-          closer to the header. */}
-      <div className="flex items-center gap-2.5 px-3.5 pt-2.5">
+      {/* Top block — avatar left; pill + name + profession right; the
+          added-ago timestamp and overflow menu pinned top-right. */}
+      <div className="flex items-start gap-3">
         <span
           aria-hidden
-          className="grid size-8 shrink-0 place-items-center rounded-full bg-note-blue text-xs font-semibold text-note-blue-ink"
+          className="grid size-12 shrink-0 place-items-center rounded-full bg-sky-100 text-sm font-semibold text-sky-700"
         >
           {initials}
         </span>
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold leading-tight" title={candidate.fullName}>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <StatusPill tone={status.tone}>{status.label}</StatusPill>
+            <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+              <time
+                dateTime={new Date(candidate.activatedAt).toISOString()}
+                title={activatedAbsolute}
+              >
+                {addedLabel}
+              </time>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label={`More actions for ${candidate.fullName}`}
+                  className="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <MoreVertical className="size-4" aria-hidden />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    render={
+                      <Link href={`/clients/${candidate.personId}?tab=applications`}>
+                        <ClipboardList className="mr-1.5 size-4" aria-hidden />
+                        Open applications
+                      </Link>
+                    }
+                  />
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </span>
+          </div>
+          <h3
+            className="mt-1.5 truncate text-[15px] font-semibold leading-tight text-foreground"
+            title={candidate.fullName}
+          >
             {candidate.fullName}
           </h3>
-          {candidate.email ? (
-            <p
-              className="truncate text-[11px] leading-tight text-muted-foreground"
-              title={candidate.email}
-            >
-              {candidate.email}
-            </p>
-          ) : (
-            <p className="truncate text-[11px] italic leading-tight text-muted-foreground">
-              no email on file
-            </p>
-          )}
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {candidate.primaryOccupationName ?? <span className="italic">No profession set</span>}
+          </p>
         </div>
       </div>
 
-      {/* 2+3. Occupation + Immigration — Stage 6E (round 2). Both
-          collapsed to single inline rows with coloured icon + label.
-          The bordered-panel treatment was adding ~90px vertical to
-          every card; this one-liner keeps the colour hierarchy
-          (interview tint for occupation, success/danger for current
-          vs expired permission, neutral for case + none) without the
-          box. Expiry date drops onto the same row with a subtle
-          separator so no second line is needed. */}
-      <div className="mt-1.5 flex items-center gap-1.5 px-3.5 text-xs">
-        <Briefcase className="size-3.5 shrink-0 text-pipeline-interview" aria-hidden />
-        {candidate.primaryOccupationName ? (
-          <span className="truncate font-medium" title={candidate.primaryOccupationName}>
-            {candidate.primaryOccupationName}
-          </span>
-        ) : (
-          <span className="truncate italic text-muted-foreground">No profession set</span>
-        )}
-      </div>
-
-      {/* Immigration row — one line each kind. Current / expired
-          permissions use their coloured icon + label + inline expiry.
-          Pending / rejected / closed cases use a neutral icon + the
-          "case" word so a case is never read as a current permission. */}
-      {candidate.immigrationKind === 'CURRENT_PERMISSION' ? (
-        <div
-          className="mt-1 flex items-center gap-1.5 px-3.5 text-xs"
-          title={candidate.immigrationPermitLabel ?? ''}
-        >
-          <ShieldCheck className="size-3.5 shrink-0 text-status-success" aria-hidden />
-          <span className="truncate font-medium text-status-success">
-            {candidate.immigrationPermitLabel}
-          </span>
-          {immigrationExpiresAbsolute && (
-            <span
-              className="shrink-0 text-[11px] text-muted-foreground"
-              title={immigrationExpiresAbsolute}
-            >
-              · exp {immigrationExpiresAbsolute}
-            </span>
-          )}
-        </div>
-      ) : candidate.immigrationKind === 'EXPIRED_PERMISSION' ? (
-        <div
-          className="mt-1 flex items-center gap-1.5 px-3.5 text-xs"
-          title={candidate.immigrationPermitLabel ?? ''}
-        >
-          <ShieldCheck className="size-3.5 shrink-0 text-status-danger" aria-hidden />
-          <span className="truncate font-medium text-status-danger">
-            {candidate.immigrationPermitLabel}
-          </span>
-          {immigrationExpiresAbsolute && (
-            <span className="shrink-0 text-[11px] font-medium text-status-danger">
-              · expired {immigrationExpiresAbsolute}
-            </span>
-          )}
-        </div>
-      ) : candidate.immigrationKind !== 'NONE' ? (
-        <div
-          className="mt-1 flex items-center gap-1.5 px-3.5 text-xs"
-          title={`${candidate.immigrationPermitLabel ?? ''} application — not a currently-held permission`}
-        >
-          <ShieldCheck className="size-3.5 shrink-0 text-pipeline-review" aria-hidden />
-          <span className="truncate text-muted-foreground">
-            Case:{' '}
-            <span className="font-medium text-foreground">{candidate.immigrationPermitLabel}</span>
-          </span>
-          {immigrationStatusLabel && (
-            <StatusPill tone={caseStatusTone} className="shrink-0">
-              {immigrationStatusLabel}
-            </StatusPill>
-          )}
-        </div>
-      ) : (
-        <div className="mt-1 flex items-center gap-1.5 px-3.5 text-xs">
-          <ShieldCheck className="size-3.5 shrink-0 text-muted-foreground/70" aria-hidden />
-          <span className="truncate italic text-muted-foreground">Immigration not on file</span>
-        </div>
-      )}
-
-      {/* 4+5. Location + phone + assigned + activation — Stage 6E
-          (round 2) — 2-column grid cuts the vertical height in half
-          vs the 4-row MetaList. Still uses icons + muted labels so
-          scanning stays easy. */}
-      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 px-3.5 text-[11px] text-muted-foreground">
-        <div className="flex min-w-0 items-center gap-1">
-          <MapPin className="size-3 shrink-0 text-pipeline-source" aria-hidden />
-          <span className="truncate">
-            {candidate.currentCity || candidate.currentCountry ? (
-              [candidate.currentCity, candidate.currentCountry].filter(Boolean).join(', ')
-            ) : (
-              <span className="italic">Location not set</span>
-            )}
+      {/* Meta rows — one per line like the mockup: location, phone,
+          email, then flag + nationality with the assigned chip right. */}
+      <div className="mt-3.5 space-y-2 text-xs text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2">
+          <MapPin className="size-3.5 shrink-0 text-sky-500" aria-hidden />
+          <span className="truncate text-foreground/80" title={locationLabel(candidate)}>
+            {locationLabel(candidate) || <span className="italic">Location not set</span>}
           </span>
         </div>
-        <div className="flex min-w-0 items-center gap-1">
-          <Phone className="size-3 shrink-0 text-pipeline-apply" aria-hidden />
-          <span className="truncate">
+        <div className="flex min-w-0 items-center gap-2">
+          <Phone className="size-3.5 shrink-0 text-sky-500" aria-hidden />
+          <span className="truncate text-foreground/80">
             {candidate.phone ?? <span className="italic">No phone</span>}
           </span>
         </div>
-        <div className="flex min-w-0 items-center gap-1">
-          <UserCheck className="size-3 shrink-0 text-pipeline-review" aria-hidden />
-          <span className="truncate">
+        <div className="flex min-w-0 items-center gap-2">
+          <Mail className="size-3.5 shrink-0 text-sky-500" aria-hidden />
+          <span className="truncate text-foreground/80">
+            {candidate.email ?? <span className="italic">No email</span>}
+          </span>
+        </div>
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-2">
+            {candidate.nationality ? (
+              <>
+                {nationalityFlag && (
+                  <span aria-hidden className="text-sm leading-none">
+                    {nationalityFlag}
+                  </span>
+                )}
+                <span className="truncate text-foreground/80">{candidate.nationality}</span>
+              </>
+            ) : (
+              <span className="italic">Nationality not set</span>
+            )}
+          </span>
+          <span className="flex shrink-0 items-center">
             {candidate.assignedUserId && candidate.assignedUserName ? (
               <OwnerAvatar
                 user={{ id: candidate.assignedUserId, fullName: candidate.assignedUserName }}
@@ -243,116 +149,88 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
                 showName
               />
             ) : (
-              <span className="italic">Unassigned</span>
+              <span className="flex items-center gap-1.5">
+                <User2 className="size-3.5" aria-hidden /> Unassigned
+              </span>
             )}
           </span>
         </div>
-        <div className="flex min-w-0 items-center gap-1">
-          <CalendarCheck className="size-3 shrink-0 text-pipeline-interview" aria-hidden />
-          <time
-            dateTime={new Date(candidate.activatedAt).toISOString()}
-            title={activatedAbsolute}
-            className="truncate"
-          >
-            {activatedLabel}
-          </time>
-        </div>
       </div>
 
-      {/* 6. Live counters — Stage 6E (round 2). Compact pill-style
-          counters replace the ring-counter trio so the counters row
-          takes ~24px instead of ~68px. The three categories (apps /
-          shortlists / placed) stay in the same order with the same
-          colour tones. mt-auto pushes the counters + footer to the
-          card's bottom so cards in a row align. */}
-      <div className="mt-auto grid grid-cols-3 gap-1 px-3.5 pt-2 text-[11px]">
-        <CounterPill label="apps" value={candidate.applicationsCount} tone="apply" />
-        <CounterPill label="shortlists" value={candidate.shortlistsCount} tone="shortlist" />
-        <CounterPill label="placed" value={candidate.placementsCount} tone="placed" />
+      {/* Counter strip — Applications / Shortlists / Placed, divided
+          columns per the mockup. Zero renders as a quiet 0: zero IS
+          the fact. */}
+      <div className="mt-4 grid grid-cols-3 divide-x divide-border/70 border-t border-border/70 pt-3 text-center">
+        <CounterCell n={candidate.applicationsCount} label="Applications" />
+        <CounterCell n={candidate.shortlistsCount} label="Shortlists" />
+        <CounterCell n={candidate.placementsCount} label="Placed" />
       </div>
 
-      {/* 7. Dual-action footer. Stage 6E (round 2) — py-1.5 for a
-          compact-but-still-tappable height. Icons shrunk 1px. */}
-      <div className="mt-2 grid grid-cols-2 gap-0 border-t">
+      {/* Footer — "Open profile" + "Reach out" per the mockup. mt-auto
+          keeps footers aligned across a row of cards. */}
+      <div className="mt-auto grid grid-cols-2 gap-2 pt-3.5">
         <Link
           href={`/clients/${candidate.personId}`}
-          className="group flex items-center justify-center gap-1 bg-note-green py-1.5 text-xs font-semibold text-note-green-ink transition-all hover:brightness-95"
-          aria-label={`Open workspace for ${candidate.fullName}`}
+          className="flex items-center justify-center gap-1.5 rounded-lg border border-border/70 bg-background py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+          aria-label={`Open profile for ${candidate.fullName}`}
         >
-          <User2 className="size-3" /> Open workspace
-          <ArrowRight className="size-3 opacity-70 transition-transform group-hover:translate-x-0.5" />
+          <User2 className="size-3.5" aria-hidden /> Open profile
         </Link>
-        <Link
-          href={`/clients/${candidate.personId}?tab=applications`}
-          className="group flex items-center justify-center gap-1 bg-note-pink py-1.5 text-xs font-semibold text-note-pink-ink transition-all hover:brightness-95"
-          aria-label={`Reach out to ${candidate.fullName}`}
-        >
-          <Mail className="size-3" /> Reach out
-          <ArrowRight className="size-3 opacity-70 transition-transform group-hover:translate-x-0.5" />
-        </Link>
+        {candidate.email ? (
+          <a
+            href={`mailto:${candidate.email}`}
+            className="flex items-center justify-center gap-1.5 rounded-lg bg-sky-100 py-2 text-xs font-medium text-sky-800 transition-colors hover:bg-sky-200"
+            aria-label={`Reach out to ${candidate.fullName}`}
+          >
+            <Mail className="size-3.5" aria-hidden /> Reach out
+          </a>
+        ) : (
+          <span
+            className="flex cursor-not-allowed items-center justify-center gap-1.5 rounded-lg bg-muted py-2 text-xs font-medium text-muted-foreground"
+            title="No email on file"
+          >
+            <Mail className="size-3.5" aria-hidden /> Reach out
+          </span>
+        )}
       </div>
-    </Card>
+    </article>
   );
 }
 
-/**
- * Stage 6E (round 2) — compact pill counter. Replaces the previous
- * ring-counter trio which was ~60px tall; this is ~24px with the same
- * data + colour tones. Zero counts render as a quiet "0" rather than a
- * placeholder (zero IS the fact).
- */
-function CounterPill({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: 'apply' | 'shortlist' | 'placed';
-}) {
-  const toneCls =
-    tone === 'apply'
-      ? 'border-pipeline-apply/30 bg-pipeline-apply/5 text-pipeline-apply'
-      : tone === 'shortlist'
-        ? 'border-pipeline-shortlist/30 bg-pipeline-shortlist/5 text-pipeline-shortlist'
-        : 'border-pipeline-placed/30 bg-pipeline-placed/5 text-pipeline-placed';
+function CounterCell({ n, label }: { n: number; label: string }) {
   return (
-    <div
-      className={cn('flex items-center justify-between gap-1 rounded-md border px-2 py-1', toneCls)}
-    >
-      <span className="font-semibold tabular-nums">{value}</span>
-      <span className="truncate text-[10px] uppercase tracking-wider opacity-80">{label}</span>
+    <div className="min-w-0 px-1">
+      <p className="text-sm font-semibold tabular-nums text-foreground">{n}</p>
+      <p className="truncate text-[11px] text-muted-foreground">{label}</p>
     </div>
   );
 }
 
-/* ── Helpers ──────────────────────────────────────────────────────────── */
-
-function availabilityTone(a: CandidateListRow['availabilityStatus']): {
-  tone: StatusTone;
-  label: string;
-} {
-  switch (a) {
-    case 'AVAILABLE':
-      return { tone: 'success', label: 'available' };
-    case 'TEMPORARILY_UNAVAILABLE':
-      return { tone: 'warning', label: 'unavailable' };
-    case 'PLACED':
-      return { tone: 'info', label: 'placed' };
-  }
+function locationLabel(c: CandidateListRow): string {
+  return [c.currentCity, c.currentCountry].filter(Boolean).join(', ');
 }
 
-function lifecycleTone(l: CandidateListRow['lifecycleStatus']): {
-  tone: StatusTone;
-  label: string;
-} {
-  switch (l) {
-    case 'ACTIVE':
-      return { tone: 'success', label: 'active' };
-    case 'INACTIVE':
-      return { tone: 'neutral', label: 'inactive' };
-    case 'ARCHIVED':
-      return { tone: 'neutral', label: 'archived' };
+/* ── Helpers ──────────────────────────────────────────────────────────── */
+
+/**
+ * The mockup's card pill mixes availability with assignment:
+ * AVAILABLE / PLACED / UNAVAILABLE by availability, except an
+ * unassigned active candidate reads UNASSIGNED (warning) — mirroring
+ * the hero stat band. Archived/inactive lifecycle takes precedence.
+ */
+function cardStatus(c: CandidateListRow): { tone: StatusTone; label: string } {
+  if (c.lifecycleStatus === 'ARCHIVED') return { tone: 'neutral', label: 'Archived' };
+  if (c.lifecycleStatus === 'INACTIVE') return { tone: 'neutral', label: 'Inactive' };
+  if (!c.assignedUserId && c.availabilityStatus === 'AVAILABLE') {
+    return { tone: 'warning', label: 'Unassigned' };
+  }
+  switch (c.availabilityStatus) {
+    case 'AVAILABLE':
+      return { tone: 'success', label: 'Available' };
+    case 'TEMPORARILY_UNAVAILABLE':
+      return { tone: 'warning', label: 'Unavailable' };
+    case 'PLACED':
+      return { tone: 'info', label: 'Placed' };
   }
 }
 
@@ -370,6 +248,62 @@ function initialsFrom(name: string): string {
 /* ── Grid + toggle ────────────────────────────────────────────────────── */
 
 export function CandidatesCardGrid({ candidates }: { candidates: CandidateListRow[] }) {
+  const params = useSearchParams();
+  const q = (params.get('q') ?? '').trim().toLowerCase();
+  const statusValues = useMemo(
+    () =>
+      (params.get('status') ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    [params],
+  );
+  const countryValues = useMemo(
+    () =>
+      (params.get('country') ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    [params],
+  );
+  const assigneeIds = useMemo(
+    () =>
+      (params.get('assignee') ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    [params],
+  );
+
+  const sort = params.get('sort') ?? 'recent';
+
+  const filtered = useMemo(() => {
+    const list = candidates.filter((c) => {
+      if (q) {
+        const hay = `${c.fullName} ${c.email ?? ''} ${c.primaryOccupationName ?? ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (statusValues.length > 0) {
+        const matches =
+          statusValues.includes(c.availabilityStatus) || statusValues.includes(c.lifecycleStatus);
+        if (!matches) return false;
+      }
+      if (countryValues.length > 0 && !countryValues.includes(c.currentCountry ?? '')) {
+        return false;
+      }
+      if (assigneeIds.length > 0 && !assigneeIds.includes(c.assignedUserId ?? '')) {
+        return false;
+      }
+      return true;
+    });
+    // "Recently added" is the server order (activatedAt desc); "Name A–Z"
+    // re-sorts client-side per the mockup's Sort by control.
+    if (sort === 'name') {
+      return [...list].sort((a, b) => a.fullName.localeCompare(b.fullName));
+    }
+    return list;
+  }, [candidates, q, statusValues, countryValues, assigneeIds, sort]);
+
   if (candidates.length === 0) {
     return (
       <EmptyState
@@ -384,12 +318,21 @@ export function CandidatesCardGrid({ candidates }: { candidates: CandidateListRo
       />
     );
   }
-  // Responsive grid: 1 column on mobile, 2 on tablet, 3 on laptop,
-  // 4 on wide desktop. items-stretch keeps rows uniform height even
-  // when some cards have an immigration block + others don't.
+  if (filtered.length === 0) {
+    return (
+      <EmptyState
+        icon={User2}
+        title="No candidates match the current filters"
+        description="Try clearing a filter chip above or widening the scope."
+      />
+    );
+  }
+  // Responsive grid: 1 column on mobile, 2 on tablet, 3 on laptop.
+  // items-stretch keeps rows uniform height even when some cards have
+  // longer names than others.
   return (
     <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {candidates.map((c) => (
+      {filtered.map((c) => (
         <CandidateCard key={c.candidateProfileId} candidate={c} />
       ))}
     </div>
@@ -399,31 +342,167 @@ export function CandidatesCardGrid({ candidates }: { candidates: CandidateListRo
 export function CandidatesViewToggle({ current }: { current: 'grid' | 'table' }) {
   const isGrid = current === 'grid';
   return (
-    <div className="inline-flex overflow-hidden rounded-md border">
+    <div className="inline-flex overflow-hidden rounded-lg border bg-background">
       <Link
         href="?view=grid"
         className={cn(
-          'flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-colors',
+          'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
           isGrid
             ? 'bg-foreground text-background'
             : 'bg-transparent text-muted-foreground hover:bg-muted',
         )}
         aria-pressed={isGrid}
       >
-        <Grid3x3 className="size-3" /> Cards
+        <Grid3x3 className="size-3.5" /> Cards
       </Link>
       <Link
         href="?view=table"
         className={cn(
-          'flex items-center gap-1 border-l px-2.5 py-1 text-xs font-medium transition-colors',
+          'flex items-center gap-1.5 border-l px-3 py-1.5 text-xs font-medium transition-colors',
           !isGrid
             ? 'bg-foreground text-background'
             : 'bg-transparent text-muted-foreground hover:bg-muted',
         )}
         aria-pressed={!isGrid}
       >
-        <Filter className="size-3" /> Table
+        <Table2 className="size-3.5" /> Table
       </Link>
+    </div>
+  );
+}
+
+/**
+ * Stage 6G Screen 03 — status tab row + Sort by, per the approved
+ * mockup: "All n / Available n / Placed n / Unassigned n / Archived n"
+ * pills above the card grid. Tabs map onto the existing filter params
+ * (?status= client filter; Unassigned reuses the ?assigned=unassigned
+ * server scope), so no new filtering machinery.
+ */
+export function CandidatesStatusTabs({
+  counts,
+}: {
+  counts: { all: number; available: number; placed: number; unassigned: number; archived: number };
+}) {
+  const params = useSearchParams();
+  const status = params.get('status') ?? '';
+  const assigned = params.get('assigned') ?? '';
+
+  const hrefWith = (overrides: Record<string, string | null>) => {
+    const sp = new URLSearchParams(params.toString());
+    for (const [k, v] of Object.entries(overrides)) {
+      if (v === null) sp.delete(k);
+      else sp.set(k, v);
+    }
+    const qs = sp.toString();
+    return qs ? `?${qs}` : '?';
+  };
+
+  const tabs: Array<{
+    key: string;
+    label: string;
+    n: number;
+    href: string;
+    active: boolean;
+    dot: string;
+  }> = [
+    {
+      key: 'all',
+      label: 'All',
+      n: counts.all,
+      href: hrefWith({ status: null, assigned: 'all' }),
+      active: !status && assigned !== 'unassigned',
+      dot: 'bg-sky-500',
+    },
+    {
+      key: 'available',
+      label: 'Available',
+      n: counts.available,
+      href: hrefWith({ status: 'AVAILABLE', assigned: 'all' }),
+      active: status === 'AVAILABLE',
+      dot: 'bg-status-success',
+    },
+    {
+      key: 'placed',
+      label: 'Placed',
+      n: counts.placed,
+      href: hrefWith({ status: 'PLACED', assigned: 'all' }),
+      active: status === 'PLACED',
+      dot: 'bg-amber-500',
+    },
+    {
+      key: 'unassigned',
+      label: 'Unassigned',
+      n: counts.unassigned,
+      href: hrefWith({ status: null, assigned: 'unassigned' }),
+      active: !status && assigned === 'unassigned',
+      dot: 'bg-rose-500',
+    },
+    {
+      key: 'archived',
+      label: 'Archived',
+      n: counts.archived,
+      href: hrefWith({ status: 'ARCHIVED', assigned: 'all' }),
+      active: status === 'ARCHIVED',
+      dot: 'bg-muted-foreground',
+    },
+  ];
+
+  const sort = params.get('sort') ?? 'recent';
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <nav aria-label="Candidate status filter" className="flex flex-wrap items-center gap-1">
+        {tabs.map((t) => (
+          <Link
+            key={t.key}
+            href={t.href}
+            aria-current={t.active ? 'page' : undefined}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
+              t.active
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+            )}
+          >
+            {!t.active && <span aria-hidden className={cn('size-1.5 rounded-full', t.dot)} />}
+            {t.label}
+            <span
+              className={cn(
+                'rounded-full px-1.5 py-px text-[10px] tabular-nums',
+                t.active ? 'bg-primary-foreground/20' : 'bg-muted',
+              )}
+            >
+              {t.n}
+            </span>
+          </Link>
+        ))}
+      </nav>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span id="candidates-sort-label">Sort by</span>
+        <nav
+          aria-labelledby="candidates-sort-label"
+          className="inline-flex overflow-hidden rounded-lg border bg-background"
+        >
+          <Link
+            href={hrefWith({ sort: null })}
+            className={cn(
+              'px-2.5 py-1 font-medium transition-colors',
+              sort === 'recent' ? 'bg-muted text-foreground' : 'hover:bg-muted/60',
+            )}
+          >
+            Recently added
+          </Link>
+          <Link
+            href={hrefWith({ sort: 'name' })}
+            className={cn(
+              'border-l px-2.5 py-1 font-medium transition-colors',
+              sort === 'name' ? 'bg-muted text-foreground' : 'hover:bg-muted/60',
+            )}
+          >
+            Name A–Z
+          </Link>
+        </nav>
+      </div>
     </div>
   );
 }
