@@ -159,7 +159,7 @@
      surfaces stay near-white with a whisper of navy so glass over the
      navy photo backdrop reads as premium enterprise rather than warm
      rustic. */
-  --background: oklch(0.965 0.012 245);
+  --background: oklch(0.962 0.018 248);
   --foreground: oklch(0.19 0.02 245);
   --card: oklch(1 0.003 245);
   --card-foreground: oklch(0.19 0.02 245);
@@ -354,117 +354,36 @@
  * over busy photo content).
  */
 @utility glass-panel {
-  background-color: oklch(1 0.003 245 / 0.68);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid oklch(1 0.003 245 / 0.5);
-  box-shadow:
-    inset 0 1px 0 0 oklch(1 0.003 245 / 0.7),
-    inset 0 -1px 0 0 oklch(0.19 0.02 245 / 0.05),
-    0 1px 2px 0 oklch(0.19 0.02 245 / 0.08);
+  /* Stage 6G remodel — approved mockups use solid white cards on a flat
+     light-blue page, so the frosted-glass treatment is retired. The
+     utility name stays (it is referenced across the app); it now paints
+     an opaque card surface with a soft ring + shadow per the mockups. */
+  background-color: oklch(1 0.003 245);
+  border: 1px solid oklch(0.92 0.015 245);
+  box-shadow: 0 1px 2px 0 oklch(0.19 0.02 245 / 0.06);
 }
 
 .dark .glass-panel {
-  background-color: oklch(0.2 0.025 245 / 0.55);
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  background-color: oklch(0.2 0.025 245);
   border-color: oklch(1 0.02 245 / 0.09);
-  box-shadow:
-    inset 0 1px 0 0 oklch(1 0.02 245 / 0.09),
-    inset 0 -1px 0 0 oklch(0 0 0 / 0.35),
-    0 1px 2px 0 oklch(0 0 0 / 0.5);
+  box-shadow: 0 1px 2px 0 oklch(0 0 0 / 0.5);
 }
 
 @utility glass-panel-strong {
-  background-color: oklch(1 0.003 245 / 0.78);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
-  border: 1px solid oklch(1 0.003 245 / 0.55);
-  box-shadow:
-    inset 0 1px 0 0 oklch(1 0.003 245 / 0.78),
-    inset 0 -1px 0 0 oklch(0.19 0.02 245 / 0.06),
-    0 1px 3px 0 oklch(0.19 0.02 245 / 0.1);
+  background-color: oklch(1 0.003 245);
+  border: 1px solid oklch(0.92 0.015 245);
+  box-shadow: 0 1px 3px 0 oklch(0.19 0.02 245 / 0.08);
 }
 
 .dark .glass-panel-strong {
-  background-color: oklch(0.2 0.025 245 / 0.66);
-  backdrop-filter: blur(32px) saturate(160%);
-  -webkit-backdrop-filter: blur(32px) saturate(160%);
+  background-color: oklch(0.2 0.025 245);
   border-color: oklch(1 0.02 245 / 0.11);
-  box-shadow:
-    inset 0 1px 0 0 oklch(1 0.02 245 / 0.11),
-    inset 0 -1px 0 0 oklch(0 0 0 / 0.4),
-    0 1px 3px 0 oklch(0 0 0 / 0.55);
+  box-shadow: 0 1px 3px 0 oklch(0 0 0 / 0.55);
 }
 
 /*
- * Workspace background — photograph as ambient wash.
- *
- * The photo at /public/workspace-bg.jpg is treated as a soft-focus
- * atmospheric backdrop, NOT documentary content. Two things enforce
- * that treatment:
- *
- *   1. body::before applies an ~18px blur + slight desaturation so the
- *      photo dissolves into abstract warm color regardless of its
- *      original subject. Sharp geometry vanishes; hard edges vanish;
- *      what remains is mood.
- *
- *   2. body::after adds a warm palette wash (~60% opacity of our
- *      --background token) that guarantees text contrast over "empty"
- *      workspace areas — not just inside frosted cards. Without this
- *      scrim, page-header descriptions and breadcrumbs sit on raw
- *      photo and become unreadable.
- *
- * Card, sidebar and topbar apply their own backdrop-blur on top; the
- * result is layered frost over an ambient warm haze.
- *
- * Both layers are hidden on print so PDF invoices/receipts stay clean.
+ * Stage 6G remodel — the workspace-bg.jpg ambient photo + warm wash
+ * layers are retired. The approved mockups use a flat light-blue page
+ * background (the --background token) with solid white cards, so the
+ * page paints the token directly with no decorative layers.
  */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -2;
-  pointer-events: none;
-  background-image: url('/workspace-bg.jpg');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  /* Light source blur only — enough to soften edges into an ambient
-     backdrop, not so much that the photo turns into grey mud. The
-     glass cards/sidebar apply their own `backdrop-blur-xl` where they
-     sit, so the photo reads as sharp-in-empty-workspace and blurred-
-     under-content, which is the pattern the user asked for. */
-  filter: blur(6px) saturate(1.08);
-  transform: scale(1.04);
-  opacity: 1;
-}
-
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  /* Whisper navy wash — palette-syncs the photo to our navy tokens.
-     Two-stop gradient with slightly more saturation at the bottom
-     mimics natural sky depth. */
-  background:
-    linear-gradient(180deg, oklch(0.96 0.02 245 / 0.28) 0%, oklch(0.9 0.05 245 / 0.42) 100%);
-}
-
-.dark body::before {
-  filter: blur(6px) saturate(0.95) brightness(0.5);
-}
-
-.dark body::after {
-  background:
-    linear-gradient(180deg, oklch(0.18 0.04 245 / 0.55) 0%, oklch(0.13 0.05 245 / 0.72) 100%);
-}
-
-@media print {
-  body::before,
-  body::after {
-    display: none;
-  }
-}
