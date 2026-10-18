@@ -18,6 +18,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { todayInDublin } from '@/lib/dates';
 import { createSupplierBillAction } from '@/modules/ap/actions';
 
 /**
@@ -44,7 +45,7 @@ export function BillDialog({
   const [open, setOpen] = useState(false);
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '');
   const [supplierRef, setSupplierRef] = useState('');
-  const [billDate, setBillDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [billDate, setBillDate] = useState(() => todayInDublin());
   const [currency, setCurrency] = useState<string>('EUR');
   const [subtotal, setSubtotal] = useState('');
   const [taxAmount, setTaxAmount] = useState('0');

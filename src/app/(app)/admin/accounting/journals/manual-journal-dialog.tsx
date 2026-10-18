@@ -18,6 +18,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { todayInDublin } from '@/lib/dates';
 import { postManualJournalAction } from '@/modules/accounting/actions';
 
 /**
@@ -62,7 +63,7 @@ export function ManualJournalDialog({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [journalDate, setJournalDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [journalDate, setJournalDate] = useState(() => todayInDublin());
   const [description, setDescription] = useState('');
   const [currency, setCurrency] = useState('EUR');
   const [lines, setLines] = useState<LineRow[]>([EMPTY_LINE, EMPTY_LINE]);

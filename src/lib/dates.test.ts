@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { formatDublinDisplay, parseDublinDisplay, todayInDublin } from './dates';
+import { formatDublinDisplay, parseDublinDisplay, plusDaysInDublin, todayInDublin } from './dates';
 
 /**
  * The immigration case status change writes `submittedAt` / `decisionAt` using
@@ -78,5 +78,47 @@ describe('parseDublinDisplay', () => {
     expect(parseDublinDisplay('not a date')).toBeNull();
     expect(parseDublinDisplay('18-10-26')).toBeNull();
     expect(parseDublinDisplay('2026-10-18')).toBeNull(); // ISO shape, not DD/MM/YYYY
+  });
+});
+
+/**
+ * Stage 6E+1 Section 5 — DST-safe `+n days` arithmetic. Validates that
+ * the delta is calendar-days from the Dublin "today", independent of
+ * UTC clock drift near midnight and independent of DST transitions.
+ */
+describe('plusDaysInDublin', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('returns today when n = 0', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-14T10:00:00.000Z'));
+    expect(plusDaysInDublin(0)).toBe(todayInDublin());
+  });
+
+  it('adds 90 days from Dublin today (July — IST, UTC+1)', () => {
+    // Dublin today = 2026-07-15 (23:15 UTC rolls to 00:15 IST next day).
+    // Dublin + 90d = 2026-10-13.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-14T23:15:00.000Z'));
+    expect(plusDaysInDublin(90)).toBe('2026-10-13');
+  });
+
+  it('crosses the IST→GMT autumn DST boundary without losing a day', () => {
+    // Dublin DST ends on the last Sunday of October (2026-10-25). Add
+    // 10 days from Oct 20 should land on Oct 30, not Oct 29 (which
+    // would happen if we added 10×24h in ms and the clock went back).
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-20T12:00:00.000Z'));
+    expect(plusDaysInDublin(10)).toBe('2026-10-30');
+  });
+
+  it('crosses the GMT→IST spring DST boundary without gaining a day', () => {
+    // Dublin DST starts on the last Sunday of March (2026-03-29). Add
+    // 10 days from Mar 25 should land on Apr 4.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-25T12:00:00.000Z'));
+    expect(plusDaysInDublin(10)).toBe('2026-04-04');
   });
 });

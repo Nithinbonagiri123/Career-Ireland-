@@ -19,6 +19,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { plusDaysInDublin, todayInDublin } from '@/lib/dates';
 import type { Advertisement } from '@/lib/db/schema/campaigns';
 import { useFormDialog } from '@/lib/hooks/use-form-dialog';
 import { upsertAdvertisementAction } from '@/modules/campaigns/actions';
@@ -36,10 +37,8 @@ export function AdDialog({ trigger, campaignId, initial }: Props) {
       country: initial?.country ?? '',
       platform: initial?.platform ?? '',
       targetApplicants: initial?.targetApplicants ?? 20,
-      startDate: initial?.startDate ?? new Date().toISOString().slice(0, 10),
-      expiryDate:
-        initial?.expiryDate ??
-        new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      startDate: initial?.startDate ?? todayInDublin(),
+      expiryDate: initial?.expiryDate ?? plusDaysInDublin(90),
       reminderOn: initial?.reminderOn ?? '',
       status: initial?.status ?? 'DRAFT',
       notes: initial?.notes ?? '',

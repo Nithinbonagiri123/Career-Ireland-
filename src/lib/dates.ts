@@ -27,6 +27,36 @@ export function todayInDublin(): string {
 }
 
 /**
+ * Today in Europe/Dublin plus `n` days as a `YYYY-MM-DD` string. Used by
+ * forms whose default expiry/end date is relative to today in Dublin
+ * time (campaign ad expiry = today + 90d, etc.). Keeps the deltas DST-
+ * safe because we start from the Dublin calendar date rather than from
+ * `Date.now() + ms` which can drift across the DST transition.
+ */
+export function plusDaysInDublin(n: number): string {
+  const base = todayInDublin();
+  const [y, m, d] = base.split('-').map((s) => Number.parseInt(s, 10));
+  if (
+    y === undefined ||
+    Number.isNaN(y) ||
+    m === undefined ||
+    Number.isNaN(m) ||
+    d === undefined ||
+    Number.isNaN(d)
+  ) {
+    return base;
+  }
+  // Date.UTC + setUTCDate avoids local-time DST transitions eating a
+  // day. The output is the pure calendar arithmetic.
+  const utc = new Date(Date.UTC(y, m - 1, d));
+  utc.setUTCDate(utc.getUTCDate() + n);
+  return `${utc.getUTCFullYear()}-${String(utc.getUTCMonth() + 1).padStart(
+    2,
+    '0',
+  )}-${String(utc.getUTCDate()).padStart(2, '0')}`;
+}
+
+/**
  * Format a `YYYY-MM-DD` date string (or a Date) as `DD/MM/YYYY` for Irish
  * UI display. Null-tolerant: returns an empty string when no date is
  * supplied. Does NOT re-translate the stored value into Dublin time —

@@ -18,6 +18,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { todayInDublin } from '@/lib/dates';
 import { recordBillPaymentAction } from '@/modules/ap/actions';
 
 export function BillPaymentDialog({
@@ -32,7 +33,7 @@ export function BillPaymentDialog({
   trigger: React.ReactElement;
 }) {
   const [open, setOpen] = useState(false);
-  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [paymentDate, setPaymentDate] = useState(() => todayInDublin());
   const [amount, setAmount] = useState(outstanding);
   const [method, setMethod] = useState<
     'BANK_TRANSFER' | 'CARD' | 'CASH' | 'DIRECT_DEBIT' | 'CHEQUE' | 'OTHER'
