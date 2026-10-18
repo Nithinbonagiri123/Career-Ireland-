@@ -118,6 +118,7 @@ export type ClientWorkspace = {
       | 'PARTIALLY_REFUNDED'
       | 'REFUNDED';
     method: 'BANK_TRANSFER' | 'CASH' | 'OTHER';
+    proofReference: string | null;
     receivedAt: Date | null;
     createdAt: Date;
   }>;
@@ -294,6 +295,7 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
             currencyCode: payments.currencyCode,
             status: payments.status,
             method: payments.method,
+            proofReference: payments.proofReference,
             receivedAt: payments.receivedAt,
             createdAt: payments.createdAt,
           })

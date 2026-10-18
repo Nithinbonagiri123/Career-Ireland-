@@ -20,6 +20,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { todayInDublin } from '@/lib/dates';
 import { recordPaymentAction, verifyPaymentAction } from '@/modules/commerce/actions';
 import { type RecordPaymentInput, RecordPaymentSchema } from '@/modules/commerce/schemas';
 
@@ -76,7 +77,7 @@ export function RecordInvoicePaymentDialog({
       currencyCode: invoice.currencyCode,
       method: 'BANK_TRANSFER',
       proofReference: '',
-      receivedAt: new Date().toISOString().slice(0, 10),
+      receivedAt: todayInDublin(),
     },
   });
 

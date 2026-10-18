@@ -1,10 +1,22 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Stage 6E Section 7 — Direct Payment & Convert acceptance scenarios.
+ * Stage 6E Section 7 + Stage 6E+1 Section 4 — Direct Payment & Convert
+ * acceptance scenarios. One spec covers all six journeys so the DB
+ * seed/cleanup helpers are shared.
  *
- * D. Direct cash payment with blank reference → invoice + receipt
- *    immediately, candidate converted.
+ * A. Cash with blank reference → receipt prints no reference label.
+ * B. Bank transfer with a reference → reference stored on the payment
+ *    and surfaced in the client workspace billing timeline.
+ * C. "Other" (card payment, operator types the card ref) → stored as
+ *    OTHER on the DB column with the operator's reference printed on
+ *    the receipt. Validates the Stage 6E+1 CARD-to-OTHER correction:
+ *    the UI no longer presents a misleading "Card" option; "Other" is
+ *    the one honest value and the reference carries the specificity.
+ * D. Cash blank reference → invoice + receipt + conversion in one step.
+ * E. Duplicate detection → the second attempt against an existing live
+ *    invoice/pro-forma for the same service is refused; override with
+ *    a reason proceeds.
  * F. Double-click / retry → no duplicate invoice, receipt, payment or
  *    candidate_profile.
  *
@@ -224,6 +236,211 @@ test('F: double-click Record payment → still exactly one invoice/receipt/payme
     await expect(page).toHaveURL(new RegExp(`/clients/${seeded.personId}`), { timeout: 15_000 });
     const counts = await countForPerson(seeded.personId);
     expect(counts).toEqual({ invoices: 1, payments: 1, receipts: 1, profiles: 1 });
+  } finally {
+    await seeded.cleanup();
+  }
+});
+
+async function latestPaymentForPerson(personId: string): Promise<{
+  method: 'BANK_TRANSFER' | 'CASH' | 'OTHER';
+  proofReference: string | null;
+} | null> {
+  const { desc, eq, inArray } = await import('drizzle-orm');
+  const { db } = await import('../src/lib/db/client');
+  const { payments: pay, serviceEngagements } = await import('../src/lib/db/schema/commerce');
+  const engs = await db
+    .select({ id: serviceEngagements.id })
+    .from(serviceEngagements)
+    .where(eq(serviceEngagements.beneficiaryPersonId, personId));
+  const engIds = engs.map((e) => e.id);
+  if (engIds.length === 0) return null;
+  const [p] = await db
+    .select({ method: pay.method, proofReference: pay.proofReference })
+    .from(pay)
+    .where(inArray(pay.serviceEngagementId, engIds))
+    .orderBy(desc(pay.createdAt))
+    .limit(1);
+  return p ?? null;
+}
+
+async function openDirectPaymentDialog(
+  page: import('@playwright/test').Page,
+  stampSubstring: string,
+) {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/leads?assigned=all');
+  const row = page.locator('tr', { hasText: new RegExp(stampSubstring, 'i') }).first();
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.getByRole('button', { name: /Direct Payment & Convert/i }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+test('A: cash with blank reference → receipt stores no reference', async ({ page }) => {
+  const stamp = Math.random().toString(36).slice(2, 6);
+  const seeded = await seedCsLeadWithService(`CA${stamp}`);
+  try {
+    const dialog = await openDirectPaymentDialog(page, `CA${stamp}`);
+    await dialog.getByLabel(/Method/i).selectOption('CASH');
+    // Reference stays blank.
+    await dialog.getByRole('button', { name: /Record payment & convert/i }).click();
+    await expect(page).toHaveURL(new RegExp(`/clients/${seeded.personId}`), { timeout: 15_000 });
+
+    const latest = await latestPaymentForPerson(seeded.personId);
+    expect(latest).not.toBeNull();
+    expect(latest?.method).toBe('CASH');
+    // Journey A asserts the field is explicitly null — not an empty
+    // string, not " ", not a placeholder. The receipt renderer uses
+    // this to omit the reference row entirely rather than printing
+    // "Reference: —".
+    expect(latest?.proofReference).toBeNull();
+  } finally {
+    await seeded.cleanup();
+  }
+});
+
+test('B: bank transfer with reference → reference stored on payment', async ({ page }) => {
+  const stamp = Math.random().toString(36).slice(2, 6);
+  const seeded = await seedCsLeadWithService(`BT${stamp}`);
+  const bankRef = `BANK-${stamp}-${Date.now().toString(36).slice(-5).toUpperCase()}`;
+  try {
+    const dialog = await openDirectPaymentDialog(page, `BT${stamp}`);
+    await dialog.getByLabel(/Method/i).selectOption('BANK_TRANSFER');
+    await dialog.getByLabel(/Payment reference/i).fill(bankRef);
+    await dialog.getByRole('button', { name: /Record payment & convert/i }).click();
+    await expect(page).toHaveURL(new RegExp(`/clients/${seeded.personId}`), { timeout: 15_000 });
+
+    const latest = await latestPaymentForPerson(seeded.personId);
+    expect(latest).not.toBeNull();
+    expect(latest?.method).toBe('BANK_TRANSFER');
+    expect(latest?.proofReference).toBe(bankRef);
+    // Workspace Billing row prints the reference verbatim so finance
+    // can reconcile against the bank statement.
+    await expect(page.getByText(bankRef)).toBeVisible({ timeout: 15_000 });
+  } finally {
+    await seeded.cleanup();
+  }
+});
+
+test('C: Other (card) with Stripe ref → stored as OTHER on DB, reference printed on receipt', async ({
+  page,
+}) => {
+  const stamp = Math.random().toString(36).slice(2, 6);
+  const seeded = await seedCsLeadWithService(`OC${stamp}`);
+  // Stage 6E+1 Section 4C — the "Card" option was removed from the
+  // Direct Payment method dropdown. Operators pick "Other" and type
+  // the real Stripe / terminal reference into the Payment reference
+  // field. The receipt + billing timeline print the reference
+  // verbatim so a client sees `pi_3O9xk1LMnrA...` instead of a bare
+  // "Other".
+  const stripeRef = `pi_3O${stamp}LMnrA${Date.now().toString(36).slice(-6)}`;
+  try {
+    const dialog = await openDirectPaymentDialog(page, `OC${stamp}`);
+    const methodSelect = dialog.getByLabel(/Method/i);
+    // Prove the misleading "CARD" option is gone from the enum.
+    const options = await methodSelect.locator('option').allTextContents();
+    expect(options.some((o) => /^Card$/i.test(o.trim()))).toBe(false);
+    expect(options.some((o) => /Other/i.test(o))).toBe(true);
+    await methodSelect.selectOption('OTHER');
+    await dialog.getByLabel(/Payment reference/i).fill(stripeRef);
+    await dialog.getByRole('button', { name: /Record payment & convert/i }).click();
+    await expect(page).toHaveURL(new RegExp(`/clients/${seeded.personId}`), { timeout: 15_000 });
+
+    const latest = await latestPaymentForPerson(seeded.personId);
+    expect(latest).not.toBeNull();
+    expect(latest?.method).toBe('OTHER');
+    expect(latest?.proofReference).toBe(stripeRef);
+    await expect(page.getByText(stripeRef)).toBeVisible({ timeout: 15_000 });
+  } finally {
+    await seeded.cleanup();
+  }
+});
+
+test('E: duplicate detection → second attempt refused; override with reason proceeds', async ({
+  page,
+}) => {
+  const stamp = Math.random().toString(36).slice(2, 6);
+  const seeded = await seedCsLeadWithService(`DU${stamp}`);
+  try {
+    // First successful attempt — creates an ISSUED invoice (then PAID
+    // after recomputeInvoiceStatus) + the one-shot engagement.
+    const dialog = await openDirectPaymentDialog(page, `DU${stamp}`);
+    await dialog.getByLabel(/Method/i).selectOption('CASH');
+    await dialog.getByRole('button', { name: /Record payment & convert/i }).click();
+    await expect(page).toHaveURL(new RegExp(`/clients/${seeded.personId}`), { timeout: 15_000 });
+    const firstCounts = await countForPerson(seeded.personId);
+    expect(firstCounts).toEqual({ invoices: 1, payments: 1, receipts: 1, profiles: 1 });
+
+    // Seed a second CS lead for the same person so we can retry the
+    // Direct Payment flow — same person + same service = duplicate.
+    const { db } = await import('../src/lib/db/client');
+    const { leads: leadsTable } = await import('../src/lib/db/schema/leads');
+    const [l2] = await db
+      .insert(leadsTable)
+      .values({
+        personId: seeded.personId,
+        targetBusiness: 'CANDIDATE_SERVICES',
+        status: 'NEW',
+      })
+      .returning({ id: leadsTable.id });
+    if (!l2) throw new Error('second lead insert failed');
+
+    try {
+      // The invoice from the first attempt was auto-flipped to PAID,
+      // so the person-level duplicate signal is a stale ISSUED/PP
+      // invoice OR an ACCEPTED/ISSUED pro-forma on *this* lead. We
+      // create an ISSUED pro-forma on the second lead to trigger the
+      // detector cleanly.
+      const { proFormaInvoices } = await import('../src/lib/db/schema/proformas');
+      await db.insert(proFormaInvoices).values({
+        number: `PF-TEST-${stamp}-${Date.now().toString(36).slice(-5)}`,
+        sourceLeadId: l2.id,
+        payerPersonId: seeded.personId,
+        currencyCode: seeded.currency,
+        subtotal: seeded.price,
+        status: 'ISSUED',
+      });
+
+      await page.goto('/leads?assigned=all');
+      const row = page
+        .locator('tr', { hasText: new RegExp(`DU${stamp}`, 'i') })
+        .filter({ hasText: /Direct Payment & Convert/i })
+        .first();
+      await expect(row).toBeVisible({ timeout: 15_000 });
+      await row.getByRole('button', { name: /Direct Payment & Convert/i }).click();
+      const dialog2 = page.getByRole('dialog');
+      await expect(dialog2).toBeVisible();
+      await dialog2.getByLabel(/Method/i).selectOption('CASH');
+      await dialog2.getByRole('button', { name: /Record payment & convert/i }).click();
+
+      // Server rejects with DIRECT_PAYMENT_DUPLICATE_LIKELY. The
+      // dialog surfaces the error inline and reveals the override box.
+      const errBox = dialog2.getByText(/live invoice or quote already exists/i);
+      await expect(errBox).toBeVisible({ timeout: 15_000 });
+
+      // No new invoice/payment/receipt created.
+      const afterRefused = await countForPerson(seeded.personId);
+      expect(afterRefused).toEqual(firstCounts);
+
+      // Override + resubmit succeeds.
+      const overrideBox = dialog2.getByLabel(/Reason for proceeding despite a possible duplicate/i);
+      await expect(overrideBox).toBeVisible();
+      await overrideBox.fill('Client called in a second CS enrolment; billing agreed.');
+      await dialog2.getByRole('button', { name: /Record payment & convert/i }).click();
+      await expect(page).toHaveURL(new RegExp(`/clients/${seeded.personId}`), { timeout: 15_000 });
+
+      const after = await countForPerson(seeded.personId);
+      expect(after.invoices).toBe(firstCounts.invoices + 1);
+      expect(after.payments).toBe(firstCounts.payments + 1);
+      expect(after.receipts).toBe(firstCounts.receipts + 1);
+      expect(after.profiles).toBe(1); // one shared profile
+    } finally {
+      const { eq } = await import('drizzle-orm');
+      const { proFormaInvoices } = await import('../src/lib/db/schema/proformas');
+      await db.delete(proFormaInvoices).where(eq(proFormaInvoices.sourceLeadId, l2.id));
+      await db.delete(leadsTable).where(eq(leadsTable.id, l2.id));
+    }
   } finally {
     await seeded.cleanup();
   }

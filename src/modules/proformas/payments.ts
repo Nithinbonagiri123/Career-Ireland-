@@ -7,6 +7,7 @@ import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { proFormaInvoices, proFormaOfficialInvoices } from '@/lib/db/schema/proformas';
 import { BusinessRuleError, NotFoundError, ValidationError } from '@/lib/errors';
 import { insertReceipt, recomputeInvoiceStatus } from '@/modules/billing/service';
+import { activateCandidateInTx } from '@/modules/clients/activation-service';
 import { issueOfficialInvoiceForProForma } from './issuance';
 import { centsToMoney, moneyToCents } from './money';
 
@@ -272,6 +273,18 @@ export type VerifyPaymentResult = {
   receiptId: string;
   issuedInvoiceId: string | null;
   issuedInvoiceNumber: string | null;
+  /**
+   * Stage 6F — when the verification completes the full agreed amount
+   * on a CS pro forma, the candidate is activated atomically in the
+   * same transaction. These two fields describe the candidate side so
+   * the UI can show one coherent success state ("invoice INV-… issued
+   * + candidate active, open workspace →") instead of a second
+   * "Activate candidate" prompt. `null` when the payment is a partial
+   * (pro forma not yet fully paid), when the lead was already
+   * CONVERTED, or for the rare non-CS pro-forma pathway.
+   */
+  candidateProfileId: string | null;
+  candidatePersonId: string | null;
 };
 
 export async function verifyPaymentForProForma(paymentId: string): Promise<VerifyPaymentResult> {
@@ -302,21 +315,46 @@ export async function verifyPaymentForProFormaAs(
     }
     if (payment.status === 'VERIFIED') {
       // Idempotent: already verified. Return the existing receipt + any
-      // issued invoice without re-processing.
+      // issued invoice + any candidate activation without re-processing.
       const [existingReceipt] = await tx.execute<{ id: string }>(
         sql`SELECT id FROM receipts WHERE payment_id = ${payment.id} LIMIT 1`,
       );
       const [issued] = await tx
-        .select({ id: invoices.id, number: invoices.number })
+        .select({
+          id: invoices.id,
+          number: invoices.number,
+          sourceLeadId: proFormaInvoices.sourceLeadId,
+        })
         .from(proFormaOfficialInvoices)
         .innerJoin(invoices, eq(invoices.id, proFormaOfficialInvoices.invoiceId))
+        .innerJoin(
+          proFormaInvoices,
+          eq(proFormaInvoices.id, proFormaOfficialInvoices.proFormaInvoiceId),
+        )
         .where(eq(proFormaOfficialInvoices.proFormaInvoiceId, payment.proFormaInvoiceId))
         .limit(1);
+      // Stage 6F — if an invoice was already issued but the lead
+      // hasn't been activated yet (payment verified before the Stage
+      // 6F wiring landed), activate idempotently on this replay.
+      let candidateProfileId: string | null = null;
+      let candidatePersonId: string | null = null;
+      if (issued) {
+        const activation = await activateCandidateInTx(tx, {
+          leadId: issued.sourceLeadId,
+          actorUserId,
+          via: 'proforma_payment_verified',
+          note: 'Idempotent replay — activating candidate for a previously-issued invoice.',
+        });
+        candidateProfileId = activation.candidateProfileId;
+        candidatePersonId = activation.personId;
+      }
       return {
         paymentId: payment.id,
         receiptId: existingReceipt?.id ?? '',
         issuedInvoiceId: issued?.id ?? null,
         issuedInvoiceNumber: issued?.number ?? null,
+        candidateProfileId,
+        candidatePersonId,
       };
     }
     if (payment.status === 'REJECTED' || payment.status === 'REFUNDED') {
@@ -430,6 +468,8 @@ export async function verifyPaymentForProFormaAs(
     // us to it, we get back the existing invoice.
     let issuedInvoiceId: string | null = null;
     let issuedInvoiceNumber: string | null = null;
+    let candidateProfileId: string | null = null;
+    let candidatePersonId: string | null = null;
     if (totalAfterCents + OVERPAY_TOLERANCE >= pfTotalCents) {
       const issued = await issueOfficialInvoiceForProForma(tx, {
         proFormaInvoiceId: pf.id,
@@ -474,6 +514,23 @@ export async function verifyPaymentForProFormaAs(
         before: { status: pf.status },
         after: { status: 'CONVERTED', invoiceId: issued.id, invoiceNumber: issued.number },
       });
+
+      // Stage 6F — atomic candidate activation. Now that the invoice +
+      // receipt are issued, flip the originating lead to CONVERTED and
+      // create (or reuse) the candidate profile in the SAME transaction.
+      // Operators no longer have to click "Activate candidate" as a
+      // second step. CS-only — the activation primitive refuses non-CS
+      // leads, so a stray Immigration pro forma won't accidentally
+      // create a candidate profile. Idempotent: if the person already
+      // has a profile (second paid pro forma on the same client), the
+      // existing profile is reused.
+      const activation = await activateCandidateInTx(tx, {
+        leadId: pf.sourceLeadId,
+        actorUserId,
+        via: 'proforma_payment_verified',
+      });
+      candidateProfileId = activation.candidateProfileId;
+      candidatePersonId = activation.personId;
     }
 
     return {
@@ -481,6 +538,8 @@ export async function verifyPaymentForProFormaAs(
       receiptId: receipt.id,
       issuedInvoiceId,
       issuedInvoiceNumber,
+      candidateProfileId,
+      candidatePersonId,
     };
   });
 }

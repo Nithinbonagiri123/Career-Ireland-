@@ -25,31 +25,43 @@ export function ClientPrimaryAction({
   action: ClientNextAction;
   onOpenDialog: (dialog: ClientDialog) => void;
 }) {
-  const toneCls =
+  // Stage 6G — compact bar with a coloured left stripe matching the
+  // tone so the operator catches the urgency at a glance without the
+  // badge pill competing with the primary status in the hero above.
+  const stripeCls =
     action.tone === 'urgent'
-      ? 'border-status-danger/30 bg-status-danger-soft'
+      ? 'bg-status-danger'
       : action.tone === 'muted'
-        ? 'border-border bg-muted/30'
-        : 'border-border bg-background';
+        ? 'bg-muted-foreground/40'
+        : 'bg-primary';
+  const bgCls =
+    action.tone === 'urgent'
+      ? 'bg-status-danger-soft/40'
+      : action.tone === 'muted'
+        ? 'bg-muted/30'
+        : 'bg-background';
   const eyebrowCls =
     action.tone === 'urgent'
       ? 'text-status-danger'
       : action.tone === 'muted'
         ? 'text-muted-foreground'
-        : 'text-foreground';
+        : 'text-primary';
   return (
-    <div className={cn('rounded-lg border p-4 sm:p-5', toneCls)}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 flex-1 space-y-1">
-          <div className={cn('text-[10px] font-medium uppercase tracking-wider', eyebrowCls)}>
+    <div className={cn('relative overflow-hidden rounded-lg border py-3 pl-5 pr-4', bgCls)}>
+      <span aria-hidden className={cn('absolute inset-y-0 left-0 w-1', stripeCls)} />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <span
+            className={cn('mr-2 text-[10px] font-semibold uppercase tracking-wider', eyebrowCls)}
+          >
             {action.label}
-            {action.dueHint && (
-              <span className="ml-2 rounded-full bg-status-danger px-1.5 py-0.5 text-[9px] uppercase text-status-danger-foreground">
-                {action.dueHint}
-              </span>
-            )}
-          </div>
-          <div className="text-sm font-medium">{action.sentence}</div>
+          </span>
+          {action.dueHint && (
+            <span className="mr-2 rounded-full bg-status-danger px-1.5 py-0.5 text-[9px] uppercase text-status-danger-foreground">
+              {action.dueHint}
+            </span>
+          )}
+          <span className="text-sm text-foreground">{action.sentence}</span>
         </div>
         <div className="shrink-0">{renderButton(action.primary, onOpenDialog)}</div>
       </div>

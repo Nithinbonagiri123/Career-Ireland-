@@ -63,7 +63,7 @@ export function DirectPaymentDialog({
   const [agreedAmount, setAgreedAmount] = useState<string>('');
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [currency, setCurrency] = useState<string>(defaultCurrencyCode);
-  const [method, setMethod] = useState<'CASH' | 'BANK_TRANSFER' | 'CARD'>('BANK_TRANSFER');
+  const [method, setMethod] = useState<'CASH' | 'BANK_TRANSFER' | 'OTHER'>('BANK_TRANSFER');
   const [paymentDate, setPaymentDate] = useState<string>(() => todayInDublin());
   const [reference, setReference] = useState<string>('');
   const [overrideReason, setOverrideReason] = useState<string>('');
@@ -270,12 +270,12 @@ export function DirectPaymentDialog({
               <Select
                 id="dp-method"
                 value={method}
-                onChange={(e) => setMethod(e.target.value as 'CASH' | 'BANK_TRANSFER' | 'CARD')}
+                onChange={(e) => setMethod(e.target.value as 'CASH' | 'BANK_TRANSFER' | 'OTHER')}
                 disabled={pending}
               >
                 <option value="CASH">Cash</option>
                 <option value="BANK_TRANSFER">Bank transfer</option>
-                <option value="CARD">Card</option>
+                <option value="OTHER">Other (card, mobile money, …)</option>
               </Select>
             </div>
             <div className="space-y-1.5">
@@ -305,6 +305,12 @@ export function DirectPaymentDialog({
               maxLength={500}
               placeholder="Bank line / card transaction id / cash slip"
             />
+            {method === 'OTHER' && (
+              <p className="text-[11px] italic text-muted-foreground">
+                For card payments, enter the Stripe / terminal receipt id above. It prints on the
+                official receipt verbatim.
+              </p>
+            )}
           </div>
 
           {showOverride && (

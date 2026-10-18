@@ -269,7 +269,10 @@ export function ProFormaComposer({
           </Button>
         }
       />
-      <DialogContent className="max-w-2xl sm:max-w-2xl">
+      {/* Stage 6F Phase 3 — widened to max-w-3xl so multi-line
+          service rows (qty / price / description) have room without
+          wrapping, with max-h scrolling for short viewports. */}
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>

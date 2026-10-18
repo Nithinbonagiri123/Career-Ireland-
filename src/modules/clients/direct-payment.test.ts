@@ -1,25 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
-
-// Stub the whole session module so vitest doesn't pull next-auth into
-// the test graph. We only need the schema here; the server action's
-// role-gate behaviour is proven by the role-gates test + Playwright.
-vi.mock('@/lib/auth/session', () => ({
-  requireRole: vi.fn(),
-  requireInternalStaff: vi.fn(),
-  requirePermission: vi.fn(),
-  INTERNAL_STAFF_ROLES: [
-    'ADMIN',
-    'STAFF',
-    'MANAGER',
-    'RECRUITER',
-    'DOCUMENT_SPECIALIST',
-    'FINANCE',
-  ] as const,
-  getSession: vi.fn(),
-  requireSession: vi.fn(),
-}));
-
-const { DirectPaymentAndConvertSchema } = await import('./direct-payment');
+import { describe, expect, it } from 'vitest';
+// Stage 6E+1 — schema moved to its own module so a 'use server' file
+// doesn't export non-async values; see direct-payment-schema.ts.
+import { DirectPaymentAndConvertSchema } from './direct-payment-schema';
 
 /**
  * Stage 6E Section 3 — schema-level checks for the Direct Payment &
@@ -62,21 +44,23 @@ describe('DirectPaymentAndConvertSchema', () => {
     expect(r.success).toBe(false);
   });
 
-  it('accepts BANK_TRANSFER, CASH, CARD; rejects OTHER', () => {
+  it('accepts BANK_TRANSFER, CASH, OTHER; rejects CARD', () => {
+    // Stage 6E+1 Section 4C — "CARD" was removed from the method
+    // enum. The dropdown now mirrors the pro-forma payments schema
+    // (BANK_TRANSFER / CASH / OTHER) so the display label and the
+    // stored DB value stay in lockstep. Card payments pick "Other"
+    // and put the Stripe / terminal reference in the Payment
+    // reference field.
     expect(
       DirectPaymentAndConvertSchema.safeParse({ ...base, methodDisplay: 'BANK_TRANSFER' }).success,
     ).toBe(true);
     expect(
-      DirectPaymentAndConvertSchema.safeParse({ ...base, methodDisplay: 'CARD' }).success,
+      DirectPaymentAndConvertSchema.safeParse({ ...base, methodDisplay: 'OTHER' }).success,
     ).toBe(true);
-    // 'OTHER' is the DB-level enum but NOT a visible method in this
-    // dialog — only CASH / BANK_TRANSFER / CARD surface. The schema
-    // locks that so the UI can't accidentally send 'OTHER' and lose
-    // the display label.
     expect(
       DirectPaymentAndConvertSchema.safeParse({
         ...base,
-        methodDisplay: 'OTHER' as unknown as 'CASH',
+        methodDisplay: 'CARD' as unknown as 'CASH',
       }).success,
     ).toBe(false);
   });

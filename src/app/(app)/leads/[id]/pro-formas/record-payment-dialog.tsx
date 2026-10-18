@@ -18,6 +18,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { todayInDublin } from '@/lib/dates';
 import { recordProFormaPaymentAction } from '@/modules/proformas/actions';
 
 /**
@@ -40,7 +41,7 @@ export function RecordPaymentDialog({
   const [pending, startTransition] = useTransition();
   const [amount, setAmount] = useState(defaultAmount);
   const [method, setMethod] = useState<'BANK_TRANSFER' | 'CASH' | 'OTHER'>('BANK_TRANSFER');
-  const [receivedAt, setReceivedAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [receivedAt, setReceivedAt] = useState(() => todayInDublin());
   const [proofReference, setProofReference] = useState('');
 
   function submit() {
@@ -152,7 +153,16 @@ export function VerifyPaymentButton({ paymentId }: { paymentId: string }) {
       const { verifyProFormaPaymentAction } = await import('@/modules/proformas/actions');
       const r = await verifyProFormaPaymentAction({ paymentId });
       if (r.ok) {
-        if (r.data.issuedInvoiceNumber) {
+        // Stage 6F — the verify path now also activates the candidate
+        // when the pro forma reaches full-paid. Report the full
+        // outcome ("invoice issued, candidate active") instead of just
+        // "invoice issued" so operators know they're done, not partway
+        // through onboarding.
+        if (r.data.candidateProfileId && r.data.issuedInvoiceNumber) {
+          toast.success(
+            `Payment verified. Official invoice ${r.data.issuedInvoiceNumber} issued and candidate is now active.`,
+          );
+        } else if (r.data.issuedInvoiceNumber) {
           toast.success(`Payment verified. Official invoice issued: ${r.data.issuedInvoiceNumber}`);
         } else {
           toast.success('Payment verified. Receipt issued.');

@@ -2,7 +2,6 @@
 
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -17,6 +16,10 @@ import { toActionResult } from '@/lib/result';
 import { insertInvoice, insertReceipt } from '@/modules/billing/service';
 import { insertEngagement, insertPayment } from '@/modules/commerce/repository';
 import { fetchAppSettings } from '@/modules/settings/service';
+import {
+  type DirectPaymentAndConvertResult,
+  DirectPaymentAndConvertSchema,
+} from './direct-payment-schema';
 
 /**
  * Stage 6E Section 3 — Direct Payment & Convert.
@@ -44,48 +47,8 @@ import { fetchAppSettings } from '@/modules/settings/service';
  *     `insertReceipt`, `insertEngagement`, `insertPayment`,
  *     `allocateNextNumber`). No parallel ledger implementation.
  */
-export const DirectPaymentAndConvertSchema = z.object({
-  leadId: z.string().uuid(),
-  serviceCatalogItemId: z.string().uuid(),
-  agreedAmount: z
-    .string()
-    .regex(/^\d+(\.\d{1,2})?$/, 'Agreed amount must be a decimal with up to 2 decimal places'),
-  paymentAmount: z
-    .string()
-    .regex(/^\d+(\.\d{1,2})?$/, 'Payment amount must be a decimal with up to 2 decimal places'),
-  currencyCode: z.string().length(3),
-  /** UI label — stored as `OTHER` in the DB method column when not
-   *  CASH/BANK_TRANSFER, with the display method recorded on the audit
-   *  event so the invoice/receipt printables can show "Card". */
-  methodDisplay: z.enum(['CASH', 'BANK_TRANSFER', 'CARD']),
-  /** YYYY-MM-DD in Europe/Dublin (the UI uses `todayInDublin()` for the
-   *  prefill). Operator can backdate; we store this on the payment's
-   *  `receivedAt`. */
-  paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'paymentDate must be YYYY-MM-DD'),
-  /** Optional transaction reference. If present, printed on invoice +
-   *  receipt. If blank, both documents omit the field entirely. */
-  reference: z.string().max(500).nullish(),
-  /** UI-generated per dialog mount so a double-click can't duplicate. */
-  idempotencyKey: z.string().min(8).max(128),
-  /** Operator-confirmed override for the duplicate detector. Required
-   *  when the detector finds a live invoice / accepted pro-forma for
-   *  the same service. */
-  overrideDuplicateReason: z.string().max(500).nullish(),
-});
-
-export type DirectPaymentAndConvertInput = z.infer<typeof DirectPaymentAndConvertSchema>;
-
-export type DirectPaymentAndConvertResult = {
-  invoiceId: string;
-  invoiceNumber: string;
-  receiptId: string;
-  receiptNumber: string;
-  paymentId: string;
-  engagementId: string;
-  candidateProfileId: string;
-  personId: string;
-  alreadyProcessed: boolean;
-};
+// Schema + types live in `direct-payment-schema.ts` because a 'use
+// server' file can only export async functions.
 
 export async function directPaymentAndConvertAction(
   input: unknown,
@@ -128,6 +91,20 @@ async function directPaymentAndConvert(input: unknown): Promise<DirectPaymentAnd
   }
 
   return db.transaction(async (tx) => {
+    // Stage 6E+1 — DB-enforced idempotency. Serialize all concurrent
+    // attempts carrying this `idempotencyKey` via a transaction-scoped
+    // Postgres advisory lock. The lock is held for the length of this
+    // transaction and released on commit/rollback. Two simultaneous
+    // double-clicks with the same key:
+    //   - the first one acquires the advisory lock and the lead row
+    //     lock, performs the full flow, commits, releases the locks;
+    //   - the second one waits, acquires both locks, finds the first
+    //     attempt's committed audit event, and returns `alreadyProcessed`.
+    // This guarantee holds even if the lead row FOR UPDATE below is
+    // somehow bypassed in future refactors — the audit lookup alone
+    // can race, the advisory lock cannot.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${data.idempotencyKey}))`);
+
     // Lock the lead for the length of the transaction. Prevents two
     // concurrent operators (or a double-clicked button) from both
     // reaching the create-invoice step before either stamps the lead.
@@ -302,16 +279,13 @@ async function directPaymentAndConvert(input: unknown): Promise<DirectPaymentAnd
       sourceLeadId: lead.id,
     });
 
-    // Record the payment as already-VERIFIED. Method maps CARD → OTHER
-    // on the DB column (the enum is BANK_TRANSFER / CASH / OTHER); the
-    // display method lands in the audit context + the payment reference
-    // for traceability.
-    const dbMethod: 'BANK_TRANSFER' | 'CASH' | 'OTHER' =
-      data.methodDisplay === 'BANK_TRANSFER'
-        ? 'BANK_TRANSFER'
-        : data.methodDisplay === 'CASH'
-          ? 'CASH'
-          : 'OTHER';
+    // Record the payment as already-VERIFIED. Stage 6E+1 — the schema
+    // now constrains methodDisplay to the DB enum values so no
+    // coercion is needed; `methodDisplay` and the stored method stay
+    // in lockstep and the receipt prints exactly what the operator
+    // chose. Card payments pick "Other" and put the Stripe/terminal
+    // reference in the Payment reference field.
+    const dbMethod = data.methodDisplay;
     const receivedAt = new Date(`${data.paymentDate}T00:00:00.000Z`);
     const ref = (data.reference ?? '').trim();
     const payment = await insertPayment(tx, {

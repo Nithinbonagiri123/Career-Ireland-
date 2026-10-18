@@ -168,6 +168,14 @@ export async function verifyProFormaPaymentAction(input: unknown) {
   if (r.ok) {
     revalidatePath('/leads');
     revalidatePath('/payments');
+    revalidatePath('/candidates');
+    // Stage 6F — when verification activates the candidate, revalidate
+    // the workspace so the operator who just verified sees the
+    // candidate-active state (CONVERTED lead, Active profile) without
+    // having to reload the page manually.
+    if (r.data.candidatePersonId) {
+      revalidatePath(`/clients/${r.data.candidatePersonId}`);
+    }
   }
   return r;
 }
