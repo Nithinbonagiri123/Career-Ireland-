@@ -1,6 +1,6 @@
 import { desc, eq, inArray, or } from 'drizzle-orm';
 import { hasPermission } from '@/lib/auth/permissions';
-import { requireInternalStaff, type Session } from '@/lib/auth/session';
+import { loadCurrentUserPermissions, requireInternalStaff, type Session } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { invoices, refunds } from '@/lib/db/schema/billing';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
@@ -19,7 +19,6 @@ import { serviceCatalogItems } from '@/lib/db/schema/services';
 import { users } from '@/lib/db/schema/users';
 import { fetchInvoiceableServicesFor, type InvoiceableService } from '@/modules/billing/read';
 import { fetchCurrencies } from '@/modules/currencies/service';
-import { fetchUserPermissionSnapshot } from '@/modules/permissions/service';
 import type { CurrencyRollup, EngagementBalance, PendingQuoteBalance } from './balance';
 import { buildClientBalance } from './balance';
 import type { ClientNextAction } from './next-action';
@@ -433,9 +432,17 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
   // "Confirm payment received" is gated to users with proformas:edit
   // on the Candidate Services business — the same gate used by the
   // verifyProFormaPaymentAction server action. ADMIN + FINANCE roles
-  // always carry this via their preset grants.
-  const perms = await fetchUserPermissionSnapshot(session.user.id);
-  const canVerifyPayments = hasPermission(perms.granted, 'candidate_services', 'proformas', 'edit');
+  // always carry this via their preset grants. Owners bypass.
+  //
+  // We use `loadCurrentUserPermissions` (self-lookup, cached per request)
+  // rather than `fetchUserPermissionSnapshot` which guards against ad-hoc
+  // introspection with `main/admin/manage` and would 403 an ordinary
+  // STAFF opening their own workspace page.
+  const perms = await loadCurrentUserPermissions();
+  const canVerifyPayments = Boolean(
+    perms?.isOwner ||
+      (perms && hasPermission(perms.granted, 'candidate_services', 'proformas', 'edit')),
+  );
 
   const nextAction = computeClientNextAction({
     personId,

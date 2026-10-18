@@ -6,7 +6,7 @@ import { invoices } from '@/lib/db/schema/billing';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { proFormaInvoices, proFormaOfficialInvoices } from '@/lib/db/schema/proformas';
 import { BusinessRuleError, NotFoundError, ValidationError } from '@/lib/errors';
-import { insertReceipt } from '@/modules/billing/service';
+import { insertReceipt, recomputeInvoiceStatus } from '@/modules/billing/service';
 import { issueOfficialInvoiceForProForma } from './issuance';
 import { centsToMoney, moneyToCents } from './money';
 
@@ -454,6 +454,17 @@ export async function verifyPaymentForProFormaAs(
         )
           AND invoice_id IS NULL
       `);
+
+      // Stage 6B+3 — atomic status flip. The invoice was inserted as
+      // ISSUED by `issueOfficialInvoiceForProForma`; now that the
+      // verified-payment total matches it, recompute to flip ISSUED →
+      // PAID (or PARTIALLY_PAID in the rare case the payment under-
+      // allocates by more than the tolerance). Runs inside the same
+      // transaction as the invoice insert + receipt backfill so no
+      // intermediate state is observable, and takes `SELECT ... FOR
+      // UPDATE` on the invoice row via recomputeInvoiceStatus so a
+      // concurrent credit-note write serialises behind us.
+      await recomputeInvoiceStatus(tx, issued.id);
 
       await recordAudit(tx, {
         actorUserId: actorUserId,

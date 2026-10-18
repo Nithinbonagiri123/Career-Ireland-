@@ -43,7 +43,18 @@ export default defineConfig({
       },
       // `.anon.spec.ts` files run under the anonymous project only — they
       // assert unauthenticated flows and would fail with a stored session.
-      testIgnore: /.*\.anon\.spec\.ts/,
+      // `.staff.spec.ts` files are STAFF-scoped and would overcollect
+      // under the admin storageState.
+      testIgnore: /.*\.(anon|staff)\.spec\.ts/,
+    },
+    {
+      name: 'staff',
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/staff.json',
+      },
+      // Only tests that explicitly need a non-finance role run here.
+      testMatch: /.*\.staff\.spec\.ts/,
     },
     {
       name: 'anonymous',

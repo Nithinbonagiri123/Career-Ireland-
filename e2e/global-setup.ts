@@ -14,6 +14,15 @@ export const E2E_ADMIN = {
   password: 'Ir3land-Careers!23',
 };
 
+export const E2E_STAFF = {
+  email: 'e2e-staff@ireland-careers.test',
+  fullName: 'E2E Staff',
+  // Same complexity rule as E2E_ADMIN. Role is STAFF so the user
+  // intentionally lacks ADMIN / FINANCE grants — this account proves
+  // the server-side gate rejects finance actions and the UI hides them.
+  password: 'St4ff-Workspace!99',
+};
+
 async function ensureAdminUser() {
   const { and, eq, ne, sql } = await import('drizzle-orm');
   const { db } = await import('../src/lib/db/client');
@@ -81,6 +90,73 @@ async function ensureAdminUser() {
   return created.id;
 }
 
+async function ensureStaffUser(): Promise<string> {
+  const { eq } = await import('drizzle-orm');
+  const { db } = await import('../src/lib/db/client');
+  const { users } = await import('../src/lib/db/schema/users');
+  const { userPermissions } = await import('../src/lib/db/schema/permissions');
+  const argon2 = (await import('argon2')).default;
+  const ARGON2_OPTIONS = {
+    type: argon2.argon2id,
+    memoryCost: 19 * 1024,
+    timeCost: 2,
+    parallelism: 1,
+  } as const;
+  const hash = (pw: string) => argon2.hash(pw, ARGON2_OPTIONS);
+
+  const [existing] = await db.select().from(users).where(eq(users.email, E2E_STAFF.email)).limit(1);
+  let userId: string;
+  if (existing) {
+    const passwordHash = await hash(E2E_STAFF.password);
+    await db
+      .update(users)
+      .set({
+        passwordHash,
+        isActive: true,
+        role: 'STAFF',
+        isOwner: false,
+        sessionsInvalidatedAfter: new Date(),
+      })
+      .where(eq(users.id, existing.id));
+    userId = existing.id;
+  } else {
+    const passwordHash = await hash(E2E_STAFF.password);
+    const [created] = await db
+      .insert(users)
+      .values({
+        email: E2E_STAFF.email,
+        fullName: E2E_STAFF.fullName,
+        passwordHash,
+        role: 'STAFF',
+        isOwner: false,
+      })
+      .returning({ id: users.id });
+    if (!created) throw new Error('failed to seed e2e staff');
+    userId = created.id;
+  }
+
+  // STAFF role preset is empty by design — grant the view-level
+  // permissions this test user needs to reach the Client Workspace
+  // and the leads list, but NO `edit` on proformas (that unlocks
+  // Verify Payment server-side) and NO ADMIN/FINANCE role (needed for
+  // Void / Refund / Credit note). This is the exact "ordinary staff"
+  // profile the Stage 6B+3 role-gating test needs to exercise.
+  await db.delete(userPermissions).where(eq(userPermissions.userId, userId));
+  const grants = [
+    { business: 'candidate_services', module: 'proformas', verb: 'view' },
+    { business: 'candidate_services', module: 'proformas', verb: 'create' },
+    { business: 'candidate_services', module: 'leads', verb: 'view' },
+    { business: 'candidate_services', module: 'candidates', verb: 'view' },
+    { business: 'candidate_services', module: 'overview', verb: 'view' },
+    { business: 'main', module: 'overview', verb: 'view' },
+    { business: 'main', module: 'leads', verb: 'view' },
+  ] as const;
+  await db
+    .insert(userPermissions)
+    .values(grants.map((g) => ({ userId, business: g.business, module: g.module, verb: g.verb })));
+  return userId;
+}
+
 async function ensureBaselineCurrencies() {
   const { db } = await import('../src/lib/db/client');
   const { currencies } = await import('../src/lib/db/schema/currencies');
@@ -128,25 +204,33 @@ export default async function globalSetup(config: FullConfig) {
   await ensureAdminUser();
   console.log(`  ✓ ${E2E_ADMIN.email}`);
 
-  console.log('▸ Logging in + saving session…');
+  console.log('▸ Seeding E2E staff user…');
+  await ensureStaffUser();
+  console.log(`  ✓ ${E2E_STAFF.email}`);
+
+  console.log('▸ Logging in + saving sessions…');
   mkdirSync('playwright/.auth', { recursive: true });
   const browser = await chromium.launch();
-  const context = await browser.newContext({ baseURL });
-  const page = await context.newPage();
 
-  await page.goto('/login');
-  await page.getByLabel(/email/i).fill(E2E_ADMIN.email);
-  await page.getByLabel(/password/i).fill(E2E_ADMIN.password);
-  // Exact 'Login' — the SSO buttons on the page also match 'Sign in'.
-  await page.getByRole('button', { name: 'Login', exact: true }).click();
-
-  // Wait for post-login redirect (dashboard or app root). Timeout is
-  // generous because the dashboard fetches from a remote Neon DB and
-  // its first cold render can take double-digit seconds; 45s buys us
-  // enough headroom for CI + local without masking a real hang.
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 45_000 });
-
-  await context.storageState({ path: 'playwright/.auth/admin.json' });
-  console.log('  ✓ session saved to playwright/.auth/admin.json');
+  for (const user of [
+    { label: 'admin', email: E2E_ADMIN.email, password: E2E_ADMIN.password },
+    { label: 'staff', email: E2E_STAFF.email, password: E2E_STAFF.password },
+  ]) {
+    const context = await browser.newContext({ baseURL });
+    const page = await context.newPage();
+    await page.goto('/login');
+    await page.getByLabel(/email/i).fill(user.email);
+    await page.getByLabel(/password/i).fill(user.password);
+    // Exact 'Login' — the SSO buttons on the page also match 'Sign in'.
+    await page.getByRole('button', { name: 'Login', exact: true }).click();
+    // Wait for post-login redirect (dashboard or app root). Timeout is
+    // generous because the dashboard fetches from a remote Neon DB and
+    // its first cold render can take double-digit seconds; 45s buys us
+    // enough headroom for CI + local without masking a real hang.
+    await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 45_000 });
+    await context.storageState({ path: `playwright/.auth/${user.label}.json` });
+    console.log(`  ✓ session saved to playwright/.auth/${user.label}.json`);
+    await context.close();
+  }
   await browser.close();
 }

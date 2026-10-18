@@ -334,6 +334,10 @@ test('full happy-path: lead → quote → partial pays → invoice → activate'
     await expect(page.getByText(/activate the candidate/i).first()).toBeVisible({
       timeout: 10_000,
     });
+    // Stage 6B+3 — the invoice row now shows "Paid" directly from the DB
+    // status (the pro-forma verify call atomically runs
+    // recomputeInvoiceStatus so no UI display override is involved).
+    await expect(page.getByText(/^Paid$/i).first()).toBeVisible({ timeout: 10_000 });
     await page.screenshot({
       path: path.join(SHOTS_DIR, 'desktop-after-full-payment.png'),
       fullPage: true,

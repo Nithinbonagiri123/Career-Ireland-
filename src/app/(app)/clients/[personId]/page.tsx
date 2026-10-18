@@ -472,28 +472,17 @@ export default async function ClientWorkspacePage({
                 className="flex items-center justify-between gap-2 border-b pb-2 text-xs last:border-b-0 last:pb-0"
               >
                 <div className="min-w-0 flex-1">
-                  {/* Display-only override: when the server leaves an
-                      ISSUED invoice with zero outstanding (which happens
-                      briefly between payment verification and the
-                      status-flip write), show "Paid" so the operator
-                      doesn't read a settled invoice as still awaiting
-                      money. The authoritative DB status stays as-is. */}
-                  {(() => {
-                    const outstanding = Number.parseFloat(i.outstandingAmount);
-                    const displayStatus =
-                      i.status === 'ISSUED' && outstanding <= 0 ? 'PAID' : i.status;
-                    return (
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{i.number}</span>
-                        <Badge
-                          variant={statusTone(displayStatus)}
-                          className="rounded-full text-[10px]"
-                        >
-                          {INVOICE_LABEL[displayStatus] ?? displayStatus}
-                        </Badge>
-                      </div>
-                    );
-                  })()}
+                  {/* Status is authoritative — the pro-forma payment path
+                      calls `recomputeInvoiceStatus` inside the same
+                      transaction as the verify + invoice-issue, so a
+                      fully-paid invoice reaches us already as PAID. No
+                      display override. */}
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{i.number}</span>
+                    <Badge variant={statusTone(i.status)} className="rounded-full text-[10px]">
+                      {INVOICE_LABEL[i.status] ?? i.status}
+                    </Badge>
+                  </div>
                   <div className="text-[11px] text-muted-foreground tabular-nums">
                     Total {formatCurrency(i.totalAmount, i.currencyCode)}
                     {i.status !== 'VOIDED' && Number.parseFloat(i.outstandingAmount) > 0 && (
