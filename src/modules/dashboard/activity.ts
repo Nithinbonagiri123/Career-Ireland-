@@ -31,7 +31,14 @@ const NOISY_ACTIONS = new Set([
   'SKILL_DETACHED',
   'QUALIFICATION_ATTACHED',
   'QUALIFICATION_DETACHED',
+  // Auth housekeeping — login/logout sessions are security-relevant (the
+  // audit log keeps them) but operationally meaningless in this feed.
+  'LOGIN',
+  'LOGOUT',
 ]);
+
+/** Entity types that never belong in the operational feed. */
+const NOISY_ENTITY_TYPES = new Set(['session', 'auth_session']);
 
 export async function fetchRecentActivity(limit = 12): Promise<ActivityRow[]> {
   await requireInternalStaff();
@@ -51,5 +58,7 @@ export async function fetchRecentActivity(limit = 12): Promise<ActivityRow[]> {
     .orderBy(desc(auditEvents.occurredAt))
     .limit(limit * 3);
 
-  return rows.filter((r) => !NOISY_ACTIONS.has(r.action)).slice(0, limit);
+  return rows
+    .filter((r) => !NOISY_ACTIONS.has(r.action) && !NOISY_ENTITY_TYPES.has(r.entityType))
+    .slice(0, limit);
 }

@@ -1,93 +1,359 @@
-import { Coins, LayoutDashboard, UserPlus, Users } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import {
+  ArrowRight,
+  BarChart3,
+  Briefcase,
+  CreditCard,
+  FileText,
+  UserCheck,
+  UserPlus,
+  Users,
+} from 'lucide-react';
+import Link from 'next/link';
+import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
-import { PageHeader } from '@/components/page-header';
 import { requirePermission } from '@/lib/auth/session';
+import { formatCurrency } from '@/lib/currency';
+import { parseDateRangeParams } from '@/lib/date-range';
+import { cn } from '@/lib/utils';
+import { fetchRecentActivity } from '@/modules/dashboard/activity';
 import { fetchDashboardRevenue, fetchRevenueTrendBySource } from '@/modules/dashboard/revenue';
 import { fetchCandidateServicesDashMetrics } from '@/modules/dashboard/service';
-import { RevenueBusinessChart } from '../revenue-business-chart';
-import { StatChip } from '../stat-chip';
+import { ActivityFeed } from '../activity-feed';
+import { CsRevenueCard } from './cs-revenue-card';
 
 export const dynamic = 'force-dynamic';
 
-export default async function CandidateServicesDashboard() {
+/**
+ * Stage 6G — Candidate Services Dashboard, matching the approved mockup:
+ * breadcrumb + title + date range control, five tinted KPI tiles with
+ * honest growth chips, the Revenue-this-month card (service-mix donut +
+ * daily trend), then Recent activity | Top services this month.
+ */
+export default async function CandidateServicesDashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ created?: string; from?: string; to?: string }>;
+}) {
   await requirePermission('candidate_services', 'dashboard', 'view');
-  const [m, revenue, revenueTrend] = await Promise.all([
+  const { created, from, to } = await searchParams;
+  const range = parseDateRangeParams({ created, from, to });
+
+  const [m, revenue, revenueTrend, activity] = await Promise.all([
     fetchCandidateServicesDashMetrics(),
-    fetchDashboardRevenue(),
-    fetchRevenueTrendBySource(),
+    fetchDashboardRevenue({ from: range.from, to: range.to }),
+    fetchRevenueTrendBySource({ from: range.from, to: range.to }),
+    fetchRecentActivity(5),
   ]);
 
+  // Honest growth chips — current window vs the equivalent previous
+  // window; no chip when the previous window is empty.
+  const candGrowth = pctChange(m.growth.candidatesNewLast30, m.growth.candidatesNewPrev30);
+  const leadsGrowth = pctChange(m.leads.lastSevenDays, m.growth.leadsPrevSevenDays);
+
+  // Top services table — candidate services rows in the primary currency.
+  const csServices = revenue.services.filter((s) => s.source === 'candidate_services');
+  const currencyTotals = new Map<string, number>();
+  for (const s of csServices) {
+    currencyTotals.set(s.currencyCode, (currencyTotals.get(s.currencyCode) ?? 0) + s.total);
+  }
+  const primaryCurrency =
+    [...currencyTotals.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'EUR';
+  const topServices = csServices
+    .filter((s) => s.currencyCode === primaryCurrency)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
+  const topTotal = topServices.reduce((sum, s) => sum + s.total, 0);
+  const topCount = topServices.reduce((sum, s) => sum + s.count, 0);
+
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10">
       <FadeUp>
-        <PageHeader
-          icon={LayoutDashboard}
-          badge="Candidate Services"
-          title="Candidate services — today"
-          description="Focused view of lead intake, candidate pool health, and payment verification."
-          breadcrumbs={[
-            { label: 'Dashboard', href: '/dashboard' },
-            { label: 'Candidate services' },
-          ]}
-        />
+        <nav
+          aria-label="Breadcrumb"
+          className="mb-3 flex items-center gap-1.5 text-sm text-muted-foreground"
+        >
+          <Link href="/dashboard" className="hover:text-foreground hover:underline">
+            Dashboard
+          </Link>
+          <span aria-hidden>/</span>
+          <span className="font-medium text-foreground">Candidate Services</span>
+        </nav>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+              Candidate Services Dashboard
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Overview of lead intake, candidate pool health and payment verification.
+            </p>
+          </div>
+          <DateRangeFilter className="shrink-0" />
+        </div>
       </FadeUp>
-      <FadeUp delay={0.05}>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          <StatChip
+
+      {/* KPI tiles */}
+      <FadeUp delay={0.05} className="mt-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          <KpiTile
+            icon={Users}
+            tone="blue"
             label="Total candidates"
             value={m.candidates.total}
+            delta={candGrowth}
             hint={`${m.candidates.available} available · ${m.candidates.placed} placed`}
             href="/candidates"
-            icon={Users}
           />
-          <StatChip
+          <KpiTile
+            icon={UserCheck}
+            tone="green"
             label="Available now"
             value={m.candidates.available}
             hint="Searchable for new requisitions"
-            href="/candidates"
-            icon={Users}
+            href="/candidates?status=AVAILABLE"
           />
-          <StatChip
+          <KpiTile
+            icon={Briefcase}
+            tone="purple"
             label="Placed"
             value={m.candidates.placed}
             hint={`${m.candidates.inactive} inactive / archived`}
-            href="/candidates"
-            icon={Users}
+            href="/candidates?status=PLACED"
           />
-          <StatChip
-            label="New leads (7d)"
+          <KpiTile
+            icon={UserPlus}
+            tone="amber"
+            label="New leads (7D)"
             value={m.leads.lastSevenDays}
+            delta={leadsGrowth}
             hint={`${m.leads.total} open · ${m.leads.awaitingPayment} awaiting payment`}
             href="/leads"
-            icon={UserPlus}
           />
-          <StatChip
+          <KpiTile
+            icon={CreditCard}
+            tone="rose"
             label="Payments to verify"
             value={m.payments.awaitingVerification}
-            hint={`${m.payments.verifiedLast30Days} verified last 30d`}
+            hint={`${m.payments.verifiedLast30Days} verified last 30 days`}
             href="/payments"
-            icon={Coins}
-            tone="warning"
           />
         </div>
       </FadeUp>
-      <FadeUp delay={0.08} className="mt-8">
-        <section aria-label="Candidate services revenue" className="mb-8">
-          <div className="mb-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
-              Revenue this month
-            </h2>
-            <p className="mt-0.5 text-[11px] text-foreground/60">
-              Service mix + daily trend for candidate services.
-            </p>
-          </div>
-          <RevenueBusinessChart
-            source="candidate_services"
-            services={revenue.services}
-            trend={revenueTrend}
-          />
-        </section>
+
+      {/* Revenue this month */}
+      <FadeUp delay={0.08} className="mt-5">
+        <CsRevenueCard
+          services={revenue.services}
+          trend={revenueTrend}
+          totals={revenue.totalsByCurrency}
+          previousTotals={revenue.previousTotalsByCurrency}
+        />
+      </FadeUp>
+
+      {/* Recent activity | Top services */}
+      <FadeUp delay={0.11} className="mt-5">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <section className="rounded-2xl border bg-card p-5 shadow-sm ring-1 ring-border/60">
+            <header className="mb-3 flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <span
+                  aria-hidden
+                  className="grid size-9 shrink-0 place-items-center rounded-lg bg-emerald-100 text-emerald-700"
+                >
+                  <FileText className="size-4.5" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-base font-semibold text-foreground">Recent activity</h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Latest actions across leads, candidates and payments.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/admin/audit"
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                View all
+              </Link>
+            </header>
+            <ActivityFeed rows={activity} />
+          </section>
+
+          <section className="rounded-2xl border bg-card p-5 shadow-sm ring-1 ring-border/60">
+            <header className="mb-3 flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <span
+                  aria-hidden
+                  className="grid size-9 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700"
+                >
+                  <BarChart3 className="size-4.5" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-base font-semibold text-foreground">
+                    Top services this month
+                  </h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Revenue by service and number of candidates.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/services"
+                className="inline-flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                View all
+              </Link>
+            </header>
+            {topServices.length === 0 ? (
+              <p className="py-8 text-center text-xs text-muted-foreground">
+                No verified revenue in this range yet.
+              </p>
+            ) : (
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="py-2 pr-2 font-medium">#</th>
+                    <th className="py-2 pr-2 font-medium">Service</th>
+                    <th className="py-2 pr-2 text-right font-medium">Revenue</th>
+                    <th className="py-2 pr-2 text-right font-medium">Candidates</th>
+                    <th className="w-[30%] py-2 font-medium">%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topServices.map((s, i) => {
+                    const pct = topTotal > 0 ? Math.round((s.total / topTotal) * 100) : 0;
+                    return (
+                      <tr key={s.serviceCode} className="border-b last:border-b-0">
+                        <td className="py-2.5 pr-2 tabular-nums text-muted-foreground">{i + 1}</td>
+                        <td className="max-w-0 truncate py-2.5 pr-2 font-medium text-foreground">
+                          {s.serviceName}
+                        </td>
+                        <td className="py-2.5 pr-2 text-right tabular-nums text-foreground">
+                          {formatCurrency(String(s.total), s.currencyCode)}
+                        </td>
+                        <td className="py-2.5 pr-2 text-right tabular-nums text-foreground">
+                          {s.count}
+                        </td>
+                        <td className="py-2.5">
+                          <span className="flex items-center gap-2">
+                            <span className="w-8 shrink-0 text-right tabular-nums text-muted-foreground">
+                              {pct}%
+                            </span>
+                            <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                              <span
+                                className={cn(
+                                  'block h-full rounded-full',
+                                  i === 0
+                                    ? 'bg-sky-500'
+                                    : i === 1
+                                      ? 'bg-emerald-500'
+                                      : 'bg-violet-500',
+                                )}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </span>
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="font-semibold text-foreground">
+                    <td className="py-2.5 pr-2" />
+                    <td className="py-2.5 pr-2">Total</td>
+                    <td className="py-2.5 pr-2 text-right tabular-nums">
+                      {formatCurrency(String(topTotal), primaryCurrency)}
+                    </td>
+                    <td className="py-2.5 pr-2 text-right tabular-nums">{topCount}</td>
+                    <td className="py-2.5 tabular-nums text-muted-foreground">
+                      <span className="pl-0.5">100%</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
+          </section>
+        </div>
       </FadeUp>
     </div>
+  );
+}
+
+/** Percent change vs the previous window; null when it can't be stated honestly. */
+function pctChange(current: number, previous: number): number | null {
+  if (previous <= 0) return null;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+const TILE_TONES = {
+  blue: { card: 'bg-sky-50/60 ring-sky-200/60', icon: 'bg-sky-100 text-sky-700' },
+  green: { card: 'bg-emerald-50/60 ring-emerald-200/60', icon: 'bg-emerald-100 text-emerald-700' },
+  purple: { card: 'bg-violet-50/60 ring-violet-200/60', icon: 'bg-violet-100 text-violet-700' },
+  amber: { card: 'bg-amber-50/60 ring-amber-200/60', icon: 'bg-amber-100 text-amber-700' },
+  rose: { card: 'bg-rose-50/60 ring-rose-200/60', icon: 'bg-rose-100 text-rose-700' },
+} as const;
+
+function KpiTile({
+  icon: Icon,
+  tone,
+  label,
+  value,
+  delta,
+  hint,
+  href,
+}: {
+  icon: LucideIcon;
+  tone: keyof typeof TILE_TONES;
+  label: string;
+  value: number;
+  /** Percent change chip; omitted when no honest comparison exists. */
+  delta?: number | null;
+  hint: string;
+  href: string;
+}) {
+  const t = TILE_TONES[tone];
+  return (
+    <Link
+      href={href}
+      className={cn('group rounded-2xl p-4 ring-1 transition-shadow hover:shadow-md', t.card)}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className={cn('grid size-9 shrink-0 place-items-center rounded-full', t.icon)}
+        >
+          <Icon className="size-4.5" />
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium text-foreground/80">{label}</p>
+          <p className="mt-1 flex items-baseline gap-2">
+            <span className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
+              {value}
+            </span>
+            {delta !== null && delta !== undefined && (
+              <span
+                className={cn(
+                  'rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums',
+                  delta > 0
+                    ? 'bg-status-success-soft text-status-success'
+                    : delta < 0
+                      ? 'bg-rose-100 text-rose-700'
+                      : 'bg-muted text-muted-foreground',
+                )}
+              >
+                {delta > 0 ? '↑ +' : delta < 0 ? '↓ ' : '→ '}
+                {delta}%
+              </span>
+            )}
+          </p>
+          <p className="mt-1 truncate text-[11px] text-muted-foreground" title={hint}>
+            {hint}
+          </p>
+        </div>
+      </div>
+      <ArrowRight
+        aria-hidden
+        className="mt-1 ml-auto hidden size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+      />
+    </Link>
   );
 }

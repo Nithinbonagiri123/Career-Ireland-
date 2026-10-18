@@ -488,57 +488,95 @@ export async function fetchRecruitmentDashMetrics(): Promise<RecruitmentDashMetr
 export type CandidateServicesDashMetrics = Pick<
   DashboardMetrics,
   'candidates' | 'leads' | 'payments'
->;
+> & {
+  /** Honest growth figures for the dashboard's delta chips — counts in
+   *  the current window vs the equivalent previous window. */
+  growth: {
+    candidatesNewLast30: number;
+    candidatesNewPrev30: number;
+    leadsPrevSevenDays: number;
+  };
+};
 
 export async function fetchCandidateServicesDashMetrics(): Promise<CandidateServicesDashMetrics> {
   await requireInternalStaff();
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
-  const [candTotals, leadTotals, leadsLast7, paymentAwaiting, paymentVerified30] =
-    await Promise.all([
-      db
-        .select({
-          total: sql<number>`COUNT(*)::int`,
-          available: sql<number>`COALESCE(SUM(CASE WHEN ${candidateProfiles.availabilityStatus} = 'AVAILABLE' THEN 1 ELSE 0 END), 0)::int`,
-          placed: sql<number>`COALESCE(SUM(CASE WHEN ${candidateProfiles.availabilityStatus} = 'PLACED' THEN 1 ELSE 0 END), 0)::int`,
-          inactive: sql<number>`COALESCE(SUM(CASE WHEN ${candidateProfiles.lifecycleStatus} <> 'ACTIVE' THEN 1 ELSE 0 END), 0)::int`,
-        })
-        .from(candidateProfiles)
-        .innerJoin(persons, eq(persons.id, candidateProfiles.personId))
-        .where(
-          and(
-            eq(persons.isDraft, false),
-            isNull(persons.mergedIntoPersonId),
-            isNull(persons.archivedAt),
-          ),
-        )
-        .then((r) => r[0] ?? { total: 0, available: 0, placed: 0, inactive: 0 }),
-      db
-        .select({
-          total: sql<number>`COUNT(*)::int`,
-          awaitingPayment: sql<number>`COALESCE(SUM(CASE WHEN ${leads.status} = 'AWAITING_PAYMENT' THEN 1 ELSE 0 END), 0)::int`,
-        })
-        .from(leads)
-        .where(and(isNull(leads.archivedAt), ne(leads.status, 'CONVERTED')))
-        .then((r) => r[0] ?? { total: 0, awaitingPayment: 0 }),
-      db
-        .select({ n: sql<number>`COUNT(*)::int` })
-        .from(leads)
-        .where(gt(leads.createdAt, sevenDaysAgo))
-        .then((r) => r[0]?.n ?? 0),
-      db
-        .select({ n: sql<number>`COUNT(*)::int` })
-        .from(payments)
-        .where(sql`${payments.status} IN ('PENDING','PROOF_UPLOADED')`)
-        .then((r) => r[0]?.n ?? 0),
-      db
-        .select({ n: sql<number>`COUNT(*)::int` })
-        .from(payments)
-        .where(and(eq(payments.status, 'VERIFIED'), gt(payments.verifiedAt, thirtyDaysAgo)))
-        .then((r) => r[0]?.n ?? 0),
-    ]);
+  const [
+    candTotals,
+    leadTotals,
+    leadsLast7,
+    paymentAwaiting,
+    paymentVerified30,
+    candNew30,
+    candNewPrev30,
+    leadsPrev7,
+  ] = await Promise.all([
+    db
+      .select({
+        total: sql<number>`COUNT(*)::int`,
+        available: sql<number>`COALESCE(SUM(CASE WHEN ${candidateProfiles.availabilityStatus} = 'AVAILABLE' THEN 1 ELSE 0 END), 0)::int`,
+        placed: sql<number>`COALESCE(SUM(CASE WHEN ${candidateProfiles.availabilityStatus} = 'PLACED' THEN 1 ELSE 0 END), 0)::int`,
+        inactive: sql<number>`COALESCE(SUM(CASE WHEN ${candidateProfiles.lifecycleStatus} <> 'ACTIVE' THEN 1 ELSE 0 END), 0)::int`,
+      })
+      .from(candidateProfiles)
+      .innerJoin(persons, eq(persons.id, candidateProfiles.personId))
+      .where(
+        and(
+          eq(persons.isDraft, false),
+          isNull(persons.mergedIntoPersonId),
+          isNull(persons.archivedAt),
+        ),
+      )
+      .then((r) => r[0] ?? { total: 0, available: 0, placed: 0, inactive: 0 }),
+    db
+      .select({
+        total: sql<number>`COUNT(*)::int`,
+        awaitingPayment: sql<number>`COALESCE(SUM(CASE WHEN ${leads.status} = 'AWAITING_PAYMENT' THEN 1 ELSE 0 END), 0)::int`,
+      })
+      .from(leads)
+      .where(and(isNull(leads.archivedAt), ne(leads.status, 'CONVERTED')))
+      .then((r) => r[0] ?? { total: 0, awaitingPayment: 0 }),
+    db
+      .select({ n: sql<number>`COUNT(*)::int` })
+      .from(leads)
+      .where(gt(leads.createdAt, sevenDaysAgo))
+      .then((r) => r[0]?.n ?? 0),
+    db
+      .select({ n: sql<number>`COUNT(*)::int` })
+      .from(payments)
+      .where(sql`${payments.status} IN ('PENDING','PROOF_UPLOADED')`)
+      .then((r) => r[0]?.n ?? 0),
+    db
+      .select({ n: sql<number>`COUNT(*)::int` })
+      .from(payments)
+      .where(and(eq(payments.status, 'VERIFIED'), gt(payments.verifiedAt, thirtyDaysAgo)))
+      .then((r) => r[0]?.n ?? 0),
+    db
+      .select({ n: sql<number>`COUNT(*)::int` })
+      .from(candidateProfiles)
+      .where(gt(candidateProfiles.activatedAt, thirtyDaysAgo))
+      .then((r) => r[0]?.n ?? 0),
+    db
+      .select({ n: sql<number>`COUNT(*)::int` })
+      .from(candidateProfiles)
+      .where(
+        and(
+          gt(candidateProfiles.activatedAt, sixtyDaysAgo),
+          lte(candidateProfiles.activatedAt, thirtyDaysAgo),
+        ),
+      )
+      .then((r) => r[0]?.n ?? 0),
+    db
+      .select({ n: sql<number>`COUNT(*)::int` })
+      .from(leads)
+      .where(and(gt(leads.createdAt, fourteenDaysAgo), lte(leads.createdAt, sevenDaysAgo)))
+      .then((r) => r[0]?.n ?? 0),
+  ]);
 
   return {
     candidates: candTotals,
@@ -550,6 +588,11 @@ export async function fetchCandidateServicesDashMetrics(): Promise<CandidateServ
     payments: {
       awaitingVerification: paymentAwaiting,
       verifiedLast30Days: paymentVerified30,
+    },
+    growth: {
+      candidatesNewLast30: candNew30,
+      candidatesNewPrev30: candNewPrev30,
+      leadsPrevSevenDays: leadsPrev7,
     },
   };
 }
