@@ -57,6 +57,12 @@ export const VoidDocumentSchema = z.object({
 });
 export type VoidDocumentInput = z.infer<typeof VoidDocumentSchema>;
 
+export const ReclassifyDocumentSchema = z.object({
+  documentInstanceId: z.string().uuid(),
+  documentTypeId: z.string().uuid(),
+});
+export type ReclassifyDocumentInput = z.infer<typeof ReclassifyDocumentSchema>;
+
 export type PresignUploadInput = z.infer<typeof PresignUploadSchema>;
 export type RegisterUploadInput = z.infer<typeof RegisterUploadSchema>;
 export type ReviewDocumentInput = z.infer<typeof ReviewDocumentSchema>;

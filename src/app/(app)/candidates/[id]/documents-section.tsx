@@ -180,6 +180,10 @@ export function DocumentsSection({
           ownerType="PERSON"
           ownerId={personId}
           documentTypes={documentTypes}
+          // Stage 6F — a successful upload lands server-side but the
+          // Uploaded-documents list below is server-rendered; a
+          // router.refresh pulls the new row + its Download link in.
+          onUploaded={() => router.refresh()}
         />
       </div>
 

@@ -259,7 +259,7 @@ const MONTHS: Record<string, number> = {
   december: 12,
 };
 
-const PRESENT_WORDS = /\b(present|current|now|to\s*date|ongoing)\b/i;
+const PRESENT_WORDS = /\b(present|current|now|(?:to|till|until)?\s*date|ongoing)\b/i;
 
 type ParsedDate = { iso: string } | null;
 
@@ -273,7 +273,7 @@ function parseDatePart(raw: string): ParsedDate {
   const s = raw.trim();
   if (!s) return null;
   if (PRESENT_WORDS.test(s)) return null;
-  const m1 = s.match(/^([A-Za-z]{3,9})\s*'?(\d{2}|\d{4})$/);
+  const m1 = s.match(/^([A-Za-z]{3,9})\.?\s*'?(\d{2}|\d{4})$/);
   if (m1) {
     const month = MONTHS[m1[1].toLowerCase()];
     if (month) {
@@ -314,9 +314,10 @@ type DateRange = {
 
 function findDateRange(text: string): DateRange | null {
   const dateAlt =
-    "(?:[A-Za-z]{3,9}\\s*\\d{4}|[A-Za-z]{3,9}\\s*'?\\d{2}|\\d{1,2}[\\/\\-]\\d{4}|\\d{4}|Present|Current|Now|Ongoing)";
-  const sep = '\\s*(?:[-–—]|to)\\s*';
-  const re = new RegExp(`(${dateAlt})${sep}(${dateAlt}|Present|Current|Now|Ongoing)`, 'i');
+    "(?:[A-Za-z]{3,9}\\.?\\s*'?\\d{2,4}|\\d{1,2}[\\/\\-]\\d{4}|\\d{4}|Present|Current|Now|Ongoing)";
+  const endAlt = `(?:${dateAlt}|Present|Current|Now|Ongoing|(?:till|until|to)?\\s*date)`;
+  const sep = '\\s*(?:[-–—]|to|till|until)\\s*';
+  const re = new RegExp(`(${dateAlt})${sep}(${endAlt})`, 'i');
   const m = text.match(re);
   if (!m) return null;
   const start = parseDatePart(m[1]);
@@ -366,6 +367,19 @@ function splitEmploymentBlocks(sectionLines: string[]): string[][] {
   return refined;
 }
 
+/**
+ * Occupation words covering this CRM's actual candidate pool (care,
+ * trades, hospitality, logistics, office) plus seniority prefixes —
+ * used to tell the job-title side of a "A — B" identity line from the
+ * employer side.
+ */
+const TITLE_WORDS_RE =
+  /\b(engineer|developer|programmer|manager|analyst|consultant|nurse|doctor|physician|carer?|caregiver|assistant|aide|lead|director|officer|specialist|technician|designer|architect|administrator|coordinator|executive|supervisor|associate|welder|driver|cleaner|chef|cook|waiter|waitress|barista|bartender|electrician|plumber|mechanic|operator|labou?rer|picker|packer|security|guard|receptionist|accountant|bookkeeper|teacher|tutor|lecturer|painter|fitter|machinist|butcher|baker|tailor|farmer|gardener|carpenter|mason|foreman|attendant|cashier|clerk|porter|housekeeper|intern|apprentice|trainee|senior|junior|head|chief|deputy)\b/i;
+
+/** Organisation-name words — the employer side of an identity line. */
+const COMPANY_WORDS_RE =
+  /\b(ltd|limited|plc|inc|llc|gmbh|group|holdings|hospital|clinic|pharmacy|university|college|school|hotel|restaurant|cafe|bank|agency|services|solutions|technologies|systems|consulting|recruitment|logistics|construction|pharma|labs?|studios?|media|centre|center|company|co\.)\b/i;
+
 function parseEmploymentBlock(block: string[]): EmploymentCandidate | null {
   if (block.length === 0) return null;
   const joined = block.join(' — ');
@@ -398,20 +412,47 @@ function parseEmploymentBlock(block: string[]): EmploymentCandidate | null {
   const first = identityLines[0];
   const second = identityLines[1] ?? '';
 
-  const atMatch = first.match(/^(.+?)\s+(?:at|@|-|–|—|,)\s+(.+)$/i);
+  // "X at Y" always reads title-at-employer; dash/comma/pipe splits are
+  // disambiguated by occupation words on either side, then company-name
+  // words, then default to employer-first.
+  const atMatch = first.match(/^(.+?)\s+(?:at|@)\s+(.+)$/i);
+  const dashMatch = atMatch ? null : first.match(/^(.+?)\s*(?:[-–—|]|,)\s+(.+)$/);
   if (atMatch) {
-    const [, a, b] = atMatch;
-    if (
-      /\b(engineer|developer|manager|analyst|consultant|nurse|doctor|assistant|lead|director|officer|specialist|technician|designer|architect|administrator|coordinator|executive|supervisor|associate)\b/i.test(
-        a,
-      )
-    ) {
-      jobTitle = a.trim();
-      employerName = b.trim();
+    jobTitle = atMatch[1].trim();
+    employerName = atMatch[2].trim();
+  } else if (dashMatch) {
+    const a = dashMatch[1].trim();
+    const b = dashMatch[2].trim();
+    // Occupation words, else the morphological fallback: a 1–2 word
+    // phrase ending in -er/-or/-ist/-ian ("Fabricator", "Roofer",
+    // "Glazier") reads as a trade title.
+    const looksOccupational = (s: string) =>
+      TITLE_WORDS_RE.test(s) || (/^\S+( \S+)?$/.test(s) && /(?:er|or|ist|ian)$/i.test(s));
+    const aTitle = looksOccupational(a);
+    const bTitle = looksOccupational(b);
+    const aCompany = COMPANY_WORDS_RE.test(a);
+    const bCompany = COMPANY_WORDS_RE.test(b);
+    if (aTitle && !bTitle) {
+      jobTitle = a;
+      employerName = b;
+    } else if (bTitle && !aTitle) {
+      jobTitle = b;
+      employerName = a;
+    } else if (aCompany && !bCompany) {
+      employerName = a;
+      jobTitle = b;
+    } else if (bCompany && !aCompany) {
+      employerName = b;
+      jobTitle = a;
     } else {
-      employerName = a.trim();
-      jobTitle = b.trim();
+      employerName = a;
+      jobTitle = b;
     }
+  } else if (TITLE_WORDS_RE.test(first) && second && !TITLE_WORDS_RE.test(second)) {
+    // Two plain lines with the occupation on the FIRST line — the common
+    // "Job Title ⏎ Employer" layout.
+    jobTitle = first;
+    employerName = second;
   } else {
     employerName = first;
     jobTitle = second || null;
@@ -455,13 +496,123 @@ function parseEmploymentBlock(block: string[]): EmploymentCandidate | null {
   };
 }
 
+/**
+ * Non-employment sections whose entries also carry date ranges (degrees,
+ * certifications) — the date-anchored pass must not turn those into jobs.
+ */
+const NON_EMPLOYMENT_SECTION_RE =
+  /\b(education|educational|academic|qualifications?|certifications?|training|courses|awards?|publications?|references?|skills)\b/i;
+
+const EMPLOYMENT_SECTION_RE =
+  /\b(employment(?:\s+history)?|work\s+(?:experience|history)|professional\s+(?:experience|history|background)|career\s+(?:history|summary)|(?:relevant\s+)?experience)\b/i;
+
+/** Degree words that mark an identity line as education, not a job. */
+const DEGREE_LINE_RE =
+  /\b(MSc|BSc|MBA|MEng|BEng|BTech|MTech|PhD|HDip|PGDip|PGCert|Bachelor|Masters?|Doctorate|Diploma|Certificate)\b/i;
+
+/**
+ * Per-line section classification — walk the document once, flipping the
+ * current section at each header-looking line. Lines before any header
+ * are 'unknown' (anchors there are allowed: many CVs open with the
+ * current job).
+ */
+function classifySections(lines: string[]): Array<'employment' | 'other' | 'unknown'> {
+  const kinds: Array<'employment' | 'other' | 'unknown'> = new Array(lines.length);
+  let current: 'employment' | 'other' | 'unknown' = 'unknown';
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line && looksLikeHeader(line)) {
+      if (EMPLOYMENT_SECTION_RE.test(line)) current = 'employment';
+      else if (NON_EMPLOYMENT_SECTION_RE.test(line)) current = 'other';
+      else if (looksLikeStrongHeader(line)) current = 'unknown';
+    }
+    kinds[i] = current;
+  }
+  return kinds;
+}
+
+/**
+ * Date-anchored extraction — works on ANY layout, with or without an
+ * employment heading. Every real job entry carries a date range, so
+ * each date-range line becomes an anchor; the job's identity lines are
+ * collected above it (or below, for dates-first layouts) and its
+ * description from the lines that follow. Single blank lines (Word/
+ * mammoth output puts one between every paragraph) are tolerated.
+ */
+function extractByDateAnchors(lines: string[], taken: Set<string>): EmploymentCandidate[] {
+  const kinds = classifySections(lines);
+  const anchors: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || kinds[i] === 'other') continue;
+    if (findDateRange(line)) anchors.push(i);
+  }
+
+  const out: EmploymentCandidate[] = [];
+  for (let a = 0; a < anchors.length; a++) {
+    const i = anchors[a];
+    const prevBound = a > 0 ? anchors[a - 1] : -1;
+    const nextBound = a + 1 < anchors.length ? anchors[a + 1] : lines.length;
+
+    // Identity lines above the anchor (most layouts put employer/title
+    // first). Tolerate single blank lines; stop at bullets, headers,
+    // long paragraph text, or the previous job's territory.
+    const above: string[] = [];
+    let blanks = 0;
+    for (let j = i - 1; j > prevBound && above.length < 3; j--) {
+      const l = lines[j].trim();
+      if (!l) {
+        // A blank above the first identity line is paragraph spacing
+        // (Word documents); a blank after we've collected identity
+        // separates this job from unrelated content higher up.
+        if (above.length > 0) break;
+        blanks += 1;
+        if (blanks >= 2) break;
+        continue;
+      }
+      blanks = 0;
+      if (/^[•\-*·▪◦]/.test(l)) break;
+      if (looksLikeStrongHeader(l)) break;
+      if (l.length > 120) break;
+      above.unshift(l);
+    }
+
+    // Description (and, for dates-first layouts, identity) below.
+    const below: string[] = [];
+    blanks = 0;
+    for (let j = i + 1; j < nextBound && below.length < 8; j++) {
+      const l = lines[j].trim();
+      if (!l) {
+        blanks += 1;
+        if (blanks >= 2) break;
+        continue;
+      }
+      blanks = 0;
+      if (looksLikeStrongHeader(l)) break;
+      below.push(l);
+    }
+
+    const block =
+      above.length > 0 ? [...above, lines[i].trim(), ...below] : [lines[i].trim(), ...below];
+    const cand = parseEmploymentBlock(block);
+    if (!cand) continue;
+    // Degree-looking identity lines are education entries, not jobs.
+    if (DEGREE_LINE_RE.test(`${cand.employerName} ${cand.jobTitle ?? ''}`)) continue;
+    if (!cand.startDate && !cand.endDate && !cand.isCurrent) continue;
+    const dedupeKey = `${cand.employerName.toLowerCase()}|${(cand.jobTitle ?? '').toLowerCase()}`;
+    if (taken.has(dedupeKey)) continue;
+    taken.add(dedupeKey);
+    out.push(cand);
+  }
+  return out;
+}
+
 export function extractEmploymentCandidates(
   text: string,
   taken: Set<string>,
 ): EmploymentCandidate[] {
   const lines = text.split(/\r?\n/);
-  const keywordRe =
-    /\b(employment(?:\s+history)?|work\s+(?:experience|history)|professional\s+(?:experience|history)|career\s+(?:history|summary)|experience)\b/i;
+  const keywordRe = EMPLOYMENT_SECTION_RE;
 
   let startIdx = -1;
   for (let i = 0; i < lines.length; i++) {
@@ -471,35 +622,44 @@ export function extractEmploymentCandidates(
       break;
     }
   }
-  if (startIdx === -1) return [];
 
-  let endIdx = lines.length;
-  let linesSeen = 0;
-  for (let i = startIdx; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    linesSeen += 1;
-    // Only *strong* headers end the section; job title lines like
-    // "Senior Software Engineer — Stripe" are title-case and would
-    // otherwise be mistaken for a new section.
-    if (linesSeen > 1 && looksLikeStrongHeader(line) && !keywordRe.test(line)) {
-      endIdx = i;
-      break;
+  const out: EmploymentCandidate[] = [];
+
+  if (startIdx !== -1) {
+    let endIdx = lines.length;
+    let linesSeen = 0;
+    for (let i = startIdx; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      linesSeen += 1;
+      // Only *strong* headers end the section; job title lines like
+      // "Senior Software Engineer — Stripe" are title-case and would
+      // otherwise be mistaken for a new section.
+      if (linesSeen > 1 && looksLikeStrongHeader(line) && !keywordRe.test(line)) {
+        endIdx = i;
+        break;
+      }
+    }
+
+    const sectionLines = lines.slice(startIdx, endIdx);
+    const blocks = splitEmploymentBlocks(sectionLines);
+
+    for (const block of blocks) {
+      const cand = parseEmploymentBlock(block);
+      if (!cand) continue;
+      if (!cand.startDate && !cand.endDate && !cand.isCurrent && !cand.description) continue;
+      const dedupeKey = `${cand.employerName.toLowerCase()}|${(cand.jobTitle ?? '').toLowerCase()}`;
+      if (taken.has(dedupeKey)) continue;
+      taken.add(dedupeKey);
+      out.push(cand);
     }
   }
 
-  const sectionLines = lines.slice(startIdx, endIdx);
-  const blocks = splitEmploymentBlocks(sectionLines);
+  // Date-anchored sweep — catches jobs the section pass missed: CVs with
+  // no (or unusual) employment headings, Word documents whose blank-line
+  // paragraph spacing shattered the section blocks, dates-first layouts.
+  // `taken` already holds the section pass's finds, so this only adds.
+  out.push(...extractByDateAnchors(lines, taken));
 
-  const out: EmploymentCandidate[] = [];
-  for (const block of blocks) {
-    const cand = parseEmploymentBlock(block);
-    if (!cand) continue;
-    if (!cand.startDate && !cand.endDate && !cand.isCurrent && !cand.description) continue;
-    const dedupeKey = `${cand.employerName.toLowerCase()}|${(cand.jobTitle ?? '').toLowerCase()}`;
-    if (taken.has(dedupeKey)) continue;
-    taken.add(dedupeKey);
-    out.push(cand);
-  }
   return out;
 }

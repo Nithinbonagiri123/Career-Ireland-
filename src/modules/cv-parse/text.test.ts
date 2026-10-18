@@ -257,3 +257,94 @@ Available on request.
     expect(phrases.some((p) => p.includes('bsc mathematics'))).toBe(true);
   });
 });
+
+describe('extractEmploymentCandidates — format tolerance (date-anchored pass)', () => {
+  it('handles Word/mammoth output with a blank line between every paragraph', () => {
+    const text = [
+      'Aoife Test',
+      '',
+      'EMPLOYMENT HISTORY',
+      '',
+      'Care Assistant at Mater Hospital',
+      '',
+      'Jan 2019 - Present',
+      '',
+      'Provided patient care on a busy ward.',
+    ].join('\n');
+    const out = extractEmploymentCandidates(text, new Set());
+    expect(out).toHaveLength(1);
+    expect(out[0].employerName).toBe('Mater Hospital');
+    expect(out[0].jobTitle).toBe('Care Assistant');
+    expect(out[0].startDate).toBe('2019-01-01');
+    expect(out[0].isCurrent).toBe(true);
+  });
+
+  it('extracts jobs from a CV with no employment heading at all', () => {
+    const text = [
+      'John Smith',
+      'Dublin',
+      '',
+      'Senior Welder — Harland Steel',
+      'Mar 2015 – Aug 2021',
+      '• MIG and TIG welding on structural frames',
+      '',
+      'Fabricator — Cork Metalworks',
+      '2012 – 2015',
+    ].join('\n');
+    const out = extractEmploymentCandidates(text, new Set());
+    expect(out).toHaveLength(2);
+    expect(out[0].employerName).toBe('Harland Steel');
+    expect(out[0].jobTitle).toBe('Senior Welder');
+    expect(out[0].endDate).toBe('2021-08-01');
+    expect(out[1].employerName).toBe('Cork Metalworks');
+  });
+
+  it('handles dates-first layouts', () => {
+    const text = [
+      'WORK EXPERIENCE',
+      '2019 – 2023',
+      'Mater Hospital',
+      'Care Assistant',
+      '',
+      '',
+      'OTHER',
+    ].join('\n');
+    const out = extractEmploymentCandidates(text, new Set());
+    expect(out).toHaveLength(1);
+    expect(out[0].employerName).toBe('Mater Hospital');
+    expect(out[0].startDate).toBe('2019-01-01');
+  });
+
+  it('does not turn education entries into jobs', () => {
+    const text = [
+      'EDUCATION',
+      'BSc Nursing, University College Cork',
+      '2014 - 2018',
+      '',
+      'CERTIFICATIONS',
+      'Basic Life Support',
+      '2020 - 2023',
+    ].join('\n');
+    const out = extractEmploymentCandidates(text, new Set());
+    expect(out).toHaveLength(0);
+  });
+
+  it('understands "till date" and dotted month abbreviations', () => {
+    const text = ['Driver at Inflight Dublin', 'Sept. 2021 till date'].join('\n');
+    const out = extractEmploymentCandidates(text, new Set());
+    expect(out).toHaveLength(1);
+    expect(out[0].startDate).toBe('2021-09-01');
+    expect(out[0].isCurrent).toBe(true);
+  });
+
+  it('does not duplicate jobs the section pass already found', () => {
+    const text = [
+      'EMPLOYMENT HISTORY',
+      'Registered Nurse — Mediclinic Cape Town',
+      '2016 – Present',
+      'Medical-surgical unit, patient care.',
+    ].join('\n');
+    const out = extractEmploymentCandidates(text, new Set());
+    expect(out).toHaveLength(1);
+  });
+});

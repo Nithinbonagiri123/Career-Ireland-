@@ -5,6 +5,7 @@ import { toActionResult } from '@/lib/result';
 import type {
   AddRequirementForPersonInput,
   MaterializeRequirementsInput,
+  ReclassifyDocumentInput,
   RegisterUploadInput,
   ReviewDocumentInput,
   UpsertRequirementRuleInput,
@@ -15,6 +16,7 @@ import {
   deleteRequirementRule,
   fetchPersonDocumentsByTypeCode,
   materialiseRequirementsForPerson,
+  reclassifyDocument,
   registerUpload,
   reviewDocument,
   upsertRequirementRule,
@@ -68,6 +70,15 @@ export async function addPersonSpecificRequirementAction(input: AddRequirementFo
 /** Fetch a person's documents filtered by document-type code — used by the CV picker. */
 export async function listPersonDocumentsByTypeCodeAction(personId: string, typeCode: string) {
   return toActionResult(() => fetchPersonDocumentsByTypeCode(personId, typeCode));
+}
+
+export async function reclassifyDocumentAction(input: ReclassifyDocumentInput) {
+  const r = await toActionResult(() => reclassifyDocument(input));
+  if (r.ok) {
+    revalidatePath('/documents');
+    revalidatePath('/candidates');
+  }
+  return r;
 }
 
 export async function voidDocumentAction(input: VoidDocumentInput) {

@@ -30,6 +30,8 @@ import {
   MaterializeRequirementsSchema,
   type PresignUploadInput,
   PresignUploadSchema,
+  type ReclassifyDocumentInput,
+  ReclassifyDocumentSchema,
   type RegisterUploadInput,
   RegisterUploadSchema,
   type ReviewDocumentInput,
@@ -638,6 +640,58 @@ export async function fetchAllDocumentsForStaff(
  * corrected version via the normal upload flow bumps the version and
  * leaves the voided row untouched.
  */
+/**
+ * Change a document's type after upload — fixes mis-filed documents
+ * (e.g. a CV auto-typed as something else) without void + re-upload.
+ * Staff-wide (same population that can upload); audited with the
+ * before/after type so support can trace the re-classification.
+ */
+export async function reclassifyDocument(input: ReclassifyDocumentInput) {
+  const session = await requireInternalStaff();
+  const parsed = ReclassifyDocumentSchema.parse(input);
+
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(documentInstances)
+      .where(eq(documentInstances.id, parsed.documentInstanceId))
+      .limit(1);
+    if (!before) throw new BusinessRuleError('NOT_FOUND', 'Document not found');
+    if (before.voidedAt) {
+      throw new BusinessRuleError('ALREADY_VOIDED', 'Cannot re-classify a voided document');
+    }
+    const [newType] = await tx
+      .select()
+      .from(documentTypes)
+      .where(eq(documentTypes.id, parsed.documentTypeId))
+      .limit(1);
+    if (!newType) throw new BusinessRuleError('NOT_FOUND', 'Document type not found');
+    if (before.documentTypeId === parsed.documentTypeId) return before;
+
+    const [after] = await tx
+      .update(documentInstances)
+      .set({ documentTypeId: parsed.documentTypeId, updatedAt: sql`NOW()` })
+      .where(eq(documentInstances.id, parsed.documentInstanceId))
+      .returning();
+    if (!after) throw new Error('reclassify returned no row');
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'document_instance',
+      entityId: after.id,
+      action: 'RECLASSIFIED',
+      before: { documentTypeId: before.documentTypeId },
+      after: { documentTypeId: after.documentTypeId },
+      context: {
+        originalFilename: after.originalFilename,
+        newTypeName: newType.name,
+      },
+    });
+
+    return after;
+  });
+}
+
 export async function voidDocument(input: VoidDocumentInput) {
   const session = await requireRole(['ADMIN', 'DOCUMENT_SPECIALIST']);
   const parsed = VoidDocumentSchema.parse(input);
