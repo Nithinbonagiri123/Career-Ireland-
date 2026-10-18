@@ -1,17 +1,26 @@
 /**
- * Stage 6E Section 4 — ISO 3166-1 country dataset with calling codes.
+ * Stage 6E+1 — complete ISO 3166-1 country/territory dataset powered by
+ * `i18n-iso-countries` (worldwide, 250+ entries) and `libphonenumber-js`
+ * (ITU-T E.164 country calling codes + phone validation).
  *
- * The list is intentionally static. We don't need a `locale`-aware
- * display: operator UI is English, every entry carries its common name,
- * ISO2 code and E.164 calling code. If a code is missing (edge cases
- * like Antarctica) we fall back to the country name only — the form
- * still accepts it but prefills no calling code.
+ * Replaces the Stage 6E hand-maintained 50-row list, which was both
+ * incomplete and unmaintained. These two libraries are the de facto
+ * standards; we lean on them so the dataset tracks ISO additions
+ * (e.g. "Türkiye" → "Turkey") without manual churn.
  *
- * Source: based on the ISO 3166-1 alpha-2 standard + ITU-T E.164
- * country-code assignments. Verified for the territories the business
- * cares about (South Africa, Ireland, UK, India, EU + Gulf + sub-Saharan
- * Africa). Add new rows as needed — no code change elsewhere.
+ * Nationality — libphonenumber-js has no demonym data. We generate a
+ * best-effort English demonym from the country name for the common
+ * cases, and fall back to the country name as the demonym where we
+ * don't have a mapping. Operators can always type a free value into
+ * the datalist so "nationality independent of residence" works even
+ * for stateless or edge-case entries.
  */
+
+import countries from 'i18n-iso-countries';
+import en from 'i18n-iso-countries/langs/en.json' with { type: 'json' };
+import { getCountries, getCountryCallingCode, isValidPhoneNumber } from 'libphonenumber-js';
+
+countries.registerLocale(en);
 
 export type IsoCountry = {
   /** ISO 3166-1 alpha-2 code, e.g. "ZA". */
@@ -19,84 +28,290 @@ export type IsoCountry = {
   /** Common English name used in UI. */
   name: string;
   /** Common English demonym (adjective) for nationality selector,
-   *  e.g. "South African". When a demonym is ambiguous or unused
-   *  commercially we keep it empty and the UI falls back to the
-   *  country name. */
+   *  e.g. "South African". Falls back to the country name when no
+   *  mapping is known. */
   nationality: string;
-  /** E.164 country calling code without the leading `+`, e.g. "27". */
-  callingCode: string;
+  /** E.164 country calling code without the leading `+`, e.g. "27".
+   *  Null when the territory has no assignment (rare). */
+  callingCode: string | null;
 };
 
-/** Not every entry — focused on the territories our clients actually
- *  reside in. Add rows at the bottom; order doesn't matter (the UI
- *  sorts by name). */
-export const ISO_COUNTRIES: readonly IsoCountry[] = [
-  { code: 'IE', name: 'Ireland', nationality: 'Irish', callingCode: '353' },
-  { code: 'ZA', name: 'South Africa', nationality: 'South African', callingCode: '27' },
-  { code: 'GB', name: 'United Kingdom', nationality: 'British', callingCode: '44' },
-  { code: 'US', name: 'United States', nationality: 'American', callingCode: '1' },
-  { code: 'CA', name: 'Canada', nationality: 'Canadian', callingCode: '1' },
-  { code: 'IN', name: 'India', nationality: 'Indian', callingCode: '91' },
-  { code: 'PK', name: 'Pakistan', nationality: 'Pakistani', callingCode: '92' },
-  { code: 'BD', name: 'Bangladesh', nationality: 'Bangladeshi', callingCode: '880' },
-  { code: 'LK', name: 'Sri Lanka', nationality: 'Sri Lankan', callingCode: '94' },
-  { code: 'PH', name: 'Philippines', nationality: 'Filipino', callingCode: '63' },
-  { code: 'NG', name: 'Nigeria', nationality: 'Nigerian', callingCode: '234' },
-  { code: 'KE', name: 'Kenya', nationality: 'Kenyan', callingCode: '254' },
-  { code: 'GH', name: 'Ghana', nationality: 'Ghanaian', callingCode: '233' },
-  { code: 'ZW', name: 'Zimbabwe', nationality: 'Zimbabwean', callingCode: '263' },
-  { code: 'BW', name: 'Botswana', nationality: 'Botswanan', callingCode: '267' },
-  { code: 'NA', name: 'Namibia', nationality: 'Namibian', callingCode: '264' },
-  { code: 'MW', name: 'Malawi', nationality: 'Malawian', callingCode: '265' },
-  { code: 'ZM', name: 'Zambia', nationality: 'Zambian', callingCode: '260' },
-  { code: 'MZ', name: 'Mozambique', nationality: 'Mozambican', callingCode: '258' },
-  { code: 'AE', name: 'United Arab Emirates', nationality: 'Emirati', callingCode: '971' },
-  { code: 'SA', name: 'Saudi Arabia', nationality: 'Saudi Arabian', callingCode: '966' },
-  { code: 'QA', name: 'Qatar', nationality: 'Qatari', callingCode: '974' },
-  { code: 'KW', name: 'Kuwait', nationality: 'Kuwaiti', callingCode: '965' },
-  { code: 'BH', name: 'Bahrain', nationality: 'Bahraini', callingCode: '973' },
-  { code: 'OM', name: 'Oman', nationality: 'Omani', callingCode: '968' },
-  { code: 'EG', name: 'Egypt', nationality: 'Egyptian', callingCode: '20' },
-  { code: 'FR', name: 'France', nationality: 'French', callingCode: '33' },
-  { code: 'DE', name: 'Germany', nationality: 'German', callingCode: '49' },
-  { code: 'ES', name: 'Spain', nationality: 'Spanish', callingCode: '34' },
-  { code: 'IT', name: 'Italy', nationality: 'Italian', callingCode: '39' },
-  { code: 'PT', name: 'Portugal', nationality: 'Portuguese', callingCode: '351' },
-  { code: 'NL', name: 'Netherlands', nationality: 'Dutch', callingCode: '31' },
-  { code: 'BE', name: 'Belgium', nationality: 'Belgian', callingCode: '32' },
-  { code: 'PL', name: 'Poland', nationality: 'Polish', callingCode: '48' },
-  { code: 'LT', name: 'Lithuania', nationality: 'Lithuanian', callingCode: '370' },
-  { code: 'LV', name: 'Latvia', nationality: 'Latvian', callingCode: '371' },
-  { code: 'EE', name: 'Estonia', nationality: 'Estonian', callingCode: '372' },
-  { code: 'RO', name: 'Romania', nationality: 'Romanian', callingCode: '40' },
-  { code: 'BG', name: 'Bulgaria', nationality: 'Bulgarian', callingCode: '359' },
-  { code: 'HU', name: 'Hungary', nationality: 'Hungarian', callingCode: '36' },
-  { code: 'CZ', name: 'Czech Republic', nationality: 'Czech', callingCode: '420' },
-  { code: 'SK', name: 'Slovakia', nationality: 'Slovak', callingCode: '421' },
-  { code: 'AU', name: 'Australia', nationality: 'Australian', callingCode: '61' },
-  { code: 'NZ', name: 'New Zealand', nationality: 'New Zealander', callingCode: '64' },
-  { code: 'MY', name: 'Malaysia', nationality: 'Malaysian', callingCode: '60' },
-  { code: 'SG', name: 'Singapore', nationality: 'Singaporean', callingCode: '65' },
-  { code: 'TH', name: 'Thailand', nationality: 'Thai', callingCode: '66' },
-  { code: 'VN', name: 'Vietnam', nationality: 'Vietnamese', callingCode: '84' },
-  { code: 'ID', name: 'Indonesia', nationality: 'Indonesian', callingCode: '62' },
-  { code: 'CN', name: 'China', nationality: 'Chinese', callingCode: '86' },
-  { code: 'JP', name: 'Japan', nationality: 'Japanese', callingCode: '81' },
-  { code: 'KR', name: 'South Korea', nationality: 'South Korean', callingCode: '82' },
-  { code: 'BR', name: 'Brazil', nationality: 'Brazilian', callingCode: '55' },
-  { code: 'AR', name: 'Argentina', nationality: 'Argentine', callingCode: '54' },
-  { code: 'MX', name: 'Mexico', nationality: 'Mexican', callingCode: '52' },
-  { code: 'TR', name: 'Turkey', nationality: 'Turkish', callingCode: '90' },
-] as const;
+// Best-effort English demonyms for the countries we care most about.
+// Keyed by ISO2 code so the lookup is cheap and additions are obvious.
+// Unmapped countries fall back to the country name (used in the
+// nationality datalist — operators can type any value).
+const DEMONYM: Record<string, string> = {
+  AE: 'Emirati',
+  AF: 'Afghan',
+  AG: 'Antiguan',
+  AL: 'Albanian',
+  AM: 'Armenian',
+  AO: 'Angolan',
+  AR: 'Argentine',
+  AT: 'Austrian',
+  AU: 'Australian',
+  AZ: 'Azerbaijani',
+  BA: 'Bosnian',
+  BB: 'Barbadian',
+  BD: 'Bangladeshi',
+  BE: 'Belgian',
+  BF: 'Burkinabé',
+  BG: 'Bulgarian',
+  BH: 'Bahraini',
+  BI: 'Burundian',
+  BJ: 'Beninese',
+  BN: 'Bruneian',
+  BO: 'Bolivian',
+  BR: 'Brazilian',
+  BS: 'Bahamian',
+  BT: 'Bhutanese',
+  BW: 'Botswanan',
+  BY: 'Belarusian',
+  BZ: 'Belizean',
+  CA: 'Canadian',
+  CD: 'Congolese',
+  CF: 'Central African',
+  CG: 'Congolese',
+  CH: 'Swiss',
+  CI: 'Ivorian',
+  CL: 'Chilean',
+  CM: 'Cameroonian',
+  CN: 'Chinese',
+  CO: 'Colombian',
+  CR: 'Costa Rican',
+  CU: 'Cuban',
+  CV: 'Cape Verdean',
+  CY: 'Cypriot',
+  CZ: 'Czech',
+  DE: 'German',
+  DJ: 'Djiboutian',
+  DK: 'Danish',
+  DM: 'Dominican',
+  DO: 'Dominican',
+  DZ: 'Algerian',
+  EC: 'Ecuadorian',
+  EE: 'Estonian',
+  EG: 'Egyptian',
+  ER: 'Eritrean',
+  ES: 'Spanish',
+  ET: 'Ethiopian',
+  FI: 'Finnish',
+  FJ: 'Fijian',
+  FR: 'French',
+  GA: 'Gabonese',
+  GB: 'British',
+  GD: 'Grenadian',
+  GE: 'Georgian',
+  GH: 'Ghanaian',
+  GM: 'Gambian',
+  GN: 'Guinean',
+  GQ: 'Equatoguinean',
+  GR: 'Greek',
+  GT: 'Guatemalan',
+  GW: 'Bissau-Guinean',
+  GY: 'Guyanese',
+  HN: 'Honduran',
+  HR: 'Croatian',
+  HT: 'Haitian',
+  HU: 'Hungarian',
+  ID: 'Indonesian',
+  IE: 'Irish',
+  IL: 'Israeli',
+  IN: 'Indian',
+  IQ: 'Iraqi',
+  IR: 'Iranian',
+  IS: 'Icelandic',
+  IT: 'Italian',
+  JM: 'Jamaican',
+  JO: 'Jordanian',
+  JP: 'Japanese',
+  KE: 'Kenyan',
+  KG: 'Kyrgyz',
+  KH: 'Cambodian',
+  KI: 'I-Kiribati',
+  KM: 'Comoran',
+  KN: 'Kittitian',
+  KP: 'North Korean',
+  KR: 'South Korean',
+  KW: 'Kuwaiti',
+  KZ: 'Kazakhstani',
+  LA: 'Lao',
+  LB: 'Lebanese',
+  LC: 'Saint Lucian',
+  LI: 'Liechtensteiner',
+  LK: 'Sri Lankan',
+  LR: 'Liberian',
+  LS: 'Mosotho',
+  LT: 'Lithuanian',
+  LU: 'Luxembourger',
+  LV: 'Latvian',
+  LY: 'Libyan',
+  MA: 'Moroccan',
+  MC: 'Monégasque',
+  MD: 'Moldovan',
+  ME: 'Montenegrin',
+  MG: 'Malagasy',
+  MH: 'Marshallese',
+  MK: 'Macedonian',
+  ML: 'Malian',
+  MM: 'Burmese',
+  MN: 'Mongolian',
+  MR: 'Mauritanian',
+  MT: 'Maltese',
+  MU: 'Mauritian',
+  MV: 'Maldivian',
+  MW: 'Malawian',
+  MX: 'Mexican',
+  MY: 'Malaysian',
+  MZ: 'Mozambican',
+  NA: 'Namibian',
+  NE: 'Nigerien',
+  NG: 'Nigerian',
+  NI: 'Nicaraguan',
+  NL: 'Dutch',
+  NO: 'Norwegian',
+  NP: 'Nepali',
+  NR: 'Nauruan',
+  NZ: 'New Zealander',
+  OM: 'Omani',
+  PA: 'Panamanian',
+  PE: 'Peruvian',
+  PG: 'Papua New Guinean',
+  PH: 'Filipino',
+  PK: 'Pakistani',
+  PL: 'Polish',
+  PT: 'Portuguese',
+  PW: 'Palauan',
+  PY: 'Paraguayan',
+  QA: 'Qatari',
+  RO: 'Romanian',
+  RS: 'Serbian',
+  RU: 'Russian',
+  RW: 'Rwandan',
+  SA: 'Saudi Arabian',
+  SB: 'Solomon Islander',
+  SC: 'Seychellois',
+  SD: 'Sudanese',
+  SE: 'Swedish',
+  SG: 'Singaporean',
+  SI: 'Slovenian',
+  SK: 'Slovak',
+  SL: 'Sierra Leonean',
+  SM: 'Sammarinese',
+  SN: 'Senegalese',
+  SO: 'Somali',
+  SR: 'Surinamese',
+  SS: 'South Sudanese',
+  ST: 'São Toméan',
+  SV: 'Salvadoran',
+  SY: 'Syrian',
+  SZ: 'Swazi',
+  TD: 'Chadian',
+  TG: 'Togolese',
+  TH: 'Thai',
+  TJ: 'Tajikistani',
+  TL: 'Timorese',
+  TM: 'Turkmen',
+  TN: 'Tunisian',
+  TO: 'Tongan',
+  TR: 'Turkish',
+  TT: 'Trinidadian',
+  TV: 'Tuvaluan',
+  TW: 'Taiwanese',
+  TZ: 'Tanzanian',
+  UA: 'Ukrainian',
+  UG: 'Ugandan',
+  US: 'American',
+  UY: 'Uruguayan',
+  UZ: 'Uzbek',
+  VA: 'Vatican',
+  VC: 'Vincentian',
+  VE: 'Venezuelan',
+  VN: 'Vietnamese',
+  VU: 'Ni-Vanuatu',
+  WS: 'Samoan',
+  YE: 'Yemeni',
+  ZA: 'South African',
+  ZM: 'Zambian',
+  ZW: 'Zimbabwean',
+};
+
+/**
+ * Build the full worldwide ISO country list once at module load. The
+ * i18n-iso-countries package ships every ISO 3166-1 alpha-2 code
+ * (250+ including territories). We join it with the libphonenumber-js
+ * calling-code set so missing-calling-code territories (Antarctica,
+ * EU, etc.) still appear in the residence picker, just without a
+ * phone prefix.
+ */
+export const ISO_COUNTRIES: readonly IsoCountry[] = (() => {
+  const callingCodeSet = new Set(getCountries());
+  const allNames = countries.getNames('en', { select: 'official' });
+  const list: IsoCountry[] = [];
+  for (const [code, name] of Object.entries(allNames)) {
+    let callingCode: string | null = null;
+    if (callingCodeSet.has(code as typeof getCountries extends () => (infer T)[] ? T : never)) {
+      try {
+        callingCode = getCountryCallingCode(
+          code as typeof getCountries extends () => (infer T)[] ? T : never,
+        );
+      } catch {
+        callingCode = null;
+      }
+    }
+    list.push({
+      code,
+      name,
+      nationality: DEMONYM[code] ?? name,
+      callingCode,
+    });
+  }
+  return list;
+})();
 
 export const COUNTRIES_SORTED = [...ISO_COUNTRIES].sort((a, b) => a.name.localeCompare(b.name));
 
 export function findCountryByName(name: string): IsoCountry | undefined {
-  return ISO_COUNTRIES.find((c) => c.name.toLowerCase() === name.toLowerCase());
+  if (!name) return undefined;
+  const n = name.toLowerCase();
+  return ISO_COUNTRIES.find((c) => c.name.toLowerCase() === n);
 }
 
 export function findCountryByCode(code: string): IsoCountry | undefined {
   return ISO_COUNTRIES.find((c) => c.code === code.toUpperCase());
+}
+
+export function findCountryByNationality(nationality: string): IsoCountry | undefined {
+  if (!nationality) return undefined;
+  const n = nationality.toLowerCase();
+  return ISO_COUNTRIES.find((c) => c.nationality?.toLowerCase() === n);
+}
+
+/**
+ * Flag emoji from an ISO alpha-2 code — maps to a Regional Indicator
+ * Symbol pair (U+1F1E6..U+1F1FF). Returns '' for unknown codes so
+ * callers can simply omit the flag.
+ */
+export function flagEmojiFromCode(code: string | null | undefined): string {
+  if (code?.length !== 2) return '';
+  const A = 0x1f1e6;
+  const codePoints = code
+    .toUpperCase()
+    .split('')
+    .map((ch) => A + (ch.charCodeAt(0) - 'A'.charCodeAt(0)));
+  return String.fromCodePoint(...codePoints);
+}
+
+/** Flag emoji from a country NAME ("South Africa"); '' when unknown. */
+export function flagEmojiFromCountryName(name: string | null | undefined): string {
+  if (!name) return '';
+  return flagEmojiFromCode(findCountryByName(name)?.code);
+}
+
+/** Flag emoji from a NATIONALITY demonym ("South African"); '' when unknown. */
+export function flagEmojiFromNationality(nationality: string | null | undefined): string {
+  if (!nationality) return '';
+  return flagEmojiFromCode(findCountryByNationality(nationality)?.code);
 }
 
 /**
@@ -121,8 +336,17 @@ export const IRISH_IMMIGRATION_STATUSES = [
 export type IrishImmigrationStatus = (typeof IRISH_IMMIGRATION_STATUSES)[number]['value'];
 
 /**
- * E.164 phone number — a leading `+`, then 7 to 15 digits where the
- * first digit after `+` is 1-9 (no leading zero in the national part
- * of the international format). Matches ITU-T E.164.
+ * Stage 6E+1 — delegate E.164 validation to libphonenumber-js (country-
+ * aware). This matches the ITU-T E.164 spec more faithfully than a
+ * hand-rolled regex: it accepts valid real-world numbers (including
+ * special country-code lengths) and rejects impossible ones.
+ *
+ * The simple regex `/^\+[1-9]\d{6,14}$/` is kept as a fallback for
+ * environments where the full library isn't available (e.g., Zod
+ * schemas in `use server` graphs); the UI uses the richer validator.
  */
+export function isValidE164(phone: string): boolean {
+  return isValidPhoneNumber(phone);
+}
+
 export const E164_REGEX = /^\+[1-9]\d{6,14}$/;

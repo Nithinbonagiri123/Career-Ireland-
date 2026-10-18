@@ -7,7 +7,9 @@ import {
   type CandidateSkill,
   candidateQualifications,
   candidateSkills,
+  type EducationEntry,
   type EmploymentHistory,
+  educationEntries,
   employmentHistory,
 } from '@/lib/db/schema/candidate_details';
 import { qualifications, skills } from '@/lib/db/schema/reference';
@@ -21,12 +23,16 @@ import {
   RemoveCandidateQualificationSchema,
   type RemoveCandidateSkillInput,
   RemoveCandidateSkillSchema,
+  type RemoveEducationEntryInput,
+  RemoveEducationEntrySchema,
   type RemoveEmploymentHistoryInput,
   RemoveEmploymentHistorySchema,
   type UpdateCandidateQualificationInput,
   UpdateCandidateQualificationSchema,
   type UpdateCandidateSkillInput,
   UpdateCandidateSkillSchema,
+  type UpsertEducationEntryInput,
+  UpsertEducationEntrySchema,
   type UpsertEmploymentHistoryInput,
   UpsertEmploymentHistorySchema,
 } from './schemas';
@@ -436,6 +442,108 @@ export async function removeEmploymentHistory(input: RemoveEmploymentHistoryInpu
       entityId: before.id,
       action: 'DELETED',
       before: { employerName: before.employerName, personId: before.personId },
+    });
+  });
+}
+
+// ─── Education (Stage 6F Phase 3) ─────────────────────────────────────────────
+
+export async function listEducationEntries(personId: string): Promise<EducationEntry[]> {
+  await requireInternalStaff();
+  return db
+    .select()
+    .from(educationEntries)
+    .where(eq(educationEntries.personId, personId))
+    .orderBy(desc(educationEntries.endDate), desc(educationEntries.startDate));
+}
+
+export async function upsertEducationEntry(
+  input: UpsertEducationEntryInput,
+): Promise<EducationEntry> {
+  const session = await requireInternalStaff();
+  const parsed = UpsertEducationEntrySchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid education entry',
+      parsed.error.flatten().fieldErrors as Record<string, string>,
+    );
+  }
+  const d = parsed.data;
+  const values = {
+    personId: d.personId,
+    institution: d.institution.trim(),
+    degree: blankToNull(d.degree ?? undefined),
+    fieldOfStudy: blankToNull(d.fieldOfStudy ?? undefined),
+    startDate: blankToNull(d.startDate ?? undefined),
+    endDate: blankToNull(d.endDate ?? undefined),
+    notes: blankToNull(d.notes ?? undefined),
+  };
+  return db.transaction(async (tx) => {
+    if (d.id) {
+      const [before] = await tx
+        .select()
+        .from(educationEntries)
+        .where(eq(educationEntries.id, d.id))
+        .limit(1);
+      if (!before) throw new BusinessRuleError('EDUCATION_NOT_FOUND', 'Education entry not found');
+      const [after] = await tx
+        .update(educationEntries)
+        .set({ ...values, updatedAt: sql`NOW()` })
+        .where(eq(educationEntries.id, d.id))
+        .returning();
+      if (!after) throw new Error('update returned no row');
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'education_entry',
+        entityId: after.id,
+        action: 'UPDATED',
+        before: {
+          institution: before.institution,
+          degree: before.degree,
+          fieldOfStudy: before.fieldOfStudy,
+          startDate: before.startDate,
+          endDate: before.endDate,
+        },
+        after: {
+          institution: after.institution,
+          degree: after.degree,
+          fieldOfStudy: after.fieldOfStudy,
+          startDate: after.startDate,
+          endDate: after.endDate,
+        },
+      });
+      return after;
+    }
+    const [row] = await tx.insert(educationEntries).values(values).returning();
+    if (!row) throw new Error('insert returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'education_entry',
+      entityId: row.id,
+      action: 'CREATED',
+      after: { personId: row.personId, institution: row.institution, degree: row.degree },
+    });
+    return row;
+  });
+}
+
+export async function removeEducationEntry(input: RemoveEducationEntryInput): Promise<void> {
+  const session = await requireInternalStaff();
+  const parsed = RemoveEducationEntrySchema.parse(input);
+  await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(educationEntries)
+      .where(eq(educationEntries.id, parsed.id))
+      .limit(1);
+    if (!before) return;
+    await tx.delete(educationEntries).where(eq(educationEntries.id, parsed.id));
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'education_entry',
+      entityId: before.id,
+      action: 'DELETED',
+      before: { institution: before.institution, personId: before.personId },
     });
   });
 }

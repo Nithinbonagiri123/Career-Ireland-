@@ -89,6 +89,31 @@ export const UpsertEmploymentHistorySchema = z
 
 export const RemoveEmploymentHistorySchema = z.object({ id: uuid });
 
+// ─── Education (Stage 6F Phase 3) ─────────────────────────────────────────────
+
+export const UpsertEducationEntrySchema = z
+  .object({
+    id: uuid.optional(),
+    personId: uuid,
+    institution: z.string().min(1).max(200),
+    degree: z.string().max(200).optional().or(blank),
+    fieldOfStudy: z.string().max(200).optional().or(blank),
+    startDate: z.string().optional().or(blank),
+    endDate: z.string().optional().or(blank),
+    notes: z.string().max(2000).optional().or(blank),
+  })
+  .refine(
+    (v) =>
+      !v.startDate ||
+      !v.endDate ||
+      v.startDate === '' ||
+      v.endDate === '' ||
+      v.endDate >= v.startDate,
+    { message: 'End date must be on or after start date', path: ['endDate'] },
+  );
+
+export const RemoveEducationEntrySchema = z.object({ id: uuid });
+
 export type AddCandidateSkillInput = z.infer<typeof AddCandidateSkillSchema>;
 export type UpdateCandidateSkillInput = z.infer<typeof UpdateCandidateSkillSchema>;
 export type RemoveCandidateSkillInput = z.infer<typeof RemoveCandidateSkillSchema>;
@@ -97,3 +122,5 @@ export type UpdateCandidateQualificationInput = z.infer<typeof UpdateCandidateQu
 export type RemoveCandidateQualificationInput = z.infer<typeof RemoveCandidateQualificationSchema>;
 export type UpsertEmploymentHistoryInput = z.infer<typeof UpsertEmploymentHistorySchema>;
 export type RemoveEmploymentHistoryInput = z.infer<typeof RemoveEmploymentHistorySchema>;
+export type UpsertEducationEntryInput = z.infer<typeof UpsertEducationEntrySchema>;
+export type RemoveEducationEntryInput = z.infer<typeof RemoveEducationEntrySchema>;

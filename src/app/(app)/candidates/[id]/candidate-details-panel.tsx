@@ -22,16 +22,18 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import type { EmploymentHistory } from '@/lib/db/schema/candidate_details';
+import type { EducationEntry, EmploymentHistory } from '@/lib/db/schema/candidate_details';
 import type { Qualification, Skill } from '@/lib/db/schema/reference';
 import {
   addCandidateQualificationAction,
   addCandidateSkillAction,
   removeCandidateQualificationAction,
   removeCandidateSkillAction,
+  removeEducationEntryAction,
   removeEmploymentHistoryAction,
   updateCandidateQualificationAction,
   updateCandidateSkillAction,
+  upsertEducationEntryAction,
   upsertEmploymentHistoryAction,
 } from '@/modules/candidate-details/actions';
 import type {
@@ -764,6 +766,217 @@ export function EmploymentHistorySection({
                     variant="ghost"
                     onClick={() => remove(r.id)}
                     aria-label="Remove role"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Education (Stage 6F Phase 3) ─────────────────────────────────────────────
+
+function EducationDialog({
+  personId,
+  editingRow,
+  onDone,
+}: {
+  personId: string;
+  editingRow?: EducationEntry;
+  onDone: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [institution, setInstitution] = useState(editingRow?.institution ?? '');
+  const [degree, setDegree] = useState(editingRow?.degree ?? '');
+  const [fieldOfStudy, setFieldOfStudy] = useState(editingRow?.fieldOfStudy ?? '');
+  const [startDate, setStartDate] = useState(editingRow?.startDate ?? '');
+  const [endDate, setEndDate] = useState(editingRow?.endDate ?? '');
+  const [notes, setNotes] = useState(editingRow?.notes ?? '');
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  const submit = () => {
+    startTransition(async () => {
+      const r = await upsertEducationEntryAction({
+        id: editingRow?.id,
+        personId,
+        institution,
+        degree,
+        fieldOfStudy,
+        startDate,
+        endDate,
+        notes,
+      });
+      if (r.ok) {
+        toast.success(editingRow ? 'Education updated' : 'Education added');
+        setOpen(false);
+        onDone();
+        router.refresh();
+      } else {
+        toast.error(r.error.message);
+      }
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          editingRow ? (
+            <Button size="sm" variant="ghost" aria-label="Edit education">
+              <Pencil className="size-3.5" />
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline">
+              <Plus className="mr-1 size-3.5" /> Add education
+            </Button>
+          )
+        }
+      />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{editingRow ? 'Edit education' : 'Add education'}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="eduInst">Institution *</Label>
+            <Input
+              id="eduInst"
+              value={institution}
+              onChange={(e) => setInstitution(e.target.value)}
+              placeholder="e.g. Trinity College Dublin"
+              required
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="eduDegree">Degree</Label>
+              <Input
+                id="eduDegree"
+                value={degree}
+                onChange={(e) => setDegree(e.target.value)}
+                placeholder="e.g. BA, MSc, Leaving Cert"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="eduField">Field of study</Label>
+              <Input
+                id="eduField"
+                value={fieldOfStudy}
+                onChange={(e) => setFieldOfStudy(e.target.value)}
+                placeholder="e.g. Economics, Nursing"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="eduStart">Start date</Label>
+              <Input
+                id="eduStart"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="eduEnd">End date</Label>
+              <Input
+                id="eduEnd"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="eduNotes">Notes</Label>
+            <Input
+              id="eduNotes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Grade / honours / dissertation / etc."
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={pending || institution.trim().length === 0}>
+            {editingRow ? 'Save' : 'Add'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function EducationSection({ personId, rows }: { personId: string; rows: EducationEntry[] }) {
+  const [, startTransition] = useTransition();
+  const [tick, setTick] = useState(0);
+  const refresh = () => setTick((t) => t + 1);
+  const router = useRouter();
+
+  const remove = (id: string) => {
+    if (!confirm('Remove this education entry?')) return;
+    startTransition(async () => {
+      const r = await removeEducationEntryAction({ id }, personId);
+      if (r.ok) {
+        toast.success('Education removed');
+        router.refresh();
+      } else toast.error(r.error.message);
+      refresh();
+    });
+  };
+
+  return (
+    <Card>
+      <SectionHeader
+        icon={GraduationCap}
+        title="Education"
+        count={rows.length}
+        action={<EducationDialog personId={personId} onDone={refresh} key={`add-${tick}`} />}
+      />
+      <CardContent>
+        {rows.length === 0 ? (
+          <EmptyState
+            icon={GraduationCap}
+            title="No education recorded"
+            description="Add schooling (institution, degree, dates) to flesh out the candidate profile."
+          />
+        ) : (
+          <ul className="divide-y">
+            {rows.map((r) => (
+              <li key={r.id} className="flex items-start justify-between py-3 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">
+                    {r.degree ? `${r.degree}${r.fieldOfStudy ? `, ${r.fieldOfStudy}` : ''} · ` : ''}
+                    {r.institution}
+                  </p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {r.startDate ?? '?'} – {r.endDate ?? '?'}
+                  </p>
+                  {r.notes && (
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{r.notes}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <EducationDialog
+                    personId={personId}
+                    editingRow={r}
+                    onDone={refresh}
+                    key={`edit-${r.id}-${tick}`}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => remove(r.id)}
+                    aria-label="Remove education"
                   >
                     <Trash2 className="size-3.5" />
                   </Button>

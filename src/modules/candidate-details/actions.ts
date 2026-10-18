@@ -7,9 +7,11 @@ import type {
   AddCandidateSkillInput,
   RemoveCandidateQualificationInput,
   RemoveCandidateSkillInput,
+  RemoveEducationEntryInput,
   RemoveEmploymentHistoryInput,
   UpdateCandidateQualificationInput,
   UpdateCandidateSkillInput,
+  UpsertEducationEntryInput,
   UpsertEmploymentHistoryInput,
 } from './schemas';
 import {
@@ -17,14 +19,19 @@ import {
   addCandidateSkill,
   removeCandidateQualification,
   removeCandidateSkill,
+  removeEducationEntry,
   removeEmploymentHistory,
   updateCandidateQualification,
   updateCandidateSkill,
+  upsertEducationEntry,
   upsertEmploymentHistory,
 } from './service';
 
 function revalidateCandidate(personId: string) {
+  // Stage 6F — the old /candidates/[id] route redirects to the Client
+  // Workspace; revalidate both so any lingering cached segments drop.
   revalidatePath(`/candidates/${personId}`);
+  revalidatePath(`/clients/${personId}`);
 }
 
 export async function addCandidateSkillAction(input: AddCandidateSkillInput) {
@@ -86,6 +93,21 @@ export async function removeEmploymentHistoryAction(
   personId: string,
 ) {
   const r = await toActionResult(() => removeEmploymentHistory(input));
+  if (r.ok) revalidateCandidate(personId);
+  return r;
+}
+
+export async function upsertEducationEntryAction(input: UpsertEducationEntryInput) {
+  const r = await toActionResult(() => upsertEducationEntry(input));
+  if (r.ok) revalidateCandidate(input.personId);
+  return r;
+}
+
+export async function removeEducationEntryAction(
+  input: RemoveEducationEntryInput,
+  personId: string,
+) {
+  const r = await toActionResult(() => removeEducationEntry(input));
   if (r.ok) revalidateCandidate(personId);
   return r;
 }

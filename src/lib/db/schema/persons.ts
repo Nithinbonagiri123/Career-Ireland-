@@ -44,6 +44,37 @@ export const persons = pgTable(
      *  that don't collect address today) stay valid. */
     addressLine1: varchar('address_line_1', { length: 255 }),
     addressLine2: varchar('address_line_2', { length: 255 }),
+    /** Stage 6G Screen 02 — residential postcode captured on the New
+     *  Lead form. Nullable so Recruitment / Immigration / historical
+     *  rows stay valid. */
+    postcode: varchar('postcode', { length: 20 }),
+    /** Stage 6G Screen 02 — freeform band ("5 years", "<1 year", "20+"),
+     *  matching the field already on `candidate_profiles` but captured
+     *  at lead-time so it survives before activation. */
+    yearsOfExperience: varchar('years_of_experience', { length: 60 }),
+    /** Stage 6G Screen 02 — captured on the New Lead form.
+     *  EMPLOYED | UNEMPLOYED | SELF_EMPLOYED | STUDENT | RETIRED | OTHER.
+     *  Enum enforced in TS; column is text so adding new options is
+     *  schema-free. */
+    employmentStatus: text('employment_status', {
+      enum: ['EMPLOYED', 'UNEMPLOYED', 'SELF_EMPLOYED', 'STUDENT', 'RETIRED', 'OTHER'],
+    }),
+    /** Stage 6G Screen 02 — short freeform blurb written by the
+     *  operator on intake. Separate from `notes` (operator-only) and
+     *  from candidate_profiles.profile_summary (post-activation).
+     *  Copied forward on lead → candidate activation. */
+    professionalSummary: text('professional_summary'),
+    /** Stage 6G Screen 02 — eligibility to work in Ireland, captured on
+     *  intake. Distinct from `irish_immigration_status` which is about
+     *  the person's current stamp. This is the broader classification
+     *  the operator uses to triage the lead. Plain text column so
+     *  historical candidate_profiles.work_eligibility strings also fit
+     *  on the person row at edit-time; zod + UI enforce the enum shape
+     *  on new writes. */
+    workEligibility: text('work_eligibility'),
+    /** Stage 6G Screen 02 — "Do you currently live in Ireland?". Three
+     *  states: Yes (true), No (false), Unknown (NULL). */
+    currentlyInIreland: boolean('currently_in_ireland'),
     /** Primary profession at the identity level. Chosen as the single
      *  source of truth over candidate_profiles.primary_occupation_id
      *  because profession is an attribute of the human, not of their
@@ -57,6 +88,32 @@ export const persons = pgTable(
     source: text('source', {
       enum: ['DIRECT', 'REFERRAL', 'ADVERTISEMENT', 'EMPLOYER_REFERRAL', 'OTHER'],
     }).default('DIRECT'),
+    /**
+     * Stage 6E+1 — structured Irish immigration status captured at
+     * lead creation. Previously Stage 6E stored this with a
+     *     `[Irish immigration status: Stamp 4]`
+     * marker in `notes`; a one-off scan in migration 0055 lifts those
+     * marker values into this column. The field is nullable because
+     * most pre-6E leads never set it.
+     *
+     * Values mirror the enum in `src/lib/iso-countries.ts`
+     * (IRISH_IMMIGRATION_STATUSES). Rendered on the Candidate Card +
+     * Client Workspace alongside the immigration-case detail so a
+     * current permission is never confused with an application/case.
+     */
+    irishImmigrationStatus: text('irish_immigration_status', {
+      enum: [
+        'NONE',
+        'STAMP_1',
+        'STAMP_1G',
+        'STAMP_2',
+        'STAMP_3',
+        'STAMP_4',
+        'OTHER',
+        'PENDING',
+        'NOT_PROVIDED',
+      ],
+    }),
     notes: text('notes'),
     /** If populated, this person has been merged into another — follow the pointer. */
     mergedIntoPersonId: uuid('merged_into_person_id').references((): AnyPgColumn => persons.id),

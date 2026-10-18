@@ -120,6 +120,7 @@ export async function updatePerson(input: UpdatePersonInput): Promise<Person> {
       .update(persons)
       .set({
         firstName: d.firstName.trim(),
+        middleName: blankToNull(d.middleName),
         lastName: d.lastName.trim(),
         email: blankToNull(d.email),
         phone: blankToNull(d.phone),
@@ -127,6 +128,17 @@ export async function updatePerson(input: UpdatePersonInput): Promise<Person> {
         nationality: blankToNull(d.nationality),
         currentCountry: blankToNull(d.currentCountry),
         currentCity: blankToNull(d.currentCity),
+        addressLine1: blankToNull(d.addressLine1),
+        addressLine2: blankToNull(d.addressLine2),
+        // Stage 6G Screen 02 — persist the New Lead form's new fields.
+        postcode: blankToNull(d.postcode),
+        employmentStatus: d.employmentStatus ? d.employmentStatus : null,
+        professionalSummary: blankToNull(d.professionalSummary),
+        workEligibility: blankToNull(d.workEligibility),
+        currentlyInIreland: typeof d.currentlyInIreland === 'boolean' ? d.currentlyInIreland : null,
+        // Stage 6F Phase 3 — same `'' | null | undefined → NULL` rule
+        // we use on create. Enum-coded value otherwise.
+        irishImmigrationStatus: d.irishImmigrationStatus ? d.irishImmigrationStatus : null,
         notes: blankToNull(d.notes),
         updatedAt: sql`NOW()`,
       })
@@ -141,6 +153,7 @@ export async function updatePerson(input: UpdatePersonInput): Promise<Person> {
       action: 'UPDATED',
       before: {
         firstName: before.firstName,
+        middleName: before.middleName,
         lastName: before.lastName,
         email: before.email,
         phone: before.phone,
@@ -148,10 +161,14 @@ export async function updatePerson(input: UpdatePersonInput): Promise<Person> {
         nationality: before.nationality,
         currentCountry: before.currentCountry,
         currentCity: before.currentCity,
+        addressLine1: before.addressLine1,
+        addressLine2: before.addressLine2,
+        irishImmigrationStatus: before.irishImmigrationStatus,
         notes: before.notes,
       },
       after: {
         firstName: after.firstName,
+        middleName: after.middleName,
         lastName: after.lastName,
         email: after.email,
         phone: after.phone,
@@ -159,6 +176,9 @@ export async function updatePerson(input: UpdatePersonInput): Promise<Person> {
         nationality: after.nationality,
         currentCountry: after.currentCountry,
         currentCity: after.currentCity,
+        addressLine1: after.addressLine1,
+        addressLine2: after.addressLine2,
+        irishImmigrationStatus: after.irishImmigrationStatus,
         notes: after.notes,
       },
     });

@@ -121,9 +121,49 @@ export const employmentHistory = pgTable(
   ],
 );
 
+/**
+ * Stage 6F Phase 3 — formal education entries. Separate from
+ * `candidate_qualifications` because the two are conceptually distinct:
+ *   - A qualification is a credential ("Registered Nurse", "CSCS Card") —
+ *     usually catalog-indexed, often expiry-tracked, central to matching.
+ *   - An education entry is schooling ("BA Economics, Trinity College,
+ *     2015–2019") — free-text, non-catalog, informational, no matching.
+ * Mixing them into candidate_qualifications meant Tracey had to use the
+ * "custom" shape for every school entry, polluting the match catalog.
+ */
+export const educationEntries = pgTable(
+  'education_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    personId: uuid('person_id')
+      .notNull()
+      .references(() => persons.id),
+    institution: varchar('institution', { length: 200 }).notNull(),
+    /** e.g. "Bachelor of Arts", "Leaving Certificate", "MBA". */
+    degree: varchar('degree', { length: 200 }),
+    /** e.g. "Economics", "Nursing". */
+    fieldOfStudy: varchar('field_of_study', { length: 200 }),
+    startDate: date('start_date'),
+    endDate: date('end_date'),
+    /** Operator-visible notes: grade, honours, dissertation, campus, etc. */
+    notes: text('notes'),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    index('education_entries_person_idx').on(t.personId),
+    check(
+      'education_entries_dates_ordered',
+      sql`${t.endDate} IS NULL OR ${t.startDate} IS NULL OR ${t.endDate} >= ${t.startDate}`,
+    ),
+  ],
+);
+
 export type CandidateSkill = typeof candidateSkills.$inferSelect;
 export type NewCandidateSkill = typeof candidateSkills.$inferInsert;
 export type CandidateQualification = typeof candidateQualifications.$inferSelect;
 export type NewCandidateQualification = typeof candidateQualifications.$inferInsert;
 export type EmploymentHistory = typeof employmentHistory.$inferSelect;
 export type NewEmploymentHistory = typeof employmentHistory.$inferInsert;
+export type EducationEntry = typeof educationEntries.$inferSelect;
+export type NewEducationEntry = typeof educationEntries.$inferInsert;
