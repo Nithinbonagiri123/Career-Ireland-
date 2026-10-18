@@ -51,3 +51,9 @@ artifacts/
 
 # Local recordings / misc user artefacts
 *.mov
+
+# Stage 6G approved design mockups (local reference, large PNGs)
+designs/
+
+# Playwright visual-acceptance screenshots (regenerated per run)
+/playwright/stage*/
