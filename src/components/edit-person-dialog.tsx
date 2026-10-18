@@ -2,25 +2,34 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
-import { AlertCircle, Loader2, Pencil } from 'lucide-react';
+import { AlertCircle, Briefcase, Globe, Loader2, Pencil, UserRound } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
+import {
+  Field,
+  FORM_INPUT_SIZING,
+  TintedFormSection as FormSection,
+} from '@/components/form-section';
 import { type OccupationOption, OccupationPicker } from '@/components/occupation-picker';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import type { Occupation } from '@/lib/db/schema/occupations';
 import type { CandidateProfile, Person } from '@/lib/db/schema/persons';
+import { COUNTRIES_SORTED, IRISH_IMMIGRATION_STATUSES } from '@/lib/iso-countries';
+import { cn } from '@/lib/utils';
 import { updatePersonAction } from '@/modules/persons/actions';
 import { type UpdatePersonInput, UpdatePersonSchema } from '@/modules/persons/schemas';
 
@@ -85,6 +94,7 @@ export function EditPersonDialog({
     defaultValues: {
       personId: person.id,
       firstName: person.firstName,
+      middleName: person.middleName ?? '',
       lastName: person.lastName,
       email: person.email ?? '',
       phone: person.phone ?? '',
@@ -92,6 +102,10 @@ export function EditPersonDialog({
       nationality: person.nationality ?? '',
       currentCountry: person.currentCountry ?? '',
       currentCity: person.currentCity ?? '',
+      addressLine1: person.addressLine1 ?? '',
+      addressLine2: person.addressLine2 ?? '',
+      postcode: person.postcode ?? '',
+      irishImmigrationStatus: person.irishImmigrationStatus ?? '',
       notes: person.notes ?? '',
       primaryOccupationId: candidateProfile?.primaryOccupationId ?? '',
       yearsOfExperience: candidateProfile?.yearsOfExperience ?? '',
@@ -129,154 +143,194 @@ export function EditPersonDialog({
       <DialogTrigger
         render={
           trigger ?? (
-            <Button variant="outline" size="sm">
-              <Pencil className="mr-1.5 size-3.5" /> Edit details
+            <Button variant="outline">
+              <Pencil className="mr-1.5 size-4" /> Edit details
             </Button>
           )
         }
       />
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[92dvh] gap-5 overflow-y-auto p-6 sm:max-w-5xl sm:p-7">
         <DialogHeader>
-          <DialogTitle>Edit details</DialogTitle>
+          <DialogTitle className="text-2xl font-semibold tracking-tight">Edit details</DialogTitle>
+          <DialogDescription>
+            Update {person.firstName}’s personal, professional and immigration information.
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="ep-first">First name</Label>
-              <Input
-                id="ep-first"
-                aria-invalid={Boolean(errors.firstName)}
-                {...register('firstName')}
-              />
-              {errors.firstName && (
-                <p className="text-xs text-destructive">{errors.firstName.message}</p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ep-last">Last name</Label>
-              <Input
-                id="ep-last"
-                aria-invalid={Boolean(errors.lastName)}
-                {...register('lastName')}
-              />
-              {errors.lastName && (
-                <p className="text-xs text-destructive">{errors.lastName.message}</p>
-              )}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="ep-email">Email</Label>
-              <Input
-                id="ep-email"
-                type="email"
-                aria-invalid={Boolean(errors.email)}
-                {...register('email')}
-              />
-              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ep-phone">Phone</Label>
-              <Input id="ep-phone" {...register('phone')} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="ep-dob">Date of birth</Label>
-              <Input id="ep-dob" type="date" {...register('dateOfBirth')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ep-nat">Nationality</Label>
-              <Input id="ep-nat" {...register('nationality')} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="ep-country">Country</Label>
-              <Input id="ep-country" {...register('currentCountry')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ep-city">City</Label>
-              <Input id="ep-city" {...register('currentCity')} />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="ep-notes">Notes</Label>
-            <textarea
-              id="ep-notes"
-              rows={3}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              {...register('notes')}
-            />
-          </div>
-
-          {/* Candidate profile section — only renders when this person has an
-              active candidate profile. Same dialog, extra fields on top of the
-              person ones so the operator doesn't hunt between surfaces. */}
-          {candidateProfile && (
-            <div className="space-y-4 rounded-md border border-border/60 bg-muted/20 p-4">
-              <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                Candidate profile
-              </h3>
-              <div className="space-y-1.5">
-                <Label htmlFor="ep-occupation">Primary occupation</Label>
-                <OccupationPicker
-                  inputId="ep-occupation"
-                  options={allOccupations}
-                  value={currentOccupationId ?? ''}
-                  onChange={(id) =>
-                    setValue('primaryOccupationId', id, {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    })
-                  }
-                  onOptionsChanged={(created: OccupationOption) =>
-                    setLocallyCreatedOccupations((prev) => [created, ...prev])
-                  }
+        <form onSubmit={onSubmit} className={cn('space-y-5', FORM_INPUT_SIZING)} noValidate>
+          {/* ── Section 1: Personal information ──────────────── */}
+          <FormSection
+            icon={UserRound}
+            iconTone="blue"
+            title="Personal information"
+            subtitle="Identity, contact details and current address"
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field id="ep-first" label="First name" required error={errors.firstName?.message}>
+                <Input
+                  id="ep-first"
+                  aria-invalid={Boolean(errors.firstName)}
+                  {...register('firstName')}
                 />
-                <p className="text-[11px] text-muted-foreground">
-                  Every occupation in the catalog is listed. The last row is “+ New occupation…” —
-                  pick it to add a new occupation that becomes reusable everywhere.
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="ep-yoe">Years of experience</Label>
+              </Field>
+              <Field id="ep-middle" label="Middle name">
+                <Input id="ep-middle" {...register('middleName')} />
+              </Field>
+              <Field id="ep-last" label="Last name" required error={errors.lastName?.message}>
+                <Input
+                  id="ep-last"
+                  aria-invalid={Boolean(errors.lastName)}
+                  {...register('lastName')}
+                />
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field id="ep-email" label="Email" error={errors.email?.message}>
+                <Input
+                  id="ep-email"
+                  type="email"
+                  aria-invalid={Boolean(errors.email)}
+                  {...register('email')}
+                />
+              </Field>
+              <Field id="ep-phone" label="Mobile number">
+                <Input id="ep-phone" placeholder="+353 87 123 4567" {...register('phone')} />
+              </Field>
+              <Field id="ep-dob" label="Date of birth">
+                <Input id="ep-dob" type="date" {...register('dateOfBirth')} />
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field id="ep-country" label="Country of residence">
+                <Input
+                  id="ep-country"
+                  list="ep-country-options"
+                  placeholder="Start typing…"
+                  {...register('currentCountry')}
+                />
+                <datalist id="ep-country-options">
+                  {COUNTRIES_SORTED.map((c) => (
+                    <option key={c.code} value={c.name} />
+                  ))}
+                </datalist>
+              </Field>
+              <Field id="ep-nat" label="Nationality">
+                <Input
+                  id="ep-nat"
+                  list="ep-nat-options"
+                  placeholder="e.g. South African"
+                  {...register('nationality')}
+                />
+                <datalist id="ep-nat-options">
+                  {COUNTRIES_SORTED.filter((c) => c.nationality).map((c) => (
+                    <option key={c.code} value={c.nationality} />
+                  ))}
+                </datalist>
+              </Field>
+              <Field id="ep-city" label="City">
+                <Input id="ep-city" {...register('currentCity')} />
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field id="ep-addr1" label="Address line 1">
+                <Input id="ep-addr1" placeholder="Street address" {...register('addressLine1')} />
+              </Field>
+              <Field id="ep-addr2" label="Address line 2">
+                <Input
+                  id="ep-addr2"
+                  placeholder="Apartment, suite…"
+                  {...register('addressLine2')}
+                />
+              </Field>
+              <Field id="ep-postcode" label="Postcode">
+                <Input id="ep-postcode" placeholder="e.g. D02 X285" {...register('postcode')} />
+              </Field>
+            </div>
+          </FormSection>
+
+          {/* ── Section 2: Professional information — only when this
+                 person has an active candidate profile. ──────────── */}
+          {candidateProfile && (
+            <FormSection
+              icon={Briefcase}
+              iconTone="amber"
+              title="Professional information"
+              subtitle="Occupation, experience and profile summary"
+            >
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Field id="ep-occupation" label="Primary occupation">
+                  <OccupationPicker
+                    inputId="ep-occupation"
+                    options={allOccupations}
+                    value={currentOccupationId ?? ''}
+                    onChange={(id) =>
+                      setValue('primaryOccupationId', id, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }
+                    onOptionsChanged={(created: OccupationOption) =>
+                      setLocallyCreatedOccupations((prev) => [created, ...prev])
+                    }
+                  />
+                </Field>
+                <Field id="ep-yoe" label="Years of experience">
                   <Input
                     id="ep-yoe"
                     placeholder="e.g. 5, 10+, entry-level"
                     {...register('yearsOfExperience')}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="ep-eligibility">Work eligibility</Label>
+                </Field>
+                <Field id="ep-pref-location" label="Preferred work location">
+                  <Input
+                    id="ep-pref-location"
+                    placeholder="e.g. Dublin, Cork, remote"
+                    {...register('preferredLocation')}
+                  />
+                </Field>
+              </div>
+              <Field id="ep-summary" label="Profile summary">
+                <Textarea
+                  id="ep-summary"
+                  rows={3}
+                  placeholder="One-paragraph description shown on shortlists + candidate cards"
+                  {...register('profileSummary')}
+                />
+              </Field>
+            </FormSection>
+          )}
+
+          {/* ── Section 3: Immigration & eligibility ─────────── */}
+          <FormSection
+            icon={Globe}
+            iconTone="teal"
+            title="Immigration & eligibility"
+            subtitle="Current Irish immigration status and right to work"
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field id="ep-imm" label="Irish immigration status">
+                <Select id="ep-imm" {...register('irishImmigrationStatus')}>
+                  <option value="">—</option>
+                  {IRISH_IMMIGRATION_STATUSES.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              {candidateProfile && (
+                <Field id="ep-eligibility" label="Work eligibility">
                   <Input
                     id="ep-eligibility"
                     placeholder="e.g. Stamp 4, EU citizen"
                     {...register('workEligibility')}
                   />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ep-pref-location">Preferred work location</Label>
-                <Input
-                  id="ep-pref-location"
-                  placeholder="e.g. Dublin, Cork, remote"
-                  {...register('preferredLocation')}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ep-summary">Profile summary</Label>
-                <textarea
-                  id="ep-summary"
-                  rows={3}
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  placeholder="One-paragraph description shown on shortlists + candidate cards"
-                  {...register('profileSummary')}
-                />
-              </div>
+                </Field>
+              )}
+              <Field id="ep-notes" label="Notes">
+                <Textarea id="ep-notes" rows={2} {...register('notes')} />
+              </Field>
             </div>
-          )}
+          </FormSection>
 
           {formError && (
             <motion.div
