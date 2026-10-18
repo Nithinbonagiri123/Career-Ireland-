@@ -30,6 +30,9 @@ export type LeadListRow = {
   personSource: string | null;
   /** Person's current country. Used by the leads filter. */
   personCountry: string | null;
+  /** Person's nationality (as entered). Rendered as the nationality
+   *  column on the Leads table and the nationality filter. */
+  personNationality: string | null;
   /** Person's primary profession id. Used by the leads filter. */
   personPrimaryOccupationId: string | null;
   assignedUserId: string | null;
@@ -85,6 +88,7 @@ export async function listLeads(opts?: {
       personPhone: persons.phone,
       personSource: persons.source,
       personCountry: persons.currentCountry,
+      personNationality: persons.nationality,
       personPrimaryOccupationId: persons.primaryOccupationId,
       employerName: employers.legalName,
       assignedUserId: leads.assignedUserId,
@@ -180,6 +184,7 @@ export async function listLeads(opts?: {
       personPhone: r.personPhone,
       personSource: r.personSource ?? null,
       personCountry: r.personCountry ?? null,
+      personNationality: r.personNationality ?? null,
       personPrimaryOccupationId: r.personPrimaryOccupationId ?? null,
       assignedUserId: r.assignedUserId,
       assignedUserName: r.assignedUserName,

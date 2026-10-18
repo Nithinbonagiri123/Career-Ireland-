@@ -83,8 +83,21 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
         currentCity: blankToNull(p.currentCity),
         addressLine1: blankToNull(p.addressLine1),
         addressLine2: blankToNull(p.addressLine2),
+        postcode: blankToNull(p.postcode),
         primaryOccupationId: blankToNull(p.primaryOccupationId),
+        // Stage 6G Screen 02 — Professional information section fields.
+        yearsOfExperience: blankToNull(p.yearsOfExperience),
+        employmentStatus: p.employmentStatus ? p.employmentStatus : null,
+        professionalSummary: blankToNull(p.professionalSummary),
+        // Stage 6G Screen 02 — Immigration & eligibility section fields.
+        workEligibility: p.workEligibility ? p.workEligibility : null,
+        currentlyInIreland: typeof p.currentlyInIreland === 'boolean' ? p.currentlyInIreland : null,
         source: p.source,
+        // Stage 6E+1 — persist structured Irish immigration status
+        // directly to the dedicated column. Empty string / null / undefined
+        // all map to NULL so the field stays optional for every business
+        // line.
+        irishImmigrationStatus: p.irishImmigrationStatus ? p.irishImmigrationStatus : null,
         notes: blankToNull(p.notes),
       });
       await recordAudit(tx, {

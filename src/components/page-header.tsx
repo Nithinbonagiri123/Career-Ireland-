@@ -128,7 +128,15 @@ export function PageHeader({
             )}
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
             {description && (
-              <p className="mt-1 max-w-2xl text-sm text-foreground/70">{description}</p>
+              // Stage 6F — description is `ReactNode`, so a `<p>` wrapper is
+              // unsafe: callers pass JSX trees that include `<div>`, `<span>`
+              // chip rows, and other block elements that React 19 refuses to
+              // nest inside `<p>` (hydration mismatch + full dev-overlay).
+              // Keep the paragraph styling, but render as a `<div>` so any
+              // valid ReactNode is accepted without surprising hydration
+              // crashes. See the Client Workspace header which passes a
+              // chip row as the description.
+              <div className="mt-1 max-w-2xl text-sm text-foreground/70">{description}</div>
             )}
             {meta && <div className="mt-3">{meta}</div>}
           </div>

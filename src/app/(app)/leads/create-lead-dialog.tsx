@@ -2,13 +2,24 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
-import { AlertCircle, FileText, Loader2, Plus, Users } from 'lucide-react';
+import {
+  AlertCircle,
+  Briefcase as BriefcaseIcon,
+  FileText,
+  Globe as GlobeIcon,
+  Loader2,
+  Plus,
+  User as UserIcon,
+  Users,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
+import { Field, TintedFormSection as FormSection } from '@/components/form-section';
 import { type OccupationOption, OccupationPicker } from '@/components/occupation-picker';
+import { PhoneCountryPicker } from '@/components/phone-country-picker';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -111,17 +122,25 @@ export function CreateLeadDialog({
       addressLine1: '',
       addressLine2: '',
       primaryOccupationId: '',
+      // Stage 6G Screen 02 — new field defaults.
+      postcode: '',
+      yearsOfExperience: '',
+      employmentStatus: '',
+      professionalSummary: '',
+      workEligibility: '',
+      currentlyInIreland: undefined,
       source: 'DIRECT',
       notes: '',
     },
   });
 
-  // Stage 6E Section 4 — Irish immigration status for CS leads.
-  // Captured on the form, serialised into the lead's `notes` with a
-  // structured prefix so no schema migration is required at this stage.
-  // The Client Workspace reads it back from notes to render the
-  // immigration badge on the candidate card. A dedicated column + the
-  // Stage 5 immigration_cases catalog mapping is a follow-up.
+  // Stage 6E+1 — Irish immigration status for CS leads. Captured on the
+  // form and written to the dedicated `persons.irish_immigration_status`
+  // column via `createLeadAction` (Stage 6E stored this inside the
+  // `notes` field with a `[Irish immigration status: X]` marker; the
+  // Stage 6E+1 migration 0055 lifted those marker values into the
+  // dedicated column, and this form now writes structured values
+  // directly). Candidate Card + Client Workspace read from the column.
   const [immigrationStatus, setImmigrationStatus] = useState<string>('NOT_PROVIDED');
   // Stage 6E Section 4 — compound phone input: calling code + national
   // number. Combined into E.164 on submit. The calling-code picker
@@ -133,6 +152,9 @@ export function CreateLeadDialog({
   // without a refetch. See occupation-picker for the pattern.
   const [localOccupations, setLocalOccupations] = useState<OccupationOption[]>(occupations);
   const selectedOccupationId = watch('primaryOccupationId') ?? '';
+  // Stage 6G Screen 02 — rendered via a tri-state Yes/No/unspecified
+  // Select; watch so the dropdown reflects the current form value.
+  const currentlyInIreland = watch('currentlyInIreland');
 
   // ── Optional first-invoice state ──────────────────────────────
   const [serviceId, setServiceId] = useState<string>('');
@@ -320,17 +342,14 @@ export function CreateLeadDialog({
           ? `+${phoneCountryCode}${phoneNationalNumber.replace(/\D/g, '')}`
           : ''
         : rawPhone;
-    // Attach the Irish immigration status to notes with a marker so the
-    // workspace / candidate card can parse it back. Keeps the data in
-    // place without a schema migration this stage.
-    const existingNotes = (data.notes ?? '').trim();
-    const immigrationLabel =
-      IRISH_IMMIGRATION_STATUSES.find((s) => s.value === immigrationStatus)?.label ?? '';
-    const prefix = existingNotes ? `${existingNotes}\n\n` : '';
-    const notesWithImmigration =
-      immigrationStatus && immigrationStatus !== 'NOT_PROVIDED'
-        ? `${prefix}[Irish immigration status: ${immigrationLabel}]`
-        : existingNotes;
+    // Stage 6E+1 — write Irish immigration status to the dedicated
+    // column. NOT_PROVIDED / '' both resolve to the explicit
+    // "NOT_PROVIDED" enum value when the operator chose it, or null
+    // when nothing was selected.
+    const structuredImmigrationStatus =
+      immigrationStatus && immigrationStatus !== ''
+        ? (immigrationStatus as (typeof IRISH_IMMIGRATION_STATUSES)[number]['value'])
+        : null;
     const result = await createLeadAction({
       mode: 'NEW_PERSON',
       // Target is picked at the top of the dialog. CS is the default and
@@ -340,7 +359,7 @@ export function CreateLeadDialog({
       person: {
         ...data,
         phone: combinedPhone,
-        notes: notesWithImmigration,
+        irishImmigrationStatus: structuredImmigrationStatus,
       },
     });
     if (!result.ok) {
@@ -414,26 +433,32 @@ export function CreateLeadDialog({
           </Button>
         }
       />
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Create a new lead</DialogTitle>
-          <DialogDescription>
-            Pick which part of the business this lead is for — the form fields adapt. Person + lead
-            for Candidate Services and Immigration; employer + lead for Recruitment. Optional first
-            invoice at the bottom.
+      {/* Stage 6G Screen 02 — restructured to match the approved
+          mockup: three iconized sections (Personal / Professional /
+          Immigration & eligibility) with a 3-column grid inside
+          each. The target-business picker is still at the top so
+          operators can switch to Recruitment / Immigration flows,
+          but the layout underneath prioritises the CS variant. */}
+      <DialogContent className="max-h-[92dvh] gap-5 overflow-y-auto p-6 sm:max-w-5xl sm:p-7">
+        <DialogHeader className="space-y-1">
+          <DialogTitle className="text-2xl font-semibold tracking-tight">
+            Create New Lead
+          </DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Enter candidate, business or organisation data to start a new lead.
           </DialogDescription>
         </DialogHeader>
 
         {/* Target-business picker — always visible at the top. Sets the
             downstream lead + invoice flow. */}
-        <div className="mb-4 space-y-1.5">
+        <div className="mb-5 space-y-2">
           <Label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
             For which part of the business?
           </Label>
           <div
             role="tablist"
             aria-label="Target business"
-            className="grid grid-cols-3 overflow-hidden rounded-md border"
+            className="grid grid-cols-3 gap-1.5 rounded-xl bg-muted/50 p-1.5"
           >
             {(
               [
@@ -450,10 +475,10 @@ export function CreateLeadDialog({
                   role="tab"
                   aria-selected={active}
                   onClick={() => setTargetBusiness(key)}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                     active
-                      ? 'bg-foreground text-background'
-                      : 'bg-transparent text-muted-foreground hover:bg-muted'
+                      ? 'bg-foreground text-background shadow-sm'
+                      : 'bg-transparent text-muted-foreground hover:bg-background/60 hover:text-foreground'
                   }`}
                 >
                   {label}
@@ -461,7 +486,7 @@ export function CreateLeadDialog({
               );
             })}
           </div>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {targetBusiness === 'RECRUITMENT'
               ? 'Payer = employer. On Accept, the lead becomes a Job Requisition for that employer.'
               : targetBusiness === 'IMMIGRATION'
@@ -544,76 +569,73 @@ export function CreateLeadDialog({
         ) : null}
 
         {targetBusiness !== 'RECRUITMENT' && (
-          <form onSubmit={submitAsNewPerson} className="space-y-5" noValidate>
-            {/* ── Person + Lead ────────────────────────────────── */}
-            <section className="space-y-3">
-              <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                Person
-              </h3>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="cl-first">First name</Label>
+          <form
+            onSubmit={submitAsNewPerson}
+            className="space-y-5 [&_[data-slot=input]]:h-10 [&_[data-slot=input]]:bg-background [&_[data-slot=input]]:px-3 [&_[data-slot=input]]:text-sm [&_[data-slot=select]]:h-10 [&_[data-slot=select]]:bg-background [&_[data-slot=select]]:px-3 [&_[data-slot=select]]:text-sm"
+            noValidate
+          >
+            {/* ── Section 1: Personal details ──────────────────── */}
+            <FormSection
+              icon={UserIcon}
+              iconTone="blue"
+              title="Personal details"
+              subtitle="Candidate's name, contact and address"
+            >
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Field id="cl-first" label="First name" required error={errors.firstName?.message}>
                   <Input
                     id="cl-first"
                     aria-invalid={Boolean(errors.firstName)}
                     {...register('firstName')}
                   />
-                  {errors.firstName && (
-                    <p className="text-xs text-destructive">{errors.firstName.message}</p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="cl-last">Last name</Label>
+                </Field>
+                <Field id="cl-middle" label="Middle name">
+                  <Input id="cl-middle" {...register('middleName')} />
+                </Field>
+                <Field id="cl-last" label="Last name" required error={errors.lastName?.message}>
                   <Input
                     id="cl-last"
                     aria-invalid={Boolean(errors.lastName)}
                     {...register('lastName')}
                   />
-                  {errors.lastName && (
-                    <p className="text-xs text-destructive">{errors.lastName.message}</p>
-                  )}
-                </div>
+                </Field>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cl-middle">Middle name (optional)</Label>
-                <Input id="cl-middle" {...register('middleName')} />
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="cl-email">
-                    Email
-                    {targetBusiness === 'CANDIDATE_SERVICES' && (
-                      <span className="text-destructive"> *</span>
-                    )}
-                  </Label>
-                  <Input id="cl-email" type="email" {...register('email')} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="cl-phone">
-                    Mobile number
-                    {targetBusiness === 'CANDIDATE_SERVICES' && (
-                      <span className="text-destructive"> *</span>
-                    )}
-                  </Label>
-                  {/* Stage 6E Section 4 — compound international phone
-                      input. The calling-code select is seeded from the
-                      residence country but changeable. The national
-                      number input accepts digits only; the server
-                      validates the combined value as E.164. */}
-                  <div className="flex gap-1.5">
-                    <Select
-                      aria-label="Country calling code"
-                      className="w-28"
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Field id="cl-dob" label="Date of birth">
+                  <Input id="cl-dob" type="date" {...register('dateOfBirth')} />
+                </Field>
+                <Field
+                  id="cl-email"
+                  label="Email"
+                  required={targetBusiness === 'CANDIDATE_SERVICES'}
+                >
+                  <Input
+                    id="cl-email"
+                    type="email"
+                    placeholder="name@example.com"
+                    {...register('email')}
+                  />
+                </Field>
+                <Field
+                  id="cl-phone"
+                  label="Mobile number"
+                  required={targetBusiness === 'CANDIDATE_SERVICES'}
+                >
+                  {/* Stage 6G Screen 02 — compound phone input styled as a
+                      single integrated control: searchable country picker
+                      on the left (flag + +code), national-number input on
+                      the right. Visually one field; two controls under
+                      the hood. */}
+                  <div className="flex h-10 overflow-visible rounded-lg border border-input bg-background transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
+                    <PhoneCountryPicker
                       value={phoneCountryCode}
-                      onChange={(e) => setPhoneCountryCode(e.target.value)}
-                    >
-                      {COUNTRIES_SORTED.filter((c) => c.callingCode).map((c) => (
-                        <option key={c.code} value={c.callingCode}>
-                          +{c.callingCode} {c.code}
-                        </option>
-                      ))}
-                    </Select>
-                    <Input
+                      onChange={(code) => {
+                        setPhoneCountryCode(code);
+                        setValue('phone', `+${code}${phoneNationalNumber}`, { shouldDirty: true });
+                      }}
+                      className="w-28 shrink-0 border-r border-input"
+                    />
+                    <input
                       id="cl-phone"
                       type="tel"
                       placeholder="National number"
@@ -623,58 +645,25 @@ export function CreateLeadDialog({
                         setPhoneNationalNumber(digits);
                         setValue('phone', `+${phoneCountryCode}${digits}`, { shouldDirty: true });
                       }}
+                      className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm text-foreground placeholder:text-muted-foreground outline-none"
                     />
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Stored in international format, e.g. +353871234567 or +27821234567.
-                  </p>
-                </div>
+                </Field>
               </div>
-              {targetBusiness === 'CANDIDATE_SERVICES' && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="cl-profession">
-                    Primary profession
-                    <span className="text-destructive"> *</span>
-                  </Label>
-                  <input type="hidden" {...register('primaryOccupationId')} />
-                  <OccupationPicker
-                    inputId="cl-profession"
-                    options={localOccupations}
-                    value={selectedOccupationId}
-                    onChange={(id) => setValue('primaryOccupationId', id, { shouldDirty: true })}
-                    onOptionsChanged={(opt) =>
-                      setLocalOccupations((prev) =>
-                        prev.some((o) => o.id === opt.id) ? prev : [opt, ...prev],
-                      )
-                    }
-                    placeholder="Pick profession…"
-                  />
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <Label htmlFor="cl-addr1">
-                  Address <span className="text-xs text-muted-foreground">(optional)</span>
-                </Label>
-                <Input id="cl-addr1" {...register('addressLine1')} />
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="cl-country">
-                    Country of residence
-                    {targetBusiness === 'CANDIDATE_SERVICES' && (
-                      <span className="text-destructive"> *</span>
-                    )}
-                  </Label>
-                  {/* Stage 6E Section 4 — ISO country datalist. Also
-                      resets the phone calling-code when the operator
-                      picks a new residence country. */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Field
+                  id="cl-country"
+                  label="Country of residence"
+                  required={targetBusiness === 'CANDIDATE_SERVICES'}
+                >
                   <Input
                     id="cl-country"
                     list="cl-country-options"
+                    placeholder="Start typing…"
                     {...register('currentCountry', {
                       onChange: (e) => {
                         const c = findCountryByName(e.target.value);
-                        if (c) setPhoneCountryCode(c.callingCode);
+                        if (c?.callingCode) setPhoneCountryCode(c.callingCode);
                       },
                     })}
                   />
@@ -683,35 +672,122 @@ export function CreateLeadDialog({
                       <option key={c.code} value={c.name} />
                     ))}
                   </datalist>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="cl-city">
-                    City <span className="text-xs text-muted-foreground">(optional)</span>
-                  </Label>
-                  <Input id="cl-city" {...register('currentCity')} />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="cl-nat">
-                    Nationality <span className="text-xs text-muted-foreground">(optional)</span>
-                  </Label>
-                  {/* Stage 6E Section 4 — nationality is independent of
-                      residence. Operator can leave blank or pick any
-                      demonym. */}
-                  <Input id="cl-nat" list="cl-nat-options" {...register('nationality')} />
+                </Field>
+                <Field id="cl-nat" label="Nationality">
+                  <Input
+                    id="cl-nat"
+                    list="cl-nat-options"
+                    placeholder="e.g. South African"
+                    {...register('nationality')}
+                  />
                   <datalist id="cl-nat-options">
                     {COUNTRIES_SORTED.filter((c) => c.nationality).map((c) => (
                       <option key={c.code} value={c.nationality} />
                     ))}
                   </datalist>
+                </Field>
+                <Field id="cl-city" label="City">
+                  <Input id="cl-city" placeholder="City" {...register('currentCity')} />
+                </Field>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Field id="cl-addr1" label="Address line 1">
+                  <Input id="cl-addr1" placeholder="Street address" {...register('addressLine1')} />
+                </Field>
+                <Field id="cl-addr2" label="Address line 2">
+                  <Input
+                    id="cl-addr2"
+                    placeholder="Apartment, suite…"
+                    {...register('addressLine2')}
+                  />
+                </Field>
+                <Field id="cl-postcode" label="Postcode">
+                  <Input id="cl-postcode" placeholder="e.g. D02 X285" {...register('postcode')} />
+                </Field>
+              </div>
+            </FormSection>
+
+            {/* ── Section 2: Professional information ─────────── */}
+            {targetBusiness === 'CANDIDATE_SERVICES' && (
+              <FormSection
+                icon={BriefcaseIcon}
+                iconTone="amber"
+                title="Professional information"
+                subtitle="Candidate's primary profession and background"
+              >
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <Field id="cl-profession" label="Primary profession" required>
+                    <input type="hidden" {...register('primaryOccupationId')} />
+                    <OccupationPicker
+                      inputId="cl-profession"
+                      options={localOccupations}
+                      value={selectedOccupationId}
+                      onChange={(id) => setValue('primaryOccupationId', id, { shouldDirty: true })}
+                      onOptionsChanged={(opt) =>
+                        setLocalOccupations((prev) =>
+                          prev.some((o) => o.id === opt.id) ? prev : [opt, ...prev],
+                        )
+                      }
+                      placeholder="Pick a profession…"
+                    />
+                  </Field>
+                  <Field id="cl-yoe" label="Years of experience">
+                    <Select id="cl-yoe" {...register('yearsOfExperience')}>
+                      <option value="">— select —</option>
+                      <option value="<1 year">Less than 1 year</option>
+                      <option value="1-2 years">1–2 years</option>
+                      <option value="3-5 years">3–5 years</option>
+                      <option value="5-10 years">5–10 years</option>
+                      <option value="10-20 years">10–20 years</option>
+                      <option value="20+ years">20+ years</option>
+                    </Select>
+                  </Field>
+                  <Field id="cl-emp" label="Current employment status">
+                    <Select id="cl-emp" {...register('employmentStatus')}>
+                      <option value="">— select —</option>
+                      <option value="EMPLOYED">Employed</option>
+                      <option value="UNEMPLOYED">Unemployed</option>
+                      <option value="SELF_EMPLOYED">Self-employed</option>
+                      <option value="STUDENT">Student</option>
+                      <option value="RETIRED">Retired</option>
+                      <option value="OTHER">Other</option>
+                    </Select>
+                  </Field>
                 </div>
-                {targetBusiness === 'CANDIDATE_SERVICES' && (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="cl-irish">
-                      Irish immigration status{' '}
-                      <span className="text-xs text-muted-foreground">(optional)</span>
-                    </Label>
+                <Field id="cl-prosum" label="Professional summary (optional)">
+                  <textarea
+                    id="cl-prosum"
+                    rows={3}
+                    placeholder="Short blurb about the candidate's background, specialisms, strengths…"
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground"
+                    {...register('professionalSummary')}
+                  />
+                </Field>
+              </FormSection>
+            )}
+
+            {/* ── Section 3: Immigration & eligibility ─────────── */}
+            {targetBusiness === 'CANDIDATE_SERVICES' && (
+              <FormSection
+                icon={GlobeIcon}
+                iconTone="teal"
+                title="Immigration & eligibility"
+                subtitle="Current Irish permission and operator notes"
+              >
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <Field id="cl-elig" label="Main eligibility">
+                    <Select id="cl-elig" {...register('workEligibility')}>
+                      <option value="">— select —</option>
+                      <option value="IRISH_CITIZEN">Irish citizen</option>
+                      <option value="EU_EEA_SWISS_CITIZEN">EU / EEA / Swiss citizen</option>
+                      <option value="UK_CITIZEN">UK citizen</option>
+                      <option value="STAMP_4_HOLDER">Stamp 4 holder</option>
+                      <option value="VISA_REQUIRED">Visa required</option>
+                      <option value="OTHER">Other</option>
+                      <option value="NOT_SURE">Not sure</option>
+                    </Select>
+                  </Field>
+                  <Field id="cl-irish" label="Irish immigration status">
                     <Select
                       id="cl-irish"
                       value={immigrationStatus}
@@ -723,76 +799,102 @@ export function CreateLeadDialog({
                         </option>
                       ))}
                     </Select>
-                  </div>
+                  </Field>
+                  <Field id="cl-inie" label="Currently living in Ireland?">
+                    <Select
+                      id="cl-inie"
+                      value={
+                        currentlyInIreland === true
+                          ? 'YES'
+                          : currentlyInIreland === false
+                            ? 'NO'
+                            : ''
+                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setValue(
+                          'currentlyInIreland',
+                          v === 'YES' ? true : v === 'NO' ? false : undefined,
+                          { shouldDirty: true },
+                        );
+                      }}
+                    >
+                      <option value="">— not provided —</option>
+                      <option value="YES">Yes</option>
+                      <option value="NO">No</option>
+                    </Select>
+                  </Field>
+                </div>
+                <Field id="cl-notes" label="Additional notes">
+                  <textarea
+                    id="cl-notes"
+                    rows={3}
+                    placeholder="Anything else the operator should know (optional)…"
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground"
+                    {...register('notes')}
+                  />
+                </Field>
+              </FormSection>
+            )}
+
+            {/* Duplicate check + matches — tucked under the sections
+                so operators see it before submitting without it
+                dominating the form. */}
+            <div className="flex items-center justify-between rounded-lg border border-dashed p-3">
+              <div className="text-xs text-muted-foreground">
+                Check whether this person is already in the system before saving.
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!canCheck || checking}
+                onClick={checkDuplicates}
+              >
+                {checking ? (
+                  <Loader2 className="mr-2 size-3.5 animate-spin" />
+                ) : (
+                  <Users className="mr-2 size-3.5" />
                 )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cl-source">Source</Label>
-                <Select id="cl-source" {...register('source')}>
-                  <option value="DIRECT">Direct inquiry</option>
-                  <option value="REFERRAL">Referral</option>
-                  <option value="ADVERTISEMENT">Advertisement</option>
-                  <option value="EMPLOYER_REFERRAL">Employer referral</option>
-                  <option value="OTHER">Other</option>
-                </Select>
-              </div>
+                Check duplicates
+              </Button>
+            </div>
 
-              <div className="flex items-center justify-between rounded-md border border-dashed p-3">
-                <div className="text-xs text-muted-foreground">
-                  Check whether this person is already in the system before saving.
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!canCheck || checking}
-                  onClick={checkDuplicates}
-                >
-                  {checking ? (
-                    <Loader2 className="mr-2 size-3.5 animate-spin" />
-                  ) : (
-                    <Users className="mr-2 size-3.5" />
-                  )}
-                  Check duplicates
-                </Button>
-              </div>
-
-              {matches && matches.length > 0 && (
-                <div className="space-y-2 rounded-md border border-status-warning/40 bg-status-warning-soft p-3">
-                  <p className="text-xs font-medium text-status-warning">
-                    {matches.length} possible match{matches.length > 1 ? 'es' : ''} found. Reuse an
-                    existing person instead of creating a duplicate?
-                  </p>
-                  <div className="space-y-1.5">
-                    {matches.map((m) => (
-                      <div
-                        key={m.person.id}
-                        className="flex items-center justify-between rounded border bg-background/50 px-2.5 py-1.5"
-                      >
-                        <div className="min-w-0 text-xs">
-                          <div className="truncate font-medium">
-                            {m.person.firstName} {m.person.lastName}
-                          </div>
-                          <div className="truncate text-muted-foreground">
-                            {m.person.email ?? m.person.phone ?? 'no contact'} · matched on{' '}
-                            {m.reasons.join(', ').toLowerCase().replace(/_/g, ' ')}
-                          </div>
+            {matches && matches.length > 0 && (
+              <div className="space-y-2 rounded-md border border-status-warning/40 bg-status-warning-soft p-3">
+                <p className="text-xs font-medium text-status-warning">
+                  {matches.length} possible match{matches.length > 1 ? 'es' : ''} found. Reuse an
+                  existing person instead of creating a duplicate?
+                </p>
+                <div className="space-y-1.5">
+                  {matches.map((m) => (
+                    <div
+                      key={m.person.id}
+                      className="flex items-center justify-between rounded border bg-background/50 px-2.5 py-1.5"
+                    >
+                      <div className="min-w-0 text-xs">
+                        <div className="truncate font-medium">
+                          {m.person.firstName} {m.person.lastName}
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => submitAsExistingPerson(m.person.id)}
-                          disabled={checking}
-                        >
-                          Reuse
-                        </Button>
+                        <div className="truncate text-muted-foreground">
+                          {m.person.email ?? m.person.phone ?? 'no contact'} · matched on{' '}
+                          {m.reasons.join(', ').toLowerCase().replace(/_/g, ' ')}
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => submitAsExistingPerson(m.person.id)}
+                        disabled={checking}
+                      >
+                        Reuse
+                      </Button>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </section>
+              </div>
+            )}
 
             {/* ── Optional first invoice ──────────────────────────
                Stage 6D Wave 1a — Candidate Services leads must stay

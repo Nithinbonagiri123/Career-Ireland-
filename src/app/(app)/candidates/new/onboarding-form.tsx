@@ -29,6 +29,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { todayInDublin } from '@/lib/dates';
 import {
   discardDraftAction,
   finaliseDraftAction,
@@ -156,7 +157,7 @@ export function OnboardingForm({
     currencyCode: currencies.find((c) => c.code === 'EUR')?.code ?? currencies[0]?.code ?? 'EUR',
     method: 'BANK_TRANSFER' as 'BANK_TRANSFER' | 'CASH' | 'OTHER',
     proofReference: '',
-    receivedAt: new Date().toISOString().slice(0, 10),
+    receivedAt: todayInDublin(),
     notes: '',
   });
 

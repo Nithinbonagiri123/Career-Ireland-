@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { findCountryByName, ISO_COUNTRIES } from '@/lib/iso-countries';
 import { statusTone } from '@/lib/ui/status-tone';
 import { assignEntityAction } from '@/modules/assignments/actions';
 import type { InvoiceableService } from '@/modules/billing/read';
@@ -111,6 +112,8 @@ export function LeadsTable({
     const sourceFilter = new Set(parseList(params.get('source')));
     const countryFilter = new Set(parseList(params.get('country')));
     const professionFilter = new Set(parseList(params.get('profession')));
+    const assigneeFilter = new Set(parseList(params.get('assignee')));
+    const q = (params.get('q') ?? '').trim().toLowerCase();
     const createdFrom = params.get('createdFrom');
     const createdTo = params.get('createdTo');
     const fromDate = createdFrom ? new Date(`${createdFrom}T00:00:00Z`) : null;
@@ -123,13 +126,21 @@ export function LeadsTable({
       if (expiredOnly && l.status !== 'EXPIRED') return false;
       if (sourceFilter.size > 0 && (!l.personSource || !sourceFilter.has(l.personSource)))
         return false;
-      if (countryFilter.size > 0 && (!l.personCountry || !countryFilter.has(l.personCountry)))
-        return false;
+      if (countryFilter.size > 0) {
+        const nat = l.personNationality ?? l.personCountry ?? '';
+        if (!countryFilter.has(nat)) return false;
+      }
       if (
         professionFilter.size > 0 &&
         (!l.personPrimaryOccupationId || !professionFilter.has(l.personPrimaryOccupationId))
       )
         return false;
+      if (assigneeFilter.size > 0 && (!l.assignedUserId || !assigneeFilter.has(l.assignedUserId)))
+        return false;
+      if (q) {
+        const hay = `${l.displayName} ${l.personEmail ?? ''} ${l.personPhone ?? ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       if (fromDate && new Date(l.createdAt) < fromDate) return false;
       if (toDate && new Date(l.createdAt) > toDate) return false;
       return true;
@@ -306,26 +317,58 @@ export function LeadsTable({
       header: 'Person / Employer',
       accessorKey: 'displayName',
       cell: ({ row }) => {
-        // Stage 6B — person-based leads (CS, Immigration) now navigate
-        // to the unified Client Workspace. Recruitment leads keep the
-        // employer destination because the workspace is person-scoped.
+        // Stage 6B — person-based leads (CS, Immigration) navigate to
+        // the Client Workspace. Recruitment keeps the employer
+        // destination because the workspace is person-scoped.
         const href = row.original.personId
           ? `/clients/${row.original.personId}`
           : row.original.employerId
             ? `/employers/${row.original.employerId}`
             : '/leads';
+        // Stage 6G Screen 01 — avatar + name + phone layout from the
+        // approved mockup. The avatar is initials on a soft blue tile
+        // so rows scan the way a contact list does.
+        const initials = leadInitials(row.original.displayName);
         return (
           <Link
             href={href}
-            className="group flex flex-col rounded-md -mx-2 px-2 py-0.5 hover:bg-muted/60"
+            className="group -mx-2 flex items-center gap-3 rounded-md px-2 py-1 hover:bg-muted/60"
           >
-            <span className="text-sm font-medium group-hover:underline underline-offset-2">
-              {row.original.displayName}
+            <span
+              aria-hidden
+              className="grid size-9 shrink-0 place-items-center rounded-full bg-note-blue text-xs font-semibold text-note-blue-ink ring-1 ring-black/5"
+            >
+              {initials}
             </span>
-            <span className="text-xs text-muted-foreground">
-              {row.original.personEmail ?? row.original.personPhone ?? '—'}
-            </span>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-foreground group-hover:underline">
+                {row.original.displayName}
+              </div>
+              <div className="truncate text-[11px] text-muted-foreground">
+                {row.original.personPhone ?? row.original.personEmail ?? '—'}
+              </div>
+            </div>
           </Link>
+        );
+      },
+    },
+    {
+      header: 'Nationality',
+      accessorKey: 'personNationality',
+      size: 180,
+      cell: ({ row }) => {
+        const value = row.original.personNationality ?? row.original.personCountry;
+        if (!value) return <span className="text-xs text-muted-foreground">—</span>;
+        const flag = flagEmojiFromCountryName(value);
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs text-foreground">
+            {flag && (
+              <span aria-hidden className="text-sm leading-none">
+                {flag}
+              </span>
+            )}
+            {value}
+          </span>
         );
       },
     },
@@ -379,14 +422,27 @@ export function LeadsTable({
       },
     },
     {
-      header: 'Assigned',
+      header: 'Assigned to',
       accessorKey: 'assignedUserName',
-      size: 140,
-      cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">
-          {row.original.assignedUserName ?? 'Unassigned'}
-        </span>
-      ),
+      size: 170,
+      cell: ({ row }) => {
+        const name = row.original.assignedUserName;
+        if (!name) {
+          return <span className="text-xs italic text-muted-foreground">Unassigned</span>;
+        }
+        const initials = leadInitials(name);
+        return (
+          <span className="inline-flex items-center gap-2 text-xs text-foreground">
+            <span
+              aria-hidden
+              className="grid size-6 shrink-0 place-items-center rounded-full bg-note-neutral text-[10px] font-semibold text-note-neutral-ink"
+            >
+              {initials}
+            </span>
+            <span className="truncate">{name}</span>
+          </span>
+        );
+      },
     },
     {
       header: 'Created',
@@ -425,62 +481,74 @@ export function LeadsTable({
         }
         if (isCS && lead.personId && canTransition) {
           return (
-            <div className="flex items-center justify-end gap-1.5">
-              <Link
-                href={`/clients/${lead.personId}?tab=billing`}
-                className={`${buttonVariants({ variant: 'outline', size: 'sm' })} h-8`}
-              >
-                <FileText className="mr-1.5 size-3.5" />
-                Create Pro Forma
-              </Link>
-              {canSeeExceptionalFinance && (
-                <Button
-                  size="sm"
-                  onClick={() => setDirectPaymentLead(lead)}
-                  disabled={isBusy}
-                  className="h-8"
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex items-center gap-1.5">
+                <Link
+                  href={`/clients/${lead.personId}?tab=billing`}
+                  className={`${buttonVariants({ variant: 'outline', size: 'sm' })} h-8`}
                 >
-                  <UserCheck className="mr-1.5 size-3.5" />
-                  Direct Payment &amp; Convert
-                </Button>
-              )}
-              {/* Admin lifecycle (Archive / Reactivate) stays in a tiny
-                  overflow for ADMIN only — operators doing routine CS
-                  work never see it. */}
-              {canSeeExceptionalFinance && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Admin actions"
-                        disabled={isBusy}
-                        className="h-8 w-8"
-                      />
-                    }
+                  <FileText className="mr-1.5 size-3.5" />
+                  Create Pro Forma
+                </Link>
+                {canSeeExceptionalFinance && (
+                  <Button
+                    size="sm"
+                    onClick={() => setDirectPaymentLead(lead)}
+                    disabled={isBusy}
+                    className="h-8"
                   >
-                    <MoreHorizontal className="size-4" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuLabel>Admin only</DropdownMenuLabel>
-                    {lead.status === 'EXPIRED' && (
-                      <DropdownMenuItem
-                        onClick={() => setReactivateTarget(lead)}
-                        className="text-emerald-700 focus:text-emerald-700 dark:text-emerald-400 dark:focus:text-emerald-400"
-                      >
-                        <RotateCcw className="mr-2 size-4" /> Reactivate lead…
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem
-                      onClick={() => setArchiveTarget(lead)}
-                      className="text-destructive focus:text-destructive"
+                    <UserCheck className="mr-1.5 size-3.5" />
+                    Direct Payment &amp; Convert
+                  </Button>
+                )}
+                {/* Admin lifecycle (Archive / Reactivate) stays in a
+                    tiny overflow for ADMIN only — operators doing
+                    routine CS work never see it. */}
+                {canSeeExceptionalFinance && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Admin actions"
+                          disabled={isBusy}
+                          className="h-8 w-8"
+                        />
+                      }
                     >
-                      <Archive className="mr-2 size-4" /> Archive lead…
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+                      <MoreHorizontal className="size-4" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuLabel>Admin only</DropdownMenuLabel>
+                      {lead.status === 'EXPIRED' && (
+                        <DropdownMenuItem
+                          onClick={() => setReactivateTarget(lead)}
+                          className="text-emerald-700 focus:text-emerald-700 dark:text-emerald-400 dark:focus:text-emerald-400"
+                        >
+                          <RotateCcw className="mr-2 size-4" /> Reactivate lead…
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem
+                        onClick={() => setArchiveTarget(lead)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Archive className="mr-2 size-4" /> Archive lead…
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+              {/* Stage 6G Screen 01 — Open Workspace shortcut matches
+                  the mockup; always available for CS leads with a
+                  person attached so the operator can skip the
+                  billing path when they just want to inspect. */}
+              <Link
+                href={`/clients/${lead.personId}`}
+                className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                Open Workspace →
+              </Link>
             </div>
           );
         }
@@ -914,4 +982,29 @@ export function LeadsTable({
       )}
     </>
   );
+}
+
+function leadInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return (parts[0]?.[0] ?? '?').toUpperCase();
+  return `${parts[0]?.[0] ?? ''}${parts[parts.length - 1]?.[0] ?? ''}`.toUpperCase();
+}
+
+/**
+ * Flag emoji for a nationality OR country string. First tries ISO
+ * country name ("South Africa"), then reverse-matches the demonym
+ * ("South African"). Returns an empty string when neither matches.
+ */
+function flagEmojiFromCountryName(input: string): string {
+  const direct = findCountryByName(input);
+  const country =
+    direct ?? ISO_COUNTRIES.find((c) => c.nationality.toLowerCase() === input.toLowerCase());
+  if (!country) return '';
+  const A = 0x1f1e6;
+  const codePoints = country.code
+    .toUpperCase()
+    .split('')
+    .map((ch) => A + (ch.charCodeAt(0) - 'A'.charCodeAt(0)));
+  return String.fromCodePoint(...codePoints);
 }
