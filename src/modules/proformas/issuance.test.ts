@@ -159,16 +159,58 @@ describe('migration 0053 — backfill result', () => {
 });
 
 describe('invoice_line_items — CHECK constraints', () => {
+  // Each test seeds its OWN invoice inside the (rejected, hence rolled
+  // back) transaction. The previous version grabbed any pre-existing
+  // invoices row — fine on a dev DB, but on CI's fresh database it only
+  // passed when another test file happened to insert an invoice first,
+  // which made the suite order-dependent and flaky.
+  async function seedInvoice(
+    tx: DbExecutor,
+    svc: string,
+    personId: string,
+    issuedByUserId: string,
+  ): Promise<string> {
+    const [eng] = await tx
+      .insert(serviceEngagements)
+      .values({
+        serviceCatalogItemId: svc,
+        payerPersonId: personId,
+        beneficiaryPersonId: personId,
+        agreedAmount: '100.00',
+        currencyCode: 'EUR',
+        status: 'PENDING_PAYMENT',
+      })
+      .returning({ id: serviceEngagements.id });
+    if (!eng) throw new Error('eng');
+    const [inv] = await tx
+      .insert(invoices)
+      .values({
+        number: nextNumber('TSTINV'),
+        payerPersonId: personId,
+        serviceEngagementId: eng.id,
+        unitPrice: '100.00',
+        subtotal: '100.00',
+        totalAmount: '100.00',
+        currencyCode: 'EUR',
+        lineDescription: 'check-constraint fixture',
+        issuedByUserId,
+      })
+      .returning({ id: invoices.id });
+    if (!inv) throw new Error('inv');
+    return inv.id;
+  }
+
   it('rejects quantity <= 0', async () => {
-    if (!service1) return;
+    if (!csLead || !service1 || !adminUserId) return;
+    const lead = csLead;
     const svc = service1;
+    const admin = adminUserId;
     await expectReject(
       () =>
         db.transaction(async (tx) => {
-          const [inv] = await tx.select({ id: invoices.id }).from(invoices).limit(1);
-          if (!inv) throw new Error('no invoice fixture');
+          const invoiceId = await seedInvoice(tx, svc, lead.personId, admin);
           await tx.insert(invoiceLineItems).values({
-            invoiceId: inv.id,
+            invoiceId,
             serviceCatalogItemId: svc,
             description: 'bad qty',
             quantity: '0',
@@ -181,15 +223,16 @@ describe('invoice_line_items — CHECK constraints', () => {
   });
 
   it('rejects negative unit price', async () => {
-    if (!service1) return;
+    if (!csLead || !service1 || !adminUserId) return;
+    const lead = csLead;
     const svc = service1;
+    const admin = adminUserId;
     await expectReject(
       () =>
         db.transaction(async (tx) => {
-          const [inv] = await tx.select({ id: invoices.id }).from(invoices).limit(1);
-          if (!inv) throw new Error('no invoice fixture');
+          const invoiceId = await seedInvoice(tx, svc, lead.personId, admin);
           await tx.insert(invoiceLineItems).values({
-            invoiceId: inv.id,
+            invoiceId,
             serviceCatalogItemId: svc,
             description: 'bad price',
             quantity: '1.000',
