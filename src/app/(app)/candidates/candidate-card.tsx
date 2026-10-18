@@ -84,11 +84,13 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
 
   return (
     <Card
-      className="flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 shadow-sm transition-shadow hover:shadow-md"
+      className="flex h-full flex-col overflow-hidden rounded-xl border border-border/60 shadow-sm transition-shadow hover:shadow-md"
       aria-label={`Candidate ${candidate.fullName}`}
     >
-      {/* Header — TALENT chip + availability status + added timestamp */}
-      <div className="flex items-center gap-2 border-b bg-muted/40 px-3 py-2">
+      {/* Header — TALENT chip + availability status + added timestamp.
+          Stage 6E — tighter vertical padding; keeps all pills visible on
+          one row at desktop + tablet widths. */}
+      <div className="flex items-center gap-1.5 border-b bg-muted/40 px-3 py-1.5">
         <PipelineChip stage="source" variant="solid" className="text-[10px] uppercase">
           Talent
         </PipelineChip>
@@ -105,11 +107,12 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
         </time>
       </div>
 
-      {/* 1. Name + email */}
-      <div className="flex items-center gap-2.5 px-4 pt-3">
+      {/* 1. Name + email — Stage 6E — reduced top padding so the name sits
+          closer to the header. */}
+      <div className="flex items-center gap-2.5 px-3.5 pt-2.5">
         <span
           aria-hidden
-          className="grid size-9 shrink-0 place-items-center rounded-full bg-note-blue text-xs font-semibold text-note-blue-ink"
+          className="grid size-8 shrink-0 place-items-center rounded-full bg-note-blue text-xs font-semibold text-note-blue-ink"
         >
           {initials}
         </span>
@@ -118,19 +121,24 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
             {candidate.fullName}
           </h3>
           {candidate.email ? (
-            <p className="truncate text-[11px] text-muted-foreground" title={candidate.email}>
+            <p
+              className="truncate text-[11px] leading-tight text-muted-foreground"
+              title={candidate.email}
+            >
               {candidate.email}
             </p>
           ) : (
-            <p className="truncate text-[11px] italic text-muted-foreground">no email on file</p>
+            <p className="truncate text-[11px] italic leading-tight text-muted-foreground">
+              no email on file
+            </p>
           )}
         </div>
       </div>
 
-      {/* 2. Primary occupation — PROMINENT. Dedicated row directly under
-          the name so recruiters can scan a grid of cards for the right
-          profession without opening every profile. */}
-      <div className="mx-4 mt-3 rounded-md border border-pipeline-interview/30 bg-pipeline-interview/5 px-2.5 py-2">
+      {/* 2. Primary occupation — Stage 6E — tightened margin and
+          padding; the single-line truncation + hover-title pattern
+          handles long occupation names gracefully. */}
+      <div className="mx-3.5 mt-2 rounded-md border border-pipeline-interview/30 bg-pipeline-interview/5 px-2.5 py-1.5">
         <div className="flex items-start gap-2">
           <Briefcase className="mt-0.5 size-3.5 shrink-0 text-pipeline-interview" aria-hidden />
           <div className="min-w-0">
@@ -139,13 +147,13 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
             </div>
             {candidate.primaryOccupationName ? (
               <div
-                className="truncate text-sm font-medium leading-snug"
+                className="truncate text-xs font-medium leading-snug"
                 title={candidate.primaryOccupationName}
               >
                 {candidate.primaryOccupationName}
               </div>
             ) : (
-              <div className="text-[12px] italic text-muted-foreground">No profession set</div>
+              <div className="text-[11px] italic text-muted-foreground">No profession set</div>
             )}
           </div>
         </div>
@@ -158,7 +166,7 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
           is in the future; everything else is labelled as a case.
           Expired permissions get a distinct destructive tone. */}
       {candidate.immigrationKind === 'CURRENT_PERMISSION' ? (
-        <div className="mx-4 mt-2 rounded-md border border-status-success/40 bg-status-success-soft px-2.5 py-2">
+        <div className="mx-3.5 mt-1.5 rounded-md border border-status-success/40 bg-status-success-soft px-2.5 py-1.5">
           <div className="flex items-start gap-2">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-status-success" aria-hidden />
             <div className="min-w-0 flex-1">
@@ -184,7 +192,7 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
           </div>
         </div>
       ) : candidate.immigrationKind === 'EXPIRED_PERMISSION' ? (
-        <div className="mx-4 mt-2 rounded-md border border-status-danger/40 bg-status-danger-soft px-2.5 py-2">
+        <div className="mx-3.5 mt-1.5 rounded-md border border-status-danger/40 bg-status-danger-soft px-2.5 py-1.5">
           <div className="flex items-start gap-2">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-status-danger" aria-hidden />
             <div className="min-w-0 flex-1">
@@ -207,7 +215,7 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
           </div>
         </div>
       ) : candidate.immigrationKind !== 'NONE' ? (
-        <div className="mx-4 mt-2 rounded-md border bg-background px-2.5 py-2">
+        <div className="mx-3.5 mt-1.5 rounded-md border bg-background px-2.5 py-1.5">
           <div className="flex items-start gap-2">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-pipeline-review" aria-hidden />
             <div className="min-w-0 flex-1">
@@ -232,7 +240,7 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
           </div>
         </div>
       ) : (
-        <div className="mx-4 mt-2 rounded-md border bg-background px-2.5 py-2">
+        <div className="mx-3.5 mt-1.5 rounded-md border bg-background px-2.5 py-1.5">
           <div className="flex items-start gap-2">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-pipeline-review" aria-hidden />
             <div className="min-w-0 flex-1">
@@ -247,8 +255,10 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
         </div>
       )}
 
-      {/* 4+5. Location, phone, assigned staff, activation date */}
-      <MetaList className="px-4 pt-3">
+      {/* 4+5. Location, phone, assigned staff, activation date.
+          Stage 6E — tighter top padding; the MetaList itself handles
+          per-row gap internally. */}
+      <MetaList className="px-3.5 pt-2">
         <MetaRow icon={<MapPin className="text-pipeline-source" />}>
           {candidate.currentCity || candidate.currentCountry ? (
             [candidate.currentCity, candidate.currentCountry].filter(Boolean).join(', ')
@@ -281,18 +291,23 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
         </MetaRow>
       </MetaList>
 
-      {/* 6. Live counters — apps / shortlists / placements */}
-      <div className="mt-3 grid grid-cols-3 gap-1 px-4">
+      {/* 6. Live counters. Stage 6E — tighter top gap; mt-auto pushes
+          the counters + footer to the card's bottom so every card in a
+          row ends at the same height (flex-col + h-full on <Card>
+          already set the stage; this just claims the slack). */}
+      <div className="mt-auto grid grid-cols-3 gap-1 px-3.5 pt-2">
         <RingCounter label="apps" value={candidate.applicationsCount} tone="apply" />
         <RingCounter label="shortlists" value={candidate.shortlistsCount} tone="shortlist" />
         <RingCounter label="placed" value={candidate.placementsCount} tone="placed" />
       </div>
 
-      {/* 7. Dual-action footer — View Profile + Reach Out */}
-      <div className="mt-3 grid grid-cols-2 gap-0 border-t">
+      {/* 7. Dual-action footer. Stage 6E — reduced from py-2.5 to
+          py-2 so the buttons stay prominent without the card gaining
+          height. Bottom-aligned via `mt-auto` on the counters above. */}
+      <div className="mt-2 grid grid-cols-2 gap-0 border-t">
         <Link
           href={`/clients/${candidate.personId}`}
-          className="group flex items-center justify-center gap-1.5 bg-note-green py-2.5 text-xs font-semibold text-note-green-ink transition-all hover:brightness-95"
+          className="group flex items-center justify-center gap-1.5 bg-note-green py-2 text-xs font-semibold text-note-green-ink transition-all hover:brightness-95"
           aria-label={`Open workspace for ${candidate.fullName}`}
         >
           <User2 className="size-3.5" /> Open workspace
@@ -300,7 +315,7 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
         </Link>
         <Link
           href={`/clients/${candidate.personId}?tab=applications`}
-          className="group flex items-center justify-center gap-1.5 bg-note-pink py-2.5 text-xs font-semibold text-note-pink-ink transition-all hover:brightness-95"
+          className="group flex items-center justify-center gap-1.5 bg-note-pink py-2 text-xs font-semibold text-note-pink-ink transition-all hover:brightness-95"
           aria-label={`Reach out to ${candidate.fullName}`}
         >
           <Mail className="size-3.5" /> Reach out
