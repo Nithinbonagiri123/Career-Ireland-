@@ -17,10 +17,8 @@ import {
 import Link from 'next/link';
 
 import { EmptyState } from '@/components/empty-state';
-import { MetaList, MetaRow } from '@/components/meta-row';
 import { OwnerAvatar } from '@/components/owner-avatar';
 import { PipelineChip } from '@/components/pipeline-chip';
-import { RingCounter } from '@/components/ring-counter';
 import { StatusPill, type StatusTone } from '@/components/status-pill';
 import { buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -135,194 +133,196 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
         </div>
       </div>
 
-      {/* 2. Primary occupation — Stage 6E — tightened margin and
-          padding; the single-line truncation + hover-title pattern
-          handles long occupation names gracefully. */}
-      <div className="mx-3.5 mt-2 rounded-md border border-pipeline-interview/30 bg-pipeline-interview/5 px-2.5 py-1.5">
-        <div className="flex items-start gap-2">
-          <Briefcase className="mt-0.5 size-3.5 shrink-0 text-pipeline-interview" aria-hidden />
-          <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Primary occupation
-            </div>
-            {candidate.primaryOccupationName ? (
-              <div
-                className="truncate text-xs font-medium leading-snug"
-                title={candidate.primaryOccupationName}
-              >
-                {candidate.primaryOccupationName}
-              </div>
-            ) : (
-              <div className="text-[11px] italic text-muted-foreground">No profession set</div>
-            )}
-          </div>
-        </div>
+      {/* 2+3. Occupation + Immigration — Stage 6E (round 2). Both
+          collapsed to single inline rows with coloured icon + label.
+          The bordered-panel treatment was adding ~90px vertical to
+          every card; this one-liner keeps the colour hierarchy
+          (interview tint for occupation, success/danger for current
+          vs expired permission, neutral for case + none) without the
+          box. Expiry date drops onto the same row with a subtle
+          separator so no second line is needed. */}
+      <div className="mt-1.5 flex items-center gap-1.5 px-3.5 text-xs">
+        <Briefcase className="size-3.5 shrink-0 text-pipeline-interview" aria-hidden />
+        {candidate.primaryOccupationName ? (
+          <span className="truncate font-medium" title={candidate.primaryOccupationName}>
+            {candidate.primaryOccupationName}
+          </span>
+        ) : (
+          <span className="truncate italic text-muted-foreground">No profession set</span>
+        )}
       </div>
 
-      {/* 3. Immigration — rendered differently per immigrationKind so
-          a pending / rejected / closed case is NEVER presented as a
-          currently-held permission. The schema can only establish a
-          current permission reliably when status = APPROVED + expiry
-          is in the future; everything else is labelled as a case.
-          Expired permissions get a distinct destructive tone. */}
+      {/* Immigration row — one line each kind. Current / expired
+          permissions use their coloured icon + label + inline expiry.
+          Pending / rejected / closed cases use a neutral icon + the
+          "case" word so a case is never read as a current permission. */}
       {candidate.immigrationKind === 'CURRENT_PERMISSION' ? (
-        <div className="mx-3.5 mt-1.5 rounded-md border border-status-success/40 bg-status-success-soft px-2.5 py-1.5">
-          <div className="flex items-start gap-2">
-            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-status-success" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <div className="text-[10px] uppercase tracking-wider text-status-success">
-                Current permission
-              </div>
-              <div
-                className="truncate text-xs font-medium"
-                title={candidate.immigrationPermitLabel ?? ''}
-              >
-                {candidate.immigrationPermitLabel}
-              </div>
-              {immigrationExpiresAbsolute && (
-                <div
-                  className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground"
-                  title={immigrationExpiresAbsolute}
-                >
-                  <CalendarCheck className="size-3" aria-hidden />
-                  expires {immigrationExpiresAbsolute}
-                </div>
-              )}
-            </div>
-          </div>
+        <div
+          className="mt-1 flex items-center gap-1.5 px-3.5 text-xs"
+          title={candidate.immigrationPermitLabel ?? ''}
+        >
+          <ShieldCheck className="size-3.5 shrink-0 text-status-success" aria-hidden />
+          <span className="truncate font-medium text-status-success">
+            {candidate.immigrationPermitLabel}
+          </span>
+          {immigrationExpiresAbsolute && (
+            <span
+              className="shrink-0 text-[11px] text-muted-foreground"
+              title={immigrationExpiresAbsolute}
+            >
+              · exp {immigrationExpiresAbsolute}
+            </span>
+          )}
         </div>
       ) : candidate.immigrationKind === 'EXPIRED_PERMISSION' ? (
-        <div className="mx-3.5 mt-1.5 rounded-md border border-status-danger/40 bg-status-danger-soft px-2.5 py-1.5">
-          <div className="flex items-start gap-2">
-            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-status-danger" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <div className="text-[10px] uppercase tracking-wider text-status-danger">
-                Expired permission
-              </div>
-              <div
-                className="truncate text-xs font-medium"
-                title={candidate.immigrationPermitLabel ?? ''}
-              >
-                {candidate.immigrationPermitLabel}
-              </div>
-              {immigrationExpiresAbsolute && (
-                <div className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-status-danger">
-                  <CalendarCheck className="size-3" aria-hidden />
-                  expired {immigrationExpiresAbsolute}
-                </div>
-              )}
-            </div>
-          </div>
+        <div
+          className="mt-1 flex items-center gap-1.5 px-3.5 text-xs"
+          title={candidate.immigrationPermitLabel ?? ''}
+        >
+          <ShieldCheck className="size-3.5 shrink-0 text-status-danger" aria-hidden />
+          <span className="truncate font-medium text-status-danger">
+            {candidate.immigrationPermitLabel}
+          </span>
+          {immigrationExpiresAbsolute && (
+            <span className="shrink-0 text-[11px] font-medium text-status-danger">
+              · expired {immigrationExpiresAbsolute}
+            </span>
+          )}
         </div>
       ) : candidate.immigrationKind !== 'NONE' ? (
-        <div className="mx-3.5 mt-1.5 rounded-md border bg-background px-2.5 py-1.5">
-          <div className="flex items-start gap-2">
-            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-pipeline-review" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Immigration case
-              </div>
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                <span
-                  className="truncate text-xs font-medium"
-                  title={candidate.immigrationPermitLabel ?? ''}
-                >
-                  {candidate.immigrationPermitLabel} application
-                </span>
-                {immigrationStatusLabel && (
-                  <StatusPill tone={caseStatusTone}>{immigrationStatusLabel}</StatusPill>
-                )}
-              </div>
-              <div className="mt-0.5 text-[11px] italic text-muted-foreground">
-                Not a currently-held permission.
-              </div>
-            </div>
-          </div>
+        <div
+          className="mt-1 flex items-center gap-1.5 px-3.5 text-xs"
+          title={`${candidate.immigrationPermitLabel ?? ''} application — not a currently-held permission`}
+        >
+          <ShieldCheck className="size-3.5 shrink-0 text-pipeline-review" aria-hidden />
+          <span className="truncate text-muted-foreground">
+            Case:{' '}
+            <span className="font-medium text-foreground">{candidate.immigrationPermitLabel}</span>
+          </span>
+          {immigrationStatusLabel && (
+            <StatusPill tone={caseStatusTone} className="shrink-0">
+              {immigrationStatusLabel}
+            </StatusPill>
+          )}
         </div>
       ) : (
-        <div className="mx-3.5 mt-1.5 rounded-md border bg-background px-2.5 py-1.5">
-          <div className="flex items-start gap-2">
-            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-pipeline-review" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Immigration
-              </div>
-              <div className="text-[12px] italic text-muted-foreground">
-                Immigration not on file
-              </div>
-            </div>
-          </div>
+        <div className="mt-1 flex items-center gap-1.5 px-3.5 text-xs">
+          <ShieldCheck className="size-3.5 shrink-0 text-muted-foreground/70" aria-hidden />
+          <span className="truncate italic text-muted-foreground">Immigration not on file</span>
         </div>
       )}
 
-      {/* 4+5. Location, phone, assigned staff, activation date.
-          Stage 6E — tighter top padding; the MetaList itself handles
-          per-row gap internally. */}
-      <MetaList className="px-3.5 pt-2">
-        <MetaRow icon={<MapPin className="text-pipeline-source" />}>
-          {candidate.currentCity || candidate.currentCountry ? (
-            [candidate.currentCity, candidate.currentCountry].filter(Boolean).join(', ')
-          ) : (
-            <span className="italic text-muted-foreground">Location not set</span>
-          )}
-        </MetaRow>
-        {candidate.phone ? (
-          <MetaRow icon={<Phone className="text-pipeline-apply" />}>{candidate.phone}</MetaRow>
-        ) : (
-          <MetaRow icon={<Phone className="text-pipeline-apply" />}>
-            <span className="italic text-muted-foreground">No phone</span>
-          </MetaRow>
-        )}
-        <MetaRow icon={<UserCheck className="text-pipeline-review" />}>
-          <OwnerAvatar
-            user={
-              candidate.assignedUserId && candidate.assignedUserName
-                ? { id: candidate.assignedUserId, fullName: candidate.assignedUserName }
-                : null
-            }
-            size="sm"
-            showName
-          />
-        </MetaRow>
-        <MetaRow icon={<Briefcase className="text-pipeline-interview" />}>
-          <time dateTime={new Date(candidate.activatedAt).toISOString()} title={activatedAbsolute}>
-            activated {activatedLabel}
+      {/* 4+5. Location + phone + assigned + activation — Stage 6E
+          (round 2) — 2-column grid cuts the vertical height in half
+          vs the 4-row MetaList. Still uses icons + muted labels so
+          scanning stays easy. */}
+      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 px-3.5 text-[11px] text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-1">
+          <MapPin className="size-3 shrink-0 text-pipeline-source" aria-hidden />
+          <span className="truncate">
+            {candidate.currentCity || candidate.currentCountry ? (
+              [candidate.currentCity, candidate.currentCountry].filter(Boolean).join(', ')
+            ) : (
+              <span className="italic">Location not set</span>
+            )}
+          </span>
+        </div>
+        <div className="flex min-w-0 items-center gap-1">
+          <Phone className="size-3 shrink-0 text-pipeline-apply" aria-hidden />
+          <span className="truncate">
+            {candidate.phone ?? <span className="italic">No phone</span>}
+          </span>
+        </div>
+        <div className="flex min-w-0 items-center gap-1">
+          <UserCheck className="size-3 shrink-0 text-pipeline-review" aria-hidden />
+          <span className="truncate">
+            {candidate.assignedUserId && candidate.assignedUserName ? (
+              <OwnerAvatar
+                user={{ id: candidate.assignedUserId, fullName: candidate.assignedUserName }}
+                size="sm"
+                showName
+              />
+            ) : (
+              <span className="italic">Unassigned</span>
+            )}
+          </span>
+        </div>
+        <div className="flex min-w-0 items-center gap-1">
+          <CalendarCheck className="size-3 shrink-0 text-pipeline-interview" aria-hidden />
+          <time
+            dateTime={new Date(candidate.activatedAt).toISOString()}
+            title={activatedAbsolute}
+            className="truncate"
+          >
+            {activatedLabel}
           </time>
-        </MetaRow>
-      </MetaList>
-
-      {/* 6. Live counters. Stage 6E — tighter top gap; mt-auto pushes
-          the counters + footer to the card's bottom so every card in a
-          row ends at the same height (flex-col + h-full on <Card>
-          already set the stage; this just claims the slack). */}
-      <div className="mt-auto grid grid-cols-3 gap-1 px-3.5 pt-2">
-        <RingCounter label="apps" value={candidate.applicationsCount} tone="apply" />
-        <RingCounter label="shortlists" value={candidate.shortlistsCount} tone="shortlist" />
-        <RingCounter label="placed" value={candidate.placementsCount} tone="placed" />
+        </div>
       </div>
 
-      {/* 7. Dual-action footer. Stage 6E — reduced from py-2.5 to
-          py-2 so the buttons stay prominent without the card gaining
-          height. Bottom-aligned via `mt-auto` on the counters above. */}
+      {/* 6. Live counters — Stage 6E (round 2). Compact pill-style
+          counters replace the ring-counter trio so the counters row
+          takes ~24px instead of ~68px. The three categories (apps /
+          shortlists / placed) stay in the same order with the same
+          colour tones. mt-auto pushes the counters + footer to the
+          card's bottom so cards in a row align. */}
+      <div className="mt-auto grid grid-cols-3 gap-1 px-3.5 pt-2 text-[11px]">
+        <CounterPill label="apps" value={candidate.applicationsCount} tone="apply" />
+        <CounterPill label="shortlists" value={candidate.shortlistsCount} tone="shortlist" />
+        <CounterPill label="placed" value={candidate.placementsCount} tone="placed" />
+      </div>
+
+      {/* 7. Dual-action footer. Stage 6E (round 2) — py-1.5 for a
+          compact-but-still-tappable height. Icons shrunk 1px. */}
       <div className="mt-2 grid grid-cols-2 gap-0 border-t">
         <Link
           href={`/clients/${candidate.personId}`}
-          className="group flex items-center justify-center gap-1.5 bg-note-green py-2 text-xs font-semibold text-note-green-ink transition-all hover:brightness-95"
+          className="group flex items-center justify-center gap-1 bg-note-green py-1.5 text-xs font-semibold text-note-green-ink transition-all hover:brightness-95"
           aria-label={`Open workspace for ${candidate.fullName}`}
         >
-          <User2 className="size-3.5" /> Open workspace
+          <User2 className="size-3" /> Open workspace
           <ArrowRight className="size-3 opacity-70 transition-transform group-hover:translate-x-0.5" />
         </Link>
         <Link
           href={`/clients/${candidate.personId}?tab=applications`}
-          className="group flex items-center justify-center gap-1.5 bg-note-pink py-2 text-xs font-semibold text-note-pink-ink transition-all hover:brightness-95"
+          className="group flex items-center justify-center gap-1 bg-note-pink py-1.5 text-xs font-semibold text-note-pink-ink transition-all hover:brightness-95"
           aria-label={`Reach out to ${candidate.fullName}`}
         >
-          <Mail className="size-3.5" /> Reach out
+          <Mail className="size-3" /> Reach out
           <ArrowRight className="size-3 opacity-70 transition-transform group-hover:translate-x-0.5" />
         </Link>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Stage 6E (round 2) — compact pill counter. Replaces the previous
+ * ring-counter trio which was ~60px tall; this is ~24px with the same
+ * data + colour tones. Zero counts render as a quiet "0" rather than a
+ * placeholder (zero IS the fact).
+ */
+function CounterPill({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: 'apply' | 'shortlist' | 'placed';
+}) {
+  const toneCls =
+    tone === 'apply'
+      ? 'border-pipeline-apply/30 bg-pipeline-apply/5 text-pipeline-apply'
+      : tone === 'shortlist'
+        ? 'border-pipeline-shortlist/30 bg-pipeline-shortlist/5 text-pipeline-shortlist'
+        : 'border-pipeline-placed/30 bg-pipeline-placed/5 text-pipeline-placed';
+  return (
+    <div
+      className={cn('flex items-center justify-between gap-1 rounded-md border px-2 py-1', toneCls)}
+    >
+      <span className="font-semibold tabular-nums">{value}</span>
+      <span className="truncate text-[10px] uppercase tracking-wider opacity-80">{label}</span>
+    </div>
   );
 }
 
