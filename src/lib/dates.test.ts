@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { todayInDublin } from './dates';
+import { formatDublinDisplay, parseDublinDisplay, todayInDublin } from './dates';
 
 /**
  * The immigration case status change writes `submittedAt` / `decisionAt` using
@@ -43,5 +43,40 @@ describe('todayInDublin', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-02-01T00:00:00.000Z'));
     expect(todayInDublin()).toBe('2026-02-01');
+  });
+});
+
+/**
+ * Stage 6E Section 5 — DD/MM/YYYY display + parse round-trip.
+ */
+describe('formatDublinDisplay', () => {
+  it('formats a YYYY-MM-DD string into DD/MM/YYYY', () => {
+    expect(formatDublinDisplay('2026-10-18')).toBe('18/10/2026');
+  });
+
+  it('returns empty string on null / undefined / empty', () => {
+    expect(formatDublinDisplay(null)).toBe('');
+    expect(formatDublinDisplay(undefined)).toBe('');
+    expect(formatDublinDisplay('')).toBe('');
+  });
+});
+
+describe('parseDublinDisplay', () => {
+  it('parses DD/MM/YYYY into YYYY-MM-DD', () => {
+    expect(parseDublinDisplay('18/10/2026')).toBe('2026-10-18');
+  });
+
+  it('accepts single-digit day / month', () => {
+    expect(parseDublinDisplay('3/9/2026')).toBe('2026-09-03');
+  });
+
+  it('rejects invalid calendar dates (31 Feb)', () => {
+    expect(parseDublinDisplay('31/02/2026')).toBeNull();
+  });
+
+  it('rejects malformed inputs', () => {
+    expect(parseDublinDisplay('not a date')).toBeNull();
+    expect(parseDublinDisplay('18-10-26')).toBeNull();
+    expect(parseDublinDisplay('2026-10-18')).toBeNull(); // ISO shape, not DD/MM/YYYY
   });
 });

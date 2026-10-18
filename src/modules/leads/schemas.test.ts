@@ -95,19 +95,16 @@ describe('CreateLeadForNewPersonSchema — CS strict validation', () => {
     }
   });
 
-  it('rejects a CS lead missing address line 1', () => {
+  it('accepts a CS lead with no address line 1 (Stage 6E Section 4 — now optional)', () => {
     const r = CreateLeadForNewPersonSchema.safeParse({
       mode: 'NEW_PERSON',
       targetBusiness: 'CANDIDATE_SERVICES',
       person: { ...CS_HAPPY_PERSON, addressLine1: '' },
     });
-    expect(r.success).toBe(false);
-    if (!r.success) {
-      expect(r.error.issues.some((i) => i.path.join('.') === 'person.addressLine1')).toBe(true);
-    }
+    expect(r.success).toBe(true);
   });
 
-  it('rejects a CS lead missing country', () => {
+  it('rejects a CS lead missing country of residence', () => {
     const r = CreateLeadForNewPersonSchema.safeParse({
       mode: 'NEW_PERSON',
       targetBusiness: 'CANDIDATE_SERVICES',
@@ -116,13 +113,33 @@ describe('CreateLeadForNewPersonSchema — CS strict validation', () => {
     expect(r.success).toBe(false);
   });
 
-  it('rejects a CS lead missing city', () => {
+  it('accepts a CS lead with no city (Stage 6E Section 4 — now optional)', () => {
     const r = CreateLeadForNewPersonSchema.safeParse({
       mode: 'NEW_PERSON',
       targetBusiness: 'CANDIDATE_SERVICES',
       person: { ...CS_HAPPY_PERSON, currentCity: '' },
     });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects a CS lead with a non-E.164 phone (Stage 6E Section 4)', () => {
+    const r = CreateLeadForNewPersonSchema.safeParse({
+      mode: 'NEW_PERSON',
+      targetBusiness: 'CANDIDATE_SERVICES',
+      person: { ...CS_HAPPY_PERSON, phone: '08712345' },
+    });
     expect(r.success).toBe(false);
+  });
+
+  it('accepts a CS lead with any valid E.164 phone (any country prefix)', () => {
+    for (const phone of ['+353871234567', '+27821234567', '+919876543210', '+447911123456']) {
+      const r = CreateLeadForNewPersonSchema.safeParse({
+        mode: 'NEW_PERSON',
+        targetBusiness: 'CANDIDATE_SERVICES',
+        person: { ...CS_HAPPY_PERSON, phone },
+      });
+      expect(r.success).toBe(true);
+    }
   });
 });
 

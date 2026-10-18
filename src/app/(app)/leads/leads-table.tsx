@@ -49,6 +49,7 @@ import {
   updateLeadStatusAction,
 } from '@/modules/leads/actions';
 import type { LeadListRow } from '@/modules/leads/repository';
+import { DirectPaymentDialog } from './direct-payment-dialog';
 import { LeadsFilterControl } from './leads-filter';
 
 type Props = {
@@ -150,6 +151,9 @@ export function LeadsTable({
   const [convertReference, setConvertReference] = useState<string>('');
   const [convertReceivedAt, setConvertReceivedAt] = useState<string>('');
   const [invoicingLead, setInvoicingLead] = useState<LeadListRow | null>(null);
+  // Stage 6E Section 3 — Direct Payment & Convert dialog state. Only
+  // reachable for CS leads with a personId (CS leads always have one).
+  const [directPaymentLead, setDirectPaymentLead] = useState<LeadListRow | null>(null);
   const [, startTransition] = useTransition();
 
   const router = useRouter();
@@ -393,49 +397,106 @@ export function LeadsTable({
     {
       header: '',
       id: 'actions',
-      size: 260,
+      size: 320,
       cell: ({ row }) => {
         const lead = row.original;
         const isBusy = busyId === lead.id;
         const canTransition = lead.status !== 'CONVERTED';
         const isMine = lead.assignedUserId === currentUserId;
+        const isCS = lead.targetBusiness === 'CANDIDATE_SERVICES';
 
-        // Context-primary button: the single most likely next action
-        // for this row's state. Order matters — first match wins.
-        //   1. Payment verified? → Convert to candidate (the whole
-        //      point of the flow).
-        //   2. Unassigned? → Assign to me (blocks nothing but gets
-        //      routine work moving).
-        //   3. No verified payment yet → Generate additional invoice
-        //      (bulk of "next actions" fall here).
-        //   4. Converted / lost / rejected → no primary.
-        let primary: React.ReactNode = null;
-        if (canTransition) {
-          if (lead.hasVerifiedPayment) {
-            // Stage 6B — CS leads route to the workspace where
-            // "Activate candidate" is a lightweight confirmation.
-            // Non-CS leads keep the legacy single-step convert flow
-            // because they don't have a Client Workspace yet.
-            primary =
-              lead.targetBusiness === 'CANDIDATE_SERVICES' && lead.personId ? (
-                <Link
-                  href={`/clients/${lead.personId}`}
-                  className={`${buttonVariants({ variant: 'default', size: 'sm' })} h-8`}
-                >
-                  <UserCheck className="mr-1.5 size-3.5" />
-                  Open workspace
-                </Link>
-              ) : (
+        // Stage 6E Section 1 — Candidate Services leads collapse to two
+        // prominent actions: Create Pro Forma + Direct Payment & Convert.
+        // Converted CS rows show Open Client Workspace. Non-CS flows
+        // (Immigration + Recruitment) keep the original cluttered row.
+        if (isCS && lead.personId && !canTransition) {
+          // Already-converted CS lead: workspace is the only action.
+          return (
+            <div className="flex items-center justify-end gap-1.5">
+              <Link
+                href={`/clients/${lead.personId}`}
+                className={`${buttonVariants({ variant: 'default', size: 'sm' })} h-8`}
+              >
+                <UserCheck className="mr-1.5 size-3.5" />
+                Open Client Workspace
+              </Link>
+            </div>
+          );
+        }
+        if (isCS && lead.personId && canTransition) {
+          return (
+            <div className="flex items-center justify-end gap-1.5">
+              <Link
+                href={`/clients/${lead.personId}?tab=billing`}
+                className={`${buttonVariants({ variant: 'outline', size: 'sm' })} h-8`}
+              >
+                <FileText className="mr-1.5 size-3.5" />
+                Create Pro Forma
+              </Link>
+              {canSeeExceptionalFinance && (
                 <Button
                   size="sm"
-                  onClick={() => openConvert(lead)}
+                  onClick={() => setDirectPaymentLead(lead)}
                   disabled={isBusy}
                   className="h-8"
                 >
                   <UserCheck className="mr-1.5 size-3.5" />
-                  Convert
+                  Direct Payment &amp; Convert
                 </Button>
-              );
+              )}
+              {/* Admin lifecycle (Archive / Reactivate) stays in a tiny
+                  overflow for ADMIN only — operators doing routine CS
+                  work never see it. */}
+              {canSeeExceptionalFinance && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Admin actions"
+                        disabled={isBusy}
+                        className="h-8 w-8"
+                      />
+                    }
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>Admin only</DropdownMenuLabel>
+                    {lead.status === 'EXPIRED' && (
+                      <DropdownMenuItem
+                        onClick={() => setReactivateTarget(lead)}
+                        className="text-emerald-700 focus:text-emerald-700 dark:text-emerald-400 dark:focus:text-emerald-400"
+                      >
+                        <RotateCcw className="mr-2 size-4" /> Reactivate lead…
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem
+                      onClick={() => setArchiveTarget(lead)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Archive className="mr-2 size-4" /> Archive lead…
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          );
+        }
+
+        // Non-CS: original row (unchanged logic — Immigration +
+        // Recruitment don't have a Client Workspace, so their status
+        // transitions + convert menu stay).
+        let primary: React.ReactNode = null;
+        if (canTransition) {
+          if (lead.hasVerifiedPayment) {
+            primary = (
+              <Button size="sm" onClick={() => openConvert(lead)} disabled={isBusy} className="h-8">
+                <UserCheck className="mr-1.5 size-3.5" />
+                Convert
+              </Button>
+            );
           } else if (!isMine && lead.assignedUserId === null) {
             primary = (
               <Button
@@ -834,6 +895,21 @@ export function LeadsTable({
           payerId={invoicingLead.personId}
           payerLabel={invoicingLead.displayName}
           services={invoiceableServices}
+        />
+      )}
+      {directPaymentLead && (
+        <DirectPaymentDialog
+          lead={{
+            id: directPaymentLead.id,
+            displayName: directPaymentLead.displayName,
+            personId: directPaymentLead.personId,
+          }}
+          services={invoiceableServices}
+          defaultCurrencyCode="EUR"
+          open
+          onOpenChange={(next) => {
+            if (!next) setDirectPaymentLead(null);
+          }}
         />
       )}
     </>

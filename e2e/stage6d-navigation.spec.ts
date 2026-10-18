@@ -78,10 +78,9 @@ test('tab query param on /candidates/[id] carries through the redirect', async (
   const seeded = await seedPersonAndLead(`Tq${Math.random().toString(36).slice(2, 6)}`);
   try {
     await page.goto(`/candidates/${seeded.personId}?tab=applications`);
-    await expect(page).toHaveURL(
-      new RegExp(`/clients/${seeded.personId}\\?tab=applications`),
-      { timeout: 15_000 },
-    );
+    await expect(page).toHaveURL(new RegExp(`/clients/${seeded.personId}\\?tab=applications`), {
+      timeout: 15_000,
+    });
   } finally {
     await seeded.cleanup();
   }

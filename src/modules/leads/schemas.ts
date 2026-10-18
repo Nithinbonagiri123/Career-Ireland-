@@ -51,12 +51,13 @@ export const CreateLeadForNewPersonSchema = z
    */
   .superRefine((data, ctx) => {
     if (data.targetBusiness !== 'CANDIDATE_SERVICES') return;
+    // Stage 6E Section 4 — relaxed to the international-lead field list.
+    // City + address are OPTIONAL now (clients abroad often don't have an
+    // Irish address). Phone must be E.164 if provided.
     const req: Array<[keyof typeof data.person, string]> = [
       ['email', 'Email is required for Candidate Services leads'],
-      ['phone', 'Phone is required for Candidate Services leads'],
-      ['addressLine1', 'Address line 1 is required for Candidate Services leads'],
-      ['currentCountry', 'Country is required for Candidate Services leads'],
-      ['currentCity', 'City is required for Candidate Services leads'],
+      ['phone', 'Mobile number is required for Candidate Services leads'],
+      ['currentCountry', 'Country of residence is required for Candidate Services leads'],
       ['primaryOccupationId', 'Primary profession is required for Candidate Services leads'],
     ];
     for (const [field, message] of req) {
@@ -64,6 +65,17 @@ export const CreateLeadForNewPersonSchema = z
       if (!v || (typeof v === 'string' && v.trim().length === 0)) {
         ctx.addIssue({ code: 'custom', path: ['person', field], message });
       }
+    }
+    // E.164 validation for the mobile number — leading `+`, 7-15 digits,
+    // first digit after `+` is 1-9. Allows any country prefix.
+    const phone = data.person.phone;
+    if (phone && !/^\+[1-9]\d{6,14}$/.test(phone)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['person', 'phone'],
+        message:
+          'Mobile number must be in international format (E.164), e.g. +353871234567 or +27821234567',
+      });
     }
   });
 

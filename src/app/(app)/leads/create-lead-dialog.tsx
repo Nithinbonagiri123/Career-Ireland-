@@ -25,6 +25,11 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { formatCurrency } from '@/lib/currency';
 import type { Currency } from '@/lib/db/schema/currencies';
+import {
+  COUNTRIES_SORTED,
+  findCountryByName,
+  IRISH_IMMIGRATION_STATUSES,
+} from '@/lib/iso-countries';
 import { generateInvoiceAction } from '@/modules/billing/generate-actions';
 import type { InvoiceableService } from '@/modules/billing/read';
 import { createLeadAction } from '@/modules/leads/actions';
@@ -98,7 +103,10 @@ export function CreateLeadDialog({
       phone: '',
       dateOfBirth: '',
       nationality: '',
-      currentCountry: '',
+      // Stage 6E Section 4 — international default: residence pre-fills
+      // to South Africa (the business's largest source market). Operator
+      // can change to any ISO country.
+      currentCountry: 'South Africa',
       currentCity: '',
       addressLine1: '',
       addressLine2: '',
@@ -107,6 +115,20 @@ export function CreateLeadDialog({
       notes: '',
     },
   });
+
+  // Stage 6E Section 4 — Irish immigration status for CS leads.
+  // Captured on the form, serialised into the lead's `notes` with a
+  // structured prefix so no schema migration is required at this stage.
+  // The Client Workspace reads it back from notes to render the
+  // immigration badge on the candidate card. A dedicated column + the
+  // Stage 5 immigration_cases catalog mapping is a follow-up.
+  const [immigrationStatus, setImmigrationStatus] = useState<string>('NOT_PROVIDED');
+  // Stage 6E Section 4 — compound phone input: calling code + national
+  // number. Combined into E.164 on submit. The calling-code picker
+  // seeds from the selected residence country but can be changed
+  // independently.
+  const [phoneCountryCode, setPhoneCountryCode] = useState<string>('27'); // South Africa default
+  const [phoneNationalNumber, setPhoneNationalNumber] = useState<string>('');
   // Local list of occupations so inline-created ones appear immediately
   // without a refetch. See occupation-picker for the pattern.
   const [localOccupations, setLocalOccupations] = useState<OccupationOption[]>(occupations);
@@ -287,13 +309,39 @@ export function CreateLeadDialog({
 
   const submitAsNewPerson = handleSubmit(async (data) => {
     setFormError(null);
+    // Stage 6E Section 4 — combine the compound phone input into
+    // E.164 before dispatch. Zod validator enforces the shape. If
+    // operator entered the number including the leading +, keep that;
+    // otherwise prefix with +{callingCode}.
+    const rawPhone = data.phone?.trim() ?? '';
+    const combinedPhone =
+      rawPhone.length === 0
+        ? phoneNationalNumber.trim().length > 0
+          ? `+${phoneCountryCode}${phoneNationalNumber.replace(/\D/g, '')}`
+          : ''
+        : rawPhone;
+    // Attach the Irish immigration status to notes with a marker so the
+    // workspace / candidate card can parse it back. Keeps the data in
+    // place without a schema migration this stage.
+    const existingNotes = (data.notes ?? '').trim();
+    const immigrationLabel =
+      IRISH_IMMIGRATION_STATUSES.find((s) => s.value === immigrationStatus)?.label ?? '';
+    const prefix = existingNotes ? `${existingNotes}\n\n` : '';
+    const notesWithImmigration =
+      immigrationStatus && immigrationStatus !== 'NOT_PROVIDED'
+        ? `${prefix}[Irish immigration status: ${immigrationLabel}]`
+        : existingNotes;
     const result = await createLeadAction({
       mode: 'NEW_PERSON',
       // Target is picked at the top of the dialog. CS is the default and
       // covers the most common flow; Immigration uses the same person-based
       // sub-form. Recruitment takes a separate employer sub-form (below).
       targetBusiness: targetBusiness === 'RECRUITMENT' ? 'CANDIDATE_SERVICES' : targetBusiness,
-      person: data,
+      person: {
+        ...data,
+        phone: combinedPhone,
+        notes: notesWithImmigration,
+      },
     });
     if (!result.ok) {
       setFormError(result.error.message);
@@ -542,12 +590,44 @@ export function CreateLeadDialog({
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="cl-phone">
-                    Phone
+                    Mobile number
                     {targetBusiness === 'CANDIDATE_SERVICES' && (
                       <span className="text-destructive"> *</span>
                     )}
                   </Label>
-                  <Input id="cl-phone" type="tel" {...register('phone')} />
+                  {/* Stage 6E Section 4 — compound international phone
+                      input. The calling-code select is seeded from the
+                      residence country but changeable. The national
+                      number input accepts digits only; the server
+                      validates the combined value as E.164. */}
+                  <div className="flex gap-1.5">
+                    <Select
+                      aria-label="Country calling code"
+                      className="w-28"
+                      value={phoneCountryCode}
+                      onChange={(e) => setPhoneCountryCode(e.target.value)}
+                    >
+                      {COUNTRIES_SORTED.filter((c) => c.callingCode).map((c) => (
+                        <option key={c.code} value={c.callingCode}>
+                          +{c.callingCode} {c.code}
+                        </option>
+                      ))}
+                    </Select>
+                    <Input
+                      id="cl-phone"
+                      type="tel"
+                      placeholder="National number"
+                      value={phoneNationalNumber}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, '');
+                        setPhoneNationalNumber(digits);
+                        setValue('phone', `+${phoneCountryCode}${digits}`, { shouldDirty: true });
+                      }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Stored in international format, e.g. +353871234567 or +27821234567.
+                  </p>
                 </div>
               </div>
               {targetBusiness === 'CANDIDATE_SERVICES' && (
@@ -573,36 +653,78 @@ export function CreateLeadDialog({
               )}
               <div className="space-y-1.5">
                 <Label htmlFor="cl-addr1">
-                  Address line 1
-                  {targetBusiness === 'CANDIDATE_SERVICES' && (
-                    <span className="text-destructive"> *</span>
-                  )}
+                  Address <span className="text-xs text-muted-foreground">(optional)</span>
                 </Label>
                 <Input id="cl-addr1" {...register('addressLine1')} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cl-addr2">Address line 2 (optional)</Label>
-                <Input id="cl-addr2" {...register('addressLine2')} />
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="cl-country">
-                    Country
+                    Country of residence
                     {targetBusiness === 'CANDIDATE_SERVICES' && (
                       <span className="text-destructive"> *</span>
                     )}
                   </Label>
-                  <Input id="cl-country" {...register('currentCountry')} />
+                  {/* Stage 6E Section 4 — ISO country datalist. Also
+                      resets the phone calling-code when the operator
+                      picks a new residence country. */}
+                  <Input
+                    id="cl-country"
+                    list="cl-country-options"
+                    {...register('currentCountry', {
+                      onChange: (e) => {
+                        const c = findCountryByName(e.target.value);
+                        if (c) setPhoneCountryCode(c.callingCode);
+                      },
+                    })}
+                  />
+                  <datalist id="cl-country-options">
+                    {COUNTRIES_SORTED.map((c) => (
+                      <option key={c.code} value={c.name} />
+                    ))}
+                  </datalist>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="cl-city">
-                    City
-                    {targetBusiness === 'CANDIDATE_SERVICES' && (
-                      <span className="text-destructive"> *</span>
-                    )}
+                    City <span className="text-xs text-muted-foreground">(optional)</span>
                   </Label>
                   <Input id="cl-city" {...register('currentCity')} />
                 </div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="cl-nat">
+                    Nationality <span className="text-xs text-muted-foreground">(optional)</span>
+                  </Label>
+                  {/* Stage 6E Section 4 — nationality is independent of
+                      residence. Operator can leave blank or pick any
+                      demonym. */}
+                  <Input id="cl-nat" list="cl-nat-options" {...register('nationality')} />
+                  <datalist id="cl-nat-options">
+                    {COUNTRIES_SORTED.filter((c) => c.nationality).map((c) => (
+                      <option key={c.code} value={c.nationality} />
+                    ))}
+                  </datalist>
+                </div>
+                {targetBusiness === 'CANDIDATE_SERVICES' && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cl-irish">
+                      Irish immigration status{' '}
+                      <span className="text-xs text-muted-foreground">(optional)</span>
+                    </Label>
+                    <Select
+                      id="cl-irish"
+                      value={immigrationStatus}
+                      onChange={(e) => setImmigrationStatus(e.target.value)}
+                    >
+                      {IRISH_IMMIGRATION_STATUSES.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="cl-source">Source</Label>

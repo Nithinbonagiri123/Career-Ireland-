@@ -25,3 +25,47 @@ export function todayInDublin(): string {
     day: '2-digit',
   }).format(new Date());
 }
+
+/**
+ * Format a `YYYY-MM-DD` date string (or a Date) as `DD/MM/YYYY` for Irish
+ * UI display. Null-tolerant: returns an empty string when no date is
+ * supplied. Does NOT re-translate the stored value into Dublin time —
+ * callers that need the Irish date for prefills should use
+ * `todayInDublin()` first and then pass the result in.
+ */
+export function formatDublinDisplay(date: string | Date | null | undefined): string {
+  if (!date) return '';
+  const d = typeof date === 'string' ? new Date(`${date}T00:00:00.000Z`) : date;
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: IRISH_TIMEZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(d);
+}
+
+/**
+ * Parse a `DD/MM/YYYY` user input back to the `YYYY-MM-DD` wire format
+ * the server expects. Returns null on malformed input; callers surface
+ * a validation error. Permissive on separators (`/` or `-`) and allows
+ * single-digit day/month so operators can type `3/9/2026`.
+ */
+export function parseDublinDisplay(input: string): string | null {
+  const m = input.trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (!m) return null;
+  const [, d, mo, y] = m;
+  const day = Number.parseInt(d ?? '0', 10);
+  const mon = Number.parseInt(mo ?? '0', 10);
+  const year = Number.parseInt(y ?? '0', 10);
+  if (day < 1 || day > 31 || mon < 1 || mon > 12 || year < 1900 || year > 2100) return null;
+  // Round-trip via a UTC Date to validate the day actually exists in the month.
+  const probe = new Date(Date.UTC(year, mon - 1, day));
+  if (
+    probe.getUTCFullYear() !== year ||
+    probe.getUTCMonth() !== mon - 1 ||
+    probe.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return `${year}-${String(mon).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
