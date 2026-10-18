@@ -108,7 +108,7 @@ export function DashboardDrilldownsSection({ data }: { data: DashboardDrilldowns
               href={
                 iv.requisitionId
                   ? `/requisitions/${iv.requisitionId}`
-                  : `/candidates/${iv.candidatePersonId}`
+                  : `/clients/${iv.candidatePersonId}`
               }
               className="flex items-center justify-between gap-3 py-2 text-sm transition-colors hover:bg-accent/40 -mx-6 px-6"
             >

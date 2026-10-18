@@ -118,6 +118,7 @@ export default async function LeadsPage({
         <LeadsTable
           leads={leads}
           currentUserId={session.user.id}
+          currentUserRole={session.user.role}
           invoiceableServices={invoiceableServices}
           occupations={occupations.map((o) => ({ id: o.id, name: o.name }))}
           countries={Array.from(

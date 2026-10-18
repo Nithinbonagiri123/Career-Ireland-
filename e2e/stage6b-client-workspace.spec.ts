@@ -92,7 +92,10 @@ test('workspace renders for a fresh lead-stage client (desktop + mobile)', async
       timeout: 15_000,
     });
     // The four tabs are all present.
-    for (const label of ['Overview', 'Billing', 'Documents', 'Activity']) {
+    // Stage 6D Wave 2 — the Documents tab split into "Financial docs"
+    // (invoice/receipt/quote PDFs) and "Candidate docs" (uploaded files
+    // + requirements). Applications was added as its own tab too.
+    for (const label of ['Overview', 'Billing', 'Applications', 'Candidate docs', 'Financial docs', 'Activity']) {
       await expect(page.getByRole('tab', { name: label })).toBeVisible();
     }
     // Overview is the default tab and shows the Identity card.

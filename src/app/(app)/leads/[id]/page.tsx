@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { ChevronLeft, FileText } from 'lucide-react';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -41,12 +41,25 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   await requirePermission('candidate_services', 'leads', 'view');
   const { id } = await params;
 
-  const [lead, services, currencies] = await Promise.all([
-    fetchLead(id),
+  const lead = await fetchLead(id);
+  if (!lead) notFound();
+
+  // Stage 6D Wave 4 — person-based leads redirect to the unified Client
+  // Workspace. The workspace's Billing tab contains the inline quote
+  // composer and all the lifecycle actions this page used to render.
+  // Employer-based (Recruitment) leads keep this detail page because
+  // they don't have a person-scoped workspace yet. The child routes
+  // (/leads/[id]/pro-formas/[pfId], .../print) stay regardless — those
+  // are deep-link targets from quotes PDFs, audit events + the
+  // workspace itself.
+  if (lead.personId) {
+    redirect(`/clients/${lead.personId}?tab=billing`);
+  }
+
+  const [services, currencies] = await Promise.all([
     fetchInvoiceableServicesFor('PERSON'),
     fetchCurrencies(),
   ]);
-  if (!lead) notFound();
 
   // Pro-formas are a Candidate Services feature. For non-CS leads we
   // just render the summary without a pro-forma panel.

@@ -70,12 +70,32 @@ const PAYMENT_LABEL: Record<string, string> = {
 
 export default async function ClientWorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ personId: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { personId } = await params;
+  const sp = await searchParams;
+  const activeTab = sp.tab ?? 'overview';
   const data = await fetchClientWorkspace(personId);
   if (!data) notFound();
+
+  // Stage 6D Wave 2 — lazy load operational tab data by active tab so
+  // the workspace page's base cost stays small. Applications +
+  // documents only load when their tabs are the current view; Billing
+  // / Activity / Overview use the always-loaded workspace data.
+  const [applications, documents, requirements] = await Promise.all([
+    activeTab === 'applications'
+      ? import('@/modules/applications/service').then((m) => m.listApplicationsForPerson(personId))
+      : Promise.resolve([] as const),
+    activeTab === 'documents-candidate'
+      ? import('@/modules/documents/service').then((m) => m.fetchPersonDocuments(personId))
+      : Promise.resolve([] as const),
+    activeTab === 'documents-candidate'
+      ? import('@/modules/documents/service').then((m) => m.fetchPersonRequirements(personId))
+      : Promise.resolve([] as const),
+  ]);
 
   const {
     person,
@@ -131,14 +151,11 @@ export default async function ClientWorkspacePage({
           Owner: <span className="text-foreground">{assignedUserName}</span>
         </span>
       )}
-      {candidateProfile && (
-        <Link
-          href={`/candidates/${personId}`}
-          className="inline-flex items-center gap-1 text-foreground underline-offset-2 hover:underline"
-        >
-          Open full candidate profile <ArrowRight className="size-3" aria-hidden />
-        </Link>
-      )}
+      {/* Stage 6D Wave 4 — the "Open full candidate profile" shortcut
+          is removed. /candidates/[id] now redirects back here, so the
+          link would have been a self-pointing loop. Operational tabs
+          (Applications, Candidate docs) are available directly on this
+          workspace. */}
     </div>
   );
 
@@ -466,39 +483,89 @@ export default async function ClientWorkspacePage({
             <CardTitle className="text-base">Invoices</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            {invoices.map((i) => (
-              <div
-                key={i.id}
-                className="flex items-center justify-between gap-2 border-b pb-2 text-xs last:border-b-0 last:pb-0"
-              >
-                <div className="min-w-0 flex-1">
-                  {/* Status is authoritative — the pro-forma payment path
-                      calls `recomputeInvoiceStatus` inside the same
-                      transaction as the verify + invoice-issue, so a
-                      fully-paid invoice reaches us already as PAID. No
-                      display override. */}
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{i.number}</span>
-                    <Badge variant={statusTone(i.status)} className="rounded-full text-[10px]">
-                      {INVOICE_LABEL[i.status] ?? i.status}
-                    </Badge>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground tabular-nums">
-                    Total {formatCurrency(i.totalAmount, i.currencyCode)}
-                    {i.status !== 'VOIDED' && Number.parseFloat(i.outstandingAmount) > 0 && (
-                      <> · Outstanding {formatCurrency(i.outstandingAmount, i.currencyCode)}</>
-                    )}
-                    · issued {format(i.issuedAt, 'dd MMM yyyy · HH:mm')}
-                  </div>
-                </div>
-                <Link
-                  href={`/candidates/${personId}/invoices/${i.number}`}
-                  className="shrink-0 text-foreground underline-offset-2 hover:underline"
+            {invoices
+              .filter((i) => i.liability === 'PERSONAL')
+              .map((i) => (
+                <div
+                  key={i.id}
+                  className="flex items-center justify-between gap-2 border-b pb-2 text-xs last:border-b-0 last:pb-0"
                 >
-                  View invoice
-                </Link>
-              </div>
-            ))}
+                  <div className="min-w-0 flex-1">
+                    {/* Status is authoritative — the pro-forma payment path
+                        calls `recomputeInvoiceStatus` inside the same
+                        transaction as the verify + invoice-issue, so a
+                        fully-paid invoice reaches us already as PAID. No
+                        display override. */}
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{i.number}</span>
+                      <Badge variant={statusTone(i.status)} className="rounded-full text-[10px]">
+                        {INVOICE_LABEL[i.status] ?? i.status}
+                      </Badge>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground tabular-nums">
+                      Total {formatCurrency(i.totalAmount, i.currencyCode)}
+                      {i.status !== 'VOIDED' && Number.parseFloat(i.outstandingAmount) > 0 && (
+                        <> · Outstanding {formatCurrency(i.outstandingAmount, i.currencyCode)}</>
+                      )}
+                      · issued {format(i.issuedAt, 'dd MMM yyyy · HH:mm')}
+                    </div>
+                  </div>
+                  <Link
+                    href={`/candidates/${personId}/invoices/${i.number}`}
+                    className="shrink-0 text-foreground underline-offset-2 hover:underline"
+                  >
+                    View invoice
+                  </Link>
+                </div>
+              ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Stage 6D Wave 3 — employer-liability invoices are shown
+          separately so operators can see them without the UI implying
+          the candidate owes them personally. Rare in practice (an
+          employer paid for a service rendered to the candidate), but
+          when it happens it must not inflate the client's debt. */}
+      {invoices.some((i) => i.liability === 'EMPLOYER_LIABILITY') && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base text-muted-foreground">
+              Related invoices · employer liability
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs text-muted-foreground">
+            <p>
+              An employer paid for these services on behalf of the candidate. Shown here for
+              context; not counted toward this client's balance.
+            </p>
+            {invoices
+              .filter((i) => i.liability === 'EMPLOYER_LIABILITY')
+              .map((i) => (
+                <div
+                  key={i.id}
+                  className="flex items-center justify-between gap-2 border-b pb-2 last:border-b-0 last:pb-0"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-foreground">{i.number}</span>
+                      <Badge variant={statusTone(i.status)} className="rounded-full text-[10px]">
+                        {INVOICE_LABEL[i.status] ?? i.status}
+                      </Badge>
+                    </div>
+                    <div className="text-[11px] tabular-nums">
+                      Total {formatCurrency(i.totalAmount, i.currencyCode)} · issued{' '}
+                      {format(i.issuedAt, 'dd MMM yyyy')}
+                    </div>
+                  </div>
+                  <Link
+                    href={`/candidates/${personId}/invoices/${i.number}`}
+                    className="shrink-0 text-foreground underline-offset-2 hover:underline"
+                  >
+                    View invoice
+                  </Link>
+                </div>
+              ))}
           </CardContent>
         </Card>
       )}
@@ -624,6 +691,40 @@ export default async function ClientWorkspacePage({
     </Card>
   );
 
+  // Stage 6D Wave 2 — Applications tab reuses the existing per-person
+  // query; renders a compact list and links out to the full detail page
+  // for state transitions. Loaded only when the Applications tab is
+  // active (see activeTab check at the top of this component).
+  const applicationsTab = (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Job applications</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ApplicationsSummary personId={personId} applications={applications} />
+      </CardContent>
+    </Card>
+  );
+
+  // Stage 6D Wave 2 — Candidate docs tab: compact summary of uploaded
+  // documents + outstanding requirements. The full management surface
+  // (request upload, review, approve, archive) stays on the candidate
+  // detail page; the deep-link at the bottom opens it.
+  const candidateDocsTab = (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Candidate documents</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <CandidateDocsSummary
+          personId={personId}
+          documents={documents}
+          requirements={requirements}
+        />
+      </CardContent>
+    </Card>
+  );
+
   const activityTab = (
     <Card>
       <CardHeader>
@@ -686,8 +787,135 @@ export default async function ClientWorkspacePage({
         overview={overviewTab}
         billing={billingTab}
         documents={documentsTab}
+        applications={applicationsTab}
+        documentsCandidate={candidateDocsTab}
         activity={activityTab}
       />
+    </div>
+  );
+}
+
+function ApplicationsSummary({
+  personId,
+  applications,
+}: {
+  personId: string;
+  applications: ReadonlyArray<{
+    id: string;
+    status: string;
+    appliedAt: Date;
+    requisitionTitle: string | null;
+    displayCompany: string | null;
+  }>;
+}) {
+  if (applications.length === 0) {
+    return (
+      <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+        No job applications on file. Shortlists and applications from Recruitment land here.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2 text-sm">
+      {applications.map((a) => (
+        <div
+          key={a.id}
+          className="flex items-center justify-between gap-2 border-b pb-2 text-xs last:border-b-0 last:pb-0"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="font-medium">
+              {a.requisitionTitle ?? a.displayCompany ?? 'External role'}
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              {a.status.replace(/_/g, ' ')} · applied{' '}
+              <time dateTime={a.appliedAt.toISOString()}>{a.appliedAt.toLocaleDateString()}</time>
+            </div>
+          </div>
+          {/* Deep-link to the full applications panel on the candidate
+              profile — Wave 4's redirect will route this back into the
+              workspace, so no need to invent a new URL. */}
+          <a
+            href={`/candidates/${personId}?tab=applications`}
+            className="shrink-0 text-foreground underline-offset-2 hover:underline"
+          >
+            Open
+          </a>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CandidateDocsSummary({
+  personId,
+  documents,
+  requirements,
+}: {
+  personId: string;
+  documents: ReadonlyArray<{
+    id: string;
+    createdAt: Date;
+    documentTypeId: string;
+  }>;
+  requirements: ReadonlyArray<{
+    documentTypeId: string;
+    documentTypeName: string;
+    status: string;
+  }>;
+}) {
+  return (
+    <div className="space-y-4 text-sm">
+      <div>
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Uploaded documents ({documents.length})
+        </h4>
+        {documents.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            No documents uploaded. Request one from the full candidate profile.
+          </p>
+        ) : (
+          <ul className="space-y-1 text-xs">
+            {documents.slice(0, 10).map((d) => (
+              <li key={d.id} className="flex items-center justify-between gap-2 border-b pb-1">
+                <span className="font-medium">{d.documentTypeId.slice(0, 8)}…</span>
+                <time dateTime={d.createdAt.toISOString()} className="text-muted-foreground">
+                  {d.createdAt.toLocaleDateString()}
+                </time>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div>
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Required documents ({requirements.length})
+        </h4>
+        {requirements.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No outstanding requirements.</p>
+        ) : (
+          <ul className="space-y-1 text-xs">
+            {requirements.map((r) => (
+              <li
+                key={r.documentTypeId}
+                className="flex items-center justify-between gap-2 border-b pb-1"
+              >
+                <span>{r.documentTypeName}</span>
+                <span className="text-muted-foreground">{r.status.replace(/_/g, ' ')}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {/* The full Documents management panel (request uploads, review,
+          approve, archive) lives on the candidate detail page. Wave 4
+          redirects will land ops back on the workspace, so this is a
+          temporary deep-link for the richer tooling. */}
+      <a
+        href={`/candidates/${personId}?tab=documents`}
+        className="inline-flex items-center text-xs text-foreground underline-offset-2 hover:underline"
+      >
+        Manage documents on candidate profile →
+      </a>
     </div>
   );
 }

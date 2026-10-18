@@ -120,7 +120,7 @@ export default async function ImmigrationCaseDetail({
         {CASE_STAGE_LABEL[c.status]}
       </Badge>
       <Link
-        href={`/candidates/${c.beneficiaryPersonId}`}
+        href={`/clients/${c.beneficiaryPersonId}`}
         className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
       >
         <User className="size-3" aria-hidden />
@@ -270,7 +270,7 @@ export default async function ImmigrationCaseDetail({
             <CardContent className="space-y-2 text-sm">
               <p className="font-medium">{c.beneficiaryName}</p>
               <Link
-                href={`/candidates/${c.beneficiaryPersonId}`}
+                href={`/clients/${c.beneficiaryPersonId}`}
                 className="text-xs text-muted-foreground underline underline-offset-2"
               >
                 Open candidate profile
@@ -338,7 +338,7 @@ export default async function ImmigrationCaseDetail({
               )}
               {caseBilling.invoices.length > 0 || caseBilling.receipts.length > 0 ? (
                 <BillingSection
-                  profileHref={`/candidates/${c.beneficiaryPersonId}`}
+                  profileHref={`/clients/${c.beneficiaryPersonId}`}
                   invoices={caseBilling.invoices}
                   receipts={caseBilling.receipts}
                   canVerify={false}

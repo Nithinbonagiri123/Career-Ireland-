@@ -421,7 +421,7 @@ export function CaseDocumentsSection({
           <p className="mb-3 text-[11px] text-muted-foreground">
             Documents already uploaded on{' '}
             <Link
-              href={`/candidates/${beneficiaryPersonId}?tab=documents`}
+              href={`/clients/${beneficiaryPersonId}?tab=documents-candidate`}
               className="underline hover:text-foreground"
             >
               the candidate’s profile

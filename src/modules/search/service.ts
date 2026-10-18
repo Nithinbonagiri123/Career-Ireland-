@@ -221,7 +221,12 @@ export async function globalSearch(rawQuery: string): Promise<SearchResult[]> {
       id: p.id,
       title: `${p.firstName} ${p.lastName}`,
       subtitle: subtitleParts.join(' · '),
-      href: p.isCandidate ? `/candidates/${p.id}` : `/leads`,
+      // Stage 6D Wave 4 — route search to the unified Client Workspace.
+      // Person results (candidates + non-candidate persons) land on
+      // `/clients/[personId]`. The old `/candidates/[id]` URL also now
+      // redirects there, but surfacing the canonical URL in search
+      // results avoids an extra hop.
+      href: `/clients/${p.id}`,
       score: p.startsWith ? 20 : 10,
     });
   }

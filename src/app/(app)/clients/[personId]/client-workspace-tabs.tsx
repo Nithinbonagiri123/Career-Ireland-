@@ -9,16 +9,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
  * the URL (`?tab=`) so refreshes + back/forward preserve the view and the
  * server-side primary-action resolver can link into a specific tab from
  * elsewhere (e.g. "Open billing" on the dashboard).
+ *
+ * Stage 6D Wave 2 — Applications + candidate-level Documents are added
+ * so the operational detail is reachable without leaving the workspace.
+ * The parent page lazy-loads those server queries only when the matching
+ * tab is active.
  */
 export function ClientWorkspaceTabs({
   overview,
   billing,
   documents,
+  applications,
+  documentsCandidate,
   activity,
 }: {
   overview: ReactNode;
   billing: ReactNode;
   documents: ReactNode;
+  applications: ReactNode;
+  documentsCandidate: ReactNode;
   activity: ReactNode;
 }) {
   const router = useRouter();
@@ -36,11 +45,15 @@ export function ClientWorkspaceTabs({
       <TabsList>
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="billing">Billing</TabsTrigger>
-        <TabsTrigger value="documents">Documents</TabsTrigger>
+        <TabsTrigger value="applications">Applications</TabsTrigger>
+        <TabsTrigger value="documents-candidate">Candidate docs</TabsTrigger>
+        <TabsTrigger value="documents">Financial docs</TabsTrigger>
         <TabsTrigger value="activity">Activity</TabsTrigger>
       </TabsList>
       <TabsContent value="overview">{overview}</TabsContent>
       <TabsContent value="billing">{billing}</TabsContent>
+      <TabsContent value="applications">{applications}</TabsContent>
+      <TabsContent value="documents-candidate">{documentsCandidate}</TabsContent>
       <TabsContent value="documents">{documents}</TabsContent>
       <TabsContent value="activity">{activity}</TabsContent>
     </Tabs>

@@ -282,6 +282,27 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
       );
     }
 
+    // Stage 6D Wave 1e — defence-in-depth. For Candidate Services the
+    // one-step convert path is an exceptional finance operation (it
+    // writes an engagement + invoice + payment + verified receipt +
+    // candidate_profile atomically). Only ADMIN / FINANCE may invoke it
+    // for a CS lead. Immigration + Recruitment keep the broader
+    // internal-staff gate because their convert flow is their ONLY path
+    // today (no Client Workspace quote-first alternative). STAFF POSTing
+    // directly from outside the UI hits this check — removing the row
+    // menu item was a UX safeguard; this is the authorization safeguard.
+    if (
+      lead.targetBusiness === 'CANDIDATE_SERVICES' &&
+      session.user.role !== 'ADMIN' &&
+      session.user.role !== 'FINANCE' &&
+      !session.user.isOwner
+    ) {
+      const { AuthorizationError } = await import('@/lib/errors');
+      throw new AuthorizationError(
+        'Record payment outside a quote on a Candidate Services lead is restricted to Finance.',
+      );
+    }
+
     // Stage 4 — detect ordinary (pro-forma-origin) vs manual-override
     // conversion. Ordinary: a CONVERTED pro forma already issued an
     // invoice for this lead, so the money record exists. Manual:

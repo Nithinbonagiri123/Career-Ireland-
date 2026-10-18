@@ -1,8 +1,11 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import type { DbExecutor } from '@/lib/audit/withAudit';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
+import { invoices } from '@/lib/db/schema/billing';
+import { serviceEngagements } from '@/lib/db/schema/commerce';
 import { employers } from '@/lib/db/schema/recruitment';
 import { serviceCatalogItems, servicePackages } from '@/lib/db/schema/services';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
@@ -53,6 +56,14 @@ export const GenerateInvoiceSchema = z.object({
   immigrationCaseId: z.string().uuid().nullish(),
   jobRequisitionId: z.string().uuid().nullish(),
   placementId: z.string().uuid().nullish(),
+  /** Stage 6D Wave 1f — operator-confirmed override for the duplicate-
+      invoice detector. The server rejects a second invoice with the
+      same payer + service + amount + currency where an ISSUED or
+      PARTIALLY_PAID row already exists; the operator may re-submit with
+      this flag set and a reason to override (e.g. legitimate repeat
+      service in the same month). The flag + reason are audited on the
+      new invoice row. */
+  overrideDuplicateReason: z.string().max(500).nullish(),
 });
 
 export type GenerateInvoiceInput = z.infer<typeof GenerateInvoiceSchema>;
@@ -66,7 +77,13 @@ export type GenerateInvoiceResult = {
 };
 
 export async function generateInvoiceForPayer(input: unknown): Promise<GenerateInvoiceResult> {
-  const session = await requireInternalStaff();
+  // Stage 6D Wave 1e — tightened from `requireInternalStaff` to
+  // ADMIN / FINANCE only. Removing the Generate invoice buttons from
+  // the UI doesn't revoke the capability; the server gate must do
+  // that. The remaining buttons (employer page, immigration case page,
+  // Immigration lead's optional first invoice) are all finance-level
+  // actions — STAFF should not create invoices directly.
+  const session = await requireRole(['ADMIN', 'FINANCE']);
   const parsed = GenerateInvoiceSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -136,6 +153,39 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
     // downstream reporting; VAT lives only on the invoice row.
     const subtotalCents = Math.round(Number.parseFloat(data.unitPrice) * 100) * data.qty;
     const engagementAmount = (subtotalCents / 100).toFixed(2);
+
+    // Stage 6D Wave 1f — duplicate-invoice detector. Finds any existing
+    // invoice on the same payer + same service + same subtotal + same
+    // currency that is still live (ISSUED or PARTIALLY_PAID). An
+    // operator can legitimately repeat the service — the override flag
+    // + reason let them proceed with an audit trail. Does not block
+    // genuinely separate services (service id differs → no match) or
+    // paid-off repeats (status filter excludes PAID).
+    const existingDuplicate = await findLiveDuplicateInvoice(tx, {
+      payerPersonId: data.payerMode === 'PERSON' ? data.payerId : null,
+      payerEmployerId: data.payerMode === 'EMPLOYER' ? data.payerId : null,
+      serviceCatalogItemId: service.id,
+      subtotalCents,
+      currencyCode: data.currencyCode,
+    });
+    if (existingDuplicate && !data.overrideDuplicateReason) {
+      throw new BusinessRuleError(
+        'DUPLICATE_INVOICE_LIKELY',
+        `An unpaid invoice for the same service and amount already exists on this payer (${existingDuplicate.number}). Settle it first, cancel it, or re-submit with a reason explaining why a second invoice is correct.`,
+      );
+    }
+    if (existingDuplicate && data.overrideDuplicateReason) {
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'invoice',
+        entityId: existingDuplicate.id,
+        action: 'DUPLICATE_OVERRIDE',
+        context: {
+          reason: data.overrideDuplicateReason.trim(),
+          note: 'Operator confirmed a second invoice is correct despite a live match.',
+        },
+      });
+    }
     const engagement = await insertEngagement(tx, {
       serviceCatalogItemId: service.id,
       servicePackageId: data.servicePackageId ?? undefined,
@@ -229,4 +279,51 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
       printPath,
     };
   });
+}
+
+/**
+ * Stage 6D Wave 1f — look for a plausible duplicate on the same payer +
+ * service + amount + currency. Matches only when the existing invoice
+ * is still live (ISSUED or PARTIALLY_PAID) because a fully-settled
+ * invoice doesn't inhibit a legitimate repeat sale of the same service.
+ *
+ * Join through `service_engagements` so the service-catalog identity
+ * check lives on the engagement row (invoices themselves don't carry
+ * the catalog FK directly — the engagement does).
+ *
+ * Returns the first live match (there may be more; the operator sees
+ * one at a time, which is enough to prompt the override).
+ */
+async function findLiveDuplicateInvoice(
+  tx: DbExecutor,
+  args: {
+    payerPersonId: string | null;
+    payerEmployerId: string | null;
+    serviceCatalogItemId: string;
+    subtotalCents: number;
+    currencyCode: string;
+  },
+): Promise<{ id: string; number: string } | null> {
+  const payerClause = args.payerPersonId
+    ? eq(invoices.payerPersonId, args.payerPersonId)
+    : args.payerEmployerId
+      ? eq(invoices.payerEmployerId, args.payerEmployerId)
+      : null;
+  if (!payerClause) return null;
+  const subtotal = (args.subtotalCents / 100).toFixed(2);
+  const rows = await tx
+    .select({ id: invoices.id, number: invoices.number })
+    .from(invoices)
+    .innerJoin(serviceEngagements, eq(serviceEngagements.id, invoices.serviceEngagementId))
+    .where(
+      and(
+        payerClause,
+        eq(invoices.currencyCode, args.currencyCode),
+        eq(serviceEngagements.serviceCatalogItemId, args.serviceCatalogItemId),
+        inArray(invoices.status, ['ISSUED', 'PARTIALLY_PAID']),
+        sql`${invoices.subtotal}::numeric = ${subtotal}::numeric`,
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
 }

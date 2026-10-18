@@ -237,6 +237,12 @@ export function CreateLeadDialog({
 
   const runInvoiceIfPresent = async (personId: string): Promise<void> => {
     if (!service || !invoiceIsValid) return;
+    // Stage 6D Wave 1a — Candidate Services leads are quote-first. Creating
+    // a CS lead must NEVER generate an invoice; the operator issues a quote
+    // from the Client Workspace and the official invoice emerges on payment
+    // verification. Immigration + Recruitment keep the atomic path because
+    // they don't use pro-formas.
+    if (targetBusiness === 'CANDIDATE_SERVICES') return;
     const inv = await generateInvoiceAction({
       payerMode: 'PERSON',
       payerId: personId,
@@ -325,7 +331,10 @@ export function CreateLeadDialog({
 
   const watched = watch(['firstName', 'lastName']);
   const canCheck = Boolean(watched[0] && watched[1]);
-  const submitLabel = service && invoiceIsValid ? 'Create lead + issue invoice' : 'Create lead';
+  const submitLabel =
+    targetBusiness !== 'CANDIDATE_SERVICES' && service && invoiceIsValid
+      ? 'Create lead + issue invoice'
+      : 'Create lead';
 
   // Clear the duplicate-matches panel the moment the user starts
   // editing name OR email OR phone — otherwise the panel from a prior
@@ -663,145 +672,152 @@ export function CreateLeadDialog({
               )}
             </section>
 
-            {/* ── Optional first invoice ────────────────────────── */}
-            <section className="space-y-3 rounded-md border bg-muted/20 p-4">
-              <div className="flex items-center gap-2">
-                <FileText className="size-4 text-muted-foreground" aria-hidden />
-                <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  First invoice (optional)
-                </h3>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Fill this in to issue an invoice immediately after the lead is created. Skip to log
-                the lead only.
-              </p>
-
-              {invoiceableServices.length === 0 ? (
-                <div className="rounded border border-dashed p-3 text-xs text-muted-foreground">
-                  No active person-payable services in the catalog. Add one in{' '}
-                  <a href="/admin/services" className="underline">
-                    /admin/services
-                  </a>{' '}
-                  first.
+            {/* ── Optional first invoice ──────────────────────────
+               Stage 6D Wave 1a — Candidate Services leads must stay
+               quote-first (lead → quote → payment → invoice). The whole
+               section is hidden for CS so there's no path to a direct
+               invoice at lead-creation time. Immigration keeps it; those
+               flows don't use pro-formas. */}
+            {targetBusiness !== 'CANDIDATE_SERVICES' && (
+              <section className="space-y-3 rounded-md border bg-muted/20 p-4">
+                <div className="flex items-center gap-2">
+                  <FileText className="size-4 text-muted-foreground" aria-hidden />
+                  <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    First invoice (optional)
+                  </h3>
                 </div>
-              ) : (
-                <>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="cl-svc" className="text-xs">
-                      Service
-                    </Label>
-                    <CatalogAutosuggest
-                      inputId="cl-svc"
-                      options={localServices.map((s) => ({
-                        id: s.id,
-                        name: s.name,
-                        isActive: true,
-                      }))}
-                      value={serviceSelection}
-                      onChange={(v) => {
-                        setServiceSelection(v);
-                        onServiceChange(v?.kind === 'catalog' ? v.id : '');
-                      }}
-                      placeholder="Type to search — or add a new service (leave blank to skip)"
-                      createLabel="Add service"
-                      onCreateNew={async (name) => {
-                        const r = await createServiceItemFromNameAction({ name });
-                        if (!r.ok) throw new Error(r.error.message);
-                        const newService: InvoiceableService = {
-                          id: r.data.id,
-                          code: r.data.code,
-                          name: r.data.name,
-                          payerType: r.data.payerType,
-                          packages: [],
-                        };
-                        setLocalServices((prev) => [...prev, newService]);
-                        return { id: r.data.id, label: r.data.name };
-                      }}
-                    />
+                <p className="text-xs text-muted-foreground">
+                  Fill this in to issue an invoice immediately after the lead is created. Skip to
+                  log the lead only.
+                </p>
+
+                {invoiceableServices.length === 0 ? (
+                  <div className="rounded border border-dashed p-3 text-xs text-muted-foreground">
+                    No active person-payable services in the catalog. Add one in{' '}
+                    <a href="/admin/services" className="underline">
+                      /admin/services
+                    </a>{' '}
+                    first.
                   </div>
+                ) : (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cl-svc" className="text-xs">
+                        Service
+                      </Label>
+                      <CatalogAutosuggest
+                        inputId="cl-svc"
+                        options={localServices.map((s) => ({
+                          id: s.id,
+                          name: s.name,
+                          isActive: true,
+                        }))}
+                        value={serviceSelection}
+                        onChange={(v) => {
+                          setServiceSelection(v);
+                          onServiceChange(v?.kind === 'catalog' ? v.id : '');
+                        }}
+                        placeholder="Type to search — or add a new service (leave blank to skip)"
+                        createLabel="Add service"
+                        onCreateNew={async (name) => {
+                          const r = await createServiceItemFromNameAction({ name });
+                          if (!r.ok) throw new Error(r.error.message);
+                          const newService: InvoiceableService = {
+                            id: r.data.id,
+                            code: r.data.code,
+                            name: r.data.name,
+                            payerType: r.data.payerType,
+                            packages: [],
+                          };
+                          setLocalServices((prev) => [...prev, newService]);
+                          return { id: r.data.id, label: r.data.name };
+                        }}
+                      />
+                    </div>
 
-                  {serviceId && (
-                    <>
-                      {(service?.packages.length ?? 0) > 0 && (
-                        <div className="space-y-1.5">
-                          <Label htmlFor="cl-pkg" className="text-xs">
-                            Prefill from package (optional)
-                          </Label>
-                          <Select
-                            id="cl-pkg"
-                            value={packageId}
-                            onChange={(e) => onPackageChange(e.target.value)}
-                          >
-                            <option value="">— none, enter unit price manually —</option>
-                            {service?.packages.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.currencyCode} · {formatCurrency(p.price, p.currencyCode)} ·{' '}
-                                {p.name}
-                              </option>
-                            ))}
-                          </Select>
+                    {serviceId && (
+                      <>
+                        {(service?.packages.length ?? 0) > 0 && (
+                          <div className="space-y-1.5">
+                            <Label htmlFor="cl-pkg" className="text-xs">
+                              Prefill from package (optional)
+                            </Label>
+                            <Select
+                              id="cl-pkg"
+                              value={packageId}
+                              onChange={(e) => onPackageChange(e.target.value)}
+                            >
+                              <option value="">— none, enter unit price manually —</option>
+                              {service?.packages.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.currencyCode} · {formatCurrency(p.price, p.currencyCode)} ·{' '}
+                                  {p.name}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="cl-qty" className="text-xs">
+                              QTY
+                            </Label>
+                            <Input
+                              id="cl-qty"
+                              inputMode="numeric"
+                              value={qty}
+                              onChange={(e) => setQty(e.target.value.replace(/[^0-9]/g, ''))}
+                              placeholder="1"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="cl-unit" className="text-xs">
+                              Unit price
+                            </Label>
+                            <Input
+                              id="cl-unit"
+                              inputMode="decimal"
+                              value={unitPrice}
+                              onChange={(e) => setUnitPrice(e.target.value)}
+                              placeholder="e.g. 100.00"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="cl-cur" className="text-xs">
+                              Currency
+                            </Label>
+                            <Select
+                              id="cl-cur"
+                              value={currency}
+                              onChange={(e) => setCurrency(e.target.value)}
+                            >
+                              {activeCurrencies.map((c) => (
+                                <option key={c.code} value={c.code}>
+                                  {c.code}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
                         </div>
-                      )}
 
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         <div className="space-y-1.5">
-                          <Label htmlFor="cl-qty" className="text-xs">
-                            QTY
+                          <Label htmlFor="cl-desc" className="text-xs">
+                            Line description (optional)
                           </Label>
                           <Input
-                            id="cl-qty"
-                            inputMode="numeric"
-                            value={qty}
-                            onChange={(e) => setQty(e.target.value.replace(/[^0-9]/g, ''))}
-                            placeholder="1"
+                            id="cl-desc"
+                            value={lineDescription}
+                            onChange={(e) => setLineDescription(e.target.value)}
+                            placeholder={service?.name ?? ''}
                           />
                         </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="cl-unit" className="text-xs">
-                            Unit price
-                          </Label>
-                          <Input
-                            id="cl-unit"
-                            inputMode="decimal"
-                            value={unitPrice}
-                            onChange={(e) => setUnitPrice(e.target.value)}
-                            placeholder="e.g. 100.00"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="cl-cur" className="text-xs">
-                            Currency
-                          </Label>
-                          <Select
-                            id="cl-cur"
-                            value={currency}
-                            onChange={(e) => setCurrency(e.target.value)}
-                          >
-                            {activeCurrencies.map((c) => (
-                              <option key={c.code} value={c.code}>
-                                {c.code}
-                              </option>
-                            ))}
-                          </Select>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label htmlFor="cl-desc" className="text-xs">
-                          Line description (optional)
-                        </Label>
-                        <Input
-                          id="cl-desc"
-                          value={lineDescription}
-                          onChange={(e) => setLineDescription(e.target.value)}
-                          placeholder={service?.name ?? ''}
-                        />
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-            </section>
+                      </>
+                    )}
+                  </>
+                )}
+              </section>
+            )}
 
             {formError && (
               <motion.div

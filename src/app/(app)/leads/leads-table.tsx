@@ -54,6 +54,23 @@ import { LeadsFilterControl } from './leads-filter';
 type Props = {
   leads: LeadListRow[];
   currentUserId: string;
+  /** Stage 6D Wave 1d — passed in so the row menu can hide the
+      "Record payment outside a quote (advanced)" option for Candidate
+      Services STAFF. Only ADMIN / FINANCE see it on CS rows. Non-CS
+      flows (Immigration + Recruitment) keep the item for everyone
+      because they don't have a Client Workspace quote-first flow.
+      Legacy portal roles (CANDIDATE / EMPLOYER) are included so the
+      Props type matches the raw UserRole enum; they never reach this
+      page but keeping the union aligned prevents type drift. */
+  currentUserRole:
+    | 'ADMIN'
+    | 'STAFF'
+    | 'MANAGER'
+    | 'RECRUITER'
+    | 'DOCUMENT_SPECIALIST'
+    | 'FINANCE'
+    | 'CANDIDATE'
+    | 'EMPLOYER';
   /** Active PERSON-payable services + their packages. Fetched by the
       server page once and passed in so every row's invoice dialog gets
       the same option list (no extra round-trip per menu-open). */
@@ -76,10 +93,12 @@ function parseList(value: string | null): string[] {
 export function LeadsTable({
   leads,
   currentUserId,
+  currentUserRole,
   invoiceableServices,
   occupations,
   countries,
 }: Props) {
+  const canSeeExceptionalFinance = currentUserRole === 'ADMIN' || currentUserRole === 'FINANCE';
   const params = useSearchParams();
   // Client-side filtering so search / sort / pagination keep working on
   // the resulting array. All filter inputs come from URL params written
@@ -498,22 +517,44 @@ export function LeadsTable({
                     </>
                   )}
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled={!canTransition} onClick={() => setInvoicingLead(lead)}>
-                  <FileText className="mr-2 size-4" /> Add another invoice…
-                </DropdownMenuItem>
-                {/* Stage 6B — the atomic one-step convert path is now
-                    "advanced" for Candidate Services (operators activate
-                    on the workspace after confirming payment separately).
-                    Immigration and Recruitment keep it as the default
-                    because they don't have a Client Workspace yet. */}
-                <DropdownMenuItem disabled={!canTransition} onClick={() => openConvert(lead)}>
-                  <UserCheck className="mr-2 size-4" />{' '}
-                  {lead.targetBusiness === 'RECRUITMENT'
-                    ? 'Convert → open requisition…'
-                    : lead.targetBusiness === 'IMMIGRATION'
-                      ? 'Convert → open case…'
-                      : 'Record payment outside a quote (advanced)…'}
-                </DropdownMenuItem>
+                {/* Stage 6D Wave 1b — Candidate Services is quote-first;
+                    a 2nd direct invoice is the exceptional path. CS rows
+                    show "Create quote" linking into the workspace; non-CS
+                    (Immigration + Recruitment) keep the direct invoice
+                    option because those flows don't use pro-formas. */}
+                {lead.targetBusiness === 'CANDIDATE_SERVICES' && lead.personId ? (
+                  <DropdownMenuItem
+                    disabled={!canTransition}
+                    render={
+                      <Link href={`/clients/${lead.personId}?tab=billing`}>
+                        <FileText className="mr-2 size-4" /> Create quote…
+                      </Link>
+                    }
+                  />
+                ) : (
+                  <DropdownMenuItem
+                    disabled={!canTransition}
+                    onClick={() => setInvoicingLead(lead)}
+                  >
+                    <FileText className="mr-2 size-4" /> Add another invoice…
+                  </DropdownMenuItem>
+                )}
+                {/* Stage 6D Wave 1d — for Candidate Services, the atomic
+                    convert path is an exceptional finance operation,
+                    gated to ADMIN / FINANCE only. STAFF never see it in
+                    the ordinary row menu. Immigration + Recruitment keep
+                    the item for everyone because they don't have a
+                    Client Workspace quote-first flow. */}
+                {(lead.targetBusiness !== 'CANDIDATE_SERVICES' || canSeeExceptionalFinance) && (
+                  <DropdownMenuItem disabled={!canTransition} onClick={() => openConvert(lead)}>
+                    <UserCheck className="mr-2 size-4" />{' '}
+                    {lead.targetBusiness === 'RECRUITMENT'
+                      ? 'Convert → open requisition…'
+                      : lead.targetBusiness === 'IMMIGRATION'
+                        ? 'Convert → open case…'
+                        : 'Record payment outside a quote (advanced)…'}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 {/* Stage 6B — person-based leads route operators to the
                     unified Client Workspace (identity, next action,

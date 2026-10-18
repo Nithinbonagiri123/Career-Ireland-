@@ -299,7 +299,7 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
           <ArrowRight className="size-3 opacity-70 transition-transform group-hover:translate-x-0.5" />
         </Link>
         <Link
-          href={`/candidates/${candidate.personId}?tab=applications`}
+          href={`/clients/${candidate.personId}?tab=applications`}
           className="group flex items-center justify-center gap-1.5 bg-note-pink py-2.5 text-xs font-semibold text-note-pink-ink transition-all hover:brightness-95"
           aria-label={`Reach out to ${candidate.fullName}`}
         >

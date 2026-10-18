@@ -1,4 +1,4 @@
-import { desc, eq, inArray, or } from 'drizzle-orm';
+import { desc, eq, inArray, or, type SQL } from 'drizzle-orm';
 import { hasPermission } from '@/lib/auth/permissions';
 import { loadCurrentUserPermissions, requireInternalStaff, type Session } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -95,6 +95,14 @@ export type ClientWorkspace = {
     currencyCode: string;
     issuedAt: Date;
     serviceEngagementId: string;
+    /** Stage 6D Wave 3 — who is legally responsible for this invoice.
+     *  PERSONAL = this person is the payer and owes it directly.
+     *  EMPLOYER_LIABILITY = an employer is the payer; the person is
+     *  the beneficiary of the service but owes nothing personally.
+     *  The UI must NEVER sum EMPLOYER_LIABILITY into "amount this
+     *  client owes" — those are separate obligations tracked under the
+     *  employer. */
+    liability: 'PERSONAL' | 'EMPLOYER_LIABILITY';
   }>;
   payments: Array<{
     id: string;
@@ -242,24 +250,38 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
       ),
     );
 
-  // Invoices + payments on those engagements.
+  // Stage 6D Wave 3 — invoices visible to this client's workspace.
+  // The query combines two routes so no historical row is missed:
+  //   (a) invoices on an engagement where this person is payer or
+  //       beneficiary (the ordinary CS / Immigration flow);
+  //   (b) invoices where this person is the DIRECT payer regardless of
+  //       whether the engagement names them (covers direct generate +
+  //       onboarding + legacy flows that didn't link via engagement).
+  // Each row carries payerPersonId + payerEmployerId so we can
+  // tag liability below and the UI never confuses an employer's
+  // obligation with the client's.
   const engagementIds = engagementRows.map((e) => e.id);
-  const invoiceRows =
-    engagementIds.length > 0
-      ? await db
-          .select({
-            id: invoices.id,
-            number: invoices.number,
-            status: invoices.status,
-            totalAmount: invoices.totalAmount,
-            currencyCode: invoices.currencyCode,
-            issuedAt: invoices.issuedAt,
-            serviceEngagementId: invoices.serviceEngagementId,
-          })
-          .from(invoices)
-          .where(inArray(invoices.serviceEngagementId, engagementIds))
-          .orderBy(desc(invoices.issuedAt))
-      : [];
+  const invoiceWhereClauses: SQL[] = [eq(invoices.payerPersonId, personId)];
+  if (engagementIds.length > 0) {
+    invoiceWhereClauses.push(inArray(invoices.serviceEngagementId, engagementIds));
+  }
+  const invoiceRawRows = await db
+    .select({
+      id: invoices.id,
+      number: invoices.number,
+      status: invoices.status,
+      totalAmount: invoices.totalAmount,
+      currencyCode: invoices.currencyCode,
+      issuedAt: invoices.issuedAt,
+      serviceEngagementId: invoices.serviceEngagementId,
+      payerPersonId: invoices.payerPersonId,
+      payerEmployerId: invoices.payerEmployerId,
+    })
+    .from(invoices)
+    .where(or(...invoiceWhereClauses))
+    .orderBy(desc(invoices.issuedAt));
+  // Dedupe (an invoice can satisfy both legs of the OR); keep the first.
+  const invoiceRows = Array.from(new Map(invoiceRawRows.map((r) => [r.id, r])).values());
 
   const paymentRows =
     engagementIds.length > 0
@@ -342,9 +364,23 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
     // live; a VOIDED invoice is always "outstanding 0" by definition
     // (voiding is not a payment event but it extinguishes the demand).
     const outstanding = i.status === 'VOIDED' ? 0 : Math.max(0, engAgreed - engPaid);
+    // Stage 6D Wave 3 — tag liability. If an employer is the payer,
+    // this invoice is the employer's obligation; the person is only the
+    // beneficiary and owes nothing personally. The balance builder uses
+    // this flag to keep the per-currency rollups and the "amount owed"
+    // chip honest.
+    const liability: 'PERSONAL' | 'EMPLOYER_LIABILITY' =
+      i.payerEmployerId != null ? 'EMPLOYER_LIABILITY' : 'PERSONAL';
     return {
-      ...i,
+      id: i.id,
+      number: i.number,
+      status: i.status,
+      totalAmount: i.totalAmount,
+      currencyCode: i.currencyCode,
+      issuedAt: i.issuedAt,
+      serviceEngagementId: i.serviceEngagementId,
       outstandingAmount: outstanding.toFixed(2),
+      liability,
     };
   });
 
@@ -417,7 +453,13 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
     })),
     payments: paymentRows,
     refunds: allRefunds,
-    invoices: invoicesOut,
+    // Stage 6D Wave 3 — only PERSONAL-liability invoices feed the
+    // "amount owed by this client" rollup. EMPLOYER_LIABILITY rows
+    // still render in the Billing tab (operators need to see them) but
+    // are tagged and visually separated; summing them into the client's
+    // owed total would misrepresent an employer's obligation as the
+    // candidate's debt.
+    invoices: invoicesOut.filter((i) => i.liability === 'PERSONAL'),
     proFormas: proFormasOut.map((p) => ({
       id: p.id,
       number: p.number,
