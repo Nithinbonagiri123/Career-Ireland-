@@ -189,7 +189,12 @@ test('final: three services on one client — compact summaries, tabs still reac
     // Legacy ?tab=billing bookmark should scroll back to Service
     // billing section rather than silently landing on profile.
     await page.goto(`/clients/${p.id}?tab=billing`);
-    await expect(page.getByText('Service billing').first()).toBeInViewport({ timeout: 5_000 });
+    // Stage 6G Screen 06 — the legacy ?tab=billing deep-link opens the
+    // redesigned Services & Billing tab; its header card is the anchor
+    // now (the detailed "Service billing" cards live further down).
+    await expect(page.getByRole('heading', { name: 'Services & Billing' })).toBeInViewport({
+      timeout: 5_000,
+    });
 
     // Mobile viewport — summary rows stack cleanly.
     await page.setViewportSize({ width: 390, height: 1800 });

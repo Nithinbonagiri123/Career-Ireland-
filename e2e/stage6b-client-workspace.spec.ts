@@ -61,8 +61,13 @@ test('inline quote composer opens from the workspace Billing tab', async ({ page
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/clients/${seeded.personId}?tab=billing`);
     // Billing tab shows the Quotes card with a "+ New quote" trigger.
-    await expect(page.getByText(/No services on file yet/i)).toBeVisible({ timeout: 15_000 });
-    await page.getByRole('button', { name: /\+ New quote/i }).click();
+    await expect(page.getByText(/No services on file yet/i).first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await page
+      .getByRole('button', { name: /\+ New quote/i })
+      .first()
+      .click();
     // The composer opens inline; the dialog title is "Create pro forma"
     // (reused from the existing lead-page composer).
     const dialog = page.getByRole('dialog');

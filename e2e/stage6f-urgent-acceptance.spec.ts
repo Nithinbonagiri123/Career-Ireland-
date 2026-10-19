@@ -488,12 +488,12 @@ test('E: Direct Payment & Convert still works as a separate one-step flow', asyn
   // The dedicated Direct Payment & Convert end-to-end tests live in
   // e2e/stage6e-direct-payment.spec.ts (6 scenarios A-F, all passing).
   // They cover cash + bank transfer + card + double-click idempotency
-  // + duplicate detection + ADMIN/FINANCE gating. Stage 6F does not
-  // alter that path — assert the schema still exposes it and still
-  // refuses the removed CARD value.
+  // + duplicate detection + ADMIN/FINANCE gating. Stage 6G Screen 10
+  // made CARD a first-class method again — assert the schema exposes
+  // the flow and accepts all four method values.
   const schemaMod = await import('../src/modules/clients/direct-payment-schema');
   expect(schemaMod.DirectPaymentAndConvertSchema).toBeTruthy();
-  const refusedCard = schemaMod.DirectPaymentAndConvertSchema.safeParse({
+  const cardAccepted = schemaMod.DirectPaymentAndConvertSchema.safeParse({
     leadId: '11111111-1111-4111-a111-111111111111',
     serviceCatalogItemId: '22222222-2222-4222-a222-222222222222',
     agreedAmount: '100.00',
@@ -503,7 +503,7 @@ test('E: Direct Payment & Convert still works as a separate one-step flow', asyn
     paymentDate: '2026-10-18',
     idempotencyKey: 'dp-ref-12345678',
   });
-  expect(refusedCard.success).toBe(false);
+  expect(cardAccepted.success).toBe(true);
 });
 
 // ──────────────────────────────────────────────────────────────────

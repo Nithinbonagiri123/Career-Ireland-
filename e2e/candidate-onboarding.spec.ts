@@ -35,27 +35,27 @@ test('/candidates/new redirects to a draft and renders all sections', async ({ p
   await page.waitForURL(/\/candidates\/new\?draft=[0-9a-f-]+/i, { timeout: 60_000 });
 
   await expect(page.getByRole('heading', { name: /add candidate/i })).toBeVisible();
-  await expect(page.getByText(/personal & contact/i)).toBeVisible();
-  await expect(page.getByText(/cover letter/i).first()).toBeVisible();
+  await expect(page.getByText(/customer details/i)).toBeVisible();
+  await expect(page.getByText(/payment details/i).first()).toBeVisible();
+  await expect(page.getByText(/services included/i).first()).toBeVisible();
+  await expect(page.getByText(/create candidate profile/i).first()).toBeVisible();
   await expect(page.getByText(/^documents$/i).first()).toBeVisible();
-  // "Payment *" heading — asterisk marks it required.
-  await expect(page.getByText(/^payment/i).first()).toBeVisible();
 
   await expect(page.getByLabel(/first name/i)).toBeVisible();
   await expect(page.getByLabel(/last name/i)).toBeVisible();
-  await expect(page.getByLabel(/^amount/i)).toBeVisible();
+  await expect(page.getByLabel(/amount received/i)).toBeVisible();
 });
 
 test('sticky Create button is disabled until required fields are filled', async ({ page }) => {
   await page.goto('/candidates/new');
   await page.waitForURL(/\/candidates\/new\?draft=[0-9a-f-]+/i);
 
-  const create = page.getByRole('button', { name: /create \+ record payment/i });
+  const create = page.getByRole('button', { name: /accept payment & create candidate/i });
   await expect(create).toBeDisabled();
 
   await page.getByLabel(/first name/i).fill('Priya');
   await page.getByLabel(/last name/i).fill('Patel');
-  await page.getByLabel(/^amount/i).fill('750.00');
+  await page.getByLabel(/amount received/i).fill('750.00');
   // receivedAt already prefilled with today; currency defaults to EUR.
 
   await expect(create).toBeEnabled();
@@ -76,7 +76,7 @@ test('full happy path: fill form → Create → open invoice and receipt', async
 
   await page.getByLabel(/first name/i).fill(firstName);
   await page.getByLabel(/last name/i).fill(lastName);
-  await page.getByLabel(/^amount/i).fill('750.00');
+  await page.getByLabel(/amount received/i).fill('750.00');
   // Currency + received-on come prefilled (EUR, today).
 
   // Upload a document straight from the form. The DocumentUploader hides the
@@ -107,7 +107,7 @@ test('full happy path: fill form → Create → open invoice and receipt', async
   // handleCreate() flushes any in-flight debounced save before finalising, so
   // there's no need to wait for the "Saved" indicator — Create is the sync
   // boundary that guarantees the personal patch reaches the DB first.
-  await page.getByRole('button', { name: /create \+ record payment/i }).click();
+  await page.getByRole('button', { name: /accept payment & create candidate/i }).click();
 
   // Redirect to /candidates/<id>?just_created=1 on success. The detail page
   // streams its content through Suspense (loading.tsx renders a skeleton),
