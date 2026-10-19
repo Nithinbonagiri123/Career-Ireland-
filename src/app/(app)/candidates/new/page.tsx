@@ -5,6 +5,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { buttonVariants } from '@/components/ui/button';
 import { requirePermission } from '@/lib/auth/session';
+import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
 import { createDraft, getDraft } from '@/modules/candidates/onboarding-service';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchDocumentTypes } from '@/modules/document-types/service';
@@ -41,11 +42,13 @@ export default async function NewCandidatePage({
     redirect('/candidates/new');
   }
 
-  const [currencies, allDocTypes, existingDocuments, occupations] = await Promise.all([
+  const [currencies, allDocTypes, existingDocuments, occupations, services] = await Promise.all([
     fetchCurrencies(),
     fetchDocumentTypes(),
     fetchPersonDocuments(draft.id),
     fetchOccupations(),
+    // Stage 6G Screen 09 — step 3's "Services included" table.
+    fetchInvoiceableServicesFor('PERSON'),
   ]);
   // Only person-applicable types are meaningful during candidate intake.
   const personDocTypes = allDocTypes.filter(
@@ -85,9 +88,11 @@ export default async function NewCandidatePage({
           nationality: draft.nationality ?? '',
           currentCity: draft.currentCity ?? '',
           currentCountry: draft.currentCountry ?? '',
+          irishImmigrationStatus: draft.irishImmigrationStatus ?? '',
           notes: draft.notes ?? '',
         }}
         currencies={currencies.map((c) => ({ code: c.code, symbol: c.symbol }))}
+        services={services}
         docTypes={personDocTypes.map((t) => ({
           id: t.id,
           name: t.name,

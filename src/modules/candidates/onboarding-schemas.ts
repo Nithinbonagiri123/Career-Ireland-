@@ -31,6 +31,19 @@ export const UpdateDraftPersonSchema = z.object({
   currentCity: optionalString(120),
   currentCountry: optionalString(80),
   source: z.enum(['DIRECT', 'REFERRAL', 'ADVERTISEMENT', 'EMPLOYER_REFERRAL', 'OTHER']).optional(),
+  irishImmigrationStatus: z
+    .enum([
+      'NONE',
+      'STAMP_1',
+      'STAMP_1G',
+      'STAMP_2',
+      'STAMP_3',
+      'STAMP_4',
+      'OTHER',
+      'PENDING',
+      'NOT_PROVIDED',
+    ])
+    .optional(),
   notes: optionalString(2000),
 });
 export type UpdateDraftPersonInput = z.infer<typeof UpdateDraftPersonSchema>;
@@ -78,6 +91,25 @@ export const FinaliseDraftSchema = z.object({
    * after onboarding if not known at intake time.
    */
   primaryOccupationId: z.string().uuid().optional().or(z.literal('')),
+  /**
+   * Stage 6G Screen 09 — the services this payment covers. When
+   * provided, the amounts must sum to payment.amount; the invoice line
+   * then names the actual services sold and the engagement is tagged
+   * with the first one instead of the generic "Candidate Onboarding"
+   * catalogue item.
+   */
+  services: z
+    .array(
+      z.object({
+        serviceCatalogItemId: z.string().uuid(),
+        name: z.string().trim().min(1).max(200),
+        amount: z
+          .string()
+          .regex(/^\d+(\.\d{1,2})?$/, 'Amount must be a positive number with up to 2 decimals'),
+      }),
+    )
+    .max(20)
+    .optional(),
 });
 export type FinaliseDraftInput = z.infer<typeof FinaliseDraftSchema>;
 

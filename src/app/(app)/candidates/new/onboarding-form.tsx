@@ -8,7 +8,7 @@ import {
   FileText,
   Loader2,
   Trash2,
-  User,
+  UserRound,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -29,7 +29,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { formatCurrency } from '@/lib/currency';
 import { todayInDublin } from '@/lib/dates';
+import { cn } from '@/lib/utils';
+import type { InvoiceableService } from '@/modules/billing/read';
 import {
   discardDraftAction,
   finaliseDraftAction,
@@ -48,6 +51,7 @@ type Draft = {
   nationality: string;
   currentCity: string;
   currentCountry: string;
+  irishImmigrationStatus: string;
   notes: string;
 };
 
@@ -57,6 +61,18 @@ type DocType = { id: string; name: string; code: string; hasExpiry: boolean };
 type UploadedDoc = { id: string; filename: string; documentTypeId: string };
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+
+const IMMIGRATION_OPTIONS: Array<[string, string]> = [
+  ['NONE', 'Not currently in Ireland'],
+  ['STAMP_1', 'Stamp 1'],
+  ['STAMP_1G', 'Stamp 1G'],
+  ['STAMP_2', 'Stamp 2'],
+  ['STAMP_3', 'Stamp 3'],
+  ['STAMP_4', 'Stamp 4'],
+  ['PENDING', 'Application pending'],
+  ['OTHER', 'Other'],
+  ['NOT_PROVIDED', 'Not provided'],
+];
 
 /**
  * Debounces `fn` by `ms` milliseconds. Re-issuing during the wait cancels
@@ -73,17 +89,44 @@ function useDebounced<T extends (...args: never[]) => void>(fn: T, ms: number): 
   );
 }
 
+function defaultServiceAmount(s: InvoiceableService, currency: string): string {
+  const pkg = s.packages.find((p) => p.currencyCode === currency) ?? s.packages[0];
+  if (pkg) return pkg.price;
+  if (s.defaultPrice) return s.defaultPrice;
+  return '';
+}
+
+/** Numbered blue step header, matching the approved Screen 09 layout. */
+function StepHeader({ n, title, sub }: { n: number; title: string; sub: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span
+        aria-hidden
+        className="grid size-7 shrink-0 place-items-center rounded-full bg-sky-600 text-xs font-bold text-white"
+      >
+        {n}
+      </span>
+      <div className="min-w-0">
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>
+      </div>
+    </div>
+  );
+}
+
 export function OnboardingForm({
   draft,
   currencies,
   docTypes,
   occupations,
+  services,
   existingDocuments,
 }: {
   draft: Draft;
   currencies: Currency[];
   docTypes: DocType[];
   occupations: Array<{ id: string; name: string }>;
+  services: InvoiceableService[];
   existingDocuments: UploadedDoc[];
 }) {
   const router = useRouter();
@@ -98,20 +141,16 @@ export function OnboardingForm({
     nationality: draft.nationality,
     currentCity: draft.currentCity,
     currentCountry: draft.currentCountry,
+    irishImmigrationStatus: draft.irishImmigrationStatus,
     notes: draft.notes,
   });
 
   const [saveState, setSaveState] = useState<SaveState>('idle');
-  // Declared here (before savePersonal) so the auto-save callback can
-  // populate field-level errors — the useState declaration further down
-  // that also sets this state is left in place for cross-section use.
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const savePersonal = useCallback(
     async (patch: typeof personal) => {
       setSaveState('saving');
-      // Zod transforms empty strings → undefined via `.optional()`; pass the
-      // raw values through and let the schema handle normalisation.
       const result = await updateDraftPersonAction({
         personId: draft.personId,
         firstName: patch.firstName,
@@ -122,11 +161,21 @@ export function OnboardingForm({
         nationality: patch.nationality,
         currentCity: patch.currentCity,
         currentCountry: patch.currentCountry,
+        irishImmigrationStatus: (patch.irishImmigrationStatus || undefined) as
+          | 'NONE'
+          | 'STAMP_1'
+          | 'STAMP_1G'
+          | 'STAMP_2'
+          | 'STAMP_3'
+          | 'STAMP_4'
+          | 'OTHER'
+          | 'PENDING'
+          | 'NOT_PROVIDED'
+          | undefined,
         notes: patch.notes,
       });
       if (result.ok) {
         setSaveState('saved');
-        // Clear any lingering personal-field errors on success.
         setFieldErrors((prev) => {
           const next = { ...prev };
           for (const k of ['firstName', 'lastName', 'email', 'phone']) delete next[k];
@@ -135,9 +184,6 @@ export function OnboardingForm({
         setTimeout(() => setSaveState('idle'), 1200);
       } else {
         setSaveState('error');
-        // Surface field-level errors from the server (e.g. duplicate
-        // email/phone) inline under the offending input, not just a
-        // generic "Save failed" label.
         if (result.error.fields) {
           setFieldErrors((prev) => ({ ...prev, ...result.error.fields }));
         }
@@ -161,18 +207,35 @@ export function OnboardingForm({
     notes: '',
   });
 
+  // Stage 6G Screen 09 — step 3: which services this payment covers.
+  // Amounts default from the catalogue but stay editable; the total
+  // auto-fills "Amount received" while at least one service is ticked.
+  const [serviceRows, setServiceRows] = useState(() =>
+    services.map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description ?? '',
+      amount: defaultServiceAmount(s, 'EUR'),
+      selected: false,
+    })),
+  );
+  const selectedServices = serviceRows.filter((r) => r.selected && r.amount);
+  const servicesTotalCents = selectedServices.reduce(
+    (acc, r) => acc + Math.round(Number.parseFloat(r.amount || '0') * 100),
+    0,
+  );
+  const servicesTotal = (servicesTotalCents / 100).toFixed(2);
+  useEffect(() => {
+    if (selectedServices.length > 0) {
+      setPayment((p) => ({ ...p, amount: servicesTotal }));
+    }
+  }, [servicesTotal, selectedServices.length]);
+
   const [coverLetter, setCoverLetter] = useState('');
-  // The candidate's primary occupation (Plumber, Electrician, etc.) —
-  // set on candidate_profiles at finalise. Not auto-saved because there's
-  // no candidate profile yet during draft; picked once at intake, and
-  // editable on the candidate detail page afterwards.
   const [primaryOccupationId, setPrimaryOccupationId] = useState('');
   const [locallyCreatedOccupations, setLocallyCreatedOccupations] = useState<OccupationOption[]>(
     [],
   );
-  // Dedupe by id: once a server refresh pulls in a locally-created
-  // occupation, it exists in both arrays. React throws a duplicate-key
-  // warning on the picker's <option> map without this.
   const occupationOptions = useMemo(() => {
     const byId = new Map<string, OccupationOption>();
     for (const o of locallyCreatedOccupations) byId.set(o.id, o);
@@ -186,11 +249,6 @@ export function OnboardingForm({
   const [discardOpen, setDiscardOpen] = useState(false);
   const [discarding, setDiscarding] = useState(false);
 
-  // Documents attached to this draft — seeded from what's already on the
-  // person row (browser refresh survives them) and appended to on each
-  // successful upload. The rows exist in the DB before finalise; once
-  // finaliseDraft flips the person's is_draft flag they become visible on
-  // the candidate detail page's Documents section automatically.
   const [uploads, setUploads] = useState<UploadedDoc[]>(existingDocuments);
 
   const canFinalise =
@@ -199,7 +257,6 @@ export function OnboardingForm({
     payment.amount.trim().length > 0 &&
     payment.currencyCode.trim().length > 0 &&
     payment.receivedAt.trim().length > 0;
-  // Walk-in path only needs a name — payment happens later on the profile.
   const canCreateWalkIn =
     personal.firstName.trim().length > 0 && personal.lastName.trim().length > 0;
 
@@ -207,13 +264,20 @@ export function OnboardingForm({
     setFormError(null);
     setFieldErrors({});
     setSubmitting(true);
-    // Flush any in-flight debounced save.
     await savePersonal(personal);
     const result = await finaliseDraftAction({
       personId: draft.personId,
       payment,
       coverLetter,
       primaryOccupationId: primaryOccupationId || undefined,
+      services:
+        selectedServices.length > 0
+          ? selectedServices.map((r) => ({
+              serviceCatalogItemId: r.id,
+              name: r.name,
+              amount: Number.parseFloat(r.amount).toFixed(2),
+            }))
+          : undefined,
     });
     setSubmitting(false);
     if (!result.ok) {
@@ -262,131 +326,443 @@ export function OnboardingForm({
     router.refresh();
   }
 
+  const currencySymbol = currencies.find((c) => c.code === payment.currencyCode)?.symbol ?? '€';
+
   return (
-    <div className="space-y-6 pb-32">
+    <div className="space-y-6 pb-10">
       <FadeUp delay={0.05}>
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <User className="size-4 text-muted-foreground" />
-              <CardTitle className="text-base">Personal & contact</CardTitle>
+        {/* ── Main 4-step card — Screen 09 ─────────────────────── */}
+        <Card className="overflow-hidden">
+          <CardHeader className="flex flex-row items-start justify-between gap-3 border-b">
+            <div className="flex items-start gap-3">
+              <span
+                aria-hidden
+                className="grid size-9 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700"
+              >
+                <UserRound className="size-4.5" />
+              </span>
+              <div>
+                <CardTitle className="text-lg">Accept Payment &amp; Create Candidate</CardTitle>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Record a payment received from a customer and create a new candidate profile.
+                </p>
+              </div>
             </div>
             <SaveIndicator state={saveState} />
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            <FieldPair
-              id="firstName"
-              label="First name *"
-              value={personal.firstName}
-              onChange={(v) => setPersonal((p) => ({ ...p, firstName: v }))}
-              error={fieldErrors.firstName}
-            />
-            <FieldPair
-              id="lastName"
-              label="Last name *"
-              value={personal.lastName}
-              onChange={(v) => setPersonal((p) => ({ ...p, lastName: v }))}
-              error={fieldErrors.lastName}
-            />
-            <FieldPair
-              id="email"
-              label="Email"
-              type="email"
-              value={personal.email}
-              onChange={(v) => setPersonal((p) => ({ ...p, email: v }))}
-            />
-            <FieldPair
-              id="phone"
-              label="Phone"
-              value={personal.phone}
-              onChange={(v) => setPersonal((p) => ({ ...p, phone: v }))}
-            />
-            <FieldPair
-              id="dateOfBirth"
-              label="Date of birth"
-              type="date"
-              value={personal.dateOfBirth}
-              onChange={(v) => setPersonal((p) => ({ ...p, dateOfBirth: v }))}
-            />
-            <FieldPair
-              id="nationality"
-              label="Nationality"
-              value={personal.nationality}
-              onChange={(v) => setPersonal((p) => ({ ...p, nationality: v }))}
-            />
-            <FieldPair
-              id="currentCity"
-              label="Current city"
-              value={personal.currentCity}
-              onChange={(v) => setPersonal((p) => ({ ...p, currentCity: v }))}
-            />
-            <FieldPair
-              id="currentCountry"
-              label="Current country"
-              value={personal.currentCountry}
-              onChange={(v) => setPersonal((p) => ({ ...p, currentCountry: v }))}
-            />
-            <div className="md:col-span-2 space-y-1.5">
-              <Label htmlFor="primaryOccupation">
-                Primary occupation
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  Used by the matching algorithm to score this candidate against requisitions.
-                </span>
-              </Label>
-              <OccupationPicker
-                inputId="primaryOccupation"
-                options={occupationOptions}
-                value={primaryOccupationId}
-                onChange={setPrimaryOccupationId}
-                onOptionsChanged={(created) =>
-                  setLocallyCreatedOccupations((prev) => [created, ...prev])
-                }
-                placeholder="Select occupation…"
+
+          <CardContent className="space-y-8 pt-6">
+            {/* ── Step 1 · Customer details ─────────────────────── */}
+            <section aria-label="Customer details">
+              <StepHeader
+                n={1}
+                title="Customer details"
+                sub="Enter the details of the person who made the payment."
               />
-            </div>
-            <div className="md:col-span-2 space-y-1.5">
-              <Label htmlFor="notes">Notes / profile summary</Label>
-              <Textarea
-                id="notes"
-                className="min-h-24"
-                value={personal.notes}
-                onChange={(e) => setPersonal((p) => ({ ...p, notes: e.currentTarget.value }))}
-                placeholder="Short bio, key achievements, anything worth surfacing to recruiters…"
-                maxLength={2000}
+              <div className="mt-4 grid gap-4 pl-10 md:grid-cols-2">
+                <FieldPair
+                  id="firstName"
+                  label="First name *"
+                  value={personal.firstName}
+                  onChange={(v) => setPersonal((p) => ({ ...p, firstName: v }))}
+                  error={fieldErrors.firstName}
+                />
+                <FieldPair
+                  id="lastName"
+                  label="Last name *"
+                  value={personal.lastName}
+                  onChange={(v) => setPersonal((p) => ({ ...p, lastName: v }))}
+                  error={fieldErrors.lastName}
+                />
+                <FieldPair
+                  id="email"
+                  label="Email (optional)"
+                  type="email"
+                  value={personal.email}
+                  onChange={(v) => setPersonal((p) => ({ ...p, email: v }))}
+                  error={fieldErrors.email}
+                />
+                <FieldPair
+                  id="phone"
+                  label="Phone (optional)"
+                  value={personal.phone}
+                  onChange={(v) => setPersonal((p) => ({ ...p, phone: v }))}
+                  error={fieldErrors.phone}
+                />
+                <FieldPair
+                  id="nationality"
+                  label="Nationality"
+                  value={personal.nationality}
+                  onChange={(v) => setPersonal((p) => ({ ...p, nationality: v }))}
+                />
+                <FieldPair
+                  id="currentCountry"
+                  label="Country of residence"
+                  value={personal.currentCountry}
+                  onChange={(v) => setPersonal((p) => ({ ...p, currentCountry: v }))}
+                />
+                <div className="space-y-1.5">
+                  <Label htmlFor="irishImmigrationStatus">Irish immigration status</Label>
+                  <Select
+                    id="irishImmigrationStatus"
+                    value={personal.irishImmigrationStatus}
+                    onChange={(e) => {
+                      const v = e.currentTarget.value;
+                      setPersonal((p) => ({ ...p, irishImmigrationStatus: v }));
+                    }}
+                  >
+                    <option value="">— not set —</option>
+                    {IMMIGRATION_OPTIONS.map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <FieldPair
+                  id="dateOfBirth"
+                  label="Date of birth"
+                  type="date"
+                  value={personal.dateOfBirth}
+                  onChange={(v) => setPersonal((p) => ({ ...p, dateOfBirth: v }))}
+                />
+                <FieldPair
+                  id="currentCity"
+                  label="Current city"
+                  value={personal.currentCity}
+                  onChange={(v) => setPersonal((p) => ({ ...p, currentCity: v }))}
+                />
+                <div className="space-y-1.5">
+                  <Label htmlFor="primaryOccupation">Primary occupation</Label>
+                  <OccupationPicker
+                    inputId="primaryOccupation"
+                    options={occupationOptions}
+                    value={primaryOccupationId}
+                    onChange={setPrimaryOccupationId}
+                    onOptionsChanged={(created) =>
+                      setLocallyCreatedOccupations((prev) => [created, ...prev])
+                    }
+                    placeholder="Select occupation…"
+                  />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label htmlFor="notes">Notes / profile summary</Label>
+                  <Textarea
+                    id="notes"
+                    className="min-h-20"
+                    value={personal.notes}
+                    onChange={(e) => {
+                      const v = e.currentTarget.value;
+                      setPersonal((p) => ({ ...p, notes: v }));
+                    }}
+                    placeholder="Short bio, key achievements, anything worth surfacing to recruiters…"
+                    maxLength={2000}
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* ── Step 2 · Payment details ──────────────────────── */}
+            <section aria-label="Payment details">
+              <StepHeader
+                n={2}
+                title="Payment details"
+                sub="Record the payment that the customer has already made to us."
               />
+              <div className="mt-4 grid gap-4 pl-10 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="amount">Amount received *</Label>
+                  <div className="flex gap-2">
+                    <span className="grid w-9 shrink-0 place-items-center rounded-lg border bg-muted/40 text-sm text-muted-foreground">
+                      {currencySymbol}
+                    </span>
+                    <Input
+                      id="amount"
+                      type="text"
+                      inputMode="decimal"
+                      value={payment.amount}
+                      onChange={(e) => {
+                        const v = e.currentTarget.value;
+                        setPayment((p) => ({ ...p, amount: v }));
+                      }}
+                      placeholder="e.g. 750.00"
+                      aria-invalid={Boolean(fieldErrors['payment.amount'])}
+                      className="min-w-0 flex-1"
+                    />
+                    <Select
+                      aria-label="Currency"
+                      value={payment.currencyCode}
+                      onChange={(e) => {
+                        const v = e.currentTarget.value;
+                        setPayment((p) => ({ ...p, currencyCode: v }));
+                      }}
+                      className="w-24 shrink-0"
+                    >
+                      {currencies.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  {fieldErrors['payment.amount'] && (
+                    <p className="text-xs text-destructive" role="alert">
+                      {fieldErrors['payment.amount']}
+                    </p>
+                  )}
+                </div>
+                <FieldPair
+                  id="receivedAt"
+                  label="Payment date *"
+                  type="date"
+                  value={payment.receivedAt}
+                  onChange={(v) => setPayment((p) => ({ ...p, receivedAt: v }))}
+                  error={fieldErrors['payment.receivedAt']}
+                />
+                <div className="space-y-1.5">
+                  <Label htmlFor="method">Payment method *</Label>
+                  <Select
+                    id="method"
+                    value={payment.method}
+                    onChange={(e) => {
+                      const v = e.currentTarget.value as typeof payment.method;
+                      setPayment((p) => ({ ...p, method: v }));
+                    }}
+                  >
+                    <option value="BANK_TRANSFER">Bank transfer</option>
+                    <option value="CASH">Cash</option>
+                    <option value="OTHER">Other</option>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="proofReference">Reference number (optional)</Label>
+                  <Input
+                    id="proofReference"
+                    value={payment.proofReference}
+                    onChange={(e) => {
+                      const v = e.currentTarget.value;
+                      setPayment((p) => ({ ...p, proofReference: v }));
+                    }}
+                    placeholder="TXN-784512"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    e.g. bank reference, receipt number, transaction ID
+                  </p>
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label htmlFor="paymentNotes">Payment notes</Label>
+                  <Textarea
+                    id="paymentNotes"
+                    className="min-h-16"
+                    value={payment.notes}
+                    onChange={(e) => {
+                      const v = e.currentTarget.value;
+                      setPayment((p) => ({ ...p, notes: v }));
+                    }}
+                    maxLength={2000}
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* ── Step 3 · Services included ────────────────────── */}
+            <section aria-label="Services included">
+              <StepHeader
+                n={3}
+                title="Services included"
+                sub="Select the service(s) that this payment is for."
+              />
+              <div className="mt-4 pl-10">
+                {serviceRows.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No services in the catalogue yet — the invoice line will read “Candidate
+                    Onboarding”.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border">
+                    <table className="w-full min-w-[480px] text-xs">
+                      <thead>
+                        <tr className="border-b bg-muted/30 text-left text-muted-foreground">
+                          <th className="w-9 px-3 py-2" aria-label="Included" />
+                          <th className="py-2 pr-3 font-medium">Service</th>
+                          <th className="py-2 pr-3 font-medium">Description</th>
+                          <th className="py-2 pr-3 text-right font-medium">
+                            Amount ({currencySymbol})
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {serviceRows.map((r) => (
+                          <tr
+                            key={r.id}
+                            className={cn(
+                              'border-b last:border-b-0',
+                              !r.selected && 'text-muted-foreground',
+                            )}
+                          >
+                            <td className="px-3 py-2.5">
+                              <input
+                                type="checkbox"
+                                checked={r.selected}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setServiceRows((prev) =>
+                                    prev.map((x) =>
+                                      x.id === r.id ? { ...x, selected: checked } : x,
+                                    ),
+                                  );
+                                }}
+                                aria-label={`Include ${r.name}`}
+                                className="size-4 accent-sky-600"
+                              />
+                            </td>
+                            <td className="py-2.5 pr-3 font-medium text-foreground">{r.name}</td>
+                            <td className="max-w-64 truncate py-2.5 pr-3">{r.description}</td>
+                            <td className="py-2.5 pr-3 text-right">
+                              <Input
+                                value={r.amount}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setServiceRows((prev) =>
+                                    prev.map((x) => (x.id === r.id ? { ...x, amount: v } : x)),
+                                  );
+                                }}
+                                inputMode="decimal"
+                                aria-label={`Amount for ${r.name}`}
+                                className="ml-auto h-8 w-24 text-right text-xs tabular-nums"
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t bg-muted/20">
+                          <td className="px-3 py-2.5" />
+                          <td className="py-2.5 pr-3 text-sm font-semibold text-foreground">
+                            Total
+                          </td>
+                          <td className="py-2.5 pr-3" />
+                          <td className="py-2.5 pr-3 text-right text-sm font-bold tabular-nums text-sky-700">
+                            {formatCurrency(servicesTotal, payment.currencyCode)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+                {selectedServices.length > 0 && (
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    The selected services auto-fill the amount received and are named on the
+                    invoice.
+                  </p>
+                )}
+              </div>
+            </section>
+
+            {/* ── Step 4 · Create candidate profile ─────────────── */}
+            <section aria-label="Create candidate profile">
+              <StepHeader
+                n={4}
+                title="Create candidate profile"
+                sub="A new candidate profile will be created with the details above."
+              />
+              <div className="mt-4 pl-10">
+                <ul className="space-y-2 rounded-lg border border-sky-200/70 bg-sky-50/50 p-4 text-xs text-foreground/90">
+                  {[
+                    'Candidate profile will be created as Active',
+                    'Payment will be recorded in the system',
+                    'An official invoice and receipt will be generated automatically',
+                  ].map((line) => (
+                    <li key={line} className="flex items-start gap-2">
+                      <CheckCircle2
+                        className="mt-0.5 size-3.5 shrink-0 text-status-success"
+                        aria-hidden
+                      />
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+
+            <AnimatePresence>
+              {formError && (
+                <motion.div
+                  key="form-err"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.18 }}
+                  className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+                  role="alert"
+                >
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <span>{formError}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* ── Footer actions ────────────────────────────────── */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDiscardOpen(true)}
+                  disabled={submitting || discarding}
+                >
+                  <Trash2 className="mr-1.5 size-4" aria-hidden />
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleCreateWalkIn}
+                  disabled={!canCreateWalkIn || submitting || discarding}
+                  title="Create the candidate profile now, raise an invoice from their profile later."
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+                      Creating…
+                    </>
+                  ) : (
+                    'Create — invoice later'
+                  )}
+                </Button>
+              </div>
+              <Button
+                type="button"
+                onClick={handleCreate}
+                disabled={!canFinalise || submitting || discarding}
+                className="h-11 px-5 font-semibold"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+                    Creating…
+                  </>
+                ) : (
+                  <>
+                    Accept payment &amp; create candidate
+                    <ArrowRight className="ml-2 size-4" aria-hidden />
+                  </>
+                )}
+              </Button>
             </div>
           </CardContent>
         </Card>
       </FadeUp>
 
+      {/* ── Documents & CV (kept from the long-form flow) ───────── */}
       <FadeUp delay={0.1}>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Cover letter</CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Optional. Free-form text — paste the full cover letter or leave blank.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <Textarea
-              className="min-h-40"
-              value={coverLetter}
-              onChange={(e) => setCoverLetter(e.currentTarget.value)}
-              maxLength={10000}
-              placeholder="Dear hiring manager,…"
-            />
-          </CardContent>
-        </Card>
-      </FadeUp>
-
-      <FadeUp delay={0.15}>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Documents</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              Drop multiple files at once — each row picks its own type + display name. Missing a
-              type? Pick <span className="font-medium">+ New type…</span> and it'll show up in every
-              dropdown across the system.
+              Optional. Drop multiple files at once — each row picks its own type + display name.
+              Missing a type? Pick <span className="font-medium">+ New type…</span> and it&apos;ll
+              show up in every dropdown across the system.
             </p>
           </CardHeader>
           <CardContent>
@@ -430,174 +806,26 @@ export function OnboardingForm({
                 })}
               </ul>
             )}
-          </CardContent>
-        </Card>
-      </FadeUp>
-
-      {/* Phase 2 blueprint §2.2 — CV extraction integrated into
-          onboarding. Previously the suggestions panel only existed on
-          the candidate detail page AFTER onboarding; operators had to
-          re-type information already in the CV during onboarding, then
-          discover the extraction panel later. Rendering it inline here
-          means the extraction becomes part of the flow, not a
-          post-flow afterthought. The panel is a no-op when no CV has
-          been uploaded yet, so the ordering (Documents → Suggestions
-          → Payment) is natural. */}
-      {uploads.length > 0 && (
-        <FadeUp delay={0.175}>
-          <CvSuggestionsPanel personId={draft.personId} />
-        </FadeUp>
-      )}
-
-      <FadeUp delay={0.2}>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Payment *</CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Required. Enter the amount received before creating the profile. An invoice and
-              receipt are generated automatically on Create.
-            </p>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            <FieldPair
-              id="amount"
-              label="Amount *"
-              type="text"
-              inputMode="decimal"
-              value={payment.amount}
-              onChange={(v) => setPayment((p) => ({ ...p, amount: v }))}
-              error={fieldErrors['payment.amount']}
-              placeholder="e.g. 750.00"
-            />
-            <div className="space-y-1.5">
-              <Label htmlFor="currencyCode">Currency *</Label>
-              <Select
-                id="currencyCode"
-                value={payment.currencyCode}
-                onChange={(e) => setPayment((p) => ({ ...p, currencyCode: e.currentTarget.value }))}
-              >
-                {currencies.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.code} ({c.symbol})
-                  </option>
-                ))}
-              </Select>
-              {fieldErrors['payment.currencyCode'] && (
-                <p className="text-xs text-destructive">{fieldErrors['payment.currencyCode']}</p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="method">Method *</Label>
-              <Select
-                id="method"
-                value={payment.method}
-                onChange={(e) =>
-                  setPayment((p) => ({
-                    ...p,
-                    method: e.currentTarget.value as typeof payment.method,
-                  }))
-                }
-              >
-                <option value="BANK_TRANSFER">Bank transfer</option>
-                <option value="CASH">Cash</option>
-                <option value="OTHER">Other</option>
-              </Select>
-            </div>
-            <FieldPair
-              id="receivedAt"
-              label="Received on *"
-              type="date"
-              value={payment.receivedAt}
-              onChange={(v) => setPayment((p) => ({ ...p, receivedAt: v }))}
-              error={fieldErrors['payment.receivedAt']}
-            />
-            <FieldPair
-              id="proofReference"
-              label="Proof reference"
-              value={payment.proofReference}
-              onChange={(v) => setPayment((p) => ({ ...p, proofReference: v }))}
-              placeholder="Bank statement ID, transaction ref…"
-            />
-            <div className="space-y-1.5 md:col-span-2">
-              <Label htmlFor="paymentNotes">Notes</Label>
+            <div className="mt-4 space-y-1.5">
+              <Label htmlFor="coverLetter">Cover letter</Label>
               <Textarea
-                id="paymentNotes"
-                className="min-h-20"
-                value={payment.notes}
-                onChange={(e) => setPayment((p) => ({ ...p, notes: e.currentTarget.value }))}
-                maxLength={2000}
+                id="coverLetter"
+                className="min-h-28"
+                value={coverLetter}
+                onChange={(e) => setCoverLetter(e.currentTarget.value)}
+                maxLength={10000}
+                placeholder="Dear hiring manager,…"
               />
             </div>
           </CardContent>
         </Card>
       </FadeUp>
 
-      <AnimatePresence>
-        {formError && (
-          <motion.div
-            key="form-err"
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.18 }}
-            className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-            role="alert"
-          >
-            <AlertCircle className="mt-0.5 size-4 shrink-0" />
-            <span>{formError}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Sticky bottom action bar — Discard, walk-in path (invoice
-          later), then paid-at-intake create. Walk-in is a secondary
-          action so it doesn't out-shout the primary flow but stays
-          within one click for staff serving unpaid intake. */}
-      <div className="pointer-events-none fixed bottom-6 right-6 z-40 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setDiscardOpen(true)}
-          disabled={submitting || discarding}
-          className="pointer-events-auto inline-flex h-11 items-center justify-center rounded-lg border border-input bg-background/95 px-4 text-sm font-medium text-muted-foreground shadow-lg shadow-foreground/5 backdrop-blur transition-all hover:text-destructive hover:border-destructive/40 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <Trash2 className="mr-1.5 size-4" />
-          Discard draft
-        </button>
-        <button
-          type="button"
-          onClick={handleCreateWalkIn}
-          disabled={!canCreateWalkIn || submitting || discarding}
-          title="Create the candidate profile now, raise an invoice from their profile later."
-          className="pointer-events-auto inline-flex h-11 items-center justify-center rounded-lg border border-input bg-background/95 px-4 text-sm font-medium text-foreground shadow-lg shadow-foreground/5 backdrop-blur transition-all hover:border-foreground/40 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {submitting ? (
-            <>
-              <Loader2 className="mr-2 size-4 animate-spin" />
-              Creating…
-            </>
-          ) : (
-            <>Create — invoice later</>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={handleCreate}
-          disabled={!canFinalise || submitting || discarding}
-          className="pointer-events-auto inline-flex h-11 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-accent-foreground shadow-lg shadow-foreground/10 transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {submitting ? (
-            <>
-              <Loader2 className="mr-2 size-4 animate-spin" />
-              Creating…
-            </>
-          ) : (
-            <>
-              Create + record payment
-              <ArrowRight className="ml-2 size-4" />
-            </>
-          )}
-        </button>
-      </div>
+      {uploads.length > 0 && (
+        <FadeUp delay={0.15}>
+          <CvSuggestionsPanel personId={draft.personId} />
+        </FadeUp>
+      )}
 
       <Dialog
         open={discardOpen}
@@ -611,15 +839,15 @@ export function OnboardingForm({
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             The draft candidate row is deleted — nothing is saved. The invoice and receipt have not
-            been generated yet, so this leaves no financial trail. Cancel if you'd rather leave the
-            draft in place and come back to it later.
+            been generated yet, so this leaves no financial trail. Cancel if you&apos;d rather leave
+            the draft in place and come back to it later.
           </p>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDiscardOpen(false)} disabled={discarding}>
               Keep draft
             </Button>
             <Button variant="destructive" onClick={handleDiscard} disabled={discarding}>
-              {discarding && <Loader2 className="mr-2 size-4 animate-spin" />}
+              {discarding && <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />}
               Discard
             </Button>
           </DialogFooter>

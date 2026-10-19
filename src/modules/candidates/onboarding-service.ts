@@ -1,4 +1,4 @@
-import { and, eq, isNull, lte, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -101,6 +101,8 @@ export async function updateDraftPerson(input: UpdateDraftPersonInput): Promise<
   if (d.currentCity !== undefined) patch.currentCity = d.currentCity ?? null;
   if (d.currentCountry !== undefined) patch.currentCountry = d.currentCountry ?? null;
   if (d.source !== undefined) patch.source = d.source;
+  if (d.irishImmigrationStatus !== undefined)
+    patch.irishImmigrationStatus = d.irishImmigrationStatus;
   if (d.notes !== undefined) patch.notes = d.notes ?? null;
 
   // Pre-check email / phone against the persons_normalized_* unique
@@ -310,7 +312,37 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
       .returning({ id: candidateProfiles.id });
     if (!profile) throw new Error('candidate_profiles insert returned no row');
 
-    const catalogItemId = await getOrCreateCandidateOnboardingCatalog(tx, d.payment.currencyCode);
+    // Stage 6G Screen 09 — when the operator ticked specific services,
+    // validate them and bill in their name; otherwise fall back to the
+    // generic onboarding catalogue item.
+    let catalogItemId: string;
+    let serviceNames: string[] = [];
+    if (d.services && d.services.length > 0) {
+      const ids = d.services.map((s) => s.serviceCatalogItemId);
+      const found = await tx
+        .select({ id: serviceCatalogItems.id })
+        .from(serviceCatalogItems)
+        .where(inArray(serviceCatalogItems.id, ids));
+      if (found.length !== new Set(ids).size) {
+        throw new ValidationError('A selected service no longer exists', {
+          services: 'Refresh the page and reselect the services.',
+        });
+      }
+      const sumCents = d.services.reduce(
+        (acc, s) => acc + Math.round(Number.parseFloat(s.amount) * 100),
+        0,
+      );
+      const paymentCents = Math.round(Number.parseFloat(d.payment.amount) * 100);
+      if (sumCents !== paymentCents) {
+        throw new ValidationError('Selected services must add up to the amount received', {
+          'payment.amount': `Services total ${(sumCents / 100).toFixed(2)} but the amount received is ${d.payment.amount}.`,
+        });
+      }
+      catalogItemId = ids[0] as string;
+      serviceNames = d.services.map((s) => s.name);
+    } else {
+      catalogItemId = await getOrCreateCandidateOnboardingCatalog(tx, d.payment.currencyCode);
+    }
 
     const [engagement] = await tx
       .insert(serviceEngagements)
@@ -360,7 +392,9 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
       unitPrice: d.payment.amount,
       vatRatePercent: effectiveVatRate,
       currencyCode: d.payment.currencyCode,
-      lineDescription: `${CANDIDATE_ONBOARDING_NAME} — ${draft.firstName} ${draft.lastName}`,
+      lineDescription: `${
+        serviceNames.length > 0 ? serviceNames.join(' + ') : CANDIDATE_ONBOARDING_NAME
+      } — ${draft.firstName} ${draft.lastName}`,
       issuedByUserId: session.user.id,
       // Phase 3 blueprint §7.2 — candidate-paid invoices use the app
       // default. Candidates don't carry per-client payment terms.
