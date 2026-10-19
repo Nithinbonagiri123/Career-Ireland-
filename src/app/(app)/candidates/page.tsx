@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import { CheckCircle2, Clock3, Plus, Target, Users } from 'lucide-react';
 import Link from 'next/link';
 import { CsvExportButton } from '@/components/csv-export-button';
+import { DateRangeFilter } from '@/components/date-range-filter';
 import { EmptyMineNudge } from '@/components/empty-mine-nudge';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { ScopeFilter } from '@/components/scope-filter';
@@ -145,9 +146,12 @@ export default async function CandidatesPage({
             above the inline chip row so the operator can switch scope
             and layout without hunting through dropdowns. */}
         <FadeUp delay={0.03}>
-          <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <ScopeFilter current={scope} />
-            <CandidatesViewToggle current={currentView} />
+            <div className="flex flex-wrap items-center gap-2">
+              <DateRangeFilter />
+              <CandidatesViewToggle current={currentView} />
+            </div>
           </div>
         </FadeUp>
         {/* Inline filter chip bar — Search + Status + Profession +

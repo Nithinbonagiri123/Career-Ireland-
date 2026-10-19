@@ -29,6 +29,7 @@ import {
   QualificationsSection,
   SkillsSection,
 } from '@/app/(app)/candidates/[id]/candidate-details-panel';
+import { JustCreatedCard } from '@/app/(app)/candidates/[id]/just-created-card';
 import { VerifyPaymentButton } from '@/app/(app)/leads/[id]/pro-formas/record-payment-dialog';
 import { RefundPaymentButton } from '@/app/(app)/leads/[id]/pro-formas/refund-payment-dialog';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
@@ -65,7 +66,7 @@ import {
   PRIMARY_STATUS_LABEL,
   PRIMARY_STATUS_TONE,
 } from '@/modules/clients/onboarding-status';
-import { fetchClientWorkspace } from '@/modules/clients/workspace-data';
+import { fetchClientWorkspace, fetchJustCreatedDocNumbers } from '@/modules/clients/workspace-data';
 import { ClientWorkspaceTabs } from './client-workspace-tabs';
 import { CandidateDocsTab } from './docs-tab';
 import { ClientNextActionIsland } from './next-action-island';
@@ -120,10 +121,13 @@ export default async function ClientWorkspacePage({
   searchParams,
 }: {
   params: Promise<{ personId: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; just_created?: string }>;
 }) {
   const { personId } = await params;
   const sp = await searchParams;
+  // Post-onboarding success banner — /candidates/new redirects here with
+  // ?just_created=1; quick links to the freshly issued invoice + receipt.
+  const justCreated = sp.just_created === '1' ? await fetchJustCreatedDocNumbers(personId) : null;
   // Stage 6G — needed by the hero's "Assign to me" / "Reassign" buttons.
   const session = await requireInternalStaff();
   // Stage 6G — five tabs: Overview (default) · Profile · Documents & CV ·
@@ -1646,6 +1650,13 @@ export default async function ClientWorkspacePage({
 
   return (
     <div className="space-y-6">
+      {justCreated && (
+        <JustCreatedCard
+          personId={personId}
+          invoiceNumber={justCreated.invoiceNumber}
+          receiptNumber={justCreated.receiptNumber}
+        />
+      )}
       {/* 1. Candidate hero — avatar, name, email/phone, status chips,
           "assigned to" line and the action buttons (Edit details,
           Assign to me, Open billing). */}

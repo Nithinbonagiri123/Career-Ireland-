@@ -2,7 +2,7 @@ import { desc, eq, inArray, or, type SQL } from 'drizzle-orm';
 import { hasPermission } from '@/lib/auth/permissions';
 import { loadCurrentUserPermissions, requireInternalStaff, type Session } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
-import { invoices, refunds } from '@/lib/db/schema/billing';
+import { invoices, receipts, refunds } from '@/lib/db/schema/billing';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import type { Currency } from '@/lib/db/schema/currencies';
 import { leads } from '@/lib/db/schema/leads';
@@ -632,4 +632,29 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
     services,
     currencies: currencies.map((c) => ({ code: c.code, name: c.name, symbol: c.symbol })),
   };
+}
+
+/**
+ * Doc numbers for the post-onboarding "Candidate created" banner
+ * (`?just_created=1`): the person's newest invoice and its receipt.
+ */
+export async function fetchJustCreatedDocNumbers(personId: string): Promise<{
+  invoiceNumber: string | null;
+  receiptNumber: string | null;
+}> {
+  await requireInternalStaff();
+  const [inv] = await db
+    .select({ id: invoices.id, number: invoices.number })
+    .from(invoices)
+    .where(eq(invoices.payerPersonId, personId))
+    .orderBy(desc(invoices.issuedAt))
+    .limit(1);
+  if (!inv) return { invoiceNumber: null, receiptNumber: null };
+  const [rct] = await db
+    .select({ number: receipts.number })
+    .from(receipts)
+    .where(eq(receipts.invoiceId, inv.id))
+    .orderBy(desc(receipts.issuedAt))
+    .limit(1);
+  return { invoiceNumber: inv.number, receiptNumber: rct?.number ?? null };
 }
