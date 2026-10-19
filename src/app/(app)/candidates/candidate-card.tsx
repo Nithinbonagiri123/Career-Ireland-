@@ -67,7 +67,11 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
           <div className="flex items-start justify-between gap-2">
             <StatusPill tone={status.tone}>{status.label}</StatusPill>
             <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+              {/* Relative time drifts between server render and hydration
+                  ("51 seconds ago" vs "52") — suppress the mismatch; the
+                  datetime attr + absolute tooltip stay exact. */}
               <time
+                suppressHydrationWarning
                 dateTime={new Date(candidate.activatedAt).toISOString()}
                 title={activatedAbsolute}
               >

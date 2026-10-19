@@ -51,7 +51,6 @@ import {
 } from '@/modules/leads/actions';
 import type { LeadListRow } from '@/modules/leads/repository';
 import { DirectPaymentDialog } from './direct-payment-dialog';
-import { LeadsFilterControl } from './leads-filter';
 
 type Props = {
   leads: LeadListRow[];
@@ -97,8 +96,8 @@ export function LeadsTable({
   currentUserId,
   currentUserRole,
   invoiceableServices,
-  occupations,
-  countries,
+  occupations: _occupations,
+  countries: _countries,
 }: Props) {
   const canSeeExceptionalFinance = currentUserRole === 'ADMIN' || currentUserRole === 'FINANCE';
   const params = useSearchParams();
@@ -749,9 +748,6 @@ export function LeadsTable({
             ? 'Clear or adjust the filter in the top right.'
             : 'Every candidate starts as a Lead. Create the first one with the button above.'
         }
-        enableGlobalFilter
-        globalFilterPlaceholder="Search leads…"
-        toolbarRight={<LeadsFilterControl countries={countries} occupations={occupations} />}
       />
       <PromptDialog
         open={archiveTarget !== null}
