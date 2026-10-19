@@ -25,6 +25,11 @@ test('permissions editor: clean vs dirty save bar', async ({ page }) => {
     fullPage: true,
   });
 
+  // The grant matrix sits behind the "Advanced — individual grants"
+  // disclosure since the progressive-disclosure pass — expand it first.
+  const advanced = page.getByRole('button', { name: /Advanced — individual grants/i });
+  if (await advanced.count()) await advanced.click();
+
   // Dirty state: toggle any checkbox to trigger the save bar.
   const firstCheckbox = page.getByRole('checkbox').first();
   await firstCheckbox.click();

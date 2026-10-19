@@ -61,7 +61,7 @@ test('inline quote composer opens from the workspace Billing tab', async ({ page
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/clients/${seeded.personId}?tab=billing`);
     // Billing tab shows the Quotes card with a "+ New quote" trigger.
-    await expect(page.getByText(/no quotes yet/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/No services on file yet/i)).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: /\+ New quote/i }).click();
     // The composer opens inline; the dialog title is "Create pro forma"
     // (reused from the existing lead-page composer).
@@ -91,33 +91,28 @@ test('workspace renders for a fresh lead-stage client (desktop + mobile)', async
     await expect(page.getByRole('heading', { name: new RegExp(`S6B${stamp}`, 'i') })).toBeVisible({
       timeout: 15_000,
     });
-    // The four tabs are all present.
-    // Stage 6D Wave 2 — the Documents tab split into "Financial docs"
-    // (invoice/receipt/quote PDFs) and "Candidate docs" (uploaded files
-    // + requirements). Applications was added as its own tab too.
+    // Stage 6G — six tabs on the remodeled workspace.
     for (const label of [
       'Overview',
-      'Billing',
+      'Profile',
+      'Documents & CV',
+      'Services & Billing',
       'Applications',
-      'Candidate docs',
-      'Financial docs',
       'Activity',
     ]) {
       await expect(page.getByRole('tab', { name: label })).toBeVisible();
     }
-    // Overview is the default tab and shows the Identity card.
-    await expect(page.getByText('Identity').first()).toBeVisible();
-    // No candidate profile yet → Journey card shows the lead.
-    await expect(page.getByText('Journey').first()).toBeVisible();
+    // Overview is the default tab and shows the Personal details card.
+    await expect(page.getByText('Personal details').first()).toBeVisible();
 
     await page.screenshot({
       path: path.join(SHOTS_DIR, 'desktop-overview.png'),
       fullPage: true,
     });
 
-    // Switch to Billing — empty state because no quotes/invoices yet.
-    await page.getByRole('tab', { name: 'Billing' }).click();
-    await expect(page.getByText(/no quotes, invoices or payments on file yet/i)).toBeVisible();
+    // Switch to Services & Billing — empty state, no quotes yet.
+    await page.getByRole('tab', { name: 'Services & Billing' }).click();
+    await expect(page.getByText(/No services on file yet/i).first()).toBeVisible();
     await page.screenshot({
       path: path.join(SHOTS_DIR, 'desktop-billing-empty.png'),
       fullPage: true,

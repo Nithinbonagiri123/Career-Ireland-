@@ -66,7 +66,11 @@ test('03 · New lead + first invoice atomic flow', async ({ page }) => {
   const newLead = page.getByRole('button', { name: /^new lead$/i });
   await expect(newLead).toBeVisible();
   await newLead.click();
-  await expect(page.getByRole('heading', { name: /create a new lead/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /create new lead/i })).toBeVisible();
+  // Stage 6D Wave 1a made Candidate Services quote-first — the atomic
+  // lead + first-invoice flow now only exists for Immigration leads, so
+  // drive it there.
+  await page.getByRole('tab', { name: /immigration/i }).click();
   await fullShot(page, 'e2e__new-lead-dialog-empty');
 
   // Fill in the person section. Randomise the email to avoid unique
@@ -156,22 +160,27 @@ test('04 · Employer invoice — dialog + manual price flow', async ({ page }) =
     return;
   }
 
-  // Prefill from a package if available, else manual-price path.
+  // Prefill from a package if available…
   const pkgSelect = page.locator('#pkg');
-  const pkgAvailable = (await pkgSelect.count()) > 0;
-  if (pkgAvailable) {
+  if ((await pkgSelect.count()) > 0) {
     const opts = await pkgSelect.locator('option').all();
     if (opts.length > 1) {
       const v = await opts[1]?.getAttribute('value');
       if (v) await pkgSelect.selectOption(v);
     }
-  } else {
-    // WORK_PERMIT_APPLICATION is payerType=ANY with no packages —
-    // enter unit price manually to prove the editable-amount flow.
-    await page.locator('#unitPrice').fill('250.00');
   }
+  // …then always override with a per-run unique price. The duplicate-
+  // invoice guard rejects a second unpaid invoice for the same service
+  // AND amount, so a fixed amount breaks every retry/re-run against a
+  // non-fresh database.
+  await page
+    .locator('#unitPrice')
+    .fill(`${200 + (Date.now() % 700)}.${String((Date.now() % 90) + 10)}`);
 
-  await page.getByRole('button', { name: /^generate invoice$/i }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: /^generate invoice$/i })
+    .click();
   await page.waitForURL(/\/employers\/[^/]+\/invoices\/INV-/, { timeout: 20_000 });
   await expect(page.getByText(/^INVOICE$/)).toBeVisible();
   await fullShot(page, 'e2e__employer-invoice-print');

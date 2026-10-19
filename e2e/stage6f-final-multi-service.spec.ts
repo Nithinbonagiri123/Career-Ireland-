@@ -161,7 +161,9 @@ test('final: three services on one client — compact summaries, tabs still reac
     // above the fold; the "Jump to profile tabs" shortcut should
     // appear in the Service billing header.
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`/clients/${p.id}`);
+    // Stage 6G moved the detailed engagement cards into the Services &
+    // Billing tab (legacy ?tab=billing maps there).
+    await page.goto(`/clients/${p.id}?tab=billing`);
     await expect(page.getByRole('heading', { name: new RegExp(`Svc-${stamp}`, 'i') })).toBeVisible({
       timeout: 15_000,
     });
@@ -191,7 +193,7 @@ test('final: three services on one client — compact summaries, tabs still reac
 
     // Mobile viewport — summary rows stack cleanly.
     await page.setViewportSize({ width: 390, height: 1800 });
-    await page.goto(`/clients/${p.id}`);
+    await page.goto(`/clients/${p.id}?tab=billing`);
     await expect(page.getByText('Service billing').first()).toBeVisible({ timeout: 10_000 });
     await expect(engagementCards).toHaveCount(3);
     await page.screenshot({

@@ -284,11 +284,16 @@ test('stage 6G — realistic healthcare candidate rendered in the redesigned wor
     // Hero chips.
     await expect(page.getByText(/Active candidate/i).first()).toBeVisible();
     await expect(page.getByText(/South African/).first()).toBeVisible();
-    // Service billing with 2 services and both status badges.
+    // Overview shows the Service billing summary; the detailed
+    // engagement cards live in the Services & Billing tab (Stage 6G).
     await expect(page.getByText('Service billing').first()).toBeVisible();
-    await expect(page.locator('[data-testid="engagement-card"]')).toHaveCount(2);
+    await page.goto(`/clients/${personId}?tab=billing`);
+    await expect(page.locator('[data-testid="engagement-card"]')).toHaveCount(2, {
+      timeout: 10_000,
+    });
     await expect(page.getByText(/Fully paid/i).first()).toBeVisible();
     await expect(page.getByText(/Awaiting payment/i).first()).toBeVisible();
+    await page.goto(`/clients/${personId}`);
     // Tab bar: Overview + Profile + Documents & CV + Applications + Activity.
     await expect(page.getByRole('tab', { name: /Overview/i })).toBeVisible();
     await expect(page.getByRole('tab', { name: /^Profile$/i })).toBeVisible();

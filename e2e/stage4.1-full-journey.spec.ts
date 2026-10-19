@@ -28,13 +28,20 @@ async function shot(page: Page, name: string): Promise<void> {
 async function pickCsLead(): Promise<{ id: string; personId: string }> {
   const { config: loadEnv } = await import('dotenv');
   loadEnv({ path: '.env.local' });
-  const { and, eq, isNotNull } = await import('drizzle-orm');
+  const { and, eq, isNotNull, notInArray, isNull } = await import('drizzle-orm');
   const { db } = await import('../src/lib/db/client');
   const { leads } = await import('../src/lib/db/schema/leads');
   const [lead] = await db
     .select({ id: leads.id, personId: leads.personId })
     .from(leads)
-    .where(and(eq(leads.targetBusiness, 'CANDIDATE_SERVICES'), isNotNull(leads.personId)))
+    .where(
+      and(
+        eq(leads.targetBusiness, 'CANDIDATE_SERVICES'),
+        isNotNull(leads.personId),
+        notInArray(leads.status, ['CONVERTED']),
+        isNull(leads.archivedAt),
+      ),
+    )
     .limit(1);
   if (!lead?.personId) throw new Error('No CS lead with person_id');
   return { id: lead.id, personId: lead.personId };
@@ -77,7 +84,7 @@ test.describe('Stage 4.1 — final journey', () => {
     await expect(page).toHaveURL(/createdFrom=2026-01-01/);
 
     // Search box still works alongside the filters.
-    await page.getByPlaceholder('Search leads…').fill('a');
+    await page.getByPlaceholder(/Search leads by name/).fill('a');
     await shot(page, '02-search-with-filters');
 
     // Open the Filter dropdown + Clear all removes every applied filter.
@@ -91,10 +98,16 @@ test.describe('Stage 4.1 — final journey', () => {
     page,
   }) => {
     const lead = await pickCsLead();
+    // Stage 6D — redirects to the Client Workspace; quote creation moved
+    // to its "+ New quote" button. The pro-forma detail page the rest of
+    // this test drives still lives at its original URL.
     await page.goto(`/leads/${lead.id}`);
+    await expect(page.getByRole('heading', { name: /Service billing/i }).first()).toBeVisible({
+      timeout: 10_000,
+    });
 
     // Create a 1-line pro forma for EUR 100.
-    await page.getByRole('button', { name: 'New pro forma' }).click();
+    await page.getByRole('button', { name: '+ New quote' }).first().click();
     await expect(page.getByRole('heading', { name: /^Create pro forma$/ })).toBeVisible();
     await page.getByPlaceholder('Appears on the PDF line').first().fill('Stage 4.1 conversion');
     const q = page.locator('input[inputmode="decimal"]');
@@ -119,7 +132,7 @@ test.describe('Stage 4.1 — final journey', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click();
     await expect(page.getByText(/Payment recorded/).first()).toBeVisible();
     await page.getByRole('button', { name: 'Verify' }).first().click();
-    await expect(page.getByText(/Official invoice issued: INV-/)).toBeVisible({
+    await expect(page.getByText(/Official invoice (issued: INV-|INV-\S+ issued)/)).toBeVisible({
       timeout: 10_000,
     });
     await expect(page.getByText(/CONVERTED/).first()).toBeVisible();
@@ -172,7 +185,7 @@ test.describe('Stage 4.1 — final journey', () => {
 
       // Open row dropdown → Reactivate.
       const row = page.getByRole('row').filter({ hasText: 'EXPIRED' }).first();
-      await row.getByRole('button', { name: 'More actions' }).click();
+      await row.getByRole('button', { name: 'Admin actions' }).click();
       await page.getByRole('menuitem', { name: /Reactivate lead/ }).click();
 
       await expect(page.getByRole('heading', { name: /^Reactivate /i })).toBeVisible();

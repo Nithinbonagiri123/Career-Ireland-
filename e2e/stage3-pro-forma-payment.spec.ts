@@ -29,17 +29,27 @@ async function shot(page: Page, name: string): Promise<void> {
 async function openFirstCsLead(page: Page): Promise<string> {
   const { config: loadEnv } = await import('dotenv');
   loadEnv({ path: '.env.local' });
-  const { and, eq, isNotNull } = await import('drizzle-orm');
+  const { and, eq, isNotNull, notInArray, isNull } = await import('drizzle-orm');
   const { db } = await import('../src/lib/db/client');
   const { leads } = await import('../src/lib/db/schema/leads');
   const [lead] = await db
     .select({ id: leads.id })
     .from(leads)
-    .where(and(eq(leads.targetBusiness, 'CANDIDATE_SERVICES'), isNotNull(leads.personId)))
+    .where(
+      and(
+        eq(leads.targetBusiness, 'CANDIDATE_SERVICES'),
+        isNotNull(leads.personId),
+        notInArray(leads.status, ['CONVERTED']),
+        isNull(leads.archivedAt),
+      ),
+    )
     .limit(1);
-  if (!lead) throw new Error('No CS lead with person_id in dev DB');
+  if (!lead) throw new Error('No unconverted CS lead with person_id in dev DB');
+  // Stage 6D — person-linked leads land on the Client Workspace; quote
+  // creation happens via its "+ New quote". The per-pro-forma detail
+  // pages this spec then drives still live at their original URLs.
   await page.goto(`/leads/${lead.id}`);
-  await expect(page.getByRole('heading', { name: /Pro formas|Lead details/ }).first()).toBeVisible({
+  await expect(page.getByRole('heading', { name: /Service billing/i }).first()).toBeVisible({
     timeout: 10_000,
   });
   return lead.id;
@@ -76,7 +86,7 @@ test.describe('Stage 3 — add alternative + partial payment issuance', () => {
     const leadId = await openFirstCsLead(page);
 
     // Create a base pro forma (1 line, EUR 400).
-    await page.getByRole('button', { name: 'New pro forma' }).click();
+    await page.getByRole('button', { name: '+ New quote' }).first().click();
     await expect(page.getByRole('heading', { name: /^Create pro forma$/ })).toBeVisible();
     await page.getByPlaceholder('Appears on the PDF line').first().fill('Tier A — Standard');
     const q = page.locator('input[inputmode="decimal"]');
@@ -124,7 +134,7 @@ test.describe('Stage 3 — add alternative + partial payment issuance', () => {
     const leadId = await openFirstCsLead(page);
 
     // Create a pro forma for EUR 500, issue, accept.
-    await page.getByRole('button', { name: 'New pro forma' }).click();
+    await page.getByRole('button', { name: '+ New quote' }).first().click();
     await expect(page.getByRole('heading', { name: /^Create pro forma$/ })).toBeVisible();
     await page.getByPlaceholder('Appears on the PDF line').first().fill('Full package');
     const q = page.locator('input[inputmode="decimal"]');
@@ -177,7 +187,7 @@ test.describe('Stage 3 — add alternative + partial payment issuance', () => {
     await expect(page.getByText(/Payment recorded/).first()).toBeVisible();
     await page.getByRole('button', { name: 'Verify' }).first().click();
     // Toast now includes the newly minted INV number.
-    await expect(page.getByText(/Official invoice issued: INV-/)).toBeVisible({
+    await expect(page.getByText(/Official invoice (issued: INV-|INV-\S+ issued)/)).toBeVisible({
       timeout: 10_000,
     });
     // Status flipped to CONVERTED. Outstanding is 0.
@@ -190,7 +200,7 @@ test.describe('Stage 3 — add alternative + partial payment issuance', () => {
     const leadId = await openFirstCsLead(page);
 
     // Fresh pro forma for EUR 100.
-    await page.getByRole('button', { name: 'New pro forma' }).click();
+    await page.getByRole('button', { name: '+ New quote' }).first().click();
     await expect(page.getByRole('heading', { name: /^Create pro forma$/ })).toBeVisible();
     await page.getByPlaceholder('Appears on the PDF line').first().fill('Overpay test');
     const q = page.locator('input[inputmode="decimal"]');

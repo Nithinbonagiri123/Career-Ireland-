@@ -146,49 +146,49 @@ test('stage 6F — workspace acceptance walk (profile edit + docs + CV + navigat
     await eduDialog.getByRole('button', { name: 'Add' }).click();
     await expect(page.getByText(`Trinity-${stamp}`)).toBeVisible({ timeout: 10_000 });
 
-    // ── Documents & CV ────────────────────────────────────────────
+    // ── Documents & CV (Stage 6G Screen 05 tab) ──────────────────
     await page.getByRole('tab', { name: /Documents & CV/i }).click();
-    await expect(page.getByText(/Required documents/i)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Suggestions from CV')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Manage candidate documents/i).first()).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText(/Scan CV & Extract Information/i)).toBeVisible({
+      timeout: 10_000,
+    });
 
     if (!process.env.E2E_SKIP_UPLOAD) {
       // Real presign → PUT → register round-trip against the local
-      // MinIO. MultiDocumentUploader is a two-step surface: attach
-      // files, pick type + display name, then "Upload all".
+      // MinIO. The Screen 05 tab stages files first: choose a file,
+      // confirm its document type on the staged row, then Upload.
       const fakePdf = Buffer.concat([
         Buffer.from('%PDF-1.4\n', 'ascii'),
         Buffer.alloc(64, 0),
         Buffer.from('\n%%EOF\n', 'ascii'),
       ]);
-      await page.locator('#mdu-files').setInputFiles({
+      await page.locator('input[type="file"][multiple]').setInputFiles({
         name: `wsa-${stamp}.pdf`,
         mimeType: 'application/pdf',
         buffer: fakePdf,
       });
-      // Row shows up in the uploader list with filename + type picker.
-      await expect(page.getByText(`wsa-${stamp}.pdf`)).toBeVisible({ timeout: 10_000 });
-      // Pick the CV document type (seeded by global-setup).
-      const typePicker = page.locator('select').last();
-      // Match on the <option> whose visible text contains "CV" — we
-      // don't know the UUID up front; find by text content.
-      const cvOptionValue = await page
+      const stagedRow = page
+        .locator('li')
+        .filter({ hasText: `wsa-${stamp}.pdf` })
+        .first();
+      await expect(stagedRow).toBeVisible({ timeout: 10_000 });
+      // Pick the CV document type on the staged row.
+      const typePicker = stagedRow.locator('select');
+      const cvOptionValue = await stagedRow
         .locator('select option', { hasText: /CV|R.?sum/i })
         .first()
         .getAttribute('value');
       if (cvOptionValue) await typePicker.selectOption(cvOptionValue);
-      // Click "Upload all".
-      await page.getByRole('button', { name: /Upload all/i }).click();
-      // Row flips to "Uploaded".
-      await expect(page.getByText(/· Uploaded/i)).toBeVisible({ timeout: 20_000 });
-      // onUploaded → router.refresh pulls the server-rendered
-      // Uploaded-documents list in which contains a Download link.
+      await page.getByRole('button', { name: /Upload 1 file/i }).click();
+      await expect(page.getByText(/1 file uploaded/i)).toBeVisible({ timeout: 20_000 });
+      // The refreshed Uploaded-documents table carries a Download link.
       const downloadLink = page.getByRole('link', { name: /^Download$/i }).first();
       await expect(downloadLink).toBeVisible({ timeout: 10_000 });
       const href = await downloadLink.getAttribute('href');
       expect(href).toMatch(/^\/api\/documents\/[0-9a-f-]{36}\/download$/);
       // GET the download URL and confirm it 302s to a presigned S3 URL.
-      // Playwright's APIRequest doesn't follow redirects by default so
-      // the 302 is observable directly.
       const dl = await page.request.get(href as string, { maxRedirects: 0 });
       expect(dl.status()).toBe(302);
     }
@@ -231,7 +231,7 @@ test('stage 6F — workspace acceptance walk (profile edit + docs + CV + navigat
       fullPage: true,
     });
     await page.goto(`/clients/${seeded.personId}?tab=documents-candidate`);
-    await expect(page.getByText(/Required documents/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Upload documents/i).first()).toBeVisible({ timeout: 10_000 });
     await page.screenshot({
       path: path.join(SHOTS_DIR, `mobile-docs-cv-${stamp}.png`),
       fullPage: true,

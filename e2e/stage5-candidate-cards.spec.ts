@@ -325,9 +325,12 @@ test.describe('Stage 5 — Candidate Cards', () => {
       await expect(page.getByText(`S5Long${stamp} Full`)).toBeVisible();
       await expect(page.getByText(`S5Pending${stamp} Full`)).toBeVisible();
 
-      // Priority-order checks — the first visible card for the Complete
-      // candidate should have occupation under the name + immigration
-      // block directly below.
+      // Priority-order checks against the APPROVED Screen 03 card:
+      // occupation under the name, single-column contact rows, the
+      // Applications / Shortlists / Placed counter strip. The old
+      // immigration block was deliberately parked by the redesign —
+      // immigration detail lives on the workspace, so a pending case
+      // can no longer be misread as a held permission from the list.
       const completeCard = page
         .locator('article, [aria-label]')
         .filter({
@@ -335,16 +338,10 @@ test.describe('Stage 5 — Candidate Cards', () => {
         })
         .first();
       await expect(completeCard.getByText(/^Nurse$/)).toBeVisible();
-      await expect(completeCard.getByText(/^Stamp 4$/)).toBeVisible();
-      // Stage 5 regression — APPROVED + future expiry must render as a
-      // currently-held permission (green banner), not as a case with an
-      // "approved" status pill. The old rendering could be misread as a
-      // pending permission; the new one cannot.
-      await expect(completeCard.getByText(/current permission/i)).toBeVisible();
-      await expect(completeCard.getByText(/^expires /i)).toBeVisible();
-      // apps / shortlists / placed counters all have the inserted "1"
-      // (one of each).
-      await expect(completeCard.getByText(/apps/i)).toBeVisible();
+      await expect(completeCard.getByText('Applications')).toBeVisible();
+      await expect(completeCard.getByText('Shortlists')).toBeVisible();
+      await expect(completeCard.getByText('Placed')).toBeVisible();
+      await expect(completeCard.getByRole('link', { name: /open profile/i })).toBeVisible();
 
       // Missing-occupation card shows the neutral placeholder.
       const noOccCard = page
@@ -355,19 +352,8 @@ test.describe('Stage 5 — Candidate Cards', () => {
         .first();
       await expect(noOccCard.getByText(/no profession set/i)).toBeVisible();
 
-      // Missing-immigration card shows the neutral placeholder.
-      const noImmCard = page
-        .locator('article, [aria-label]')
-        .filter({
-          hasText: `S5NoImm${stamp} Full`,
-        })
-        .first();
-      await expect(noImmCard.getByText(/immigration not on file/i)).toBeVisible();
-
       // Long-occupation card truncates the title (no horizontal
-      // overflow). We just confirm the occupation block exists; CSS
-      // handles the truncation via `truncate` class — Playwright can't
-      // directly assert overflow but we snapshot it below for review.
+      // overflow) — snapshot below covers the visual check.
       const longCard = page
         .locator('article, [aria-label]')
         .filter({
@@ -376,18 +362,14 @@ test.describe('Stage 5 — Candidate Cards', () => {
         .first();
       await expect(longCard).toBeVisible();
 
-      // Pending-case card renders the neutral "Immigration case" label
-      // and the "Not a currently-held permission." subtitle, never as a
-      // currently-held permission. The permit label still appears but
-      // trailing the application word so operators read it as the case
-      // type, not the active permission.
+      // Pending-case regression: the card must never present a pending
+      // Stamp 4 application as a held permission. The approved card
+      // omits immigration entirely, so assert the absence.
       const pendingCard = page
         .locator('article, [aria-label]')
         .filter({ hasText: `S5Pending${stamp} Full` })
         .first();
-      await expect(pendingCard.getByText(/immigration case/i)).toBeVisible();
-      await expect(pendingCard.getByText(/Stamp 4 application/i)).toBeVisible();
-      await expect(pendingCard.getByText(/not a currently-held permission/i)).toBeVisible();
+      await expect(pendingCard.getByText(/Stamp 4/i)).toHaveCount(0);
       await expect(pendingCard.getByText(/current permission/i)).toHaveCount(0);
 
       // Scroll the first seeded card into view so the screenshot

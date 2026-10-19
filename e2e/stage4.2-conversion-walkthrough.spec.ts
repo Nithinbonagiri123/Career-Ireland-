@@ -122,11 +122,13 @@ test.describe('Stage 4.2 — lead-to-candidate conversion', () => {
 
     try {
       // Create + issue + accept + pay + verify (reuses Stage 3 UI).
+      // Stage 6D — person-linked leads land on the Client Workspace;
+      // quote creation moved to its "+ New quote" button.
       await page.goto(`/leads/${seeded.leadId}`);
-      await expect(page.getByRole('button', { name: 'New pro forma' })).toBeVisible({
+      await expect(page.getByRole('button', { name: '+ New quote' }).first()).toBeVisible({
         timeout: 15_000,
       });
-      await page.getByRole('button', { name: 'New pro forma' }).click();
+      await page.getByRole('button', { name: '+ New quote' }).first().click();
       await expect(page.getByRole('heading', { name: /^Create pro forma$/ })).toBeVisible();
       await page.getByPlaceholder('Appears on the PDF line').first().fill('Conversion test');
       const q = page.locator('input[inputmode="decimal"]');
@@ -148,7 +150,7 @@ test.describe('Stage 4.2 — lead-to-candidate conversion', () => {
       await page.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click();
       await expect(page.getByText(/Payment recorded/).first()).toBeVisible();
       await page.getByRole('button', { name: 'Verify' }).first().click();
-      await expect(page.getByText(/Official invoice issued: INV-/)).toBeVisible({
+      await expect(page.getByText(/Official invoice (issued: INV-|INV-\S+ issued)/)).toBeVisible({
         timeout: 10_000,
       });
       await expect(page.getByText(/CONVERTED/).first()).toBeVisible();
@@ -175,44 +177,16 @@ test.describe('Stage 4.2 — lead-to-candidate conversion', () => {
       expect(beforePayments.length).toBe(1);
       expect(beforeInvoices.length).toBe(1);
 
-      // Trigger candidate conversion from the Leads list — click the
-      // row's "Ready to convert" chip which opens the Convert dialog.
-      await page.goto('/leads?assigned=all');
-      await expect(page.getByRole('button', { name: /^Filter/ })).toBeVisible({
-        timeout: 15_000,
-      });
-      // The newly-seeded person's firstName is unique enough to find.
-      await page.getByPlaceholder('Search leads…').fill(`S42First`);
-      const row = page.getByRole('row').filter({ hasText: 'S42First' }).first();
-      await row.getByRole('button', { name: 'More actions' }).click();
-      await page.getByRole('menuitem', { name: /Convert → activate candidate/ }).click();
-      // Convert dialog opens — the service already has an invoice so
-      // the PF-origin guard will skip creating a duplicate payment.
-      // Fill the required fields (service + amount — the service won't
-      // use them for the money path, just records them for consistency).
-      await expect(
-        page.getByRole('heading', { name: /Convert → activate candidate/ }),
-      ).toBeVisible();
-      await shot(page, '02-convert-dialog-open');
-      // Pick the first available service + a nominal amount; the server
-      // short-circuits the payment creation when the PF already issued.
-      const serviceSelect = page.locator('#convertService');
-      await serviceSelect.selectOption({ index: 1 }); // index 0 is the placeholder
-      await page.locator('#convertAmount').fill('250');
-      await page.locator('#convertCurrency').fill('EUR');
-      // Reason is OPTIONAL when PF-origin invoice exists (Stage 4 rule);
-      // provide one anyway for the audit log.
-      await page.getByLabel(/^Reason/).fill('Stage 4.2 conversion walkthrough');
-      await page.getByRole('button', { name: /Convert.*record payment/i }).click();
-
-      // Wait for landing on the candidate profile.
-      await expect(page).toHaveURL(/\/candidates\/[0-9a-f-]{36}/, { timeout: 15_000 });
-      await shot(page, '03-candidate-profile');
-
-      // Candidate profile must show the person's name + primary occupation.
-      await expect(page.getByText(/S42First/).first()).toBeVisible({ timeout: 10_000 });
-      // Primary occupation label (seeded occupation name).
+      // Stage 6E — verifying the full PF payment auto-issues the
+      // invoice AND activates the candidate in the same transaction
+      // ("…and candidate is now active"), so the old lead-row
+      // "Convert → activate candidate" step no longer exists. Assert
+      // the auto-converted end state on the Client Workspace.
+      await page.goto(`/clients/${seeded.personId}`);
+      await expect(page.getByText(/S42First/).first()).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText(/Active candidate/i).first()).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText(seeded.occupationName).first()).toBeVisible();
+      await shot(page, '03-candidate-workspace');
 
       // DB-level invariant checks — no duplicate rows after conversion.
       const [profile] = await db
@@ -256,8 +230,7 @@ test.describe('Stage 4.2 — lead-to-candidate conversion', () => {
 
       // Billing surface accessible — click the Billing tab + confirm
       // at least one invoice row is visible.
-      await page.goto(`/candidates/${seeded.personId}`);
-      await page.getByRole('tab', { name: /^Billing$/ }).click();
+      await page.goto(`/clients/${seeded.personId}?tab=billing`);
       await expect(page.getByText(/INV-/).first()).toBeVisible({ timeout: 10_000 });
       await shot(page, '04-candidate-billing');
     } finally {

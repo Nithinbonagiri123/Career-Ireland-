@@ -80,6 +80,9 @@ async function probe(page: import('@playwright/test').Page, path: string, findin
 }
 
 test('stage 6F — runtime error probe across main pages', async ({ page }) => {
+  // Twelve page loads against a dev server (per-route compilation on a
+  // cold cache) doesn't fit the default 30s test budget.
+  test.setTimeout(180_000);
   await page.setViewportSize({ width: 1440, height: 900 });
 
   // Seed one convertible lead so /clients/[personId] has something to show.
