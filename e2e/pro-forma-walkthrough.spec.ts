@@ -36,23 +36,55 @@ async function shot(page: Page, name: string): Promise<void> {
   });
 }
 
+/** formatCurrency(en-IE) output for sub-€1,000 amounts — no separator. */
+function eur(n: number): string {
+  return `€${n.toFixed(2)}`;
+}
+
+/**
+ * The workspace renders each not-yet-converted quote as a "Pending
+ * quote" card; `marker` (a per-run unique amount string) pins the card
+ * belonging to this test run, since prior runs against the same dev
+ * lead leave their own cards behind.
+ */
+function quoteCard(page: Page, marker: string) {
+  return page
+    .locator('[data-slot="card"]')
+    .filter({ hasText: 'Pending quote' })
+    .filter({ hasText: marker })
+    .first();
+}
+
 async function openFirstCsLead(page: Page): Promise<string> {
   // Query the DB directly for the first CS lead with a payer person —
   // the table UI's row-name link goes to the candidate page, not the
   // lead detail page. We navigate to /leads/<id> directly.
   const { config: loadEnv } = await import('dotenv');
   loadEnv({ path: '.env.local' });
-  const { eq, and, isNotNull } = await import('drizzle-orm');
+  const { eq, and, isNotNull, notInArray, isNull } = await import('drizzle-orm');
   const { db } = await import('../src/lib/db/client');
   const { leads } = await import('../src/lib/db/schema/leads');
   const [lead] = await db
     .select({ id: leads.id })
     .from(leads)
-    .where(and(eq(leads.targetBusiness, 'CANDIDATE_SERVICES'), isNotNull(leads.personId)))
+    .where(
+      and(
+        eq(leads.targetBusiness, 'CANDIDATE_SERVICES'),
+        isNotNull(leads.personId),
+        // A CONVERTED lead's /leads/<id> page redirects to the Client
+        // Workspace (Stage 6D) — the pro-forma composer this spec
+        // exercises lives on the pre-conversion lead detail page.
+        notInArray(leads.status, ['CONVERTED']),
+        isNull(leads.archivedAt),
+      ),
+    )
     .limit(1);
-  if (!lead) throw new Error('No CS lead with person_id in dev DB. Seed one first.');
+  if (!lead) throw new Error('No unconverted CS lead with person_id in dev DB. Seed one first.');
   await page.goto(`/leads/${lead.id}`);
-  await expect(page.getByRole('heading', { name: /Pro formas|Lead details/ }).first()).toBeVisible({
+  // Stage 6D Wave 4 — /leads/<id> for a person-linked lead redirects to
+  // the Client Workspace, whose Services & Billing surface hosts the
+  // same ProFormaComposer behind the "+ New quote" button.
+  await expect(page.getByRole('heading', { name: /Service billing/i }).first()).toBeVisible({
     timeout: 10_000,
   });
   return lead.id;
@@ -60,92 +92,99 @@ async function openFirstCsLead(page: Page): Promise<string> {
 
 test.describe('Stage 2 — pro forma close-out', () => {
   test('build, issue, accept, print — EUR 3-line multi-service', async ({ page }) => {
-    const _leadId = await openFirstCsLead(page);
-    await shot(page, '01-lead-detail');
+    await openFirstCsLead(page);
+    await shot(page, '01-workspace-billing');
+
+    // Per-run unique line-1 price so this run's quote card can't be
+    // confused with leftovers from earlier runs against the same lead.
+    // Totals stay under €1,000 so formatCurrency emits no thousands
+    // separator and plain `€${n.toFixed(2)}` matches it.
+    const p1 = 100 + (Date.now() % 90) + 0.37;
+    const tot1 = eur(p1 + 3 * 60 + 2.5 * 40); // 1×p1 + 3×60 + 2.5×40
+    const tot2 = eur(p1 + 3 * 60 + 3 * 40); // after revising line 3 qty to 3
 
     // ── Create pro forma A (EUR, 3 lines) ──────────────────────
-    await page.getByRole('button', { name: 'New pro forma' }).click();
+    await page.getByRole('button', { name: '+ New quote' }).first().click();
     await expect(page.getByRole('heading', { name: 'Create pro forma' })).toBeVisible();
 
     // The composer opens pre-populated with one line. Edit line 1,
     // then click Add line twice to total 3 lines.
-    // Line 1
     const line1Desc = page.getByPlaceholder('Appears on the PDF line').first();
     await line1Desc.fill('CV review and ATS optimisation');
     const qtyInputs = page.locator('input[inputmode="decimal"]');
-    await qtyInputs.nth(0).fill('1'); // qty line 1
-    await qtyInputs.nth(1).fill('250.00'); // unit price line 1
+    await qtyInputs.nth(0).fill('1');
+    await qtyInputs.nth(1).fill(p1.toFixed(2));
 
-    // Add line 2
     await page.getByRole('button', { name: /^Add line$/ }).click();
-    const line2Desc = page.getByPlaceholder('Appears on the PDF line').nth(1);
-    await line2Desc.fill('Interview coaching — 3 sessions');
+    await page
+      .getByPlaceholder('Appears on the PDF line')
+      .nth(1)
+      .fill('Interview coaching — 3 sessions');
     await qtyInputs.nth(2).fill('3');
-    await qtyInputs.nth(3).fill('180.00');
+    await qtyInputs.nth(3).fill('60.00');
 
-    // Add line 3
     await page.getByRole('button', { name: /^Add line$/ }).click();
-    const line3Desc = page.getByPlaceholder('Appears on the PDF line').nth(2);
-    await line3Desc.fill('Job search strategy session');
+    await page
+      .getByPlaceholder('Appears on the PDF line')
+      .nth(2)
+      .fill('Job search strategy session');
     await qtyInputs.nth(4).fill('2.5');
-    await qtyInputs.nth(5).fill('120.00');
+    await qtyInputs.nth(5).fill('40.00');
 
     await shot(page, '02-composer-3-lines');
-
-    // Document total should equal 1×250 + 3×180 + 2.5×120 = 250 + 540 + 300 = 1090.00
-    await expect(page.getByText('€1,090.00')).toBeVisible();
+    await expect(page.getByText(tot1).first()).toBeVisible();
 
     await page.getByRole('button', { name: 'Save draft' }).click();
     await expect(page.getByText('Pro forma draft created')).toBeVisible();
 
-    // Panel now shows a row with DRAFT badge.
-    await shot(page, '03-panel-with-draft');
-    const draftRow = page.locator('li').filter({ hasText: 'DRAFT' }).first();
-    await expect(draftRow).toBeVisible();
-    // Open it.
-    await draftRow.getByRole('link', { name: /Open/ }).click();
-    await expect(page).toHaveURL(/\/leads\/.*\/pro-formas\/[0-9a-f-]{36}/);
-    await shot(page, '04-draft-view');
+    // Stage 6D — the quote lifecycle lives on the workspace's quote
+    // cards now: the draft renders as a "Pending quote" card with the
+    // Edit / Issue / Cancel actions inline.
+    const draftCard = quoteCard(page, tot1);
+    await expect(draftCard).toBeVisible({ timeout: 10_000 });
+    await expect(draftCard.getByText('Draft quote')).toBeVisible();
+    await shot(page, '03-draft-card');
 
     // ── Issue it ──────────────────────────────────────────────
-    await page.getByRole('button', { name: 'Issue' }).click();
-    await expect(page.getByText('Pro forma issued')).toBeVisible();
-    await expect(page.getByText(/ISSUED/)).toBeVisible();
-    await shot(page, '05-issued');
+    await draftCard.getByRole('button', { name: 'Issue' }).click();
+    await expect(page.getByText('Pro forma issued').first()).toBeVisible();
+    await expect(draftCard.getByText('Quote issued')).toBeVisible({ timeout: 10_000 });
+    await shot(page, '04-issued');
 
     // ── Revise it ─────────────────────────────────────────────
-    await page.getByRole('button', { name: /^Revise$/ }).click();
+    await draftCard.getByRole('button', { name: /^Revise$/ }).click();
     await expect(page.getByRole('heading', { name: 'Revise issued pro forma' })).toBeVisible();
     // Bump line-3 qty from 2.5 → 3
     const reviseQtyInputs = page.locator('input[inputmode="decimal"]');
     await reviseQtyInputs.nth(4).fill('3');
     await page.getByPlaceholder(/e\.g\. updated line/).fill('Line 3 session count agreed at 3');
-    await shot(page, '06-revising');
+    await shot(page, '05-revising');
     await page.getByRole('button', { name: 'Save revision' }).click();
-    await expect(page.getByText('Revision saved')).toBeVisible();
-    // Revision history now has 1 entry (the snapshot of rev 1 before edit).
-    await expect(page.getByText('rev 2')).toBeVisible();
-    await expect(page.getByText('Line 3 session count agreed at 3')).toBeVisible();
-    await shot(page, '07-after-revise');
-    // New total: 1×250 + 3×180 + 3×120 = 250 + 540 + 360 = 1150.00
-    await expect(page.getByText('€1,150.00')).toBeVisible();
+    await expect(page.getByText('Revision saved').first()).toBeVisible();
+    // The card re-renders with the revised total.
+    const revisedCard = quoteCard(page, tot2);
+    await expect(revisedCard).toBeVisible({ timeout: 10_000 });
+    await shot(page, '06-after-revise');
 
     // ── Record acceptance ─────────────────────────────────────
-    await page.getByRole('button', { name: 'Record client acceptance' }).click();
+    await revisedCard.getByRole('button', { name: 'Record client acceptance' }).click();
     await page.getByPlaceholder('Required for the audit log').fill('Client signed email offer');
-    await shot(page, '08-accept-dialog');
+    await shot(page, '07-accept-dialog');
     await page.getByRole('button', { name: 'Mark as accepted' }).click();
-    await expect(page.getByText(/ACCEPTED/)).toBeVisible();
-    // Edit / Revise / Issue / Accept buttons should be gone now — ACCEPTED is terminal.
-    await expect(page.getByRole('button', { name: /^Issue$/ })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /^Revise$/ })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Record client acceptance' })).toHaveCount(0);
-    await shot(page, '09-accepted-terminal');
+    await expect(revisedCard.getByText('Client accepted')).toBeVisible({ timeout: 10_000 });
+    // Issue / Revise / Accept controls are gone — ACCEPTED is terminal
+    // for the quote editor (payment recording takes over from here).
+    await expect(revisedCard.getByRole('button', { name: /^Issue$/ })).toHaveCount(0);
+    await expect(revisedCard.getByRole('button', { name: /^Revise$/ })).toHaveCount(0);
+    await expect(revisedCard.getByRole('button', { name: 'Record client acceptance' })).toHaveCount(
+      0,
+    );
+    await shot(page, '08-accepted-terminal');
 
     // ── Open the print view ───────────────────────────────────
     const [printPage] = await Promise.all([
       page.context().waitForEvent('page'),
-      page.getByRole('link', { name: /View \/ print PDF/ }).click(),
+      revisedCard.getByRole('link', { name: /Open PDF/ }).click(),
     ]);
     await printPage.waitForLoadState();
     await expect(printPage.getByText(/PRO FORMA/).first()).toBeVisible();
@@ -153,26 +192,29 @@ test.describe('Stage 2 — pro forma close-out', () => {
     await expect(printPage.getByText('CV review and ATS optimisation')).toBeVisible();
     await expect(printPage.getByText('Interview coaching — 3 sessions')).toBeVisible();
     await expect(printPage.getByText('Job search strategy session')).toBeVisible();
-    await expect(printPage.getByText('€1,150.00')).toBeVisible();
+    await expect(printPage.getByText(tot2).first()).toBeVisible();
     await printPage.screenshot({
-      path: path.join(SHOTS_DIR, '10-print-pdf.png'),
+      path: path.join(SHOTS_DIR, '09-print-pdf.png'),
       fullPage: true,
     });
     await printPage.close();
   });
 
-  test('competing proposals — accept one, sibling supersedes', async ({ page }) => {
-    const leadId = await openFirstCsLead(page);
+  test('competing proposals — accept one, unrelated group untouched', async ({ page }) => {
+    await openFirstCsLead(page);
 
-    // Count existing pro-formas to pick fresh ones later.
-    const _panel = page.getByText('Pro formas').locator('..').locator('..');
+    // Per-run unique amounts (both sub-1,000 so no thousands separator).
+    const eurAmount = 300 + (Date.now() % 80) + 0.11;
+    const zarAmount = 700 + (Date.now() % 80) + 0.19;
+    const eurText = eur(eurAmount);
+    const zarText = zarAmount.toFixed(2);
 
     // Create pro forma B (EUR) and pro forma C (ZAR) back-to-back.
     for (const [idx, currency, amount] of [
-      [0, 'EUR', '300.00'],
-      [1, 'ZAR', '5000.00'],
+      [0, 'EUR', eurAmount.toFixed(2)],
+      [1, 'ZAR', zarAmount.toFixed(2)],
     ] as const) {
-      await page.getByRole('button', { name: 'New pro forma' }).click();
+      await page.getByRole('button', { name: '+ New quote' }).first().click();
       await expect(page.getByRole('heading', { name: 'Create pro forma' })).toBeVisible();
       const currencySelect = page.locator('select#pf-currency');
       await currencySelect.selectOption(currency);
@@ -184,87 +226,79 @@ test.describe('Stage 2 — pro forma close-out', () => {
       await qtyIn.nth(0).fill('1');
       await qtyIn.nth(1).fill(amount);
       await page.getByRole('button', { name: 'Save draft' }).click();
-      await expect(page.getByText('Pro forma draft created')).toBeVisible();
+      await expect(page.getByText('Pro forma draft created').first()).toBeVisible();
     }
-    await shot(page, '11-two-drafts-created');
+    await shot(page, '10-two-drafts-created');
 
-    // The brief requires that competing proposals in one group behave right.
-    // The composer always creates a NEW group — so these two drafts are in
-    // separate groups by default. For the "sibling supersedes" check we need
-    // to issue BOTH as drafts in the same group. For Stage 2 the UX exposes
-    // this only via re-opening a draft and issuing — the panel shows them
-    // as separate groups. We verify the DB-level invariant via the direct
-    // integration tests (service.test.ts) and rely on the panel to show
-    // acceptance isolation. Confirm one accept doesn't touch an unrelated
-    // group's drafts by accepting the EUR one and asserting the ZAR one
-    // stays DRAFT.
-
-    const draftRows = page.locator('li').filter({ hasText: 'DRAFT' });
-    const _n = await draftRows.count();
-    // Issue the first new draft.
-    await draftRows.first().getByRole('link', { name: 'Open' }).click();
-    await page.getByRole('button', { name: 'Issue' }).click();
-    await expect(page.getByText('Pro forma issued')).toBeVisible();
-    await page.getByRole('button', { name: 'Record client acceptance' }).click();
+    // The composer always creates a NEW proposal group, so these drafts
+    // are in separate groups. The DB-level "sibling supersedes" invariant
+    // is covered by the integration tests; here we confirm acceptance
+    // isolation in the UI — accepting the EUR quote must not touch the
+    // unrelated ZAR draft.
+    const eurCard = quoteCard(page, eurText);
+    await eurCard.getByRole('button', { name: 'Issue' }).click();
+    await expect(eurCard.getByText('Quote issued')).toBeVisible({ timeout: 10_000 });
+    await eurCard.getByRole('button', { name: 'Record client acceptance' }).click();
     await page.getByPlaceholder('Required for the audit log').fill('Client picked tier A');
     await page.getByRole('button', { name: 'Mark as accepted' }).click();
-    await expect(page.getByText(/ACCEPTED/)).toBeVisible();
-    await shot(page, '12-group-1-accepted');
+    await expect(eurCard.getByText('Client accepted')).toBeVisible({ timeout: 10_000 });
+    await shot(page, '11-group-1-accepted');
 
-    // Back to the lead — the second (ZAR) draft should still be DRAFT
-    // because it lives in a different proposal group.
-    await page.goto(`/leads/${leadId}`);
-    await expect(page.getByText('ZAR')).toBeVisible();
-    await shot(page, '13-second-group-untouched');
+    // The ZAR draft lives in a different proposal group — still a draft.
+    await page.reload();
+    const zarCard = quoteCard(page, zarText);
+    await expect(zarCard).toBeVisible({ timeout: 10_000 });
+    await expect(zarCard.getByText('Draft quote')).toBeVisible();
+    await shot(page, '12-second-group-untouched');
   });
 
   test('reject + cancel paths cover terminal transitions', async ({ page }) => {
-    const leadId = await openFirstCsLead(page);
+    await openFirstCsLead(page);
 
-    // Create a draft just to reject.
-    await page.getByRole('button', { name: 'New pro forma' }).click();
+    const rejectAmount = eur(500 + (Date.now() % 80) + 0.23);
+    const cancelAmount = eur(600 + (Date.now() % 80) + 0.29);
+
+    // Create a draft, issue it, then reject (Reject lives on ISSUED
+    // quotes — a draft that's no longer wanted is cancelled instead).
+    await page.getByRole('button', { name: '+ New quote' }).first().click();
     await expect(page.getByRole('heading', { name: 'Create pro forma' })).toBeVisible();
     await page.getByPlaceholder('Appears on the PDF line').first().fill('Will be rejected');
     const qtyIn = page.locator('input[inputmode="decimal"]');
     await qtyIn.nth(0).fill('1');
-    await qtyIn.nth(1).fill('100.00');
+    await qtyIn.nth(1).fill(rejectAmount.slice(1));
     await page.getByRole('button', { name: 'Save draft' }).click();
+    await expect(page.getByText('Pro forma draft created').first()).toBeVisible();
 
-    // Open it, reject.
-    await page.goto(`/leads/${leadId}`);
-    const draftRow = page
-      .locator('li')
-      .filter({ hasText: 'Will be rejected' })
-      .or(page.locator('li').filter({ hasText: 'DRAFT' }).first());
-    const openBtn = draftRow.getByRole('link', { name: 'Open' }).first();
-    await openBtn.click();
-    await page.getByRole('button', { name: 'Reject' }).click();
+    const rejectCard = quoteCard(page, rejectAmount);
+    await rejectCard.getByRole('button', { name: 'Issue' }).click();
+    await expect(rejectCard.getByText('Quote issued')).toBeVisible({ timeout: 10_000 });
+    await rejectCard.getByRole('button', { name: 'Reject' }).click();
     await page.getByPlaceholder('Required for the audit log').fill('Client went silent');
     await page
       .getByRole('button', { name: /^Reject$/ })
       .last()
       .click();
-    await expect(page.getByText(/REJECTED/)).toBeVisible();
-    await shot(page, '14-rejected');
+    // Terminal quotes (REJECTED / CANCELLED / SUPERSEDED) drop off the
+    // workspace quote list by design — the card disappearing IS the
+    // confirmation the transition landed.
+    await expect(rejectCard).toBeHidden({ timeout: 10_000 });
+    await shot(page, '13-rejected');
 
-    // Create another draft, cancel it.
-    await page.goto(`/leads/${leadId}`);
-    await page.getByRole('button', { name: 'New pro forma' }).click();
+    // Create another draft, cancel it directly from DRAFT.
+    await page.getByRole('button', { name: '+ New quote' }).first().click();
+    await expect(page.getByRole('heading', { name: 'Create pro forma' })).toBeVisible();
     await page.getByPlaceholder('Appears on the PDF line').first().fill('Will be cancelled');
     const q2 = page.locator('input[inputmode="decimal"]');
     await q2.nth(0).fill('1');
-    await q2.nth(1).fill('50.00');
+    await q2.nth(1).fill(cancelAmount.slice(1));
     await page.getByRole('button', { name: 'Save draft' }).click();
-    await page.goto(`/leads/${leadId}`);
-    const cancelDraft = page
-      .locator('li')
-      .filter({ hasText: 'Will be cancelled' })
-      .or(page.locator('li').filter({ hasText: 'DRAFT' }).last());
-    await cancelDraft.getByRole('link', { name: 'Open' }).first().click();
-    await page.getByRole('button', { name: /^Cancel$/ }).click();
+    await expect(page.getByText('Pro forma draft created').first()).toBeVisible();
+
+    const cancelCard = quoteCard(page, cancelAmount);
+    await cancelCard.getByRole('button', { name: /^Cancel$/ }).click();
     await page.getByPlaceholder('Required for the audit log').fill('Replaced with new offer');
     await page.getByRole('button', { name: /^Cancel pro forma$/ }).click();
-    await expect(page.getByText(/CANCELLED/)).toBeVisible();
-    await shot(page, '15-cancelled');
+    await expect(cancelCard).toBeHidden({ timeout: 10_000 });
+    await shot(page, '14-cancelled');
   });
 });

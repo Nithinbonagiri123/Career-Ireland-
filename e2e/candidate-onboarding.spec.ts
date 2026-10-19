@@ -114,7 +114,7 @@ test('full happy path: fill form → Create → open invoice and receipt', async
   // so we wait for the streaming to finish by looking for the newly created
   // candidate's name in the H1 rather than for the Sonner toast, which
   // appears earlier and would match /candidate created/i falsely.
-  await page.waitForURL(/\/candidates\/[0-9a-f-]+\?just_created=1/i, { timeout: 15_000 });
+  await page.waitForURL(/\/(candidates|clients)\/[0-9a-f-]+\?just_created=1/i, { timeout: 15_000 });
   await expect(
     page.getByRole('heading', { name: new RegExp(`${firstName} ${lastName}`, 'i') }),
   ).toBeVisible({ timeout: 15_000 });
@@ -144,7 +144,7 @@ test('full happy path: fill form → Create → open invoice and receipt', async
   // success card still mounted — the invoice page's "Back to candidate" link
   // strips the query string, so goBack() is the reliable path.
   await page.goBack();
-  await page.waitForURL(/\/candidates\/[0-9a-f-]+\?just_created=1/i);
+  await page.waitForURL(/\/(candidates|clients)\/[0-9a-f-]+\?just_created=1/i);
   await page.getByRole('link', { name: /view receipt/i }).click();
   await page.waitForURL(/\/candidates\/[0-9a-f-]+\/receipts\/RCT-\d{4}-\d{6}/i);
   await expect(page.getByText(/^receipt$/i).first()).toBeVisible();
