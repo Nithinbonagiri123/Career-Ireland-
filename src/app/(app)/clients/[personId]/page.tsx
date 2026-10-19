@@ -30,7 +30,10 @@ import {
   SkillsSection,
 } from '@/app/(app)/candidates/[id]/candidate-details-panel';
 import { JustCreatedCard } from '@/app/(app)/candidates/[id]/just-created-card';
-import { VerifyPaymentButton } from '@/app/(app)/leads/[id]/pro-formas/record-payment-dialog';
+import {
+  RecordPaymentDialog,
+  VerifyPaymentButton,
+} from '@/app/(app)/leads/[id]/pro-formas/record-payment-dialog';
 import { RefundPaymentButton } from '@/app/(app)/leads/[id]/pro-formas/refund-payment-dialog';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { EditPersonDialog } from '@/components/edit-person-dialog';
@@ -757,9 +760,34 @@ export default async function ClientWorkspacePage({
                   refund action. */}
                 {relatedPayments.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Payments
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Payments
+                      </p>
+                      {/* Partial-payment continuation — once the quote
+                          CONVERTS, QuoteActionsRow stops offering Record
+                          payment, so an engagement with an outstanding
+                          balance needs its own entry point for the next
+                          instalment. */}
+                      {!isSettled &&
+                        (() => {
+                          // Pre-conversion the quote isn't linked to the
+                          // engagement yet (pf.engagementId is set at
+                          // CONVERT time) — bridge via the payments rows.
+                          const paymentPf =
+                            headerPf ??
+                            proFormas.find((pf) =>
+                              relatedPayments.some((p2) => p2.proFormaInvoiceId === pf.id),
+                            );
+                          return paymentPf ? (
+                            <RecordPaymentDialog
+                              proFormaInvoiceId={paymentPf.id}
+                              currencyCode={e.currencyCode}
+                              defaultAmount={e.outstanding}
+                            />
+                          ) : null;
+                        })()}
+                    </div>
                     {relatedPayments.map((p) => {
                       const parentPf = proFormas.find(
                         (pf) => pf.engagementId === p.serviceEngagementId,
