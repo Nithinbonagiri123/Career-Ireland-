@@ -11,7 +11,7 @@ import {
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { persons } from '@/lib/db/schema/persons';
 import { employers } from '@/lib/db/schema/recruitment';
-import { serviceCatalogItems, servicePackages } from '@/lib/db/schema/services';
+import { serviceCatalogItems, serviceCategories, servicePackages } from '@/lib/db/schema/services';
 import { users } from '@/lib/db/schema/users';
 
 /**
@@ -32,6 +32,12 @@ export type InvoiceableService = {
   id: string;
   code: string;
   name: string;
+  /** Optional catalog blurb shown on the service-picker cards. */
+  description: string | null;
+  /** Business-line category label, for the picker's category filter. */
+  categoryName: string | null;
+  defaultPrice: string | null;
+  defaultCurrencyCode: string | null;
   payerType: 'PERSON' | 'EMPLOYER' | 'ANY';
   packages: Array<{
     id: string;
@@ -85,9 +91,14 @@ export async function fetchInvoiceableServicesFor(
       id: serviceCatalogItems.id,
       code: serviceCatalogItems.code,
       name: serviceCatalogItems.name,
+      description: serviceCatalogItems.description,
+      categoryName: serviceCategories.name,
+      defaultPrice: serviceCatalogItems.defaultPrice,
+      defaultCurrencyCode: serviceCatalogItems.defaultCurrencyCode,
       payerType: serviceCatalogItems.payerType,
     })
     .from(serviceCatalogItems)
+    .leftJoin(serviceCategories, eq(serviceCategories.id, serviceCatalogItems.categoryId))
     .where(
       and(
         eq(serviceCatalogItems.isActive, true),
@@ -274,7 +285,7 @@ export type RefundablePaymentRow = {
   id: string;
   amount: string;
   currencyCode: string;
-  method: 'BANK_TRANSFER' | 'CASH' | 'OTHER';
+  method: 'BANK_TRANSFER' | 'CASH' | 'CARD' | 'OTHER';
   verifiedAt: Date | null;
   remainingRefundable: string;
 };
@@ -322,6 +333,52 @@ export async function fetchRefundablePaymentsForInvoice(
       };
     })
     .filter((r) => Number.parseFloat(r.remainingRefundable) > 0);
+}
+
+export type InvoicePaymentTrailRow = {
+  id: string;
+  amount: string;
+  currencyCode: string;
+  method: 'BANK_TRANSFER' | 'CASH' | 'CARD' | 'OTHER';
+  status:
+    | 'PENDING'
+    | 'PROOF_UPLOADED'
+    | 'VERIFIED'
+    | 'REJECTED'
+    | 'REFUNDED'
+    | 'PARTIALLY_REFUNDED';
+  proofReference: string | null;
+  receivedAt: Date | null;
+  createdAt: Date;
+  receiptNumber: string | null;
+};
+
+/**
+ * Stage 6G Screen 10 — every payment on an invoice's engagement with
+ * its receipt number, for the invoice detail page's Payments tab.
+ */
+export async function fetchInvoicePaymentTrail(
+  invoiceId: string,
+): Promise<InvoicePaymentTrailRow[]> {
+  await requireInternalStaff();
+  const rows = await db
+    .select({
+      id: payments.id,
+      amount: payments.amount,
+      currencyCode: payments.currencyCode,
+      method: payments.method,
+      status: payments.status,
+      proofReference: payments.proofReference,
+      receivedAt: payments.receivedAt,
+      createdAt: payments.createdAt,
+      receiptNumber: receipts.number,
+    })
+    .from(payments)
+    .innerJoin(invoices, eq(invoices.serviceEngagementId, payments.serviceEngagementId))
+    .leftJoin(receipts, eq(receipts.paymentId, payments.id))
+    .where(eq(invoices.id, invoiceId))
+    .orderBy(desc(payments.createdAt));
+  return rows;
 }
 
 export type PersonBillingRow = {

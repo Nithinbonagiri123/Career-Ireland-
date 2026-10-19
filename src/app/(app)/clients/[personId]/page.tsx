@@ -74,6 +74,11 @@ import { ClientWorkspaceTabs } from './client-workspace-tabs';
 import { CandidateDocsTab } from './docs-tab';
 import { ClientNextActionIsland } from './next-action-island';
 import { NewQuoteButton, QuoteActionsRow } from './quote-actions-row';
+import {
+  type ActiveServiceRow,
+  type ServiceHistoryRow,
+  ServicesBillingTab,
+} from './services-billing-tab';
 
 export const dynamic = 'force-dynamic';
 
@@ -491,465 +496,614 @@ export default async function ClientWorkspacePage({
   // clients keep the detail open so there's no extra click for the
   // common case.
   const collapseByDefault = balance.engagements.length > 1;
+
+  // Stage 6G Screen 06 — derived summary rows for the mockup-matching
+  // Services & Billing surface (service picker + active-service cards +
+  // service-history table). The detailed engagement cards below
+  // (#billing-detail) stay the operational source of truth — these are
+  // read-only views over the same workspace data.
+  const engagementById = new Map(balance.engagements.map((e) => [e.engagementId, e]));
+  const activeServiceRows: ActiveServiceRow[] = balance.engagements.map((e) => {
+    const relatedQuotes = proFormas.filter((p) => p.engagementId === e.engagementId);
+    const headerPf =
+      relatedQuotes.find((pf) => pf.status === 'CONVERTED') ??
+      relatedQuotes.find((pf) => pf.status === 'ACCEPTED') ??
+      relatedQuotes[0] ??
+      // Pre-conversion the quote isn't linked to the engagement yet —
+      // bridge via the payment rows (same trick as the Payments header).
+      proFormas.find((pf) =>
+        payments.some(
+          (p) => p.serviceEngagementId === e.engagementId && p.proFormaInvoiceId === pf.id,
+        ),
+      );
+    const agreedNum = Number.parseFloat(e.agreedAmount);
+    const paidNum = Number.parseFloat(e.verifiedPaid);
+    const settled = Number.parseFloat(e.outstanding) <= 0;
+    return {
+      engagementId: e.engagementId,
+      serviceName: e.serviceName,
+      statusLabel: settled ? 'Active' : 'In progress',
+      settled,
+      pfLine: headerPf
+        ? `Pro Forma ${headerPf.number}${
+            headerPf.acceptedAt
+              ? ` · Accepted ${format(headerPf.acceptedAt, 'dd MMM yyyy · HH:mm')}`
+              : headerPf.issuedAt
+                ? ` · Issued ${format(headerPf.issuedAt, 'dd MMM yyyy · HH:mm')}`
+                : ''
+          }`
+        : null,
+      agreed: e.agreedAmount,
+      paid: e.verifiedPaid,
+      balance: e.outstanding,
+      currencyCode: e.currencyCode,
+      pct: agreedNum > 0 ? Math.min(100, Math.max(0, Math.round((paidNum / agreedNum) * 100))) : 0,
+    };
+  });
+  // Verified money per quote — used for quotes that haven't converted
+  // into an engagement yet (post-conversion the engagement's own
+  // verifiedPaid is authoritative).
+  const verifiedByPf = new Map<string, number>();
+  for (const p of payments) {
+    if (!p.proFormaInvoiceId || p.status !== 'VERIFIED') continue;
+    verifiedByPf.set(
+      p.proFormaInvoiceId,
+      (verifiedByPf.get(p.proFormaInvoiceId) ?? 0) + Number.parseFloat(p.amount),
+    );
+  }
+  const quoteHistoryRows: ServiceHistoryRow[] = proFormas
+    .filter(
+      (pf) => pf.status !== 'SUPERSEDED' && pf.status !== 'CANCELLED' && pf.status !== 'REJECTED',
+    )
+    .map((pf) => {
+      const eng = pf.engagementId ? engagementById.get(pf.engagementId) : undefined;
+      const subtotalNum = Number.parseFloat(pf.subtotal);
+      const paidNum = eng ? Number.parseFloat(eng.verifiedPaid) : (verifiedByPf.get(pf.id) ?? 0);
+      const balanceNum = Math.max(0, subtotalNum - paidNum);
+      return {
+        key: `pf-${pf.id}`,
+        dateIso: pf.issuedAt ? pf.issuedAt.toISOString() : null,
+        service: eng?.serviceName ?? pf.lines[0]?.description ?? 'Pro forma',
+        type: 'Quote' as const,
+        refLabel: pf.number,
+        refHref: `/leads/${pf.sourceLeadId}/pro-formas/${pf.id}`,
+        printHref: pf.issuedAt ? `/leads/${pf.sourceLeadId}/pro-formas/${pf.id}/print` : null,
+        amount: pf.subtotal,
+        paid: paidNum.toFixed(2),
+        balance: balanceNum.toFixed(2),
+        currencyCode: pf.currencyCode,
+        status:
+          pf.status === 'DRAFT'
+            ? ('Draft quote' as const)
+            : balanceNum <= 0 && paidNum > 0
+              ? ('Paid' as const)
+              : paidNum > 0
+                ? ('Partially paid' as const)
+                : ('In progress' as const),
+      };
+    });
+  // Direct Payment & Convert engagements never had a quote — their
+  // history row anchors to the official invoice instead.
+  const pfEngagementIds = new Set(
+    proFormas.map((p) => p.engagementId).filter((id): id is string => !!id),
+  );
+  const directHistoryRows: ServiceHistoryRow[] = balance.engagements
+    .filter(
+      (e) =>
+        !pfEngagementIds.has(e.engagementId) &&
+        !payments.some((p) => p.serviceEngagementId === e.engagementId && p.proFormaInvoiceId),
+    )
+    .map((e) => {
+      const inv = invoices.find(
+        (i) =>
+          i.serviceEngagementId === e.engagementId &&
+          i.liability === 'PERSONAL' &&
+          i.status !== 'VOIDED',
+      );
+      const settled = Number.parseFloat(e.outstanding) <= 0;
+      return {
+        key: `eng-${e.engagementId}`,
+        dateIso: inv ? inv.issuedAt.toISOString() : null,
+        service: e.serviceName,
+        type: 'Direct payment' as const,
+        refLabel: inv?.number ?? null,
+        refHref: inv ? `/candidates/${personId}/invoices/${inv.number}` : null,
+        printHref: null,
+        amount: e.agreedAmount,
+        paid: e.verifiedPaid,
+        balance: e.outstanding,
+        currencyCode: e.currencyCode,
+        status: settled ? ('Paid' as const) : ('Partially paid' as const),
+      };
+    });
+  const serviceHistoryRows = [...quoteHistoryRows, ...directHistoryRows].sort((a, b) =>
+    (b.dateIso ?? '9999').localeCompare(a.dateIso ?? '9999'),
+  );
+
   const serviceBillingSection = (
-    <section id="service-billing" className="space-y-3" aria-labelledby="service-billing-heading">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-teal-200/60 bg-teal-50/40 px-4 py-3">
-        <h2
-          id="service-billing-heading"
-          className="flex items-center gap-2 text-base font-semibold"
-        >
-          <span
-            aria-hidden
-            className="grid size-7 place-items-center rounded-md bg-teal-100 text-teal-700"
+    <section id="service-billing" className="space-y-5" aria-labelledby="service-billing-heading">
+      <ServicesBillingTab
+        personId={personId}
+        personName={fullName}
+        candidateInfo={{
+          email: person.email,
+          phone: person.phone,
+          nationality: person.nationality,
+          country: person.currentCountry,
+          immigrationStatus: person.irishImmigrationStatus?.replace(/_/g, ' ') ?? null,
+        }}
+        leadId={csLeadForActivation?.id ?? liveLead?.id ?? ''}
+        services={data.services}
+        currencies={data.currencies}
+        active={activeServiceRows}
+        history={serviceHistoryRows}
+      />
+
+      {/* Detailed operational cards — quotes, payment verification,
+          refunds, invoices & receipts. The summary surface above links
+          here via "View all" / active-service cards. */}
+      <div id="billing-detail" className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-teal-200/60 bg-teal-50/40 px-4 py-3">
+          <h2
+            id="service-billing-heading"
+            className="flex items-center gap-2 text-base font-semibold"
           >
-            <CalendarCheck className="size-4" />
-          </span>
-          Service billing
-          <span className="text-xs font-normal text-muted-foreground">
-            ({balance.engagements.length} service
-            {balance.engagements.length === 1 ? '' : 's'})
-          </span>
-        </h2>
-        <div className="flex items-center gap-2">
-          {balance.engagements.length > 2 && (
-            <a
-              href="#workspace-tabs"
-              className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            <span
+              aria-hidden
+              className="grid size-7 place-items-center rounded-md bg-teal-100 text-teal-700"
             >
-              Jump to profile tabs ↓
-            </a>
-          )}
-          <NewQuoteButton
-            leadId={csLeadForActivation?.id ?? liveLead?.id ?? ''}
-            services={data.services}
-            currencies={data.currencies}
-          />
+              <CalendarCheck className="size-4" />
+            </span>
+            Service billing
+            <span className="text-xs font-normal text-muted-foreground">
+              ({balance.engagements.length} service
+              {balance.engagements.length === 1 ? '' : 's'})
+            </span>
+          </h2>
+          <div className="flex items-center gap-2">
+            {balance.engagements.length > 2 && (
+              <a
+                href="#workspace-tabs"
+                className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                Jump to profile tabs ↓
+              </a>
+            )}
+            <NewQuoteButton
+              leadId={csLeadForActivation?.id ?? liveLead?.id ?? ''}
+              services={data.services}
+              currencies={data.currencies}
+            />
+          </div>
         </div>
-      </div>
 
-      {balance.engagements.length === 0 &&
-        quotesWithoutEngagement.length === 0 &&
-        proFormas.length === 0 && (
-          <Card>
-            <CardContent className="py-10 text-center">
-              <Coins className="mx-auto mb-2 size-6 text-muted-foreground" aria-hidden />
-              <p className="text-sm text-muted-foreground">
-                No services on file yet. Use <span className="font-medium">+ New quote</span> to
-                raise the first pro forma.
-              </p>
-            </CardContent>
-          </Card>
-        )}
+        {balance.engagements.length === 0 &&
+          quotesWithoutEngagement.length === 0 &&
+          proFormas.length === 0 && (
+            <Card>
+              <CardContent className="py-10 text-center">
+                <Coins className="mx-auto mb-2 size-6 text-muted-foreground" aria-hidden />
+                <p className="text-sm text-muted-foreground">
+                  No services on file yet. Use <span className="font-medium">+ New quote</span> to
+                  raise the first pro forma.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
-      {/* Pre-engagement quotes (DRAFT / ISSUED / ACCEPTED with no
+        {/* Pre-engagement quotes (DRAFT / ISSUED / ACCEPTED with no
           serviceEngagement yet). Rare — most quotes become an
           engagement as soon as they're issued — but worth surfacing
           when they do. */}
-      {quotesWithoutEngagement.map((pf) => (
-        <Card key={`loose-pf-${pf.id}`}>
-          <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-base">Pending quote</CardTitle>
-                <Badge variant={statusTone(pf.status)} className="rounded-full text-[10px]">
-                  {PF_LABEL[pf.status] ?? pf.status}
-                </Badge>
+        {quotesWithoutEngagement.map((pf) => (
+          <Card key={`loose-pf-${pf.id}`}>
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-base">Pending quote</CardTitle>
+                  <Badge variant={statusTone(pf.status)} className="rounded-full text-[10px]">
+                    {PF_LABEL[pf.status] ?? pf.status}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {pf.number} ·{' '}
+                  <span className="tabular-nums">
+                    {formatCurrency(pf.subtotal, pf.currencyCode)}
+                  </span>
+                  {pf.issuedAt && <> · issued {format(pf.issuedAt, 'dd MMM yyyy · HH:mm')}</>}
+                </p>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {pf.number} ·{' '}
-                <span className="tabular-nums">{formatCurrency(pf.subtotal, pf.currencyCode)}</span>
-                {pf.issuedAt && <> · issued {format(pf.issuedAt, 'dd MMM yyyy · HH:mm')}</>}
-              </p>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <QuoteActionsRow pf={pf} services={data.services} currencies={data.currencies} />
-          </CardContent>
-        </Card>
-      ))}
+            </CardHeader>
+            <CardContent className="pt-0">
+              <QuoteActionsRow pf={pf} services={data.services} currencies={data.currencies} />
+            </CardContent>
+          </Card>
+        ))}
 
-      {/* One card per engagement — the service row the product owner
+        {/* One card per engagement — the service row the product owner
           asked for: agreed, received, balance, progress, embedded
           quote + invoice + payment actions. */}
-      {balance.engagements.map((e) => {
-        const relatedQuotes = proFormas.filter((p) => p.engagementId === e.engagementId);
-        const relatedInvoices = invoices.filter(
-          (i) => i.serviceEngagementId === e.engagementId && i.liability === 'PERSONAL',
-        );
-        const relatedPayments = payments.filter((p) => p.serviceEngagementId === e.engagementId);
-        const agreedCents = Math.max(1, Math.round(Number.parseFloat(e.agreedAmount) * 100));
-        const receivedCents = Math.round(Number.parseFloat(e.verifiedPaid) * 100);
-        const progressPct = Math.min(100, Math.max(0, (receivedCents / agreedCents) * 100));
-        const isSettled = Number.parseFloat(e.outstanding) <= 0;
-        const headerPf =
-          relatedQuotes.find((pf) => pf.status === 'CONVERTED') ??
-          relatedQuotes.find((pf) => pf.status === 'ACCEPTED') ??
-          relatedQuotes[0];
-        // Stage 6G — short, operator-facing status label for the row
-        // badge on the right. Derived from the engagement + payment
-        // state, not duplicated with the primary onboarding status in
-        // the hero.
-        const rowStatusLabel = isSettled
-          ? 'Fully paid'
-          : progressPct > 0
-            ? 'Awaiting payment'
-            : e.status === 'PENDING_PAYMENT'
+        {balance.engagements.map((e) => {
+          const relatedQuotes = proFormas.filter((p) => p.engagementId === e.engagementId);
+          const relatedInvoices = invoices.filter(
+            (i) => i.serviceEngagementId === e.engagementId && i.liability === 'PERSONAL',
+          );
+          const relatedPayments = payments.filter((p) => p.serviceEngagementId === e.engagementId);
+          const agreedCents = Math.max(1, Math.round(Number.parseFloat(e.agreedAmount) * 100));
+          const receivedCents = Math.round(Number.parseFloat(e.verifiedPaid) * 100);
+          const progressPct = Math.min(100, Math.max(0, (receivedCents / agreedCents) * 100));
+          const isSettled = Number.parseFloat(e.outstanding) <= 0;
+          const headerPf =
+            relatedQuotes.find((pf) => pf.status === 'CONVERTED') ??
+            relatedQuotes.find((pf) => pf.status === 'ACCEPTED') ??
+            relatedQuotes[0];
+          // Stage 6G — short, operator-facing status label for the row
+          // badge on the right. Derived from the engagement + payment
+          // state, not duplicated with the primary onboarding status in
+          // the hero.
+          const rowStatusLabel = isSettled
+            ? 'Fully paid'
+            : progressPct > 0
               ? 'Awaiting payment'
-              : e.status.replace(/_/g, ' ').toLowerCase();
-        const rowStatusTone = isSettled
-          ? 'border-status-success/30 bg-status-success-soft text-status-success'
-          : progressPct > 0
-            ? 'border-info/30 bg-info/10 text-info'
-            : 'border-status-warning/30 bg-status-warning-soft text-status-warning';
-        return (
-          <Card key={e.engagementId} data-testid="engagement-card" className="py-0">
-            <details
-              className="group [&_summary::-webkit-details-marker]:hidden"
-              {...(collapseByDefault ? {} : { open: true })}
-            >
-              <summary className="cursor-pointer list-none px-5 py-4 outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
-                {/* Row layout — matches the reference image: icon,
+              : e.status === 'PENDING_PAYMENT'
+                ? 'Awaiting payment'
+                : e.status.replace(/_/g, ' ').toLowerCase();
+          const rowStatusTone = isSettled
+            ? 'border-status-success/30 bg-status-success-soft text-status-success'
+            : progressPct > 0
+              ? 'border-info/30 bg-info/10 text-info'
+              : 'border-status-warning/30 bg-status-warning-soft text-status-warning';
+          return (
+            <Card key={e.engagementId} data-testid="engagement-card" className="py-0">
+              <details
+                className="group [&_summary::-webkit-details-marker]:hidden"
+                {...(collapseByDefault ? {} : { open: true })}
+              >
+                <summary className="cursor-pointer list-none px-5 py-4 outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                  {/* Row layout — matches the reference image: icon,
                     service name + status pill + pro-forma subtitle on
                     the left; Agreed / Received / Balance columns and
                     progress bar + status badge on the right. */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-                  <span
-                    aria-hidden
-                    className="grid size-9 shrink-0 place-items-center rounded-lg bg-sky-50 text-sky-700"
-                  >
-                    <Scroll className="size-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <CardTitle className="text-sm">{e.serviceName}</CardTitle>
-                      <Badge
-                        variant={statusTone(e.status)}
-                        className="rounded-full text-[10px] uppercase"
-                      >
-                        {e.status.replace(/_/g, ' ')}
-                      </Badge>
-                    </div>
-                    {headerPf && (
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">
-                        Pro Forma {headerPf.number}
-                        {headerPf.acceptedAt && (
-                          <> · Accepted {format(headerPf.acceptedAt, 'd MMM yyyy')}</>
-                        )}
-                        {!headerPf.acceptedAt && headerPf.issuedAt && (
-                          <> · Issued {format(headerPf.issuedAt, 'd MMM yyyy')}</>
-                        )}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-6 text-right tabular-nums">
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Agreed
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+                    <span
+                      aria-hidden
+                      className="grid size-9 shrink-0 place-items-center rounded-lg bg-sky-50 text-sky-700"
+                    >
+                      <Scroll className="size-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <CardTitle className="text-sm">{e.serviceName}</CardTitle>
+                        <Badge
+                          variant={statusTone(e.status)}
+                          className="rounded-full text-[10px] uppercase"
+                        >
+                          {e.status.replace(/_/g, ' ')}
+                        </Badge>
                       </div>
-                      <div className="text-sm font-medium">
-                        {formatCurrency(e.agreedAmount, e.currencyCode)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Received
-                      </div>
-                      <div
-                        className={cn(
-                          'text-sm font-medium',
-                          isSettled ? 'text-status-success' : 'text-info',
-                        )}
-                      >
-                        {formatCurrency(e.verifiedPaid, e.currencyCode)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Balance
-                      </div>
-                      <div className="text-sm font-medium">
-                        {formatCurrency(e.outstanding, e.currencyCode)}
-                      </div>
-                    </div>
-                  </div>
-                  <ChevronDown
-                    aria-hidden
-                    className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
-                  />
-                </div>
-                {/* Progress bar + status pill — stretched across the
-                    row width so the operator sees the money glance in
-                    one line. */}
-                <div className="mt-3 flex items-center gap-3">
-                  <div
-                    role="progressbar"
-                    aria-label={`${progressPct.toFixed(0)}% paid`}
-                    aria-valuenow={Math.round(progressPct)}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
-                  >
-                    <div
-                      className={cn(
-                        'h-full rounded-full transition-all',
-                        isSettled ? 'bg-status-success' : 'bg-info',
+                      {headerPf && (
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          Pro Forma {headerPf.number}
+                          {headerPf.acceptedAt && (
+                            <> · Accepted {format(headerPf.acceptedAt, 'd MMM yyyy')}</>
+                          )}
+                          {!headerPf.acceptedAt && headerPf.issuedAt && (
+                            <> · Issued {format(headerPf.issuedAt, 'd MMM yyyy')}</>
+                          )}
+                        </p>
                       )}
-                      style={{ width: `${progressPct}%` }}
+                    </div>
+                    <div className="flex items-center gap-6 text-right tabular-nums">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          Agreed
+                        </div>
+                        <div className="text-sm font-medium">
+                          {formatCurrency(e.agreedAmount, e.currencyCode)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          Received
+                        </div>
+                        <div
+                          className={cn(
+                            'text-sm font-medium',
+                            isSettled ? 'text-status-success' : 'text-info',
+                          )}
+                        >
+                          {formatCurrency(e.verifiedPaid, e.currencyCode)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          Balance
+                        </div>
+                        <div className="text-sm font-medium">
+                          {formatCurrency(e.outstanding, e.currencyCode)}
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronDown
+                      aria-hidden
+                      className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
                     />
                   </div>
-                  <span className="w-10 shrink-0 text-right text-[11px] text-muted-foreground tabular-nums">
-                    {progressPct.toFixed(0)}%
-                  </span>
-                  <span
-                    className={cn(
-                      'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium',
-                      rowStatusTone,
-                    )}
-                  >
-                    {rowStatusLabel}
-                  </span>
-                </div>
-              </summary>
-              <div className="space-y-4 px-6 pb-6 pt-0">
-                {/* Quotes attached to this service */}
-                {relatedQuotes.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Quotes
-                    </p>
-                    {relatedQuotes.map((pf) => (
+                  {/* Progress bar + status pill — stretched across the
+                    row width so the operator sees the money glance in
+                    one line. */}
+                  <div className="mt-3 flex items-center gap-3">
+                    <div
+                      role="progressbar"
+                      aria-label={`${progressPct.toFixed(0)}% paid`}
+                      aria-valuenow={Math.round(progressPct)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
+                    >
                       <div
-                        key={pf.id}
-                        className="rounded-md border p-3"
-                        data-testid={`quote-row-${pf.number}`}
-                      >
-                        <div className="flex flex-wrap items-center gap-2 text-sm">
-                          <span className="font-medium">{pf.number}</span>
-                          <Badge
-                            variant={statusTone(pf.status)}
-                            className="rounded-full text-[10px]"
-                          >
-                            {PF_LABEL[pf.status] ?? pf.status}
-                          </Badge>
-                          {pf.revision > 1 && (
-                            <span className="text-[10px] text-muted-foreground">
-                              rev {pf.revision}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-muted-foreground tabular-nums">
-                          {formatCurrency(pf.subtotal, pf.currencyCode)} ·{' '}
-                          {pf.issuedAt
-                            ? `issued ${format(pf.issuedAt, 'dd MMM yyyy · HH:mm')}`
-                            : 'draft'}
-                        </div>
-                        <div className="mt-2 border-t pt-2">
-                          <QuoteActionsRow
-                            pf={pf}
-                            services={data.services}
-                            currencies={data.currencies}
-                          />
-                        </div>
-                      </div>
-                    ))}
+                        className={cn(
+                          'h-full rounded-full transition-all',
+                          isSettled ? 'bg-status-success' : 'bg-info',
+                        )}
+                        style={{ width: `${progressPct}%` }}
+                      />
+                    </div>
+                    <span className="w-10 shrink-0 text-right text-[11px] text-muted-foreground tabular-nums">
+                      {progressPct.toFixed(0)}%
+                    </span>
+                    <span
+                      className={cn(
+                        'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium',
+                        rowStatusTone,
+                      )}
+                    >
+                      {rowStatusLabel}
+                    </span>
                   </div>
-                )}
+                </summary>
+                <div className="space-y-4 px-6 pb-6 pt-0">
+                  {/* Quotes attached to this service */}
+                  {relatedQuotes.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Quotes
+                      </p>
+                      {relatedQuotes.map((pf) => (
+                        <div
+                          key={pf.id}
+                          className="rounded-md border p-3"
+                          data-testid={`quote-row-${pf.number}`}
+                        >
+                          <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <span className="font-medium">{pf.number}</span>
+                            <Badge
+                              variant={statusTone(pf.status)}
+                              className="rounded-full text-[10px]"
+                            >
+                              {PF_LABEL[pf.status] ?? pf.status}
+                            </Badge>
+                            {pf.revision > 1 && (
+                              <span className="text-[10px] text-muted-foreground">
+                                rev {pf.revision}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground tabular-nums">
+                            {formatCurrency(pf.subtotal, pf.currencyCode)} ·{' '}
+                            {pf.issuedAt
+                              ? `issued ${format(pf.issuedAt, 'dd MMM yyyy · HH:mm')}`
+                              : 'draft'}
+                          </div>
+                          <div className="mt-2 border-t pt-2">
+                            <QuoteActionsRow
+                              pf={pf}
+                              services={data.services}
+                              currencies={data.currencies}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                {/* Payments against this service — each row carries its
+                  {/* Payments against this service — each row carries its
                   own status (pending/verified/refunded) + verify or
                   refund action. */}
-                {relatedPayments.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Payments
-                      </p>
-                      {/* Partial-payment continuation — once the quote
+                  {relatedPayments.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Payments
+                        </p>
+                        {/* Partial-payment continuation — once the quote
                           CONVERTS, QuoteActionsRow stops offering Record
                           payment, so an engagement with an outstanding
                           balance needs its own entry point for the next
                           instalment. */}
-                      {!isSettled &&
-                        (() => {
-                          // Pre-conversion the quote isn't linked to the
-                          // engagement yet (pf.engagementId is set at
-                          // CONVERT time) — bridge via the payments rows.
-                          const paymentPf =
-                            headerPf ??
-                            proFormas.find((pf) =>
-                              relatedPayments.some((p2) => p2.proFormaInvoiceId === pf.id),
-                            );
-                          return paymentPf ? (
-                            <RecordPaymentDialog
-                              proFormaInvoiceId={paymentPf.id}
-                              currencyCode={e.currencyCode}
-                              defaultAmount={e.outstanding}
-                            />
-                          ) : null;
-                        })()}
+                        {!isSettled &&
+                          (() => {
+                            // Pre-conversion the quote isn't linked to the
+                            // engagement yet (pf.engagementId is set at
+                            // CONVERT time) — bridge via the payments rows.
+                            const paymentPf =
+                              headerPf ??
+                              proFormas.find((pf) =>
+                                relatedPayments.some((p2) => p2.proFormaInvoiceId === pf.id),
+                              );
+                            return paymentPf ? (
+                              <RecordPaymentDialog
+                                proFormaInvoiceId={paymentPf.id}
+                                currencyCode={e.currencyCode}
+                                defaultAmount={e.outstanding}
+                              />
+                            ) : null;
+                          })()}
+                      </div>
+                      {relatedPayments.map((p) => {
+                        const parentPf = proFormas.find(
+                          (pf) => pf.engagementId === p.serviceEngagementId,
+                        );
+                        const canPreIssuanceRefund =
+                          parentPf?.status === 'ACCEPTED' &&
+                          (p.status === 'VERIFIED' || p.status === 'PARTIALLY_REFUNDED');
+                        const relatedInvoice = relatedInvoices.find((i) => i.status !== 'VOIDED');
+                        const canPostIssuanceRefund =
+                          parentPf?.status === 'CONVERTED' &&
+                          relatedInvoice != null &&
+                          (p.status === 'VERIFIED' || p.status === 'PARTIALLY_REFUNDED');
+                        return (
+                          <div
+                            key={p.id}
+                            className="flex items-center justify-between gap-2 rounded-md border p-3 text-xs"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="tabular-nums font-medium">
+                                  {formatCurrency(p.amount, p.currencyCode)}
+                                </span>
+                                <Badge
+                                  variant={statusTone(p.status)}
+                                  className="rounded-full text-[10px]"
+                                >
+                                  {PAYMENT_LABEL[p.status] ?? p.status}
+                                </Badge>
+                              </div>
+                              <div className="text-[11px] text-muted-foreground">
+                                {p.method.replace(/_/g, ' ')}
+                                {p.proofReference && ` · ref ${p.proofReference}`}
+                                {p.receivedAt &&
+                                  ` · received ${format(p.receivedAt, 'dd MMM yyyy')}`}
+                                {' · recorded '}
+                                {format(p.createdAt, 'dd MMM yyyy · HH:mm')}
+                              </div>
+                            </div>
+                            <div className="shrink-0">
+                              {(p.status === 'PENDING' || p.status === 'PROOF_UPLOADED') &&
+                                data.canVerifyPayments && <VerifyPaymentButton paymentId={p.id} />}
+                              {(p.status === 'PENDING' || p.status === 'PROOF_UPLOADED') &&
+                                !data.canVerifyPayments && (
+                                  <span className="text-[11px] italic text-muted-foreground">
+                                    Finance will confirm
+                                  </span>
+                                )}
+                              {canPreIssuanceRefund && (
+                                <RefundPaymentButton
+                                  paymentId={p.id}
+                                  paymentAmount={p.amount}
+                                  currencyCode={p.currencyCode}
+                                />
+                              )}
+                              {canPostIssuanceRefund && relatedInvoice && (
+                                <Link
+                                  href={`/candidates/${personId}/invoices/${relatedInvoice.number}`}
+                                  className="text-[11px] text-foreground underline-offset-2 hover:underline"
+                                  title="Post-issuance refund — issue a credit note from the invoice detail page"
+                                >
+                                  Refund via credit note →
+                                </Link>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    {relatedPayments.map((p) => {
-                      const parentPf = proFormas.find(
-                        (pf) => pf.engagementId === p.serviceEngagementId,
-                      );
-                      const canPreIssuanceRefund =
-                        parentPf?.status === 'ACCEPTED' &&
-                        (p.status === 'VERIFIED' || p.status === 'PARTIALLY_REFUNDED');
-                      const relatedInvoice = relatedInvoices.find((i) => i.status !== 'VOIDED');
-                      const canPostIssuanceRefund =
-                        parentPf?.status === 'CONVERTED' &&
-                        relatedInvoice != null &&
-                        (p.status === 'VERIFIED' || p.status === 'PARTIALLY_REFUNDED');
-                      return (
+                  )}
+
+                  {/* Invoices + receipts attached to this service */}
+                  {relatedInvoices.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Invoice &amp; receipts
+                      </p>
+                      {relatedInvoices.map((i) => (
                         <div
-                          key={p.id}
+                          key={i.id}
                           className="flex items-center justify-between gap-2 rounded-md border p-3 text-xs"
                         >
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="tabular-nums font-medium">
-                                {formatCurrency(p.amount, p.currencyCode)}
-                              </span>
+                              <Receipt className="size-3.5 text-muted-foreground" aria-hidden />
+                              <span className="font-medium">{i.number}</span>
                               <Badge
-                                variant={statusTone(p.status)}
+                                variant={statusTone(i.status)}
                                 className="rounded-full text-[10px]"
                               >
-                                {PAYMENT_LABEL[p.status] ?? p.status}
+                                {INVOICE_LABEL[i.status] ?? i.status}
                               </Badge>
                             </div>
-                            <div className="text-[11px] text-muted-foreground">
-                              {p.method.replace(/_/g, ' ')}
-                              {p.proofReference && ` · ref ${p.proofReference}`}
-                              {p.receivedAt && ` · received ${format(p.receivedAt, 'dd MMM yyyy')}`}
-                              {' · recorded '}
-                              {format(p.createdAt, 'dd MMM yyyy · HH:mm')}
+                            <div className="text-[11px] text-muted-foreground tabular-nums">
+                              Total {formatCurrency(i.totalAmount, i.currencyCode)}
+                              {i.status !== 'VOIDED' &&
+                                Number.parseFloat(i.outstandingAmount) > 0 && (
+                                  <>
+                                    {' '}
+                                    · Outstanding{' '}
+                                    {formatCurrency(i.outstandingAmount, i.currencyCode)}
+                                  </>
+                                )}
+                              · issued {format(i.issuedAt, 'dd MMM yyyy · HH:mm')}
                             </div>
                           </div>
-                          <div className="shrink-0">
-                            {(p.status === 'PENDING' || p.status === 'PROOF_UPLOADED') &&
-                              data.canVerifyPayments && <VerifyPaymentButton paymentId={p.id} />}
-                            {(p.status === 'PENDING' || p.status === 'PROOF_UPLOADED') &&
-                              !data.canVerifyPayments && (
-                                <span className="text-[11px] italic text-muted-foreground">
-                                  Finance will confirm
-                                </span>
-                              )}
-                            {canPreIssuanceRefund && (
-                              <RefundPaymentButton
-                                paymentId={p.id}
-                                paymentAmount={p.amount}
-                                currencyCode={p.currencyCode}
-                              />
-                            )}
-                            {canPostIssuanceRefund && relatedInvoice && (
-                              <Link
-                                href={`/candidates/${personId}/invoices/${relatedInvoice.number}`}
-                                className="text-[11px] text-foreground underline-offset-2 hover:underline"
-                                title="Post-issuance refund — issue a credit note from the invoice detail page"
-                              >
-                                Refund via credit note →
-                              </Link>
-                            )}
-                          </div>
+                          <Link
+                            href={`/candidates/${personId}/invoices/${i.number}`}
+                            className="shrink-0 text-foreground underline-offset-2 hover:underline"
+                          >
+                            View invoice
+                          </Link>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Invoices + receipts attached to this service */}
-                {relatedInvoices.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Invoice &amp; receipts
-                    </p>
-                    {relatedInvoices.map((i) => (
-                      <div
-                        key={i.id}
-                        className="flex items-center justify-between gap-2 rounded-md border p-3 text-xs"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Receipt className="size-3.5 text-muted-foreground" aria-hidden />
-                            <span className="font-medium">{i.number}</span>
-                            <Badge
-                              variant={statusTone(i.status)}
-                              className="rounded-full text-[10px]"
-                            >
-                              {INVOICE_LABEL[i.status] ?? i.status}
-                            </Badge>
-                          </div>
-                          <div className="text-[11px] text-muted-foreground tabular-nums">
-                            Total {formatCurrency(i.totalAmount, i.currencyCode)}
-                            {i.status !== 'VOIDED' &&
-                              Number.parseFloat(i.outstandingAmount) > 0 && (
-                                <>
-                                  {' '}
-                                  · Outstanding{' '}
-                                  {formatCurrency(i.outstandingAmount, i.currencyCode)}
-                                </>
-                              )}
-                            · issued {format(i.issuedAt, 'dd MMM yyyy · HH:mm')}
-                          </div>
-                        </div>
-                        <Link
-                          href={`/candidates/${personId}/invoices/${i.number}`}
-                          className="shrink-0 text-foreground underline-offset-2 hover:underline"
-                        >
-                          View invoice
-                        </Link>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </details>
-          </Card>
-        );
-      })}
-
-      {/* Employer-liability invoices rendered separately so the
-          client's own balance isn't inflated by someone else's debt. */}
-      {employerLiabilityInvoices.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base text-muted-foreground">
-              Related invoices · employer liability
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              An employer paid for these services on behalf of the candidate. Shown here for
-              context; not counted toward this client's balance.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-2 text-xs text-muted-foreground">
-            {employerLiabilityInvoices.map((i) => (
-              <div
-                key={i.id}
-                className="flex items-center justify-between gap-2 border-b pb-2 last:border-b-0 last:pb-0"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-foreground">{i.number}</span>
-                    <Badge variant={statusTone(i.status)} className="rounded-full text-[10px]">
-                      {INVOICE_LABEL[i.status] ?? i.status}
-                    </Badge>
-                  </div>
-                  <div className="text-[11px] tabular-nums">
-                    Total {formatCurrency(i.totalAmount, i.currencyCode)} · issued{' '}
-                    {format(i.issuedAt, 'dd MMM yyyy')}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <Link
-                  href={`/candidates/${personId}/invoices/${i.number}`}
-                  className="shrink-0 text-foreground underline-offset-2 hover:underline"
+              </details>
+            </Card>
+          );
+        })}
+
+        {/* Employer-liability invoices rendered separately so the
+          client's own balance isn't inflated by someone else's debt. */}
+        {employerLiabilityInvoices.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base text-muted-foreground">
+                Related invoices · employer liability
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                An employer paid for these services on behalf of the candidate. Shown here for
+                context; not counted toward this client's balance.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2 text-xs text-muted-foreground">
+              {employerLiabilityInvoices.map((i) => (
+                <div
+                  key={i.id}
+                  className="flex items-center justify-between gap-2 border-b pb-2 last:border-b-0 last:pb-0"
                 >
-                  View invoice
-                </Link>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-foreground">{i.number}</span>
+                      <Badge variant={statusTone(i.status)} className="rounded-full text-[10px]">
+                        {INVOICE_LABEL[i.status] ?? i.status}
+                      </Badge>
+                    </div>
+                    <div className="text-[11px] tabular-nums">
+                      Total {formatCurrency(i.totalAmount, i.currencyCode)} · issued{' '}
+                      {format(i.issuedAt, 'dd MMM yyyy')}
+                    </div>
+                  </div>
+                  <Link
+                    href={`/candidates/${personId}/invoices/${i.number}`}
+                    className="shrink-0 text-foreground underline-offset-2 hover:underline"
+                  >
+                    View invoice
+                  </Link>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </section>
   );
 
