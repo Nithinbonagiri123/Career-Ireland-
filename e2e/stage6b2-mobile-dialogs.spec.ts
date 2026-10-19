@@ -152,12 +152,15 @@ async function seedWithAcceptedQuoteAndPayment(firstName: string) {
       status: 'ACTIVE',
     })
     .returning({ id: serviceEngagements.id });
+  // Half-pay so the engagement keeps an outstanding balance — the
+  // Record-payment entry point only renders while money is still owed.
+  const halfPrice = (Number(pkg.price) / 2).toFixed(2);
   const [payment] = await db
     .insert(pay)
     .values({
       serviceEngagementId: eng?.id ?? '',
       proFormaInvoiceId: pf.id,
-      amount: pkg.price,
+      amount: halfPrice,
       currencyCode: pkg.currencyCode,
       method: 'BANK_TRANSFER',
       status: 'VERIFIED',

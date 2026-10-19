@@ -52,11 +52,31 @@ async function seedCsLeadWithIdentity(): Promise<{
   const { persons } = await import('../src/lib/db/schema/persons');
   const { occupations } = await import('../src/lib/db/schema/occupations');
 
-  const [occ] = await db
+  let [occ] = await db
     .select({ id: occupations.id, name: occupations.name })
     .from(occupations)
     .where(eq(occupations.isActive, true))
     .limit(1);
+  if (!occ) {
+    // Fresh CI databases seed no occupations — create one so the
+    // walkthrough is self-sufficient.
+    const { occupationCategories } = await import('../src/lib/db/schema/occupations');
+    let [cat] = await db
+      .select({ id: occupationCategories.id })
+      .from(occupationCategories)
+      .limit(1);
+    if (!cat) {
+      [cat] = await db
+        .insert(occupationCategories)
+        .values({ name: `E2E Category ${Date.now()}` })
+        .returning({ id: occupationCategories.id });
+    }
+    if (!cat) throw new Error('could not seed occupation category');
+    [occ] = await db
+      .insert(occupations)
+      .values({ categoryId: cat.id, name: `E2E Occupation ${Date.now()}` })
+      .returning({ id: occupations.id, name: occupations.name });
+  }
   if (!occ) throw new Error('no active occupation');
 
   const stamp = Math.random().toString(36).slice(2, 6);

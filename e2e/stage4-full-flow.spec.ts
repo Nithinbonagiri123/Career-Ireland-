@@ -38,22 +38,30 @@ async function shot(page: Page, name: string): Promise<void> {
 async function openFirstCsLead(page: Page): Promise<string> {
   const { config: loadEnv } = await import('dotenv');
   loadEnv({ path: '.env.local' });
-  const { and, eq, isNotNull, notInArray, isNull } = await import('drizzle-orm');
   const { db } = await import('../src/lib/db/client');
   const { leads } = await import('../src/lib/db/schema/leads');
+  const { persons } = await import('../src/lib/db/schema/persons');
+  // Self-seed a fresh person + CS lead: earlier suites in the same run
+  // convert every seeded lead, so querying for an unconverted one is
+  // order-dependent and starves on CI's fresh database.
+  const rand = Math.random().toString(36).slice(2, 7);
+  const [p] = await db
+    .insert(persons)
+    .values({
+      firstName: 'E2EQuote',
+      lastName: `Lead-${rand}`,
+      email: `e2e-quote-${Date.now()}-${rand}@example.test`,
+      phone: '+353871230000',
+      currentCountry: 'Ireland',
+      source: 'DIRECT',
+    })
+    .returning({ id: persons.id });
+  if (!p) throw new Error('could not seed person');
   const [lead] = await db
-    .select({ id: leads.id })
-    .from(leads)
-    .where(
-      and(
-        eq(leads.targetBusiness, 'CANDIDATE_SERVICES'),
-        isNotNull(leads.personId),
-        notInArray(leads.status, ['CONVERTED']),
-        isNull(leads.archivedAt),
-      ),
-    )
-    .limit(1);
-  if (!lead) throw new Error('No unconverted CS lead with person_id in dev DB');
+    .insert(leads)
+    .values({ personId: p.id, targetBusiness: 'CANDIDATE_SERVICES', status: 'NEW' })
+    .returning({ id: leads.id });
+  if (!lead) throw new Error('could not seed CS lead');
   // Stage 6D — person-linked leads redirect to the Client Workspace,
   // whose Services & Billing surface hosts the quote lifecycle.
   await page.goto(`/leads/${lead.id}`);

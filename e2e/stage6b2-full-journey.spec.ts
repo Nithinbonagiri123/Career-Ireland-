@@ -329,11 +329,13 @@ test('full happy-path: lead → quote → partial pays → invoice → activate'
     //   (c) Primary action flips to "Activate candidate"
     // Assert all three — any one failing would be a regression in the
     // auto-issue chain.
-    await expect(page.getByText(/^Invoices$/).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/Invoice & receipts/i).first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/Settled/i).first()).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/activate the candidate/i).first()).toBeVisible({
-      timeout: 10_000,
-    });
+    // Stage 6E — verifying the final instalment auto-activates the
+    // candidate in the same transaction, so there is no manual
+    // "Activate candidate" step any more: the hero flips straight to
+    // Active candidate.
+    await expect(page.getByText(/Active candidate/i).first()).toBeVisible({ timeout: 10_000 });
     // Stage 6B+3 — the invoice row now shows "Paid" directly from the DB
     // status (the pro-forma verify call atomically runs
     // recomputeInvoiceStatus so no UI display override is involved).
@@ -343,35 +345,15 @@ test('full happy-path: lead → quote → partial pays → invoice → activate'
       fullPage: true,
     });
 
-    // ── Step 10: Count check — exactly 1 engagement, 1 invoice, 2 payments,
-    //    1 receipt, 0 candidate profile (not activated yet). ─────────────
-    const beforeActivate = await countForPerson(seeded.personId);
-    expect(beforeActivate.engagements).toBe(1);
-    expect(beforeActivate.invoices).toBe(1);
-    expect(beforeActivate.payments).toBe(2);
-    expect(beforeActivate.receipts).toBe(2); // one per verified payment
-    expect(beforeActivate.candidateProfiles).toBe(0);
-
-    // ── Step 11: Activate candidate (inline dialog, pure action) ────────
-    // The "Activate candidate" primary-action button is already visible
-    // from Step 9 — no reload needed.
-    await page
-      .getByRole('button', { name: /^Activate candidate$/i })
-      .first()
-      .click();
-    const activateDialog = page.getByRole('dialog');
-    await expect(activateDialog.getByText(/does not create or alter/i)).toBeVisible();
-    await activateDialog.getByRole('button', { name: /^Activate candidate$/i }).click();
-    await expect(activateDialog).not.toBeVisible({ timeout: 10_000 });
-
-    // ── Step 12: Candidate active, no new money records ─────────────────
-    await expect(page.getByText(/active client/i).first()).toBeVisible({ timeout: 15_000 });
-    const afterActivate = await countForPerson(seeded.personId);
-    expect(afterActivate).toEqual({
-      engagements: beforeActivate.engagements,
-      invoices: beforeActivate.invoices,
-      payments: beforeActivate.payments,
-      receipts: beforeActivate.receipts,
+    // ── Step 10: Count check — exactly 1 engagement, 1 invoice, 2
+    //    payments, 2 receipts (one per verified payment), and the
+    //    auto-created candidate profile. ─────────────────────────────
+    const afterSettle = await countForPerson(seeded.personId);
+    expect(afterSettle).toEqual({
+      engagements: 1,
+      invoices: 1,
+      payments: 2,
+      receipts: 2,
       candidateProfiles: 1,
     });
     await page.screenshot({

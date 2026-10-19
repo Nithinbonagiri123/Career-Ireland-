@@ -73,10 +73,17 @@ async function seedCandidate(args: {
       // row that the seed script creates. Flag inactive so it doesn't
       // pollute downstream pickers.
       const { occupationCategories } = await import('../src/lib/db/schema/occupations');
-      const [cat] = await db
+      let [cat] = await db
         .select({ id: occupationCategories.id })
         .from(occupationCategories)
         .limit(1);
+      if (!cat) {
+        // Fresh CI databases seed no occupation categories — create one.
+        [cat] = await db
+          .insert(occupationCategories)
+          .values({ name: `E2E Category ${Date.now()}` })
+          .returning({ id: occupationCategories.id });
+      }
       if (!cat) throw new Error('no occupation_categories row to anchor seed');
       const [created] = await db
         .insert(occupations)
