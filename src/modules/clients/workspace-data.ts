@@ -117,7 +117,7 @@ export type ClientWorkspace = {
       | 'REJECTED'
       | 'PARTIALLY_REFUNDED'
       | 'REFUNDED';
-    method: 'BANK_TRANSFER' | 'CASH' | 'OTHER';
+    method: 'BANK_TRANSFER' | 'CASH' | 'CARD' | 'OTHER';
     proofReference: string | null;
     receivedAt: Date | null;
     createdAt: Date;

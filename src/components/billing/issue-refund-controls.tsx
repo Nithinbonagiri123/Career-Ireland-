@@ -24,7 +24,7 @@ export type RefundablePayment = {
   id: string;
   amount: string;
   currencyCode: string;
-  method: 'BANK_TRANSFER' | 'CASH' | 'OTHER';
+  method: 'BANK_TRANSFER' | 'CASH' | 'CARD' | 'OTHER';
   verifiedAt: Date | null;
   /** Remaining refundable = payment.amount − sum(prior refunds). */
   remainingRefundable: string;
@@ -57,8 +57,13 @@ export function IssueRefundControls({
     [paymentId, refundablePayments],
   );
   const [amount, setAmount] = useState(selectedPayment?.remainingRefundable ?? '');
+  // A CARD payment refunds through the channel the money moves back on
+  // (usually a bank transfer) — the refunds table only accepts the
+  // three movement methods.
+  const refundableMethod = (m: RefundablePayment['method'] | undefined) =>
+    m && m !== 'CARD' ? m : 'BANK_TRANSFER';
   const [method, setMethod] = useState<'BANK_TRANSFER' | 'CASH' | 'OTHER'>(
-    selectedPayment?.method ?? 'BANK_TRANSFER',
+    refundableMethod(selectedPayment?.method),
   );
   const [reason, setReason] = useState('');
   const [reference, setReference] = useState('');
@@ -69,7 +74,7 @@ export function IssueRefundControls({
     const first = refundablePayments[0] ?? null;
     setPaymentId(first?.id ?? '');
     setAmount(first?.remainingRefundable ?? '');
-    setMethod(first?.method ?? 'BANK_TRANSFER');
+    setMethod(refundableMethod(first?.method));
     setReason('');
     setReference('');
     setErr(null);
@@ -81,7 +86,7 @@ export function IssueRefundControls({
     if (!p) return;
     setPaymentId(id);
     setAmount(p.remainingRefundable);
-    setMethod(p.method);
+    setMethod(refundableMethod(p.method));
   };
 
   const submit = async () => {

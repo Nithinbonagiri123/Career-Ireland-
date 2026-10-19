@@ -44,23 +44,19 @@ describe('DirectPaymentAndConvertSchema', () => {
     expect(r.success).toBe(false);
   });
 
-  it('accepts BANK_TRANSFER, CASH, OTHER; rejects CARD', () => {
-    // Stage 6E+1 Section 4C — "CARD" was removed from the method
-    // enum. The dropdown now mirrors the pro-forma payments schema
-    // (BANK_TRANSFER / CASH / OTHER) so the display label and the
-    // stored DB value stay in lockstep. Card payments pick "Other"
-    // and put the Stripe / terminal reference in the Payment
-    // reference field.
-    expect(
-      DirectPaymentAndConvertSchema.safeParse({ ...base, methodDisplay: 'BANK_TRANSFER' }).success,
-    ).toBe(true);
-    expect(
-      DirectPaymentAndConvertSchema.safeParse({ ...base, methodDisplay: 'OTHER' }).success,
-    ).toBe(true);
+  it('accepts BANK_TRANSFER, CASH, CARD and OTHER; rejects unknown methods', () => {
+    // Stage 6G Screen 10 — CARD is a first-class payments.method value
+    // again: the dialog's Card tab stores and prints "CARD" honestly
+    // (with only the terminal / processor reference, never card data).
+    for (const methodDisplay of ['BANK_TRANSFER', 'CASH', 'CARD', 'OTHER'] as const) {
+      expect(DirectPaymentAndConvertSchema.safeParse({ ...base, methodDisplay }).success).toBe(
+        true,
+      );
+    }
     expect(
       DirectPaymentAndConvertSchema.safeParse({
         ...base,
-        methodDisplay: 'CARD' as unknown as 'CASH',
+        methodDisplay: 'CHEQUE' as unknown as 'CASH',
       }).success,
     ).toBe(false);
   });

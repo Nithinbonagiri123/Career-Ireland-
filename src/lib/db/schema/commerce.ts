@@ -86,7 +86,12 @@ export const payments = pgTable(
     currencyCode: char('currency_code', { length: 3 })
       .notNull()
       .references(() => currencies.code),
-    method: text('method', { enum: ['BANK_TRANSFER', 'CASH', 'OTHER'] }).notNull(),
+    /** Stage 6G Screen 10 — CARD added for direct card payments taken
+     *  on an external terminal; no card data is ever stored, only the
+     *  operator-entered reference. Refund methods stay BANK_TRANSFER /
+     *  CASH / OTHER (a card refund is recorded as the channel the money
+     *  actually moves back through). */
+    method: text('method', { enum: ['BANK_TRANSFER', 'CASH', 'CARD', 'OTHER'] }).notNull(),
     status: text('status', {
       enum: ['PENDING', 'PROOF_UPLOADED', 'VERIFIED', 'REJECTED', 'PARTIALLY_REFUNDED', 'REFUNDED'],
     })

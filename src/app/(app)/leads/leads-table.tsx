@@ -968,6 +968,12 @@ export function LeadsTable({
             displayName: directPaymentLead.displayName,
             personId: directPaymentLead.personId,
           }}
+          candidate={{
+            email: directPaymentLead.personEmail,
+            phone: directPaymentLead.personPhone,
+            nationality: directPaymentLead.personNationality,
+            country: directPaymentLead.personCountry,
+          }}
           services={invoiceableServices}
           defaultCurrencyCode="EUR"
           open

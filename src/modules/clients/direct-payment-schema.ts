@@ -18,16 +18,13 @@ export const DirectPaymentAndConvertSchema = z.object({
     .string()
     .regex(/^\d+(\.\d{1,2})?$/, 'Payment amount must be a decimal with up to 2 decimal places'),
   currencyCode: z.string().length(3),
-  /** Payment method. Aligned with the pro-forma payments schema (3
-   *  values: CASH / BANK_TRANSFER / OTHER). Stage 6E+1 — the earlier
-   *  Stage 6E `'CARD'` display option was removed because it silently
-   *  mapped to `'OTHER'` on the DB column and on receipts, so operators
-   *  and clients saw "Other" where they expected "Card". For card
-   *  payments pick "Other" and put the Stripe / terminal reference in
-   *  the Payment reference field; the receipt will print the reference
-   *  verbatim. A follow-up stage can widen the payments.method DB enum
-   *  to include CARD once a cross-table migration is scoped. */
-  methodDisplay: z.enum(['CASH', 'BANK_TRANSFER', 'OTHER']),
+  /** Payment method. Stage 6G Screen 10 — `CARD` is now a first-class
+   *  value on payments.method (text column, no DB constraint), so the
+   *  dialog's Card tab records and prints "CARD" honestly instead of
+   *  the Stage 6E-era silent mapping to OTHER. Card payments store only
+   *  the operator-entered terminal / processor reference — never card
+   *  data. Refund methods remain BANK_TRANSFER / CASH / OTHER. */
+  methodDisplay: z.enum(['CASH', 'BANK_TRANSFER', 'CARD', 'OTHER']),
   /** YYYY-MM-DD in Europe/Dublin (the UI uses `todayInDublin()` for the
    *  prefill). Operator can backdate; we store this on the payment's
    *  `receivedAt`. */
@@ -41,6 +38,24 @@ export const DirectPaymentAndConvertSchema = z.object({
    *  when the detector finds a live invoice / accepted pro-forma for
    *  the same service. */
   overrideDuplicateReason: z.string().max(500).nullish(),
+  /**
+   * Stage 6G Screen 10 — the services this payment covers (step 2 of
+   * the dialog). When present, the amounts must sum to `agreedAmount`,
+   * `serviceCatalogItemId` must be the first entry, and the invoice
+   * line names every selected service.
+   */
+  services: z
+    .array(
+      z.object({
+        serviceCatalogItemId: z.string().uuid(),
+        name: z.string().trim().min(1).max(200),
+        amount: z
+          .string()
+          .regex(/^\d+(\.\d{1,2})?$/, 'Amount must be a decimal with up to 2 decimal places'),
+      }),
+    )
+    .max(20)
+    .optional(),
 });
 
 export type DirectPaymentAndConvertInput = z.infer<typeof DirectPaymentAndConvertSchema>;

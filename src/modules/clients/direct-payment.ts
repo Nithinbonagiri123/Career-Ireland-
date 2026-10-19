@@ -262,6 +262,27 @@ async function directPaymentAndConvert(input: unknown): Promise<DirectPaymentAnd
       status: 'ACTIVE',
     });
 
+    // Stage 6G Screen 10 — when the dialog sent an explicit service
+    // selection, the amounts must add up to the agreed amount and the
+    // invoice line names every selected service.
+    if (data.services && data.services.length > 0) {
+      const sumCents = data.services.reduce(
+        (acc, s) => acc + Math.round(Number.parseFloat(s.amount) * 100),
+        0,
+      );
+      const agreedCents = Math.round(Number.parseFloat(data.agreedAmount) * 100);
+      if (sumCents !== agreedCents) {
+        throw new BusinessRuleError(
+          'DIRECT_PAYMENT_SERVICES_MISMATCH',
+          `Selected services total ${(sumCents / 100).toFixed(2)} but the agreed amount is ${data.agreedAmount}.`,
+        );
+      }
+    }
+    const lineDescription =
+      data.services && data.services.length > 0
+        ? data.services.map((s) => s.name).join(' + ')
+        : service.name;
+
     const settings = await fetchAppSettings();
     const effectiveVatRate = settings.vatRegistered ? settings.vatRatePercent : '0.00';
     const invoice = await insertInvoice(tx, {
@@ -273,18 +294,16 @@ async function directPaymentAndConvert(input: unknown): Promise<DirectPaymentAnd
       vatRatePercent: effectiveVatRate,
       vatTreatment: 'STANDARD',
       currencyCode: data.currencyCode,
-      lineDescription: service.name,
+      lineDescription,
       issuedByUserId: session.user.id,
       paymentTermsDays: 0,
       sourceLeadId: lead.id,
     });
 
-    // Record the payment as already-VERIFIED. Stage 6E+1 — the schema
-    // now constrains methodDisplay to the DB enum values so no
-    // coercion is needed; `methodDisplay` and the stored method stay
-    // in lockstep and the receipt prints exactly what the operator
-    // chose. Card payments pick "Other" and put the Stripe/terminal
-    // reference in the Payment reference field.
+    // Record the payment as already-VERIFIED. `methodDisplay` and the
+    // stored method stay in lockstep and the receipt prints exactly
+    // what the operator chose — including CARD (Stage 6G Screen 10),
+    // for which only the terminal / processor reference is stored.
     const dbMethod = data.methodDisplay;
     const receivedAt = new Date(`${data.paymentDate}T00:00:00.000Z`);
     const ref = (data.reference ?? '').trim();

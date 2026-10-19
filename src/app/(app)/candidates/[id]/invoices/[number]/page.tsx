@@ -1,19 +1,31 @@
-import { ArrowLeft } from 'lucide-react';
+import { format } from 'date-fns';
+import { ArrowLeft, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { InvoicePrintable } from '@/components/billing/invoice-printable';
 import { IssueRefundControls } from '@/components/billing/issue-refund-controls';
 import { PrintButton } from '@/components/print-button';
+import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { requireInternalStaff } from '@/lib/auth/session';
+import { cn } from '@/lib/utils';
 import {
   fetchCreditNotesForInvoice,
   fetchInvoiceForPrint,
+  fetchInvoicePaymentTrail,
   fetchRefundablePaymentsForInvoice,
 } from '@/modules/billing/read';
 import { fetchAppSettings } from '@/modules/settings/service';
 import { CreditNoteControls } from './credit-note-controls';
+import { InvoiceDetailTabs, type RelatedRecordLink } from './invoice-detail-tabs';
 import { VoidInvoiceControls } from './void-invoice-controls';
+
+const INVOICE_STATUS_LABEL: Record<string, string> = {
+  ISSUED: 'Issued',
+  PARTIALLY_PAID: 'Partially paid',
+  PAID: 'Paid',
+  VOIDED: 'Voided',
+};
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Invoice' };
@@ -56,40 +68,133 @@ export default async function InvoicePrintPage({
   const maxCreditCents = Math.max(0, invoiceTotalCents - alreadyCreditedCents);
   const maxCreditAmount = (maxCreditCents / 100).toFixed(2);
 
+  // Stage 6G Screen 10 — payments + related records for the tab shell.
+  const paymentTrail = await fetchInvoicePaymentTrail(data.invoice.id);
+  const latestPaid = paymentTrail.find((p) => p.status === 'VERIFIED');
+  const paymentReceivedNote =
+    data.invoice.status === 'PAID' && latestPaid
+      ? `This invoice has been fully paid. Payment was received on ${format(
+          latestPaid.receivedAt ?? latestPaid.createdAt,
+          'dd MMM yyyy',
+        )} via ${latestPaid.method.replace(/_/g, ' ').toLowerCase()}${
+          latestPaid.proofReference ? ` (Ref: ${latestPaid.proofReference})` : ''
+        }.`
+      : null;
+  const relatedRecords: RelatedRecordLink[] = [
+    {
+      key: 'candidate',
+      label: 'Candidate workspace',
+      detail: `${person.firstName} ${person.lastName}`.trim(),
+      href: `/clients/${id}?tab=services-billing`,
+    },
+    ...paymentTrail
+      .filter((p) => p.receiptNumber)
+      .map((p) => ({
+        key: `receipt-${p.id}`,
+        label: `Receipt ${p.receiptNumber}`,
+        detail: `${p.amount} ${p.currencyCode} · received ${
+          p.receivedAt ? format(p.receivedAt, 'dd MMM yyyy') : '—'
+        }`,
+        href: `/candidates/${id}/receipts/${p.receiptNumber}`,
+      })),
+    ...existingCreditNotes.map((c) => ({
+      key: `cn-${c.id}`,
+      label: `Credit note ${c.number}`,
+      detail: `${c.amount} ${data.invoice.currencyCode} · issued ${format(c.issuedAt, 'dd MMM yyyy · HH:mm')}`,
+      href: null,
+    })),
+    ...(data.invoice.sourceLeadId
+      ? [
+          {
+            key: 'lead',
+            label: 'Source lead',
+            detail: 'The Candidate Services lead this invoice was raised from.',
+            href: `/leads/${data.invoice.sourceLeadId}`,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div className="min-h-screen bg-muted/40 print:bg-white">
-      <div className="mx-auto flex max-w-3xl items-center justify-between px-6 pt-6 print:hidden">
-        <Link
-          href={`/candidates/${id}`}
-          className={buttonVariants({ variant: 'outline', size: 'sm' })}
-        >
-          <ArrowLeft className="mr-1.5 size-4" /> Back to candidate
-        </Link>
-        <div className="flex items-center gap-2">
-          {canVoid && (
-            <VoidInvoiceControls
-              invoiceId={data.invoice.id}
-              invoiceNumber={data.invoice.number}
-              personId={id}
-            />
-          )}
-          {canCredit && maxCreditCents > 0 && (
-            <CreditNoteControls
-              invoiceId={data.invoice.id}
-              invoiceNumber={data.invoice.number}
-              profileHref={`/candidates/${id}`}
-              currencyCode={data.invoice.currencyCode}
-              maxCreditAmount={maxCreditAmount}
-            />
-          )}
-          {refundablePayments.length > 0 && (
-            <IssueRefundControls
-              invoiceNumber={data.invoice.number}
-              profileHref={`/candidates/${id}`}
-              refundablePayments={refundablePayments}
-            />
-          )}
-          <PrintButton />
+      {/* ── Breadcrumb + header card — Stage 6G Screen 10 ────────── */}
+      <div className="mx-auto max-w-3xl px-6 pt-6 print:hidden">
+        <nav className="text-xs text-muted-foreground" aria-label="Breadcrumb">
+          <Link href="/payments" className="hover:text-foreground hover:underline">
+            Payments
+          </Link>{' '}
+          /{' '}
+          <Link href={`/candidates/${id}`} className="hover:text-foreground hover:underline">
+            Invoices
+          </Link>{' '}
+          / <span className="font-medium text-foreground">{data.invoice.number}</span>
+        </nav>
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-xl border bg-card p-4 shadow-sm">
+          <div className="flex min-w-0 items-start gap-3">
+            <span
+              aria-hidden
+              className="grid size-11 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-700"
+            >
+              <FileText className="size-5" />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-lg font-semibold text-foreground">
+                  Invoice <span className="text-sky-800">{data.invoice.number}</span>
+                </h1>
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    'rounded-full border-transparent text-[10px]',
+                    data.invoice.status === 'PAID'
+                      ? 'bg-status-success-soft text-status-success'
+                      : data.invoice.status === 'VOIDED'
+                        ? 'bg-muted text-muted-foreground'
+                        : 'bg-amber-100 text-amber-800',
+                  )}
+                >
+                  {INVOICE_STATUS_LABEL[data.invoice.status] ?? data.invoice.status}
+                </Badge>
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Issued on {format(data.invoice.issuedAt, 'dd MMM yyyy · HH:mm')}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {canVoid && (
+              <VoidInvoiceControls
+                invoiceId={data.invoice.id}
+                invoiceNumber={data.invoice.number}
+                personId={id}
+              />
+            )}
+            {canCredit && maxCreditCents > 0 && (
+              <CreditNoteControls
+                invoiceId={data.invoice.id}
+                invoiceNumber={data.invoice.number}
+                profileHref={`/candidates/${id}`}
+                currencyCode={data.invoice.currencyCode}
+                maxCreditAmount={maxCreditAmount}
+              />
+            )}
+            {refundablePayments.length > 0 && (
+              <IssueRefundControls
+                invoiceNumber={data.invoice.number}
+                profileHref={`/candidates/${id}`}
+                refundablePayments={refundablePayments}
+              />
+            )}
+            <PrintButton />
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-between">
+          <Link
+            href={`/candidates/${id}`}
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            <ArrowLeft className="mr-1.5 size-4" /> Back to candidate
+          </Link>
         </div>
       </div>
 
@@ -108,19 +213,27 @@ export default async function InvoicePrintPage({
         </div>
       )}
 
-      <InvoicePrintable
-        invoice={data.invoice}
-        settings={settings}
-        payer={{
-          displayName: `${person.firstName} ${person.lastName}`.trim(),
-          contactRows: [
-            person.email ? { label: 'Customer Email', value: person.email } : null,
-            person.phone ? { label: 'Customer Telephone Contact', value: person.phone } : null,
-          ].filter((r): r is { label: string; value: string } => r !== null),
-        }}
-        lineItems={data.lineItems}
-        creditNotes={existingCreditNotes}
-      />
+      <div className="mx-auto mt-4 max-w-3xl px-6 print:mt-0 print:max-w-none print:px-0">
+        <InvoiceDetailTabs
+          payments={paymentTrail}
+          related={relatedRecords}
+          paymentReceivedNote={paymentReceivedNote}
+        >
+          <InvoicePrintable
+            invoice={data.invoice}
+            settings={settings}
+            payer={{
+              displayName: `${person.firstName} ${person.lastName}`.trim(),
+              contactRows: [
+                person.email ? { label: 'Customer Email', value: person.email } : null,
+                person.phone ? { label: 'Customer Telephone Contact', value: person.phone } : null,
+              ].filter((r): r is { label: string; value: string } => r !== null),
+            }}
+            lineItems={data.lineItems}
+            creditNotes={existingCreditNotes}
+          />
+        </InvoiceDetailTabs>
+      </div>
     </div>
   );
 }
