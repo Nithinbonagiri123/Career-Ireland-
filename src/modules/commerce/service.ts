@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import type { DateRange } from '@/lib/date-range';
@@ -10,6 +10,8 @@ import {
   type ServiceEngagement,
   serviceEngagements,
 } from '@/lib/db/schema/commerce';
+import { persons } from '@/lib/db/schema/persons';
+import { serviceCatalogItems } from '@/lib/db/schema/services';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { emitFinancialEvent } from '@/modules/accounting/events';
 import { resolveDivisionForInvoice } from '@/modules/accounting/rule-engine';
@@ -186,6 +188,239 @@ export async function fetchPaymentsSummary(createdRange?: DateRange): Promise<Pa
     overdueByCurrency,
     receivedCount,
     receivedByCurrency,
+  };
+}
+
+/** One row of the Payments page's Transactions surface. */
+export type PaymentsTransactionRow = {
+  id: string;
+  /** Payment creation moment — the operational "transaction date". */
+  dateIso: string;
+  personId: string | null;
+  personName: string | null;
+  serviceName: string;
+  /** Direct Payment & Convert records carry no pro forma. */
+  kind: 'Direct Payment' | 'Invoice';
+  amount: string;
+  currencyCode: string;
+  method: Payment['method'];
+  status: Payment['status'];
+  /** Bank/cash proof reference as recorded by the operator. */
+  proofReference: string | null;
+  /** Receipt number once the payment is verified. */
+  receiptNumber: string | null;
+};
+
+export type PaymentsActivityEntry = {
+  id: string;
+  kind: 'payment' | 'invoice' | 'receipt';
+  title: string;
+  subtitle: string;
+  atIso: string;
+};
+
+export type PaymentsWorkspace = {
+  summary: PaymentsSummary;
+  /** Payments awaiting verification in the range (PENDING / PROOF_UPLOADED). */
+  pendingCount: number;
+  pendingByCurrency: Record<string, string>;
+  /** Invoices issued in the range. */
+  invoicesIssuedCount: number;
+  /**
+   * Percentage change vs the preceding window of equal length, per
+   * metric count. Null when the window can't be compared (no range or
+   * empty previous window).
+   */
+  receiptsDeltaPct: number | null;
+  invoicesDeltaPct: number | null;
+  transactions: PaymentsTransactionRow[];
+  activity: PaymentsActivityEntry[];
+};
+
+function pctChange(current: number, previous: number): number | null {
+  if (previous <= 0) return null;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+/**
+ * Stage 6G Screen 07 — everything the redesigned Payments page shows in
+ * one round trip: the KPI rollup, the transactions list (payments
+ * joined to candidate + service + receipt), a deterministic recent-
+ * activity feed derived from the billing tables, and simple count
+ * deltas vs the preceding window of equal length. No estimates — every
+ * number is an SQL aggregate over real rows.
+ */
+export async function fetchPaymentsWorkspace(createdRange?: DateRange): Promise<PaymentsWorkspace> {
+  await requireInternalStaff();
+  const summary = await fetchPaymentsSummary(createdRange);
+
+  // Previous window of equal length, for the "vs." deltas.
+  const prevRange: { from: Date; to: Date } | null =
+    createdRange?.from && createdRange?.to
+      ? {
+          from: new Date(
+            createdRange.from.getTime() - (createdRange.to.getTime() - createdRange.from.getTime()),
+          ),
+          to: createdRange.from,
+        }
+      : null;
+
+  const pendingConds = [inArray(payments.status, ['PENDING', 'PROOF_UPLOADED'])];
+  if (createdRange?.from) pendingConds.push(gte(payments.createdAt, createdRange.from));
+  if (createdRange?.to) pendingConds.push(lte(payments.createdAt, createdRange.to));
+
+  const invoiceCountConds = [];
+  if (createdRange?.from) invoiceCountConds.push(gte(invoices.issuedAt, createdRange.from));
+  if (createdRange?.to) invoiceCountConds.push(lte(invoices.issuedAt, createdRange.to));
+
+  const txConds = [isNull(serviceEngagements.archivedAt)];
+  if (createdRange?.from) txConds.push(gte(payments.createdAt, createdRange.from));
+  if (createdRange?.to) txConds.push(lte(payments.createdAt, createdRange.to));
+
+  const [pendingRollup, [invoiceCountRow], prevReceipts, prevInvoices, txRows] = await Promise.all([
+    db
+      .select({
+        currencyCode: payments.currencyCode,
+        count: sql<number>`COUNT(*)::int`,
+        totalCents: sql<number>`COALESCE(SUM(ROUND(${payments.amount} * 100)::bigint), 0)::bigint`,
+      })
+      .from(payments)
+      .where(and(...pendingConds))
+      .groupBy(payments.currencyCode),
+    db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(invoices)
+      .where(invoiceCountConds.length > 0 ? and(...invoiceCountConds) : undefined),
+    prevRange
+      ? db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(receipts)
+          .where(
+            and(gte(receipts.receivedAt, prevRange.from), lte(receipts.receivedAt, prevRange.to)),
+          )
+      : Promise.resolve([{ count: -1 }]),
+    prevRange
+      ? db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(invoices)
+          .where(and(gte(invoices.issuedAt, prevRange.from), lte(invoices.issuedAt, prevRange.to)))
+      : Promise.resolve([{ count: -1 }]),
+    db
+      .select({
+        payment: payments,
+        serviceName: serviceCatalogItems.name,
+        personId: serviceEngagements.beneficiaryPersonId,
+        personFirstName: persons.firstName,
+        personLastName: persons.lastName,
+        receiptNumber: receipts.number,
+      })
+      .from(payments)
+      .innerJoin(serviceEngagements, eq(serviceEngagements.id, payments.serviceEngagementId))
+      .innerJoin(
+        serviceCatalogItems,
+        eq(serviceCatalogItems.id, serviceEngagements.serviceCatalogItemId),
+      )
+      .leftJoin(persons, eq(persons.id, serviceEngagements.beneficiaryPersonId))
+      .leftJoin(receipts, eq(receipts.paymentId, payments.id))
+      .where(and(...txConds))
+      .orderBy(desc(payments.createdAt)),
+  ]);
+
+  let pendingCount = 0;
+  const pendingByCurrency: Record<string, string> = {};
+  for (const row of pendingRollup) {
+    pendingCount += row.count;
+    const cents = Number(row.totalCents);
+    if (cents > 0) pendingByCurrency[row.currencyCode] = (cents / 100).toFixed(2);
+  }
+
+  const transactions: PaymentsTransactionRow[] = txRows.map((r) => ({
+    id: r.payment.id,
+    dateIso: r.payment.createdAt.toISOString(),
+    personId: r.personId,
+    personName:
+      r.personFirstName || r.personLastName
+        ? `${r.personFirstName ?? ''} ${r.personLastName ?? ''}`.trim()
+        : null,
+    serviceName: r.serviceName,
+    kind: r.payment.proFormaInvoiceId ? 'Invoice' : 'Direct Payment',
+    amount: r.payment.amount,
+    currencyCode: r.payment.currencyCode,
+    method: r.payment.method,
+    status: r.payment.status,
+    proofReference: r.payment.proofReference,
+    receiptNumber: r.receiptNumber,
+  }));
+
+  // Recent activity — newest receipts (money in) + invoices (documents
+  // out), each with the candidate it belongs to.
+  const [receiptActivity, invoiceActivity] = await Promise.all([
+    db
+      .select({
+        id: receipts.id,
+        number: receipts.number,
+        amount: receipts.amount,
+        currencyCode: receipts.currencyCode,
+        at: receipts.receivedAt,
+        personFirstName: persons.firstName,
+        personLastName: persons.lastName,
+      })
+      .from(receipts)
+      .leftJoin(payments, eq(payments.id, receipts.paymentId))
+      .leftJoin(serviceEngagements, eq(serviceEngagements.id, payments.serviceEngagementId))
+      .leftJoin(persons, eq(persons.id, serviceEngagements.beneficiaryPersonId))
+      .orderBy(desc(receipts.receivedAt))
+      .limit(5),
+    db
+      .select({
+        id: invoices.id,
+        number: invoices.number,
+        at: invoices.issuedAt,
+        personFirstName: persons.firstName,
+        personLastName: persons.lastName,
+      })
+      .from(invoices)
+      .leftJoin(serviceEngagements, eq(serviceEngagements.id, invoices.serviceEngagementId))
+      .leftJoin(persons, eq(persons.id, serviceEngagements.beneficiaryPersonId))
+      .orderBy(desc(invoices.issuedAt))
+      .limit(5),
+  ]);
+  const personLabel = (first: string | null, last: string | null) =>
+    `${first ?? ''} ${last ?? ''}`.trim() || 'Unknown candidate';
+  const activity: PaymentsActivityEntry[] = [
+    ...receiptActivity.map((r) => ({
+      id: `rcpt-${r.id}`,
+      kind: 'receipt' as const,
+      title: `Payment received — ${r.amount} ${r.currencyCode} · ${r.number}`,
+      subtitle: personLabel(r.personFirstName, r.personLastName),
+      atIso: r.at.toISOString(),
+    })),
+    ...invoiceActivity.map((i) => ({
+      id: `inv-${i.id}`,
+      kind: 'invoice' as const,
+      title: `Invoice issued — ${i.number}`,
+      subtitle: personLabel(i.personFirstName, i.personLastName),
+      atIso: i.at.toISOString(),
+    })),
+  ]
+    .sort((a, b) => b.atIso.localeCompare(a.atIso))
+    .slice(0, 6);
+
+  return {
+    summary,
+    pendingCount,
+    pendingByCurrency,
+    invoicesIssuedCount: invoiceCountRow?.count ?? 0,
+    receiptsDeltaPct:
+      prevReceipts[0] && prevReceipts[0].count >= 0
+        ? pctChange(summary.receivedCount, prevReceipts[0].count)
+        : null,
+    invoicesDeltaPct:
+      prevInvoices[0] && prevInvoices[0].count >= 0
+        ? pctChange(invoiceCountRow?.count ?? 0, prevInvoices[0].count)
+        : null,
+    transactions,
+    activity,
   };
 }
 

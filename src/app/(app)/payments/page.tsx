@@ -1,13 +1,11 @@
-import { Coins } from 'lucide-react';
+import { Wallet } from 'lucide-react';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
-import { PageHeader } from '@/components/page-header';
 import { requireAnyPermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
-import { fetchEngagements, fetchPayments, fetchPaymentsSummary } from '@/modules/commerce/service';
-import { PaymentsKpiCards } from './payments-kpi-cards';
-import { PaymentsTable } from './payments-table';
+import { fetchEngagements, fetchPaymentsWorkspace } from '@/modules/commerce/service';
+import { PaymentsWorkspaceView } from './payments-workspace';
 import { RecordPaymentDialog } from './record-payment-dialog';
 
 export const dynamic = 'force-dynamic';
@@ -30,34 +28,46 @@ export default async function PaymentsPage({
   // other list pages (Candidates, Leads, etc.).
   const effectiveCreated = created ?? (from || to ? undefined : 'month');
   const createdRange = parseDateRangeParams({ created: effectiveCreated, from, to });
-  const [payments, engagements, summary] = await Promise.all([
-    fetchPayments(createdRange),
+  const [data, engagements] = await Promise.all([
+    fetchPaymentsWorkspace(createdRange),
     fetchEngagements(),
-    fetchPaymentsSummary(createdRange),
   ]);
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8 md:px-10">
+      {/* Stage 6G Screen 07 — hero: icon card + title + subtitle on the
+          left, the range filter + export on the right. */}
       <FadeUp>
-        <PageHeader
-          icon={Coins}
-          iconTone="green"
-          title="Payments"
-          description="Record incoming payments and verify proof. Only ADMIN can verify or reject."
-          action={
-            <div className="flex flex-wrap items-center gap-2">
-              <DateRangeFilter />
-              <CsvExportButton href="/api/export/payments" />
-              <RecordPaymentDialog engagements={engagements} />
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-4">
+            <span
+              aria-hidden
+              className="grid size-14 shrink-0 place-items-center rounded-2xl bg-card text-sky-700 shadow-sm ring-1 ring-border/60"
+            >
+              <Wallet className="size-6" />
+            </span>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                Payments
+              </h1>
+              <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+                Track payments, manage invoices and receipts, and monitor financial activity for
+                your candidates and services.
+              </p>
             </div>
-          }
-        />
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <DateRangeFilter />
+            <CsvExportButton href="/api/export/payments" />
+          </div>
+        </div>
       </FadeUp>
       <FadeUp delay={0.05} className="mt-6">
-        <PaymentsKpiCards summary={summary} />
-      </FadeUp>
-      <FadeUp delay={0.1} className="mt-6">
-        <PaymentsTable payments={payments} role={session.user.role} />
+        <PaymentsWorkspaceView
+          data={data}
+          role={session.user.role}
+          recordPaymentSlot={<RecordPaymentDialog key="record-payment" engagements={engagements} />}
+        />
       </FadeUp>
     </div>
   );
