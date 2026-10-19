@@ -46,14 +46,25 @@ export function Timestamp({
   }
   if (inline) {
     return (
-      <time dateTime={iso} className={cn('text-xs text-muted-foreground', className)}>
+      // suppressHydrationWarning: the relative label drifts between the
+      // server render and hydration ("51 seconds ago" vs "52"), which
+      // in production builds makes React throw away and regenerate the
+      // whole client tree — losing in-flight interaction state. The
+      // dateTime attr and absolute time stay exact.
+      <time
+        suppressHydrationWarning
+        dateTime={iso}
+        className={cn('text-xs text-muted-foreground', className)}
+      >
         {rel} · {abs}
       </time>
     );
   }
   return (
     <span className={cn('flex flex-col leading-tight', className)}>
-      <span className="text-xs text-muted-foreground">{rel}</span>
+      <span suppressHydrationWarning className="text-xs text-muted-foreground">
+        {rel}
+      </span>
       <time dateTime={iso} className="text-[10px] tabular-nums text-muted-foreground/70">
         {abs}
       </time>

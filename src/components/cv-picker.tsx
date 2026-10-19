@@ -94,7 +94,9 @@ export function CvPicker({
                 <span className="min-w-0 flex-1 truncate">
                   <span className="font-medium">{doc.originalFilename}</span>
                   <span className="ml-2 text-[11px] text-muted-foreground">
-                    v{doc.version} · {formatDistanceToNow(doc.createdAt, { addSuffix: true })}
+                    <span suppressHydrationWarning>
+                      v{doc.version} · {formatDistanceToNow(doc.createdAt, { addSuffix: true })}
+                    </span>
                   </span>
                 </span>
                 {value?.id === doc.id && <CheckCircle2 className="size-3.5 text-status-success" />}
