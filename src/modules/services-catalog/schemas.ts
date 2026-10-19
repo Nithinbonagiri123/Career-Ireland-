@@ -11,6 +11,8 @@ export const UpsertServiceItemSchema = z.object({
     .regex(/^[A-Z0-9_]+$/, 'Uppercase letters, numbers, underscores only')
     .transform((s) => s.toUpperCase()),
   name: z.string().min(2).max(120),
+  /** Stage 6G Screen 06 — card blurb on the service picker. */
+  description: z.string().max(500).optional().or(z.literal('')),
   defaultCurrencyCode: z.string().length(3).optional().or(z.literal('')),
   defaultPrice: z.string().optional().or(z.literal('')),
   payerType: PayerTypeSchema,

@@ -1,0 +1,1 @@
+ALTER TABLE "service_catalog_items" ADD COLUMN "description" text;

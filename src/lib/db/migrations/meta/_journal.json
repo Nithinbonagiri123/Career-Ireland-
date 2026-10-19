@@ -411,8 +411,15 @@
     {
       "idx": 58,
       "version": "7",
-      "when": 1792393669232,
+      "when": 1792510000000,
       "tag": "0058_legal_ezekiel",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1792520000000,
+      "tag": "0059_boring_king_bedlam",
       "breakpoints": true
     }
   ]

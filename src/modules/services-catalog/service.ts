@@ -69,6 +69,7 @@ export async function upsertServiceItem(
     const values = {
       code: data.code,
       name: data.name,
+      description: blankToNull(data.description),
       defaultCurrencyCode: blankToNull(data.defaultCurrencyCode),
       defaultPrice: blankToNull(data.defaultPrice),
       payerType: data.payerType,

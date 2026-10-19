@@ -950,6 +950,10 @@ export function CreateLeadDialog({
                             id: r.data.id,
                             code: r.data.code,
                             name: r.data.name,
+                            description: null,
+                            categoryName: null,
+                            defaultPrice: null,
+                            defaultCurrencyCode: null,
                             payerType: r.data.payerType,
                             packages: [],
                           };

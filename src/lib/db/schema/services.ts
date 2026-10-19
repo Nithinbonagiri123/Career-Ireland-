@@ -43,6 +43,10 @@ export const serviceCatalogItems = pgTable('service_catalog_items', {
   id: uuid('id').primaryKey().defaultRandom(),
   code: varchar('code', { length: 60 }).notNull().unique(),
   name: varchar('name', { length: 120 }).notNull(),
+  /** Stage 6G Screen 06 — operator-editable blurb shown on the service
+   *  picker cards ("Professional CV writing and cover letter
+   *  preparation"). Maintained in /admin/services. */
+  description: text('description'),
   defaultCurrencyCode: char('default_currency_code', { length: 3 }).references(
     () => currencies.code,
   ),

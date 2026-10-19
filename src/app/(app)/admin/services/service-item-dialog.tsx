@@ -48,6 +48,7 @@ export function ServiceItemDialog({ trigger, currencies, categories, initial }: 
       id: initial?.id,
       code: initial?.code ?? '',
       name: initial?.name ?? '',
+      description: initial?.description ?? '',
       defaultCurrencyCode: initial?.defaultCurrencyCode ?? '',
       defaultPrice: initial?.defaultPrice ?? '',
       payerType: initial?.payerType ?? 'PERSON',
@@ -95,6 +96,13 @@ export function ServiceItemDialog({ trigger, currencies, categories, initial }: 
               <Input id="si-name" aria-invalid={Boolean(errors.name)} {...register('name')} />
             </FormField>
           </div>
+          <FormField id="si-description" label="Description" error={errors.description?.message}>
+            <Input
+              id="si-description"
+              placeholder="Short blurb shown on the service picker cards"
+              {...register('description')}
+            />
+          </FormField>
           <div className="grid grid-cols-2 gap-3">
             <FormField id="si-currency" label="Default currency">
               <Select id="si-currency" {...register('defaultCurrencyCode')}>
