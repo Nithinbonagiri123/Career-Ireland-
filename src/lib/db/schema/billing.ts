@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
@@ -115,6 +116,25 @@ export const invoices = pgTable(
     status: text('status', { enum: ['ISSUED', 'PARTIALLY_PAID', 'PAID', 'VOIDED'] })
       .notNull()
       .default('ISSUED'),
+    /**
+     * Stage B Wave 4 — how this invoice settles. STANDARD = money is (or
+     * was) expected; COMPLIMENTARY = a genuine €0.00 invoice for a service
+     * granted free: real sequential number, zero totals, written as PAID
+     * at issue (nothing is owed), never any payment / receipt / refund /
+     * credit note. Status stays the settledness axis; this column carries
+     * the why, so "settled with money" and "nothing was ever due" can't
+     * be confused in any report.
+     */
+    settlementKind: text('settlement_kind', { enum: ['STANDARD', 'COMPLIMENTARY'] })
+      .notNull()
+      .default('STANDARD'),
+    /** Mandatory for COMPLIMENTARY (CHECK below) — the operator's reason. */
+    complimentaryReason: text('complimentary_reason'),
+    /** Who authorized the free grant. Audit rows carry it too; the column
+     *  keeps exports self-contained. */
+    complimentaryGrantedByUserId: uuid('complimentary_granted_by_user_id').references(
+      () => users.id,
+    ),
     voidedAt: timestamp('voided_at', { withTimezone: true }),
     voidedByUserId: uuid('voided_by_user_id').references(() => users.id),
     voidReason: text('void_reason'),
@@ -140,6 +160,15 @@ export const invoices = pgTable(
     index('invoices_payer_person_idx').on(t.payerPersonId),
     index('invoices_payer_employer_idx').on(t.payerEmployerId),
     index('invoices_engagement_idx').on(t.serviceEngagementId),
+    // Stage B Wave 1 (client P0) — at most ONE live invoice per
+    // engagement. Payments are attributed to an invoice through its
+    // engagement, so a second live invoice on the same engagement would
+    // count the same payments twice. Every writer already keeps this
+    // 1:1; the index makes it a guarantee. VOIDED rows are exempt so
+    // the void-and-reissue correction path keeps working.
+    uniqueIndex('invoices_engagement_live_uq')
+      .on(t.serviceEngagementId)
+      .where(sql`status != 'VOIDED'`),
     index('invoices_status_idx').on(t.status),
     index('invoices_immigration_case_idx').on(t.immigrationCaseId),
     index('invoices_job_requisition_idx').on(t.jobRequisitionId),
@@ -159,6 +188,16 @@ export const invoices = pgTable(
     check(
       'invoices_payer_xor',
       sql`(${t.payerPersonId} IS NOT NULL) <> (${t.payerEmployerId} IS NOT NULL)`,
+    ),
+    // Stage B Wave 4 — a complimentary invoice always carries its reason,
+    // and only complimentary invoices do; and it is €0.00 by definition.
+    check(
+      'invoices_complimentary_reason',
+      sql`(${t.settlementKind} = 'COMPLIMENTARY') = (${t.complimentaryReason} IS NOT NULL)`,
+    ),
+    check(
+      'invoices_complimentary_zero_total',
+      sql`${t.settlementKind} != 'COMPLIMENTARY' OR ${t.totalAmount} = 0`,
     ),
   ],
 );

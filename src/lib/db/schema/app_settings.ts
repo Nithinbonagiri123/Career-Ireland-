@@ -107,6 +107,12 @@ export const appSettings = pgTable(
         the renderer if present as a literal template placeholder. */
     invoiceFooter: text('invoice_footer').notNull(),
     receiptFooter: text('receipt_footer').notNull(),
+    /** Stage B Wave 4 — line printed on €0.00 complimentary invoices.
+     *  Admin-editable like every printable string; the migration default
+     *  only seeds the first value. */
+    complimentaryInvoiceNote: text('complimentary_invoice_note')
+      .notNull()
+      .default('Provided as a complimentary service — no payment is due.'),
 
     updatedByUserId: uuid('updated_by_user_id').references(() => users.id),
     createdAt,

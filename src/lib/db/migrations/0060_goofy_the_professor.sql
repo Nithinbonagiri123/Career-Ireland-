@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "invoices_engagement_live_uq" ON "invoices" USING btree ("service_engagement_id") WHERE status != 'VOIDED';
