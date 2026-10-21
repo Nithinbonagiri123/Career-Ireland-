@@ -2,7 +2,7 @@
 
 import { FileText, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useId, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -95,6 +95,14 @@ export function GenerateInvoiceDialog({
   const [currency, setCurrency] = useState<string>('EUR');
   const [lineDescription, setLineDescription] = useState<string>('');
   const [pending, startTransition] = useTransition();
+  // Stage B Wave 1 — inline duplicate warning + audited override, plus a
+  // per-open idempotency key so a double-click or retry can't raise a
+  // second engagement + invoice.
+  const [error, setError] = useState<string | null>(null);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [showOverride, setShowOverride] = useState(false);
+  const idSeed = useId();
+  const idempotencyKey = useMemo(() => `gi-${idSeed}-${open ? Date.now() : ''}`, [idSeed, open]);
 
   const service = useMemo(() => services.find((s) => s.id === serviceId), [services, serviceId]);
 
@@ -128,6 +136,7 @@ export function GenerateInvoiceDialog({
 
   const onSubmit = () => {
     if (!service || !canSubmit) return;
+    setError(null);
     startTransition(async () => {
       const r = await generateInvoiceAction({
         payerMode,
@@ -141,13 +150,27 @@ export function GenerateInvoiceDialog({
         immigrationCaseId: contextLinks?.immigrationCaseId ?? null,
         jobRequisitionId: contextLinks?.jobRequisitionId ?? null,
         placementId: contextLinks?.placementId ?? null,
+        idempotencyKey,
+        overrideDuplicateReason: showOverride ? overrideReason.trim() || null : null,
       });
       if (!r.ok) {
+        const code = (r.error as { code?: string }).code;
+        if (code === 'DUPLICATE_INVOICE_LIKELY') {
+          // Keep the dialog open and reveal the audited override path
+          // instead of a vanishing toast.
+          setShowOverride(true);
+          setError(r.error.message);
+          return;
+        }
+        setError(r.error.message);
         toast.error(r.error.message);
         return;
       }
       toast.success(`Invoice ${r.data.invoiceNumber} issued`);
       setOpen(false);
+      setError(null);
+      setOverrideReason('');
+      setShowOverride(false);
       router.push(r.data.printPath);
     });
   };
@@ -285,9 +308,35 @@ export function GenerateInvoiceDialog({
           </div>
         )}
 
+        {showOverride && (
+          <div className="space-y-1.5 rounded-md border border-amber-400/40 bg-amber-50 p-3 text-xs dark:bg-amber-900/30">
+            <label htmlFor="gi-override" className="font-medium text-amber-900 dark:text-amber-100">
+              Reason for proceeding despite a possible duplicate
+            </label>
+            <textarea
+              id="gi-override"
+              rows={2}
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+              disabled={pending}
+              maxLength={500}
+              className="w-full rounded-md border border-input bg-background px-2 py-1.5"
+            />
+          </div>
+        )}
+        {error && (
+          <p className="text-xs text-destructive" role="alert">
+            {error}
+          </p>
+        )}
+
         <DialogFooter>
           <DialogClose render={<Button variant="outline" size="sm" disabled={pending} />} />
-          <Button size="sm" onClick={onSubmit} disabled={pending || !canSubmit}>
+          <Button
+            size="sm"
+            onClick={onSubmit}
+            disabled={pending || !canSubmit || (showOverride && overrideReason.trim().length < 3)}
+          >
             {pending && <Loader2 className="mr-1.5 size-4 animate-spin" />}
             Generate invoice
           </Button>

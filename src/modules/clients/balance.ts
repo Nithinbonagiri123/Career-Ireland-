@@ -54,6 +54,11 @@ type EngagementInput = {
 type PaymentInput = {
   id: string;
   serviceEngagementId: string;
+  /** Stage B Wave 1 — quote this payment was recorded against, if any.
+   *  Recording a payment auto-creates the engagement while the quote's
+   *  own `engagementId` stays NULL until conversion; this field is the
+   *  bridge that stops the rollup counting the same commitment twice. */
+  proFormaInvoiceId?: string | null;
   amount: string;
   currencyCode: string;
   status:
@@ -164,8 +169,23 @@ export function buildClientBalance(input: {
   // Accepted-but-not-yet-materialised quotes become their own cards. Only
   // ACCEPTED counts — DRAFT / ISSUED aren't a commitment yet, CONVERTED
   // is already reflected in the engagement + invoice.
+  //
+  // Stage B Wave 1 (client P0) — a quote also stops being "pending" the
+  // moment any payment is recorded against it: recording auto-creates
+  // the engagement (carrying the full subtotal as agreed) while the
+  // quote's own engagementId stays NULL until conversion. Without this
+  // bridge the same commitment was summed twice — once as the
+  // engagement, once as a pending quote — doubling the hero "owed"
+  // figure for every part-paid quote.
+  const engagementIdSet = new Set(input.engagements.map((e) => e.id));
+  const materialisedPfIds = new Set<string>();
+  for (const p of input.payments) {
+    if (p.proFormaInvoiceId && engagementIdSet.has(p.serviceEngagementId)) {
+      materialisedPfIds.add(p.proFormaInvoiceId);
+    }
+  }
   const pendingQuotes: PendingQuoteBalance[] = input.proFormas
-    .filter((p) => p.status === 'ACCEPTED' && !p.engagementId)
+    .filter((p) => p.status === 'ACCEPTED' && !p.engagementId && !materialisedPfIds.has(p.id))
     .map((p) => ({
       proFormaId: p.id,
       proFormaNumber: p.number,

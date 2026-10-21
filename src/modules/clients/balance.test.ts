@@ -257,6 +257,133 @@ describe('buildClientBalance — pending accepted quotes (no engagement yet)', (
     expect(r.byCurrency[0].agreed).toBe('100.00');
   });
 
+  // Stage B Wave 1 (client P0) — the doubled-amount regression. Recording
+  // a payment against an ACCEPTED quote auto-creates the engagement while
+  // the quote's engagementId stays NULL until conversion. The quote must
+  // NOT be counted as a pending quote on top of the engagement.
+  it('ACCEPTED quote with a recorded payment (engagement exists, engagementId still null) is counted ONCE', () => {
+    const r = buildClientBalance({
+      engagements: [
+        {
+          id: E1,
+          serviceName: 'Job Search Support',
+          currencyCode: EUR,
+          agreedAmount: '500.00',
+          status: 'PENDING_PAYMENT',
+        },
+      ],
+      payments: [
+        {
+          id: P1,
+          serviceEngagementId: E1,
+          proFormaInvoiceId: PF1,
+          amount: '200.00',
+          currencyCode: EUR,
+          status: 'VERIFIED',
+        },
+      ],
+      refunds: [],
+      invoices: [],
+      proFormas: [
+        {
+          id: PF1,
+          number: 'PROF-2026-000002',
+          status: 'ACCEPTED',
+          currencyCode: EUR,
+          subtotal: '500.00',
+          sourceLeadId: LID,
+          engagementId: null, // linked only at conversion — the bug's trigger
+        },
+      ],
+    });
+    expect(r.pendingQuotes).toHaveLength(0);
+    expect(r.engagements[0]).toMatchObject({
+      agreedAmount: '500.00',
+      verifiedPaid: '200.00',
+      outstanding: '300.00',
+    });
+    // Before the fix this read agreed 1000.00 / outstanding 800.00.
+    expect(r.byCurrency[0]).toMatchObject({
+      currencyCode: EUR,
+      agreed: '500.00',
+      verified: '200.00',
+      outstanding: '300.00',
+    });
+  });
+
+  it('even a merely RECORDED (PENDING) payment bridges the quote to its engagement', () => {
+    const r = buildClientBalance({
+      engagements: [
+        {
+          id: E1,
+          serviceName: 'Job Search Support',
+          currencyCode: EUR,
+          agreedAmount: '500.00',
+          status: 'PENDING_PAYMENT',
+        },
+      ],
+      payments: [
+        {
+          id: P1,
+          serviceEngagementId: E1,
+          proFormaInvoiceId: PF1,
+          amount: '200.00',
+          currencyCode: EUR,
+          status: 'PENDING', // not yet verified — engagement already exists
+        },
+      ],
+      refunds: [],
+      invoices: [],
+      proFormas: [
+        {
+          id: PF1,
+          number: 'PROF-2026-000002',
+          status: 'ACCEPTED',
+          currencyCode: EUR,
+          subtotal: '500.00',
+          sourceLeadId: LID,
+          engagementId: null,
+        },
+      ],
+    });
+    expect(r.pendingQuotes).toHaveLength(0);
+    expect(r.byCurrency[0]).toMatchObject({ agreed: '500.00', verified: '0.00' });
+  });
+
+  it("a payment on a DIFFERENT quote does not bridge this quote's pending row", () => {
+    const r = buildClientBalance({
+      engagements: [
+        { id: E1, serviceName: 'CV', currencyCode: EUR, agreedAmount: '100.00', status: 'ACTIVE' },
+      ],
+      payments: [
+        {
+          id: P1,
+          serviceEngagementId: E1,
+          proFormaInvoiceId: 'pf-other',
+          amount: '100.00',
+          currencyCode: EUR,
+          status: 'VERIFIED',
+        },
+      ],
+      refunds: [],
+      invoices: [],
+      proFormas: [
+        {
+          id: PF1,
+          number: 'PROF-2026-000003',
+          status: 'ACCEPTED',
+          currencyCode: EUR,
+          subtotal: '250.00',
+          sourceLeadId: LID,
+          engagementId: null,
+        },
+      ],
+    });
+    // The untouched accepted quote still shows as a pending commitment.
+    expect(r.pendingQuotes).toHaveLength(1);
+    expect(r.byCurrency[0]).toMatchObject({ agreed: '350.00' });
+  });
+
   it('DRAFT / ISSUED / REJECTED / SUPERSEDED pro-formas never contribute to balances', () => {
     for (const status of ['DRAFT', 'ISSUED', 'REJECTED', 'CANCELLED', 'SUPERSEDED'] as const) {
       const r = buildClientBalance({

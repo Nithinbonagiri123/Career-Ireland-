@@ -64,6 +64,10 @@ export const GenerateInvoiceSchema = z.object({
       service in the same month). The flag + reason are audited on the
       new invoice row. */
   overrideDuplicateReason: z.string().max(500).nullish(),
+  /** Stage B Wave 1 — client-generated per-dialog-mount key. A replayed
+   *  submit (double-click, network retry) returns the original invoice
+   *  instead of raising a second engagement + invoice. */
+  idempotencyKey: z.string().min(8).max(128).nullish(),
 });
 
 export type GenerateInvoiceInput = z.infer<typeof GenerateInvoiceSchema>;
@@ -98,6 +102,63 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
   const settings = await fetchAppSettings();
 
   return db.transaction(async (tx) => {
+    // Stage B Wave 1 — idempotent replay, serialised at the DB. The
+    // transaction-scoped advisory lock makes two concurrent submits with
+    // the same key run one-after-another: the second waits here, then its
+    // audit lookup below finds the first's row and replays it. Without
+    // the lock both lookups could race past each other and double-issue.
+    if (data.idempotencyKey) {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`invoice-gen:${data.idempotencyKey}`}))`,
+      );
+    }
+    // The ISSUED audit row carries the key; a second submit with the same
+    // key returns the first result without touching the ledger.
+    if (data.idempotencyKey) {
+      const priorRows = await tx.execute<{
+        invoice_id: string;
+        invoice_number: string | null;
+        engagement_id: string | null;
+        print_path: string | null;
+      }>(sql`
+        SELECT entity_id AS invoice_id,
+               (context ->> 'invoiceNumber') AS invoice_number,
+               (context ->> 'engagementId') AS engagement_id,
+               (context ->> 'printPath') AS print_path
+        FROM audit_events
+        WHERE entity_type = 'invoice'
+          AND action = 'ISSUED'
+          AND (context ->> 'idempotencyKey') = ${data.idempotencyKey}
+          -- Release-readiness item 3: a replay only matches the SAME
+          -- payer; a reused or guessed key submitted for a different
+          -- payer finds nothing and proceeds as a fresh request, so it
+          -- can never disclose another payer's invoice number or print
+          -- path. (Rows written before this change lack the payer
+          -- fields and simply never replay — keys are per dialog
+          -- mount, so nothing legitimate is lost.)
+          AND (context ->> 'payerMode') = ${data.payerMode}
+          AND (context ->> 'payerId') = ${data.payerId}
+        ORDER BY occurred_at DESC
+        LIMIT 1
+      `);
+      const prior = (
+        priorRows as Array<{
+          invoice_id: string;
+          invoice_number: string | null;
+          engagement_id: string | null;
+          print_path: string | null;
+        }>
+      )[0];
+      if (prior?.invoice_id && prior.invoice_number && prior.print_path) {
+        return {
+          invoiceId: prior.invoice_id,
+          invoiceNumber: prior.invoice_number,
+          engagementId: prior.engagement_id ?? '',
+          printPath: prior.print_path,
+        };
+      }
+    }
+
     // Resolve the service catalog item (and its payerType constraint).
     const [service] = await tx
       .select({
@@ -165,13 +226,11 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
       payerPersonId: data.payerMode === 'PERSON' ? data.payerId : null,
       payerEmployerId: data.payerMode === 'EMPLOYER' ? data.payerId : null,
       serviceCatalogItemId: service.id,
-      subtotalCents,
-      currencyCode: data.currencyCode,
     });
     if (existingDuplicate && !data.overrideDuplicateReason) {
       throw new BusinessRuleError(
         'DUPLICATE_INVOICE_LIKELY',
-        `An unpaid invoice for the same service and amount already exists on this payer (${existingDuplicate.number}). Settle it first, cancel it, or re-submit with a reason explaining why a second invoice is correct.`,
+        `An unpaid invoice for the same service already exists on this payer: ${existingDuplicate.number} for ${existingDuplicate.totalAmount} ${existingDuplicate.currencyCode}. A second invoice doubles what this payer appears to owe. Settle or void the first one, or provide a reason to confirm this really is a separate sale.`,
       );
     }
     if (existingDuplicate && data.overrideDuplicateReason) {
@@ -249,6 +308,11 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
       jobRequisitionId: data.jobRequisitionId ?? null,
       placementId: data.placementId ?? null,
     });
+    const printPath =
+      data.payerMode === 'PERSON'
+        ? `/candidates/${data.payerId}/invoices/${invoice.number}`
+        : `/employers/${data.payerId}/invoices/${invoice.number}`;
+
     await recordAudit(tx, {
       actorUserId: session.user.id,
       entityType: 'invoice',
@@ -265,12 +329,20 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
         vatRatePercent: effectiveVatRate,
         vatTreatment,
       },
+      // Stage B Wave 1 — replay anchor: a resubmit with the same key
+      // finds this row and returns the original result (see the
+      // idempotency lookup at the top of the transaction).
+      context: data.idempotencyKey
+        ? {
+            idempotencyKey: data.idempotencyKey,
+            payerMode: data.payerMode,
+            payerId: data.payerId,
+            invoiceNumber: invoice.number,
+            engagementId: engagement.id,
+            printPath,
+          }
+        : undefined,
     });
-
-    const printPath =
-      data.payerMode === 'PERSON'
-        ? `/candidates/${data.payerId}/invoices/${invoice.number}`
-        : `/employers/${data.payerId}/invoices/${invoice.number}`;
 
     return {
       invoiceId: invoice.id,
@@ -282,10 +354,14 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
 }
 
 /**
- * Stage 6D Wave 1f — look for a plausible duplicate on the same payer +
- * service + amount + currency. Matches only when the existing invoice
- * is still live (ISSUED or PARTIALLY_PAID) because a fully-settled
- * invoice doesn't inhibit a legitimate repeat sale of the same service.
+ * Stage 6D Wave 1f, widened in Stage B Wave 1 (client P0) — look for a
+ * plausible duplicate on the same payer + service. The original check
+ * also matched on amount, which let a re-raise with any price change
+ * through silently; the client-reported "duplicated invoice, amount
+ * doubled" scenario is exactly that path. Now any live (ISSUED or
+ * PARTIALLY_PAID) invoice for the same payer + service triggers the
+ * warning regardless of amount; a fully-settled invoice still doesn't
+ * inhibit a legitimate repeat sale.
  *
  * Join through `service_engagements` so the service-catalog identity
  * check lives on the engagement row (invoices themselves don't carry
@@ -300,28 +376,28 @@ async function findLiveDuplicateInvoice(
     payerPersonId: string | null;
     payerEmployerId: string | null;
     serviceCatalogItemId: string;
-    subtotalCents: number;
-    currencyCode: string;
   },
-): Promise<{ id: string; number: string } | null> {
+): Promise<{ id: string; number: string; totalAmount: string; currencyCode: string } | null> {
   const payerClause = args.payerPersonId
     ? eq(invoices.payerPersonId, args.payerPersonId)
     : args.payerEmployerId
       ? eq(invoices.payerEmployerId, args.payerEmployerId)
       : null;
   if (!payerClause) return null;
-  const subtotal = (args.subtotalCents / 100).toFixed(2);
   const rows = await tx
-    .select({ id: invoices.id, number: invoices.number })
+    .select({
+      id: invoices.id,
+      number: invoices.number,
+      totalAmount: invoices.totalAmount,
+      currencyCode: invoices.currencyCode,
+    })
     .from(invoices)
     .innerJoin(serviceEngagements, eq(serviceEngagements.id, invoices.serviceEngagementId))
     .where(
       and(
         payerClause,
-        eq(invoices.currencyCode, args.currencyCode),
         eq(serviceEngagements.serviceCatalogItemId, args.serviceCatalogItemId),
         inArray(invoices.status, ['ISSUED', 'PARTIALLY_PAID']),
-        sql`${invoices.subtotal}::numeric = ${subtotal}::numeric`,
       ),
     )
     .limit(1);

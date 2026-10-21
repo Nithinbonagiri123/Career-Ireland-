@@ -158,32 +158,40 @@ export function DateRangeFilter({ className }: { className?: string }) {
               </button>
             );
           })}
-          <button
-            type="button"
-            onClick={() => setCustomOpen((v) => !v)}
-            aria-expanded={customOpen}
+          {/* Stage B Wave 1 — the clear-X used to be a <button> nested
+              inside this toggle <button>. That's invalid HTML: the
+              browser's parser splits the pair apart, so the server-sent
+              DOM never matches React's tree and hydration fails
+              (regenerating the tree and swallowing early clicks on any
+              page with a custom range active). Siblings in a wrapper
+              render identically and hydrate cleanly. */}
+          <span
             className={cn(
-              'inline-flex items-center gap-1 rounded px-2.5 py-1 transition-colors',
+              'inline-flex items-center rounded transition-colors',
               isCustom
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:bg-accent/50',
             )}
           >
-            {customLabel}
+            <button
+              type="button"
+              onClick={() => setCustomOpen((v) => !v)}
+              aria-expanded={customOpen}
+              className="inline-flex items-center gap-1 rounded px-2.5 py-1"
+            >
+              {customLabel}
+            </button>
             {isCustom && (
               <button
                 type="button"
                 aria-label="Clear custom range"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  clearCustom();
-                }}
-                className="ml-1 inline-flex items-center rounded p-0.5 hover:bg-background/40"
+                onClick={clearCustom}
+                className="mr-1 inline-flex items-center rounded p-0.5 hover:bg-background/40"
               >
                 <X className="size-3" />
               </button>
             )}
-          </button>
+          </span>
         </div>
       </div>
 

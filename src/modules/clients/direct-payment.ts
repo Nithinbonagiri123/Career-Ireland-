@@ -125,9 +125,14 @@ async function directPaymentAndConvert(input: unknown): Promise<DirectPaymentAnd
       throw new BusinessRuleError('LEAD_HAS_NO_PERSON', 'Lead has no person attached.');
     }
 
-    // Idempotency — look up any audit event on this lead carrying the
-    // same key. Prevents the "double-click" scenario even across
-    // sessions; the key is generated per dialog mount by the client.
+    // Idempotency — serialise same-key submits at the DB (Stage B Wave 1:
+    // without this lock two truly concurrent requests could both miss the
+    // audit lookup below and double-process), then look up any audit
+    // event on this lead carrying the same key. The key is generated per
+    // dialog mount by the client.
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`direct-payment:${data.idempotencyKey}`}))`,
+    );
     const existingAuditRows = await tx.execute<{
       invoice_id: string | null;
       invoice_number: string | null;
