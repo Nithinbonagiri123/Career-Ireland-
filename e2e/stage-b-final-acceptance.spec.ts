@@ -20,6 +20,11 @@ const SHOTS_DIR = path.resolve('playwright/stage-b-final');
 fs.mkdirSync(SHOTS_DIR, { recursive: true });
 const FIXTURES = path.resolve('e2e/fixtures');
 
+// CI has no object store (E2E_SKIP_UPLOAD=1), so the CV-upload leg of
+// the journey self-skips there; every money/status/notes/complimentary
+// leg still runs. Locally (MinIO) the full journey executes.
+const UPLOADS_DISABLED = !!process.env.E2E_SKIP_UPLOAD;
+
 async function dbModules() {
   const { config: loadEnv } = await import('dotenv');
   loadEnv({ path: '.env.local' });
@@ -241,32 +246,34 @@ test('Stage B final acceptance: complete candidate journey across Waves 1–4', 
     await expect(page.getByText('Non-EU citizen').first()).toBeVisible();
 
     // ── 6. Wave 2: CV upload → scan → staged review → save cert ─────
-    await page.goto(`/clients/${personId}?tab=documents-candidate`);
-    await expect(page.getByText('Upload documents').first()).toBeVisible({ timeout: 20_000 });
-    await page
-      .locator('input[type="file"]')
-      .first()
-      .setInputFiles(path.join(FIXTURES, 'cv-text.pdf'));
-    const uploadBtn = page.getByRole('button', { name: /^Upload \d+ file/ });
-    await expect(uploadBtn).toBeEnabled({ timeout: 10_000 });
-    await uploadBtn.click();
-    await expect(page.getByText(/file uploaded/).first()).toBeVisible({ timeout: 20_000 });
-    await page
-      .getByRole('button', { name: /Scan CV/i })
-      .first()
-      .click();
-    await expect(page.getByText(/suggestions? ready to review/)).toBeVisible({ timeout: 30_000 });
-    const saveBtn = page.getByRole('button', { name: 'Save to profile' });
-    await expect(saveBtn).toBeDisabled(); // review-before-save
-    await page.getByRole('button', { name: 'Qualifications', exact: true }).click();
-    await page.getByRole('button', { name: 'Manual Handling Certificate' }).click();
-    await expect(saveBtn).toBeEnabled();
-    await saveBtn.click();
-    await expect(page.getByText('Saved to profile')).toBeVisible({ timeout: 15_000 });
-    await page.screenshot({
-      path: path.join(SHOTS_DIR, 'final-02-cv-scan-1440.png'),
-      fullPage: false,
-    });
+    if (!UPLOADS_DISABLED) {
+      await page.goto(`/clients/${personId}?tab=documents-candidate`);
+      await expect(page.getByText('Upload documents').first()).toBeVisible({ timeout: 20_000 });
+      await page
+        .locator('input[type="file"]')
+        .first()
+        .setInputFiles(path.join(FIXTURES, 'cv-text.pdf'));
+      const uploadBtn = page.getByRole('button', { name: /^Upload \d+ file/ });
+      await expect(uploadBtn).toBeEnabled({ timeout: 10_000 });
+      await uploadBtn.click();
+      await expect(page.getByText(/file uploaded/).first()).toBeVisible({ timeout: 20_000 });
+      await page
+        .getByRole('button', { name: /Scan CV/i })
+        .first()
+        .click();
+      await expect(page.getByText(/suggestions? ready to review/)).toBeVisible({ timeout: 30_000 });
+      const saveBtn = page.getByRole('button', { name: 'Save to profile' });
+      await expect(saveBtn).toBeDisabled(); // review-before-save
+      await page.getByRole('button', { name: 'Qualifications', exact: true }).click();
+      await page.getByRole('button', { name: 'Manual Handling Certificate' }).click();
+      await expect(saveBtn).toBeEnabled();
+      await saveBtn.click();
+      await expect(page.getByText('Saved to profile')).toBeVisible({ timeout: 15_000 });
+      await page.screenshot({
+        path: path.join(SHOTS_DIR, 'final-02-cv-scan-1440.png'),
+        fullPage: false,
+      });
+    }
 
     // ── 7. Wave 3: note with author + absolute date & time ───────────
     await page.goto(`/clients/${personId}`);
