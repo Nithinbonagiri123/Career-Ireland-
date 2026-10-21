@@ -26,6 +26,7 @@ import { notFound } from 'next/navigation';
 import {
   EducationSection,
   EmploymentHistorySection,
+  QualificationDialog,
   QualificationsSection,
   SkillsSection,
 } from '@/app/(app)/candidates/[id]/candidate-details-panel';
@@ -57,9 +58,12 @@ import {
   flagEmojiFromCountryName,
   flagEmojiFromNationality,
   IRISH_IMMIGRATION_STATUSES,
+  workEligibilityLabel,
 } from '@/lib/iso-countries';
 import { statusTone } from '@/lib/ui/status-tone';
 import { cn } from '@/lib/utils';
+import type { CommunicationRow } from '@/modules/activities/service';
+import { canGrantComplimentary } from '@/modules/billing/complimentary';
 import type {
   CandidateQualificationRow,
   CandidateSkillRow,
@@ -70,6 +74,7 @@ import {
   PRIMARY_STATUS_TONE,
 } from '@/modules/clients/onboarding-status';
 import { fetchClientWorkspace, fetchJustCreatedDocNumbers } from '@/modules/clients/workspace-data';
+import { type CandidateNote, CandidateNotesCard } from './candidate-notes-card';
 import { ClientWorkspaceTabs } from './client-workspace-tabs';
 import { CandidateDocsTab } from './docs-tab';
 import { ClientNextActionIsland } from './next-action-island';
@@ -173,6 +178,7 @@ export default async function ClientWorkspacePage({
     allSkills,
     allQualifications,
     occupations,
+    noteRows,
   ] = await Promise.all([
     // Overview also needs applications + documents counts for the
     // new summary cards; load them for both tabs so the cards populate
@@ -212,6 +218,10 @@ export default async function ClientWorkspacePage({
     activeTab === 'profile' || activeTab === 'overview'
       ? import('@/modules/occupations/service').then((m) => m.fetchOccupations())
       : Promise.resolve([] as const),
+    // Stage B Wave 3 — internal notes for the Overview Notes card.
+    activeTab === 'overview'
+      ? import('@/modules/activities/service').then((m) => m.fetchPersonNotes(personId))
+      : Promise.resolve([] as const),
   ]);
 
   const {
@@ -240,8 +250,16 @@ export default async function ClientWorkspacePage({
   // Stage 6G — ONE derived primary status drives the hero's green/amber
   // status chip. Detailed per-record statuses still live on the service
   // billing rows (per quote, per invoice, per payment).
+  // Stage B Wave 4 — may this user grant complimentary (€0.00) services?
+  // Mirrors the server gate in grantComplimentaryService exactly.
+  const canComplimentary = await canGrantComplimentary();
   const primaryStatus = derivePrimaryOnboardingStatus({
     candidateProfile,
+    // Stage B Wave 3 — progress sub-states for an activated candidate.
+    // Engagement statuses come from real, non-archived service_engagements
+    // rows; availabilityStatus (on candidateProfile) is Recruitment's
+    // placement mirror and is never written from Candidate Services.
+    engagements: data.engagementStatuses,
     leads,
     proFormas,
     payments,
@@ -503,6 +521,13 @@ export default async function ClientWorkspacePage({
   // (#billing-detail) stay the operational source of truth — these are
   // read-only views over the same workspace data.
   const engagementById = new Map(balance.engagements.map((e) => [e.engagementId, e]));
+  // Stage B Wave 4 — engagements whose live invoice is a €0.00
+  // complimentary grant get a distinct chip (never "Fully paid").
+  const complimentaryEngagements = new Set(
+    invoices
+      .filter((i) => i.settlementKind === 'COMPLIMENTARY' && i.status !== 'VOIDED')
+      .map((i) => i.serviceEngagementId),
+  );
   const activeServiceRows: ActiveServiceRow[] = balance.engagements.map((e) => {
     const relatedQuotes = proFormas.filter((p) => p.engagementId === e.engagementId);
     const headerPf =
@@ -524,6 +549,7 @@ export default async function ClientWorkspacePage({
       serviceName: e.serviceName,
       statusLabel: settled ? 'Active' : 'In progress',
       settled,
+      complimentary: complimentaryEngagements.has(e.engagementId),
       pfLine: headerPf
         ? `Pro Forma ${headerPf.number}${
             headerPf.acceptedAt
@@ -601,11 +627,14 @@ export default async function ClientWorkspacePage({
           i.status !== 'VOIDED',
       );
       const settled = Number.parseFloat(e.outstanding) <= 0;
+      // Stage B Wave 4 — a complimentary engagement's history row names
+      // the kind; "Paid" would read as money received.
+      const isComplimentary = inv?.settlementKind === 'COMPLIMENTARY';
       return {
         key: `eng-${e.engagementId}`,
         dateIso: inv ? inv.issuedAt.toISOString() : null,
         service: e.serviceName,
-        type: 'Direct payment' as const,
+        type: isComplimentary ? ('Complimentary' as const) : ('Direct payment' as const),
         refLabel: inv?.number ?? null,
         refHref: inv ? `/candidates/${personId}/invoices/${inv.number}` : null,
         printHref: null,
@@ -613,7 +642,11 @@ export default async function ClientWorkspacePage({
         paid: e.verifiedPaid,
         balance: e.outstanding,
         currencyCode: e.currencyCode,
-        status: settled ? ('Paid' as const) : ('Partially paid' as const),
+        status: isComplimentary
+          ? ('Complimentary' as const)
+          : settled
+            ? ('Paid' as const)
+            : ('Partially paid' as const),
       };
     });
   const serviceHistoryRows = [...quoteHistoryRows, ...directHistoryRows].sort((a, b) =>
@@ -637,6 +670,7 @@ export default async function ClientWorkspacePage({
         currencies={data.currencies}
         active={activeServiceRows}
         history={serviceHistoryRows}
+        canComplimentary={canComplimentary}
       />
 
       {/* Detailed operational cards — quotes, payment verification,
@@ -1026,10 +1060,16 @@ export default async function ClientWorkspacePage({
                               <Receipt className="size-3.5 text-muted-foreground" aria-hidden />
                               <span className="font-medium">{i.number}</span>
                               <Badge
-                                variant={statusTone(i.status)}
+                                variant={
+                                  i.settlementKind === 'COMPLIMENTARY' && i.status !== 'VOIDED'
+                                    ? 'info'
+                                    : statusTone(i.status)
+                                }
                                 className="rounded-full text-[10px]"
                               >
-                                {INVOICE_LABEL[i.status] ?? i.status}
+                                {i.settlementKind === 'COMPLIMENTARY' && i.status !== 'VOIDED'
+                                  ? 'Complimentary'
+                                  : (INVOICE_LABEL[i.status] ?? i.status)}
                               </Badge>
                             </div>
                             <div className="text-[11px] text-muted-foreground tabular-nums">
@@ -1083,8 +1123,17 @@ export default async function ClientWorkspacePage({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-foreground">{i.number}</span>
-                      <Badge variant={statusTone(i.status)} className="rounded-full text-[10px]">
-                        {INVOICE_LABEL[i.status] ?? i.status}
+                      <Badge
+                        variant={
+                          i.settlementKind === 'COMPLIMENTARY' && i.status !== 'VOIDED'
+                            ? 'info'
+                            : statusTone(i.status)
+                        }
+                        className="rounded-full text-[10px]"
+                      >
+                        {i.settlementKind === 'COMPLIMENTARY' && i.status !== 'VOIDED'
+                          ? 'Complimentary'
+                          : (INVOICE_LABEL[i.status] ?? i.status)}
                       </Badge>
                     </div>
                     <div className="text-[11px] tabular-nums">
@@ -1177,6 +1226,17 @@ export default async function ClientWorkspacePage({
   const educationList = educationRows as EducationEntry[];
   const skillList = skillRows as CandidateSkillRow[];
   const qualificationList = qualificationRows as CandidateQualificationRow[];
+  // Stage B Wave 3 — notes serialized for the client card (Dates → ISO).
+  const notesList: CandidateNote[] = (noteRows as CommunicationRow[]).map((n) => ({
+    id: n.id,
+    body: n.body,
+    staffUserId: n.staffUserId,
+    staffName: n.staffName,
+    occurredAt: n.occurredAt.toISOString(),
+    createdAt: n.createdAt.toISOString(),
+    updatedAt: n.updatedAt.toISOString(),
+  }));
+  const canModerateNotes = session.user.role === 'ADMIN' || session.user.isOwner;
   const overviewTab = (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
       {/* Personal details — matches the mockup's grey-header card with
@@ -1241,7 +1301,10 @@ export default async function ClientWorkspacePage({
                 : '—'
             }
           />
-          <ProfileRow label="Work eligibility" value={candidateProfile?.workEligibility ?? '—'} />
+          <ProfileRow
+            label="Work eligibility"
+            value={workEligibilityLabel(candidateProfile?.workEligibility) ?? '—'}
+          />
         </CardContent>
       </Card>
 
@@ -1530,12 +1593,28 @@ export default async function ClientWorkspacePage({
             <ShieldCheck className="size-4 text-muted-foreground" aria-hidden />
             Certifications &amp; licences
           </CardTitle>
-          <Link
-            href="?tab=profile"
-            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-muted"
-          >
-            + Add
-          </Link>
+          {/* Stage B Wave 2.2 — "+ Add" opens the add dialog right here;
+              it used to be a bare link to the Profile tab, which read as
+              a broken button. */}
+          <QualificationDialog
+            personId={personId}
+            allQuals={allQualifications as Qualification[]}
+            existing={
+              new Set(
+                qualificationList
+                  .map((r) => r.qualificationId)
+                  .filter((id): id is string => Boolean(id)),
+              )
+            }
+            trigger={
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-muted"
+              >
+                + Add
+              </button>
+            }
+          />
         </CardHeader>
         <CardContent className="space-y-3 text-xs">
           {qualificationList.length === 0 ? (
@@ -1560,6 +1639,16 @@ export default async function ClientWorkspacePage({
           )}
         </CardContent>
       </Card>
+
+      {/* Stage B Wave 3 — internal Notes card. Communication-log backed:
+          author + absolute date & time on every entry; edit/archive only
+          for the author or an admin (enforced server-side too). */}
+      <CandidateNotesCard
+        personId={personId}
+        notes={notesList}
+        currentUserId={session.user.id}
+        canModerate={canModerateNotes}
+      />
 
       {/* Stage 6G Screen 04 (v3 polish) — Documents & CV summary card
           per the approved mockup. Shows the 5 most recent uploads with
@@ -1721,7 +1810,10 @@ export default async function ClientWorkspacePage({
           {candidateProfile && (
             <>
               <Row label="Years of experience" value={candidateProfile.yearsOfExperience ?? '—'} />
-              <Row label="Work eligibility" value={candidateProfile.workEligibility ?? '—'} />
+              <Row
+                label="Work eligibility"
+                value={workEligibilityLabel(candidateProfile.workEligibility) ?? '—'}
+              />
               <Row label="Preferred location" value={candidateProfile.preferredLocation ?? '—'} />
             </>
           )}

@@ -90,6 +90,9 @@ export type ClientWorkspace = {
     id: string;
     number: string;
     status: 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOIDED';
+    /** Stage B Wave 4 — COMPLIMENTARY invoices are €0.00 and PAID by
+     *  definition; every display shows the kind, never a bare "Paid". */
+    settlementKind: 'STANDARD' | 'COMPLIMENTARY';
     totalAmount: string;
     outstandingAmount: string;
     currencyCode: string;
@@ -127,6 +130,13 @@ export type ClientWorkspace = {
     pendingQuotes: PendingQuoteBalance[];
     byCurrency: CurrencyRollup[];
   };
+  /** Stage B Wave 3 — non-archived engagement statuses feeding the derived
+   *  progress status (In progress / Completed). Separate from
+   *  balance.engagements, which deliberately keeps archived rows for the
+   *  billing history. */
+  engagementStatuses: Array<{
+    status: 'REQUESTED' | 'PENDING_PAYMENT' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
+  }>;
   timeline: ClientTimelineItem[];
   nextAction: ClientNextAction | null;
   canVerifyPayments: boolean;
@@ -271,6 +281,7 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
       id: invoices.id,
       number: invoices.number,
       status: invoices.status,
+      settlementKind: invoices.settlementKind,
       totalAmount: invoices.totalAmount,
       currencyCode: invoices.currencyCode,
       issuedAt: invoices.issuedAt,
@@ -376,6 +387,7 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
     return {
       id: i.id,
       number: i.number,
+      settlementKind: i.settlementKind,
       status: i.status,
       totalAmount: i.totalAmount,
       currencyCode: i.currencyCode,
@@ -626,6 +638,9 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
     invoices: invoicesOut,
     payments: paymentRows,
     balance,
+    engagementStatuses: engagementRows
+      .filter((e) => !e.archivedAt)
+      .map((e) => ({ status: e.status })),
     timeline,
     nextAction,
     canVerifyPayments,

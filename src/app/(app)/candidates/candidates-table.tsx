@@ -64,6 +64,18 @@ const COLUMNS: ColumnDef<CandidateListRow>[] = [
               {lifecycle}
             </Badge>
           )}
+          {/* Stage B Wave 3 — derived CS progress (live / finished
+              engagements). Hidden for the plain ACTIVE_CANDIDATE case to
+              keep the approved column quiet by default. */}
+          {(row.original.csProgressStatus === 'IN_PROGRESS' ||
+            row.original.csProgressStatus === 'COMPLETED') && (
+            <Badge
+              variant={statusTone(row.original.csProgressStatus)}
+              className="rounded-full text-[10px]"
+            >
+              {row.original.csProgressStatus === 'IN_PROGRESS' ? 'In progress' : 'Completed'}
+            </Badge>
+          )}
         </span>
       );
     },

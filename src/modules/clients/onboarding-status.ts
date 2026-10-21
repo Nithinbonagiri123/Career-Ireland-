@@ -28,6 +28,17 @@
 
 export type PrimaryOnboardingStatus =
   | 'ACTIVE_CANDIDATE'
+  // Stage B Wave 3 — Candidate Services progress sub-states for an
+  // activated candidate, derived from real records only:
+  //   PLACED      — availabilityStatus is PLACED, written exclusively by
+  //                 the Recruitment placements module (read-only mirror
+  //                 here; Candidate Services never writes it).
+  //   IN_PROGRESS — at least one live service engagement (ACTIVE or
+  //                 PENDING_PAYMENT).
+  //   COMPLETED   — at least one COMPLETED engagement and none live.
+  | 'PLACED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
   | 'PAYMENT_PENDING_VERIFICATION'
   | 'PARTIALLY_PAID'
   | 'AWAITING_PAYMENT'
@@ -40,6 +51,9 @@ export type PrimaryStatusTone = 'success' | 'info' | 'warning' | 'neutral' | 'da
 
 export const PRIMARY_STATUS_LABEL: Record<PrimaryOnboardingStatus, string> = {
   ACTIVE_CANDIDATE: 'Active candidate',
+  PLACED: 'Placed',
+  IN_PROGRESS: 'In progress',
+  COMPLETED: 'Completed',
   PAYMENT_PENDING_VERIFICATION: 'Payment pending verification',
   PARTIALLY_PAID: 'Partially paid',
   AWAITING_PAYMENT: 'Awaiting payment',
@@ -51,6 +65,9 @@ export const PRIMARY_STATUS_LABEL: Record<PrimaryOnboardingStatus, string> = {
 
 export const PRIMARY_STATUS_TONE: Record<PrimaryOnboardingStatus, PrimaryStatusTone> = {
   ACTIVE_CANDIDATE: 'success',
+  PLACED: 'success',
+  IN_PROGRESS: 'info',
+  COMPLETED: 'success',
   PAYMENT_PENDING_VERIFICATION: 'info',
   PARTIALLY_PAID: 'warning',
   AWAITING_PAYMENT: 'warning',
@@ -61,7 +78,21 @@ export const PRIMARY_STATUS_TONE: Record<PrimaryOnboardingStatus, PrimaryStatusT
 };
 
 export type PrimaryStatusInputs = {
-  candidateProfile: { lifecycleStatus: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' } | null | undefined;
+  candidateProfile:
+    | {
+        lifecycleStatus: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+        /** Written by Recruitment placements only; read here to mirror
+         *  "Placed". Optional so existing callers stay valid. */
+        availabilityStatus?: 'AVAILABLE' | 'TEMPORARILY_UNAVAILABLE' | 'PLACED' | null;
+      }
+    | null
+    | undefined;
+  /** Stage B Wave 3 — service engagement statuses for the progress
+   *  sub-states. Optional: callers without engagement data keep the
+   *  plain "Active candidate" behaviour. */
+  engagements?: ReadonlyArray<{
+    status: 'REQUESTED' | 'PENDING_PAYMENT' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
+  }>;
   leads: ReadonlyArray<{
     status:
       | 'NEW'
@@ -90,8 +121,21 @@ export type PrimaryStatusInputs = {
 };
 
 export function derivePrimaryOnboardingStatus(i: PrimaryStatusInputs): PrimaryOnboardingStatus {
-  // 1. The person is already a working candidate — nothing else beats this.
-  if (i.candidateProfile?.lifecycleStatus === 'ACTIVE') return 'ACTIVE_CANDIDATE';
+  // 1. The person is already a working candidate — nothing else beats
+  //    this. Stage B Wave 3 splits the headline into progress
+  //    sub-states, every one derived from authoritative records:
+  //    Placed (Recruitment placement) > In progress (live engagement)
+  //    > Completed (all engagements done) > Active candidate.
+  if (i.candidateProfile?.lifecycleStatus === 'ACTIVE') {
+    if (i.candidateProfile.availabilityStatus === 'PLACED') return 'PLACED';
+    const engagements = i.engagements ?? [];
+    const live = engagements.some(
+      (e) => e.status === 'ACTIVE' || e.status === 'PENDING_PAYMENT' || e.status === 'ON_HOLD',
+    );
+    if (live) return 'IN_PROGRESS';
+    if (engagements.some((e) => e.status === 'COMPLETED')) return 'COMPLETED';
+    return 'ACTIVE_CANDIDATE';
+  }
 
   // 2. A payment is awaiting finance verification — operators need to
   //    see this ahead of any quote-level state so the queue doesn't

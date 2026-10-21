@@ -87,6 +87,20 @@ export type CandidateListRow = {
     | 'REJECTED_CASE'
     | 'CLOSED_CASE'
     | 'NONE';
+  /**
+   * Stage B Wave 3 — derived Candidate Services progress status. Only
+   * meaningful for an ACTIVE lifecycle (null otherwise). Derived from
+   * real records, never stored:
+   *   PLACED           — availabilityStatus is PLACED (written only by
+   *                      Recruitment placements; mirrored read-only here)
+   *   IN_PROGRESS      — ≥1 non-archived engagement ACTIVE /
+   *                      PENDING_PAYMENT / ON_HOLD
+   *   COMPLETED        — no live engagement, ≥1 COMPLETED
+   *   ACTIVE_CANDIDATE — activated, no engagement signal
+   * Same precedence as derivePrimaryOnboardingStatus in
+   * clients/onboarding-status.ts — keep the two in lockstep.
+   */
+  csProgressStatus: 'PLACED' | 'IN_PROGRESS' | 'COMPLETED' | 'ACTIVE_CANDIDATE' | null;
   /** Live counts for the card's ring counters. Zero when the person has
    *  no rows in that table — the card renders zero as a quiet 0, not a
    *  placeholder, since zero IS the fact. */
@@ -96,13 +110,15 @@ export type CandidateListRow = {
 };
 
 /**
- * Query cost — one page of N candidates issues exactly 5 round-trips
+ * Query cost — one page of N candidates issues exactly 6 round-trips
  * independent of N:
  *   (1) main SELECT with 3 joins (persons / users / occupations)
  *   (2) one IN() lookup against immigration_cases
  *   (3) one IN() grouped lookup against job_applications
  *   (4) one IN() grouped lookup against shortlist_entries
  *   (5) one IN() grouped lookup against placements
+ *   (6) one IN() grouped lookup against service_engagements (Wave 3
+ *       progress flags)
  * If this ever regresses to N+1 the perf regression test in
  * repository.test.ts will time out on 100 seeded candidates.
  *
@@ -251,6 +267,36 @@ export async function listCandidates(opts?: {
     }
   }
 
+  // Stage B Wave 3 — engagement progress flags, one grouped round trip.
+  // A person can sit on an engagement as payer OR beneficiary (same rule
+  // as the client workspace); archived engagements don't count towards
+  // progress. BOOL_OR collapses duplicates when payer = beneficiary.
+  const engagementFlagsByPerson = new Map<string, { live: boolean; completed: boolean }>();
+  if (personIds.length > 0) {
+    const inList = sql.join(
+      personIds.map((id) => sql`${id}::uuid`),
+      sql`, `,
+    );
+    const engRows = await exec.execute<{ person_id: string; live: boolean; completed: boolean }>(
+      sql`
+      SELECT person_id,
+             BOOL_OR(status IN ('ACTIVE', 'PENDING_PAYMENT', 'ON_HOLD')) AS live,
+             BOOL_OR(status = 'COMPLETED') AS completed
+      FROM (
+        SELECT payer_person_id AS person_id, status FROM service_engagements
+        WHERE archived_at IS NULL AND payer_person_id IN (${inList})
+        UNION ALL
+        SELECT beneficiary_person_id, status FROM service_engagements
+        WHERE archived_at IS NULL AND beneficiary_person_id IN (${inList})
+      ) s
+      GROUP BY person_id
+    `,
+    );
+    for (const r of engRows as Array<{ person_id: string; live: boolean; completed: boolean }>) {
+      engagementFlagsByPerson.set(r.person_id, { live: r.live, completed: r.completed });
+    }
+  }
+
   // Reference inArray to silence lint when no scope path used it.
   void inArray;
 
@@ -261,6 +307,17 @@ export async function listCandidates(opts?: {
   return rows.map((r) => {
     const imm = immigrationByPerson.get(r.personId);
     const immigrationKind = classifyImmigration(imm, todayStr);
+    const eng = engagementFlagsByPerson.get(r.personId);
+    const csProgressStatus: CandidateListRow['csProgressStatus'] =
+      r.lifecycleStatus !== 'ACTIVE'
+        ? null
+        : r.availabilityStatus === 'PLACED'
+          ? 'PLACED'
+          : eng?.live
+            ? 'IN_PROGRESS'
+            : eng?.completed
+              ? 'COMPLETED'
+              : 'ACTIVE_CANDIDATE';
     return {
       candidateProfileId: r.candidateProfileId,
       personId: r.personId,
@@ -282,6 +339,7 @@ export async function listCandidates(opts?: {
       immigrationExpiresOn: imm?.expiresOn ?? null,
       irishImmigrationStatus: r.irishImmigrationStatus,
       immigrationKind,
+      csProgressStatus,
       applicationsCount: applicationsByPerson.get(r.personId) ?? 0,
       shortlistsCount: shortlistsByPerson.get(r.personId) ?? 0,
       placementsCount: placementsByPerson.get(r.personId) ?? 0,

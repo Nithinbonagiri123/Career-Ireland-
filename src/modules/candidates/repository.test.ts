@@ -109,7 +109,7 @@ function makeChainable(rows: unknown[]) {
 }
 
 describe('listCandidates query cost (N+1 regression)', () => {
-  it('issues 1 main SELECT + 4 batched execute() calls regardless of N', async () => {
+  it('issues 1 main SELECT + 5 batched execute() calls regardless of N', async () => {
     const N = 100;
     const mockRows = Array.from({ length: N }, (_, i) => ({
       candidateProfileId: `cp-${i}`,
@@ -147,10 +147,11 @@ describe('listCandidates query cost (N+1 regression)', () => {
 
     const result = await listCandidates({ executor });
 
-    // 4 batched IN() lookups — immigration + applications + shortlists +
-    // placements. The main SELECT uses the drizzle query builder, not
-    // execute(), so it doesn't bump this counter.
-    expect(executeCalls).toBe(4);
+    // 5 batched IN() lookups — immigration + applications + shortlists +
+    // placements + engagement progress flags (Wave 3). The main SELECT
+    // uses the drizzle query builder, not execute(), so it doesn't bump
+    // this counter.
+    expect(executeCalls).toBe(5);
     expect(result).toHaveLength(N);
     // Every row got the batched defaults — no row-level fallback query.
     expect(result[0]?.immigrationKind).toBe('NONE');
@@ -159,7 +160,7 @@ describe('listCandidates query cost (N+1 regression)', () => {
     expect(result[0]?.placementsCount).toBe(0);
   });
 
-  it('skips the 4 batched queries entirely when the main SELECT returns 0 rows', async () => {
+  it('skips the 5 batched queries entirely when the main SELECT returns 0 rows', async () => {
     const chain = makeChainable([]);
     let executeCalls = 0;
     const executor = new Proxy(chain, {

@@ -110,3 +110,98 @@ describe('derivePrimaryOnboardingStatus', () => {
     ).toBe('ACTIVE_CANDIDATE');
   });
 });
+
+// Stage B Wave 3 — Candidate Services progress sub-states. All derived
+// from real records: Recruitment's availabilityStatus mirror (PLACED) and
+// service_engagements statuses. Precedence inside an ACTIVE lifecycle:
+// PLACED > IN_PROGRESS > COMPLETED > ACTIVE_CANDIDATE.
+describe('derivePrimaryOnboardingStatus — Wave 3 progress sub-states', () => {
+  const active = { lifecycleStatus: 'ACTIVE' as const };
+
+  it('ACTIVE lifecycle with no engagement data stays ACTIVE_CANDIDATE (legacy callers unaffected)', () => {
+    expect(derivePrimaryOnboardingStatus(baseline({ candidateProfile: active }))).toBe(
+      'ACTIVE_CANDIDATE',
+    );
+    expect(
+      derivePrimaryOnboardingStatus(baseline({ candidateProfile: active, engagements: [] })),
+    ).toBe('ACTIVE_CANDIDATE');
+  });
+
+  it('a live engagement (ACTIVE / PENDING_PAYMENT / ON_HOLD) reports IN_PROGRESS', () => {
+    for (const status of ['ACTIVE', 'PENDING_PAYMENT', 'ON_HOLD'] as const) {
+      expect(
+        derivePrimaryOnboardingStatus(
+          baseline({ candidateProfile: active, engagements: [{ status }] }),
+        ),
+      ).toBe('IN_PROGRESS');
+    }
+  });
+
+  it('REQUESTED or CANCELLED engagements alone do not count as in progress', () => {
+    expect(
+      derivePrimaryOnboardingStatus(
+        baseline({
+          candidateProfile: active,
+          engagements: [{ status: 'REQUESTED' }, { status: 'CANCELLED' }],
+        }),
+      ),
+    ).toBe('ACTIVE_CANDIDATE');
+  });
+
+  it('all engagements finished with at least one COMPLETED reports COMPLETED', () => {
+    expect(
+      derivePrimaryOnboardingStatus(
+        baseline({
+          candidateProfile: active,
+          engagements: [{ status: 'COMPLETED' }, { status: 'CANCELLED' }],
+        }),
+      ),
+    ).toBe('COMPLETED');
+  });
+
+  it('a new live engagement after a completed one moves back to IN_PROGRESS (repeat business)', () => {
+    expect(
+      derivePrimaryOnboardingStatus(
+        baseline({
+          candidateProfile: active,
+          engagements: [{ status: 'COMPLETED' }, { status: 'ACTIVE' }],
+        }),
+      ),
+    ).toBe('IN_PROGRESS');
+  });
+
+  it('Recruitment placement (availabilityStatus PLACED) wins over everything, even live engagements', () => {
+    expect(
+      derivePrimaryOnboardingStatus(
+        baseline({
+          candidateProfile: { ...active, availabilityStatus: 'PLACED' },
+          engagements: [{ status: 'ACTIVE' }],
+        }),
+      ),
+    ).toBe('PLACED');
+  });
+
+  it('non-PLACED availability statuses never produce PLACED', () => {
+    for (const availabilityStatus of ['AVAILABLE', 'TEMPORARILY_UNAVAILABLE', null] as const) {
+      expect(
+        derivePrimaryOnboardingStatus(
+          baseline({
+            candidateProfile: { ...active, availabilityStatus },
+            engagements: [{ status: 'COMPLETED' }],
+          }),
+        ),
+      ).toBe('COMPLETED');
+    }
+  });
+
+  it('sub-states only apply to an ACTIVE lifecycle — an INACTIVE profile with engagements falls through to onboarding states', () => {
+    expect(
+      derivePrimaryOnboardingStatus(
+        baseline({
+          candidateProfile: { lifecycleStatus: 'INACTIVE', availabilityStatus: 'PLACED' },
+          engagements: [{ status: 'COMPLETED' }],
+        }),
+      ),
+    ).toBe('NEW_ENQUIRY');
+  });
+});

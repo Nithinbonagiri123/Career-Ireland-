@@ -25,6 +25,10 @@ export const WorkEligibilitySchema = z.enum([
   'IRISH_CITIZEN',
   'EU_EEA_SWISS_CITIZEN',
   'UK_CITIZEN',
+  // Stage B Wave 3 (client request) — citizenship-style triage value for
+  // candidates outside IE/EU/EEA/CH/UK. Distinct from the Irish
+  // immigration stamp, which stays on irishImmigrationStatus.
+  'NON_EU_CITIZEN',
   'STAMP_4_HOLDER',
   'VISA_REQUIRED',
   'OTHER',

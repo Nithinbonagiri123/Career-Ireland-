@@ -321,6 +321,27 @@ export function flagEmojiFromNationality(nationality: string | null | undefined)
  * "Not currently in Ireland" is the sensible default for a residence-
  * outside-Ireland lead; the workspace renders it as a neutral badge.
  */
+/** Stage B Wave 3 — human-readable labels for the Candidate Services
+ *  "Main eligibility" triage field (persons.work_eligibility). The DB
+ *  column is free text (legacy rows may hold arbitrary strings); render
+ *  via workEligibilityLabel() so unknown values fall back to the raw
+ *  stored text instead of disappearing. */
+export const WORK_ELIGIBILITY_OPTIONS = [
+  { value: 'IRISH_CITIZEN', label: 'Irish citizen' },
+  { value: 'EU_EEA_SWISS_CITIZEN', label: 'EU / EEA / Swiss citizen' },
+  { value: 'UK_CITIZEN', label: 'UK citizen' },
+  { value: 'NON_EU_CITIZEN', label: 'Non-EU citizen' },
+  { value: 'STAMP_4_HOLDER', label: 'Stamp 4 holder' },
+  { value: 'VISA_REQUIRED', label: 'Visa required' },
+  { value: 'OTHER', label: 'Other' },
+  { value: 'NOT_SURE', label: 'Not sure' },
+] as const;
+
+export function workEligibilityLabel(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return WORK_ELIGIBILITY_OPTIONS.find((o) => o.value === value)?.label ?? value;
+}
+
 export const IRISH_IMMIGRATION_STATUSES = [
   { value: 'NONE', label: 'Not currently in Ireland / no Irish immigration permission' },
   { value: 'STAMP_1', label: 'Stamp 1' },

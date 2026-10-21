@@ -11,6 +11,7 @@ import {
 } from '@/lib/db/schema/activities';
 import { users } from '@/lib/db/schema/users';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
+import { canModifyNote } from './note-permissions';
 import {
   type ArchiveCommunicationInput,
   ArchiveCommunicationSchema,
@@ -56,6 +57,30 @@ export async function fetchRecentCommunications(
     .where(and(...whereConds))
     .orderBy(desc(communicationLogs.occurredAt))
     .limit(limit);
+  return rows.map((r) => ({ ...r.c, staffName: r.staffName }));
+}
+
+/**
+ * Stage B Wave 3 — notes for the candidate Overview card. Notes reuse the
+ * communication-log model (type INTERNAL_NOTE, direction INTERNAL): author
+ * comes from staffUserId stamped at creation, date + time from occurredAt,
+ * and archive keeps the row + its audit trail. Archived notes stay out of
+ * the card but remain queryable for audit.
+ */
+export async function fetchPersonNotes(personId: string): Promise<CommunicationRow[]> {
+  await requireInternalStaff();
+  const rows = await db
+    .select({ c: communicationLogs, staffName: users.fullName })
+    .from(communicationLogs)
+    .innerJoin(users, eq(users.id, communicationLogs.staffUserId))
+    .where(
+      and(
+        eq(communicationLogs.personId, personId),
+        eq(communicationLogs.type, 'INTERNAL_NOTE'),
+        isNull(communicationLogs.archivedAt),
+      ),
+    )
+    .orderBy(desc(communicationLogs.occurredAt));
   return rows.map((r) => ({ ...r.c, staffName: r.staffName }));
 }
 
@@ -418,6 +443,20 @@ export async function updateCommunication(
     if (before.archivedAt) {
       throw new BusinessRuleError('ARCHIVED', 'Archived communications cannot be edited');
     }
+    // Stage B Wave 3 — notes may only be edited by their author or an
+    // admin/owner. Other communication types are unaffected.
+    if (
+      !canModifyNote(before, {
+        userId: session.user.id,
+        role: session.user.role,
+        isOwner: session.user.isOwner,
+      })
+    ) {
+      throw new BusinessRuleError(
+        'NOT_NOTE_AUTHOR',
+        "Only the note's author or an admin can edit this note.",
+      );
+    }
     const [after] = await tx
       .update(communicationLogs)
       .set({
@@ -468,6 +507,19 @@ export async function archiveCommunication(
     if (!before) throw new BusinessRuleError('COMM_NOT_FOUND', 'Communication not found');
     if (before.archivedAt) {
       throw new BusinessRuleError('ALREADY_ARCHIVED', 'Communication is already archived');
+    }
+    // Stage B Wave 3 — same author-or-admin rule as updateCommunication.
+    if (
+      !canModifyNote(before, {
+        userId: session.user.id,
+        role: session.user.role,
+        isOwner: session.user.isOwner,
+      })
+    ) {
+      throw new BusinessRuleError(
+        'NOT_NOTE_AUTHOR',
+        "Only the note's author or an admin can archive this note.",
+      );
     }
     const [after] = await tx
       .update(communicationLogs)

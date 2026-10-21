@@ -40,6 +40,7 @@ import {
   COUNTRIES_SORTED,
   findCountryByName,
   IRISH_IMMIGRATION_STATUSES,
+  WORK_ELIGIBILITY_OPTIONS,
 } from '@/lib/iso-countries';
 import { generateInvoiceAction } from '@/modules/billing/generate-actions';
 import type { InvoiceableService } from '@/modules/billing/read';
@@ -778,13 +779,11 @@ export function CreateLeadDialog({
                   <Field id="cl-elig" label="Main eligibility">
                     <Select id="cl-elig" {...register('workEligibility')}>
                       <option value="">— select —</option>
-                      <option value="IRISH_CITIZEN">Irish citizen</option>
-                      <option value="EU_EEA_SWISS_CITIZEN">EU / EEA / Swiss citizen</option>
-                      <option value="UK_CITIZEN">UK citizen</option>
-                      <option value="STAMP_4_HOLDER">Stamp 4 holder</option>
-                      <option value="VISA_REQUIRED">Visa required</option>
-                      <option value="OTHER">Other</option>
-                      <option value="NOT_SURE">Not sure</option>
+                      {WORK_ELIGIBILITY_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
                     </Select>
                   </Field>
                   <Field id="cl-irish" label="Irish immigration status">

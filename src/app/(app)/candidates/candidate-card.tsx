@@ -65,7 +65,11 @@ export function CandidateCard({ candidate }: { candidate: CandidateListRow }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <StatusPill tone={status.tone}>{status.label}</StatusPill>
+            {/* Two-word labels ("In progress") must not wrap inside the
+                pill when the added-ago text is long. */}
+            <StatusPill tone={status.tone} className="whitespace-nowrap">
+              {status.label}
+            </StatusPill>
             <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
               {/* Relative time drifts between server render and hydration
                   ("51 seconds ago" vs "52") — suppress the mismatch; the
@@ -230,6 +234,12 @@ function cardStatus(c: CandidateListRow): { tone: StatusTone; label: string } {
   }
   switch (c.availabilityStatus) {
     case 'AVAILABLE':
+      // Stage B Wave 3 — an available active candidate surfaces their
+      // Candidate Services progress (live/completed engagements) instead
+      // of the bare "Available". Placed stays driven by availability
+      // below — that value is Recruitment's, never written by CS.
+      if (c.csProgressStatus === 'IN_PROGRESS') return { tone: 'info', label: 'In progress' };
+      if (c.csProgressStatus === 'COMPLETED') return { tone: 'success', label: 'Completed' };
       return { tone: 'success', label: 'Available' };
     case 'TEMPORARILY_UNAVAILABLE':
       return { tone: 'warning', label: 'Unavailable' };
@@ -289,7 +299,11 @@ export function CandidatesCardGrid({ candidates }: { candidates: CandidateListRo
       }
       if (statusValues.length > 0) {
         const matches =
-          statusValues.includes(c.availabilityStatus) || statusValues.includes(c.lifecycleStatus);
+          statusValues.includes(c.availabilityStatus) ||
+          statusValues.includes(c.lifecycleStatus) ||
+          // Stage B Wave 3 — derived CS progress statuses are filterable
+          // alongside availability/lifecycle ("IN_PROGRESS", "COMPLETED").
+          (c.csProgressStatus !== null && statusValues.includes(c.csProgressStatus));
         if (!matches) return false;
       }
       if (countryValues.length > 0 && !countryValues.includes(c.currentCountry ?? '')) {

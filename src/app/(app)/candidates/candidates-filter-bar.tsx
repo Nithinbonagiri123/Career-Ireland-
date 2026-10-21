@@ -26,6 +26,11 @@ import { cn } from '@/lib/utils';
 
 const CANDIDATE_STATUSES = [
   { value: 'AVAILABLE', label: 'Available' },
+  // Stage B Wave 3 — derived Candidate Services progress (live /
+  // finished service engagements). Placed below stays the Recruitment
+  // availability value.
+  { value: 'IN_PROGRESS', label: 'In progress' },
+  { value: 'COMPLETED', label: 'Completed' },
   { value: 'PLACED', label: 'Placed' },
   { value: 'TEMPORARILY_UNAVAILABLE', label: 'Unavailable' },
   { value: 'ACTIVE', label: 'Active' },
