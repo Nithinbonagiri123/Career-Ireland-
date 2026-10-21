@@ -37,6 +37,7 @@ import { formatCurrency } from '@/lib/currency';
 import { cn } from '@/lib/utils';
 import type { InvoiceableService } from '@/modules/billing/read';
 import { createServiceItemFromNameAction } from '@/modules/services-catalog/actions';
+import { ComplimentaryGrantDialog } from './complimentary-grant-dialog';
 
 /**
  * Stage 6G Screen 06 — Services & Billing tab, matching the approved
@@ -53,6 +54,10 @@ export type ActiveServiceRow = {
   serviceName: string;
   statusLabel: string;
   settled: boolean;
+  /** Stage B Wave 4 — true when the live invoice on this engagement is a
+   *  €0.00 complimentary grant; renders a distinct chip, never "Fully
+   *  paid". */
+  complimentary?: boolean;
   pfLine: string | null;
   agreed: string;
   paid: string;
@@ -65,7 +70,7 @@ export type ServiceHistoryRow = {
   key: string;
   dateIso: string | null;
   service: string;
-  type: 'Quote' | 'Direct payment';
+  type: 'Quote' | 'Direct payment' | 'Complimentary';
   refLabel: string | null;
   refHref: string | null;
   printHref: string | null;
@@ -73,7 +78,7 @@ export type ServiceHistoryRow = {
   paid: string;
   balance: string;
   currencyCode: string;
-  status: 'Paid' | 'Partially paid' | 'In progress' | 'Draft quote';
+  status: 'Paid' | 'Partially paid' | 'In progress' | 'Draft quote' | 'Complimentary';
 };
 
 const CARD_ICONS = [FileText, Briefcase, Users, MessageSquare, ChartNoAxesColumn, Send];
@@ -112,6 +117,7 @@ export function ServicesBillingTab({
   currencies,
   active,
   history,
+  canComplimentary = false,
 }: {
   personId: string;
   personName: string;
@@ -127,6 +133,8 @@ export function ServicesBillingTab({
   leadId: string;
   services: InvoiceableService[];
   currencies: Array<{ code: string; name: string; symbol: string }>;
+  /** Stage B Wave 4 — current user may grant complimentary services. */
+  canComplimentary?: boolean;
   active: ActiveServiceRow[];
   history: ServiceHistoryRow[];
 }) {
@@ -430,12 +438,14 @@ export function ServicesBillingTab({
                             variant="secondary"
                             className={cn(
                               'shrink-0 rounded-full border-transparent text-[10px]',
-                              a.settled
-                                ? 'bg-status-success-soft text-status-success'
-                                : 'bg-amber-100 text-amber-800',
+                              a.complimentary
+                                ? 'bg-status-info-soft text-status-info'
+                                : a.settled
+                                  ? 'bg-status-success-soft text-status-success'
+                                  : 'bg-amber-100 text-amber-800',
                             )}
                           >
-                            {a.statusLabel}
+                            {a.complimentary ? 'Complimentary' : a.statusLabel}
                           </Badge>
                         </div>
                         {a.pfLine && (
@@ -482,12 +492,18 @@ export function ServicesBillingTab({
                             variant="secondary"
                             className={cn(
                               'shrink-0 rounded-full border-transparent text-[10px]',
-                              a.settled
-                                ? 'bg-status-success-soft text-status-success'
-                                : 'bg-amber-100 text-amber-800',
+                              a.complimentary
+                                ? 'bg-status-info-soft text-status-info'
+                                : a.settled
+                                  ? 'bg-status-success-soft text-status-success'
+                                  : 'bg-amber-100 text-amber-800',
                             )}
                           >
-                            {a.settled ? 'Fully paid' : 'Awaiting payment'}
+                            {a.complimentary
+                              ? 'No payment due'
+                              : a.settled
+                                ? 'Fully paid'
+                                : 'Awaiting payment'}
                           </Badge>
                         </div>
                       </div>
@@ -534,6 +550,13 @@ export function ServicesBillingTab({
                 <CreditCard className="mr-1.5 size-4" aria-hidden />
                 Direct Payment &amp; Activate
               </Button>
+              {canComplimentary && (
+                <ComplimentaryGrantDialog
+                  personId={personId}
+                  services={services}
+                  currencies={currencies}
+                />
+              )}
             </div>
           </section>
         </div>
@@ -654,9 +677,11 @@ export function ServicesBillingTab({
                           'rounded-full border-transparent text-[10px]',
                           h.status === 'Paid'
                             ? 'bg-status-success-soft text-status-success'
-                            : h.status === 'Draft quote'
-                              ? 'bg-muted text-muted-foreground'
-                              : 'bg-amber-100 text-amber-800',
+                            : h.status === 'Complimentary'
+                              ? 'bg-status-info-soft text-status-info'
+                              : h.status === 'Draft quote'
+                                ? 'bg-muted text-muted-foreground'
+                                : 'bg-amber-100 text-amber-800',
                         )}
                       >
                         {h.status}

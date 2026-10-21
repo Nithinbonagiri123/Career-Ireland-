@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, type SQL, sql } from 'drizzle-orm';
 import type { DbExecutor } from '@/lib/audit/withAudit';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
@@ -17,6 +17,10 @@ export type EngagementListRow = ServiceEngagement & {
   serviceName: string;
   payerLabel: string;
   beneficiaryName: string | null;
+  /** Stage B Wave 4 — true when a live complimentary (€0.00) invoice sits
+   *  on this engagement: nothing is owed, so payment recording is both
+   *  hidden in the UI and refused server-side. */
+  hasComplimentaryInvoice: boolean;
 };
 
 export async function listEngagements(createdRange?: DateRange): Promise<EngagementListRow[]> {
@@ -31,6 +35,12 @@ export async function listEngagements(createdRange?: DateRange): Promise<Engagem
       serviceName: serviceCatalogItems.name,
       payerFirst: persons.firstName,
       payerLast: persons.lastName,
+      hasComplimentaryInvoice: sql<boolean>`EXISTS (
+        SELECT 1 FROM invoices i
+        WHERE i.service_engagement_id = ${serviceEngagements.id}
+          AND i.settlement_kind = 'COMPLIMENTARY'
+          AND i.status != 'VOIDED'
+      )`,
     })
     .from(serviceEngagements)
     .innerJoin(
@@ -68,6 +78,7 @@ export async function listEngagements(createdRange?: DateRange): Promise<Engagem
     beneficiaryName: r.engagement.beneficiaryPersonId
       ? (beneficiaryMap.get(r.engagement.beneficiaryPersonId) ?? null)
       : null,
+    hasComplimentaryInvoice: r.hasComplimentaryInvoice,
   }));
 }
 

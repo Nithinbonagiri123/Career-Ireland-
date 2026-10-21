@@ -26,7 +26,12 @@ import { type RecordPaymentInput, RecordPaymentSchema } from '@/modules/commerce
 
 export function RecordPaymentDialog({ engagements }: { engagements: EngagementListRow[] }) {
   const openEngagements = engagements.filter(
-    (e) => e.status !== 'CANCELLED' && e.status !== 'COMPLETED',
+    (e) =>
+      e.status !== 'CANCELLED' &&
+      e.status !== 'COMPLETED' &&
+      // Stage B Wave 4 — complimentary services owe nothing; the server
+      // refuses payments on them, so don't offer them here.
+      !e.hasComplimentaryInvoice,
   );
 
   const form = useForm<RecordPaymentInput>({

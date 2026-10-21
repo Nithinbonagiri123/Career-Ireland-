@@ -114,6 +114,37 @@ export const FinaliseDraftSchema = z.object({
 export type FinaliseDraftInput = z.infer<typeof FinaliseDraftSchema>;
 
 /**
+ * Stage B Wave 4 — complimentary (€0.00) intake. No payment section at
+ * all: the grant needs a currency (for the engagement/invoice rows), a
+ * mandatory substantive reason, and optionally the specific services
+ * being granted (names only — there are no amounts to reconcile).
+ */
+export const FinaliseDraftComplimentarySchema = z.object({
+  personId: z.string().uuid(),
+  currencyCode: z.string().length(3),
+  reason: z
+    .string()
+    .trim()
+    .min(
+      10,
+      'Give a real reason (at least 10 characters) — it appears on the audit trail and the invoice.',
+    )
+    .max(500),
+  coverLetter: z.string().trim().max(10_000).optional().or(z.literal('')),
+  primaryOccupationId: z.string().uuid().optional().or(z.literal('')),
+  services: z
+    .array(
+      z.object({
+        serviceCatalogItemId: z.string().uuid(),
+        name: z.string().trim().min(1).max(200),
+      }),
+    )
+    .max(20)
+    .optional(),
+});
+export type FinaliseDraftComplimentaryInput = z.infer<typeof FinaliseDraftComplimentarySchema>;
+
+/**
  * Walk-in path: create the candidate NOW, invoice later. Skips the
  * payment section entirely — no invoice, no engagement, no receipt.
  * Same audit trail flag ("via: onboarding_walk_in") so support can

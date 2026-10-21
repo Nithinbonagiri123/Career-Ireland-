@@ -1,15 +1,17 @@
 import { and, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { checkPermission, requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { currencies } from '@/lib/db/schema/currencies';
 import { candidateProfiles, type Person, persons } from '@/lib/db/schema/persons';
 import { serviceCatalogItems } from '@/lib/db/schema/services';
-import { BusinessRuleError, ValidationError } from '@/lib/errors';
+import { AuthorizationError, BusinessRuleError, ValidationError } from '@/lib/errors';
 import { insertInvoice, insertReceipt, recomputeInvoiceStatus } from '@/modules/billing/service';
 import { fetchAppSettings } from '@/modules/settings/service';
 import {
+  type FinaliseDraftComplimentaryInput,
+  FinaliseDraftComplimentarySchema,
   type FinaliseDraftInput,
   FinaliseDraftSchema,
   type FinaliseDraftWithoutPaymentInput,
@@ -254,6 +256,12 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
   }
   const d = parsed.data;
 
+  // Stage B Wave 4 hardening — settings are read BEFORE the transaction
+  // (same reasoning as finaliseDraftComplimentary: a second pooled
+  // connection inside this transaction can starve the pool under
+  // concurrent auto-saves queuing on our persons row lock).
+  const settings = await fetchAppSettings();
+
   return db.transaction(async (tx) => {
     const [draft] = await tx
       .select()
@@ -303,6 +311,7 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
         personId: draft.id,
         profileSummary: blankToNull(draft.notes),
         primaryOccupationId: blankToNull(d.primaryOccupationId),
+        workEligibility: blankToNull(draft.workEligibility),
         // coverLetter is captured but doesn't have a first-class column —
         // stored in profileSummary if provided, else preserved from notes.
         lifecycleStatus: 'ACTIVE',
@@ -379,7 +388,6 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
     // unit price = agreed payment amount). VAT rate comes from
     // app_settings so a future rate change is reflected here without
     // touching this code.
-    const settings = await fetchAppSettings();
     // Phase 3 blueprint §8.2 — honour the vatRegistered switch here
     // too so onboarding invoices don't accidentally bill VAT while the
     // business isn't actually registered.
@@ -464,6 +472,175 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
 }
 
 /**
+ * Stage B Wave 4 — complimentary intake: create the candidate AND grant
+ * the service free, in one transaction. Mirrors `finaliseDraft` except:
+ * no payment row, no verification, no receipt (the DB's `amount > 0`
+ * receipt CHECK forbids one anyway). The engagement is agreed at €0.00
+ * and goes straight to ACTIVE; the invoice is a genuine sequential
+ * number with zero totals, settlement kind COMPLIMENTARY, status PAID
+ * at birth. Draft-flip is the idempotency guard, exactly as in the paid
+ * intake: a second submit finds no draft and throws instead of
+ * double-issuing.
+ *
+ * Gated like the workspace grant: ADMIN / owner or the explicit
+ * ('candidate_services','complimentary','create') permission.
+ */
+export async function finaliseDraftComplimentary(
+  input: FinaliseDraftComplimentaryInput,
+): Promise<{ personId: string; candidateProfileId: string; invoiceNumber: string }> {
+  const session = await requireInternalStaff();
+  if (!(session.user.isOwner || session.user.role === 'ADMIN')) {
+    const granted = await checkPermission('candidate_services', 'complimentary', 'create');
+    if (!granted) throw new AuthorizationError();
+  }
+  const parsed = FinaliseDraftComplimentarySchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid complimentary intake payload',
+      parsed.error.flatten().fieldErrors as Record<string, string>,
+    );
+  }
+  const d = parsed.data;
+
+  // Settings are read BEFORE the transaction — fetching them inside would
+  // need a second pooled connection while this transaction holds one and
+  // its row locks queue other actions, which can starve the pool.
+  const settings = await fetchAppSettings();
+
+  return db.transaction(async (tx) => {
+    const [draft] = await tx
+      .select()
+      .from(persons)
+      .where(and(eq(persons.id, d.personId), eq(persons.isDraft, true)))
+      .limit(1);
+    if (!draft)
+      throw new BusinessRuleError(
+        'DRAFT_NOT_FOUND',
+        'Draft candidate not found or already finalised',
+      );
+    if (!draft.firstName || draft.firstName === 'Draft' || !draft.lastName) {
+      throw new ValidationError('First and last name are required to create a candidate', {
+        firstName: 'Required',
+        lastName: 'Required',
+      });
+    }
+
+    const [currencyRow] = await tx
+      .select({ code: currencies.code })
+      .from(currencies)
+      .where(eq(currencies.code, d.currencyCode))
+      .limit(1);
+    if (!currencyRow) {
+      throw new ValidationError('Unknown currency', {
+        currencyCode: `Currency ${d.currencyCode} not configured`,
+      });
+    }
+
+    const [finalisedPerson] = await tx
+      .update(persons)
+      .set({ isDraft: false, draftedByUserId: null, updatedAt: sql`NOW()` })
+      .where(eq(persons.id, draft.id))
+      .returning();
+    if (!finalisedPerson) throw new Error('draft finalise update returned no row');
+
+    const [profile] = await tx
+      .insert(candidateProfiles)
+      .values({
+        personId: draft.id,
+        profileSummary: blankToNull(draft.notes),
+        primaryOccupationId: blankToNull(d.primaryOccupationId),
+        workEligibility: blankToNull(draft.workEligibility),
+        lifecycleStatus: 'ACTIVE',
+        availabilityStatus: 'AVAILABLE',
+        assignedUserId: session.user.id,
+      })
+      .returning({ id: candidateProfiles.id });
+    if (!profile) throw new Error('candidate_profiles insert returned no row');
+
+    let catalogItemId: string;
+    let serviceNames: string[] = [];
+    if (d.services && d.services.length > 0) {
+      const ids = d.services.map((s) => s.serviceCatalogItemId);
+      const found = await tx
+        .select({ id: serviceCatalogItems.id })
+        .from(serviceCatalogItems)
+        .where(inArray(serviceCatalogItems.id, ids));
+      if (found.length !== new Set(ids).size) {
+        throw new ValidationError('A selected service no longer exists', {
+          services: 'Refresh the page and reselect the services.',
+        });
+      }
+      catalogItemId = ids[0] as string;
+      serviceNames = d.services.map((s) => s.name);
+    } else {
+      catalogItemId = await getOrCreateCandidateOnboardingCatalog(tx, d.currencyCode);
+    }
+
+    const [engagement] = await tx
+      .insert(serviceEngagements)
+      .values({
+        serviceCatalogItemId: catalogItemId,
+        payerPersonId: draft.id,
+        beneficiaryPersonId: draft.id,
+        agreedAmount: '0.00',
+        currencyCode: d.currencyCode,
+        status: 'ACTIVE',
+        notes: `Complimentary: ${d.reason}`,
+      })
+      .returning({ id: serviceEngagements.id });
+    if (!engagement) throw new Error('service_engagements insert returned no row');
+
+    const effectiveVatRate = settings.vatRegistered ? settings.vatRatePercent : '0.00';
+    const invoice = await insertInvoice(tx, {
+      payerPersonId: draft.id,
+      serviceEngagementId: engagement.id,
+      serviceCatalogItemId: catalogItemId,
+      qty: 1,
+      unitPrice: '0.00',
+      vatRatePercent: effectiveVatRate,
+      currencyCode: d.currencyCode,
+      lineDescription: `${
+        serviceNames.length > 0 ? serviceNames.join(' + ') : CANDIDATE_ONBOARDING_NAME
+      } — ${draft.firstName} ${draft.lastName}`,
+      issuedByUserId: session.user.id,
+      paymentTermsDays: null,
+      complimentary: { reason: d.reason, grantedByUserId: session.user.id },
+    });
+
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'candidate_profile',
+      entityId: profile.id,
+      action: 'CREATED',
+      after: { personId: draft.id, via: 'onboarding_complimentary' },
+    });
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'invoice',
+      entityId: invoice.id,
+      action: 'COMPLIMENTARY_GRANTED',
+      after: {
+        number: invoice.number,
+        totalAmount: invoice.totalAmount,
+        reason: d.reason,
+      },
+      context: {
+        via: 'onboarding_complimentary',
+        engagementId: engagement.id,
+        personId: draft.id,
+        invoiceNumber: invoice.number,
+      },
+    });
+
+    return {
+      personId: draft.id,
+      candidateProfileId: profile.id,
+      invoiceNumber: invoice.number,
+    };
+  });
+}
+
+/**
  * Walk-in path: create the candidate profile now, invoice later. Same
  * shape as finaliseDraft but skips every payment/invoice/receipt
  * insert — the operator can raise an invoice from the candidate
@@ -517,6 +694,7 @@ export async function finaliseDraftWithoutPayment(
         personId: draft.id,
         profileSummary: blankToNull(draft.notes),
         primaryOccupationId: blankToNull(d.primaryOccupationId),
+        workEligibility: blankToNull(draft.workEligibility),
         lifecycleStatus: 'ACTIVE',
         availabilityStatus: 'AVAILABLE',
         assignedUserId: session.user.id,

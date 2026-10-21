@@ -46,6 +46,10 @@ export const MODULES = {
     'engagements',
     'payments',
     'proformas',
+    // Stage B Wave 4 — authority to grant complimentary (€0.00) services.
+    // Deliberately its own module so the grant is explicit; ADMIN/owner
+    // bypass as everywhere, STAFF needs this granted.
+    'complimentary',
   ],
   recruitment: [
     'dashboard',

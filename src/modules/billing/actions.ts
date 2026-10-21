@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { toActionResult } from '@/lib/result';
+import { grantComplimentaryService } from './complimentary';
+import type { GrantComplimentaryServiceInput } from './complimentary-schemas';
 import { issueCreditNote, issueRefund, voidInvoice } from './service';
 
 export async function voidInvoiceAction(input: {
@@ -62,6 +64,17 @@ export async function issueRefundAction(input: {
   if (r.ok) {
     revalidatePath(input.profileHref);
     revalidatePath(`${input.profileHref}/invoices/${input.invoiceNumber}`);
+    revalidatePath('/payments');
+  }
+  return r;
+}
+
+/** Stage B Wave 4 — grant a complimentary (€0.00) service from the client
+ *  workspace. Permission + validation live in the service. */
+export async function grantComplimentaryServiceAction(input: GrantComplimentaryServiceInput) {
+  const r = await toActionResult(() => grantComplimentaryService(input));
+  if (r.ok) {
+    revalidatePath('/candidates');
     revalidatePath('/payments');
   }
   return r;

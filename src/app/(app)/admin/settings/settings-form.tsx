@@ -43,6 +43,9 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
   );
   const [invoiceFooter, setInvoiceFooter] = useState(initial.invoiceFooter);
   const [receiptFooter, setReceiptFooter] = useState(initial.receiptFooter);
+  const [complimentaryInvoiceNote, setComplimentaryInvoiceNote] = useState(
+    initial.complimentaryInvoiceNote,
+  );
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -70,6 +73,7 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
       ),
       invoiceFooter,
       receiptFooter,
+      complimentaryInvoiceNote,
     }),
     [
       legalName,
@@ -88,6 +92,7 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
       defaultPaymentTermsDays,
       invoiceFooter,
       receiptFooter,
+      complimentaryInvoiceNote,
     ],
   );
 
@@ -109,6 +114,7 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
       defaultPaymentTermsDays: initial.defaultPaymentTermsDays,
       invoiceFooter: initial.invoiceFooter,
       receiptFooter: initial.receiptFooter,
+      complimentaryInvoiceNote: initial.complimentaryInvoiceNote,
     }),
     [initial],
   );
@@ -328,6 +334,18 @@ export function SettingsForm({ initial }: { initial: AppSettings }) {
               id="receiptFooter"
               value={receiptFooter}
               onChange={(e) => setReceiptFooter(e.target.value)}
+              rows={2}
+            />
+          </FieldWrap>
+          <FieldWrap
+            label="Complimentary invoice note"
+            htmlFor="complimentaryInvoiceNote"
+            hint="Printed on €0.00 complimentary invoices instead of payment instructions."
+          >
+            <Textarea
+              id="complimentaryInvoiceNote"
+              value={complimentaryInvoiceNote}
+              onChange={(e) => setComplimentaryInvoiceNote(e.target.value)}
               rows={2}
             />
           </FieldWrap>

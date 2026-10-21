@@ -47,8 +47,16 @@ export default async function InvoicePrintPage({
   if (data?.payer.kind !== 'PERSON' || data.payer.person.id !== id) notFound();
 
   const person = data.payer.person;
-  const canVoid = session.user.role === 'ADMIN' && data.invoice.status === 'ISSUED';
+  // Stage B Wave 4 — complimentary invoices: PAID-with-no-money, so the
+  // money controls (credit note, refund) make no sense and are blocked
+  // server-side too; void-with-reason IS their correction path, PAID
+  // notwithstanding.
+  const isComplimentary = data.invoice.settlementKind === 'COMPLIMENTARY';
+  const canVoid =
+    session.user.role === 'ADMIN' &&
+    (data.invoice.status === 'ISSUED' || (isComplimentary && data.invoice.status !== 'VOIDED'));
   const canCredit =
+    !isComplimentary &&
     (session.user.role === 'ADMIN' || session.user.role === 'FINANCE') &&
     data.invoice.status !== 'VOIDED';
 
@@ -146,19 +154,29 @@ export default async function InvoicePrintPage({
                   variant="secondary"
                   className={cn(
                     'rounded-full border-transparent text-[10px]',
-                    data.invoice.status === 'PAID'
-                      ? 'bg-status-success-soft text-status-success'
-                      : data.invoice.status === 'VOIDED'
-                        ? 'bg-muted text-muted-foreground'
-                        : 'bg-amber-100 text-amber-800',
+                    isComplimentary && data.invoice.status !== 'VOIDED'
+                      ? 'bg-status-info-soft text-status-info'
+                      : data.invoice.status === 'PAID'
+                        ? 'bg-status-success-soft text-status-success'
+                        : data.invoice.status === 'VOIDED'
+                          ? 'bg-muted text-muted-foreground'
+                          : 'bg-amber-100 text-amber-800',
                   )}
                 >
-                  {INVOICE_STATUS_LABEL[data.invoice.status] ?? data.invoice.status}
+                  {isComplimentary && data.invoice.status !== 'VOIDED'
+                    ? 'Complimentary'
+                    : (INVOICE_STATUS_LABEL[data.invoice.status] ?? data.invoice.status)}
                 </Badge>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Issued on {format(data.invoice.issuedAt, 'dd MMM yyyy · HH:mm')}
               </p>
+              {isComplimentary && data.invoice.complimentaryReason && (
+                <p className="mt-0.5 max-w-md text-xs text-muted-foreground">
+                  Complimentary — no payment due. Reason:{' '}
+                  <span className="text-foreground">{data.invoice.complimentaryReason}</span>
+                </p>
+              )}
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -206,9 +224,11 @@ export default async function InvoicePrintPage({
         <div className="mx-auto mt-3 max-w-3xl px-6 print:hidden">
           <div className="rounded-md border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
             <strong className="font-semibold">Need to correct the amount?</strong>{' '}
-            {data.invoice.status === 'ISSUED'
-              ? "Nothing paid yet — Void the invoice above and generate a fresh one from the candidate's Billing tab."
-              : "Issue a credit note above to reduce what's owed, then raise a second invoice from the candidate's Billing tab for the correct amount. Invoices are final once paid — this is required by Irish VAT rules."}
+            {isComplimentary
+              ? 'Complimentary invoice — no money moved, so there is nothing to credit or refund. Void it above with a reason (the linked service is cancelled automatically) and re-issue if needed.'
+              : data.invoice.status === 'ISSUED'
+                ? "Nothing paid yet — Void the invoice above and generate a fresh one from the candidate's Billing tab."
+                : "Issue a credit note above to reduce what's owed, then raise a second invoice from the candidate's Billing tab for the correct amount. Invoices are final once paid — this is required by Irish VAT rules."}
           </div>
         </div>
       )}

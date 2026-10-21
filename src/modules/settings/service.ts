@@ -55,6 +55,8 @@ export type UpdateAppSettingsInput = {
   defaultPaymentTermsDays: number;
   invoiceFooter: string;
   receiptFooter: string;
+  /** Stage B Wave 4 — line printed on €0.00 complimentary invoices. */
+  complimentaryInvoiceNote: string;
 };
 
 export async function updateAppSettings(input: UpdateAppSettingsInput): Promise<AppSettings> {
@@ -97,6 +99,7 @@ export async function updateAppSettings(input: UpdateAppSettingsInput): Promise<
         vatRatePercent: effectiveVatRate,
         defaultPaymentTermsDays: input.defaultPaymentTermsDays,
         invoiceFooter: input.invoiceFooter,
+        complimentaryInvoiceNote: input.complimentaryInvoiceNote,
         receiptFooter: input.receiptFooter,
         updatedByUserId: session.user.id,
         updatedAt: new Date(),

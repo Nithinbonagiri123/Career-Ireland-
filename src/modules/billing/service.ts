@@ -12,7 +12,7 @@ import {
   receipts,
   refunds,
 } from '@/lib/db/schema/billing';
-import { payments } from '@/lib/db/schema/commerce';
+import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { emitFinancialEvent } from '@/modules/accounting/events';
 import { resolveDivisionForInvoice } from '@/modules/accounting/rule-engine';
@@ -108,6 +108,10 @@ export async function insertInvoice(
      *  so the invoice detail view can resolve the service. Nullable
      *  because historic callers predate this field. */
     serviceCatalogItemId?: string | null;
+    /** Stage B Wave 4 — pass both together for a genuine €0.00
+     *  complimentary invoice (CHECK-enforced: reason mandatory, total
+     *  must be 0). The row is written PAID: nothing is owed. */
+    complimentary?: { reason: string; grantedByUserId: string } | null;
   },
 ): Promise<Invoice> {
   const hasPerson = Boolean(args.payerPersonId);
@@ -128,6 +132,9 @@ export async function insertInvoice(
   // drifts from what the customer sees.
   const taxCents = Math.round((subtotalCents * vatRate) / 100);
   const totalCents = subtotalCents + taxCents;
+  if (args.complimentary && totalCents !== 0) {
+    throw new Error('insertInvoice: a complimentary invoice must total 0.00');
+  }
 
   const now = new Date();
   const number = await allocateNextNumber(tx, 'INV', now.getUTCFullYear());
@@ -152,7 +159,12 @@ export async function insertInvoice(
       currencyCode: args.currencyCode,
       lineDescription: args.lineDescription,
       issuedByUserId: args.issuedByUserId,
-      status: 'ISSUED',
+      // Complimentary invoices are born settled — nothing is owed. The
+      // recompute guard keeps them PAID forever.
+      status: args.complimentary ? 'PAID' : 'ISSUED',
+      settlementKind: args.complimentary ? 'COMPLIMENTARY' : 'STANDARD',
+      complimentaryReason: args.complimentary?.reason ?? null,
+      complimentaryGrantedByUserId: args.complimentary?.grantedByUserId ?? null,
       dueAt,
       vatTreatment,
       immigrationCaseId: args.immigrationCaseId ?? null,
@@ -294,6 +306,7 @@ export async function recomputeInvoiceStatus(
       id: invoices.id,
       totalAmount: invoices.totalAmount,
       status: invoices.status,
+      settlementKind: invoices.settlementKind,
     })
     .from(invoices)
     .where(eq(invoices.id, invoiceId))
@@ -304,6 +317,27 @@ export async function recomputeInvoiceStatus(
     return {
       before: row.status,
       after: row.status,
+      paidCents: 0,
+      creditedCents: 0,
+      totalCents: parseCents(row.totalAmount),
+    };
+  }
+
+  // Stage B Wave 4 — a complimentary invoice is PAID by definition
+  // (nothing is owed) and must never drift to ISSUED or PARTIALLY_PAID.
+  // Without this guard a €0.00 total flips to PAID only when something
+  // happens to recompute it — nondeterministic — and a stray payment
+  // or credit row could never change what "complimentary" means.
+  if (row.settlementKind === 'COMPLIMENTARY') {
+    if (row.status !== 'PAID') {
+      await tx
+        .update(invoices)
+        .set({ status: 'PAID', updatedAt: sql`NOW()` })
+        .where(eq(invoices.id, invoiceId));
+    }
+    return {
+      before: row.status,
+      after: 'PAID',
       paidCents: 0,
       creditedCents: 0,
       totalCents: parseCents(row.totalAmount),
@@ -421,7 +455,11 @@ export async function voidInvoice(invoiceId: string, reason: string): Promise<In
     if (before.status === 'VOIDED') {
       throw new BusinessRuleError('INVOICE_ALREADY_VOIDED', 'This invoice is already voided.');
     }
-    if (before.status === 'PAID') {
+    // Stage B Wave 4 — a complimentary invoice is written as PAID with
+    // zero money against it, so "refund + credit note" is meaningless;
+    // void-with-reason IS its correction path. Money-backed PAID
+    // invoices keep the hard block below.
+    if (before.status === 'PAID' && before.settlementKind !== 'COMPLIMENTARY') {
       throw new BusinessRuleError(
         'INVOICE_ALREADY_PAID',
         'A paid invoice cannot be voided. Refund the payment and issue a credit note instead.',
@@ -471,6 +509,42 @@ export async function voidInvoice(invoiceId: string, reason: string): Promise<In
       before: { status: before.status },
       after: { status: after.status, voidReason: after.voidReason },
     });
+
+    // Stage B Wave 4 — voiding a complimentary invoice reconciles its
+    // engagement: the free service was granted BY that invoice, so a
+    // live engagement must not stay attached to a voided one. Only
+    // not-yet-finished engagements are cancelled (a COMPLETED service
+    // was actually delivered — cancelling it would rewrite history),
+    // and the candidate profile is never touched: deactivation is a
+    // separate, deliberate operator decision because the person may
+    // hold other valid services.
+    if (before.settlementKind === 'COMPLIMENTARY') {
+      const [eng] = await tx
+        .select({ id: serviceEngagements.id, status: serviceEngagements.status })
+        .from(serviceEngagements)
+        .where(eq(serviceEngagements.id, before.serviceEngagementId))
+        .for('update')
+        .limit(1);
+      if (eng && ['REQUESTED', 'PENDING_PAYMENT', 'ACTIVE', 'ON_HOLD'].includes(eng.status)) {
+        await tx
+          .update(serviceEngagements)
+          .set({ status: 'CANCELLED', updatedAt: sql`NOW()` })
+          .where(eq(serviceEngagements.id, eng.id));
+        await recordAudit(tx, {
+          actorUserId: session.user.id,
+          entityType: 'service_engagement',
+          entityId: eng.id,
+          action: 'CANCELLED',
+          before: { status: eng.status },
+          after: { status: 'CANCELLED' },
+          context: {
+            via: 'complimentary_invoice_voided',
+            invoiceNumber: after.number,
+            reason: trimmed,
+          },
+        });
+      }
+    }
 
     return after;
   });
@@ -537,6 +611,7 @@ export async function issueCreditNote(input: {
         immigrationCaseId: invoices.immigrationCaseId,
         jobRequisitionId: invoices.jobRequisitionId,
         placementId: invoices.placementId,
+        settlementKind: invoices.settlementKind,
       })
       .from(invoices)
       .where(eq(invoices.id, input.invoiceId))
@@ -547,6 +622,15 @@ export async function issueCreditNote(input: {
       throw new BusinessRuleError(
         'INVOICE_VOIDED',
         'Cannot credit a voided invoice — the row is already reversed.',
+      );
+    }
+    // Stage B Wave 4 — nothing to credit against €0.00, and a CRN here
+    // would corrupt the settled-total math that drives invoice status.
+    // The correction path for a complimentary invoice is void + reissue.
+    if (inv.settlementKind === 'COMPLIMENTARY') {
+      throw new BusinessRuleError(
+        'INVOICE_COMPLIMENTARY',
+        'A complimentary (€0.00) invoice has nothing to credit. Void it with a reason and reissue instead.',
       );
     }
 

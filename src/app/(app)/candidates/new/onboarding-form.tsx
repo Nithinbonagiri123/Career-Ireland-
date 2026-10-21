@@ -36,6 +36,7 @@ import type { InvoiceableService } from '@/modules/billing/read';
 import {
   discardDraftAction,
   finaliseDraftAction,
+  finaliseDraftComplimentaryAction,
   finaliseDraftWithoutPaymentAction,
   updateDraftPersonAction,
 } from '@/modules/candidates/onboarding-actions';
@@ -121,6 +122,7 @@ export function OnboardingForm({
   occupations,
   services,
   existingDocuments,
+  canComplimentary = false,
 }: {
   draft: Draft;
   currencies: Currency[];
@@ -128,6 +130,8 @@ export function OnboardingForm({
   occupations: Array<{ id: string; name: string }>;
   services: InvoiceableService[];
   existingDocuments: UploadedDoc[];
+  /** Stage B Wave 4 — current user may grant complimentary services. */
+  canComplimentary?: boolean;
 }) {
   const router = useRouter();
 
@@ -207,6 +211,11 @@ export function OnboardingForm({
     notes: '',
   });
 
+  // Stage B Wave 4 — complimentary mode: no payment at all; a genuine
+  // €0.00 invoice is issued instead. Reason is mandatory and audited.
+  const [complimentaryMode, setComplimentaryMode] = useState(false);
+  const [complimentaryReason, setComplimentaryReason] = useState('');
+
   // Stage 6G Screen 09 — step 3: which services this payment covers.
   // Amounts default from the catalogue but stay editable; the total
   // auto-fills "Amount received" while at least one service is ticked.
@@ -251,12 +260,16 @@ export function OnboardingForm({
 
   const [uploads, setUploads] = useState<UploadedDoc[]>(existingDocuments);
 
-  const canFinalise =
-    personal.firstName.trim().length > 0 &&
-    personal.lastName.trim().length > 0 &&
-    payment.amount.trim().length > 0 &&
-    payment.currencyCode.trim().length > 0 &&
-    payment.receivedAt.trim().length > 0;
+  const canFinalise = complimentaryMode
+    ? personal.firstName.trim().length > 0 &&
+      personal.lastName.trim().length > 0 &&
+      payment.currencyCode.trim().length > 0 &&
+      complimentaryReason.trim().length >= 10
+    : personal.firstName.trim().length > 0 &&
+      personal.lastName.trim().length > 0 &&
+      payment.amount.trim().length > 0 &&
+      payment.currencyCode.trim().length > 0 &&
+      payment.receivedAt.trim().length > 0;
   const canCreateWalkIn =
     personal.firstName.trim().length > 0 && personal.lastName.trim().length > 0;
 
@@ -265,6 +278,32 @@ export function OnboardingForm({
     setFieldErrors({});
     setSubmitting(true);
     await savePersonal(personal);
+    if (complimentaryMode) {
+      const result = await finaliseDraftComplimentaryAction({
+        personId: draft.personId,
+        currencyCode: payment.currencyCode,
+        reason: complimentaryReason.trim(),
+        coverLetter,
+        primaryOccupationId: primaryOccupationId || undefined,
+        services:
+          selectedServices.length > 0
+            ? selectedServices.map((r) => ({ serviceCatalogItemId: r.id, name: r.name }))
+            : undefined,
+      });
+      setSubmitting(false);
+      if (!result.ok) {
+        if (result.error.fields) setFieldErrors(result.error.fields);
+        setFormError(result.error.message);
+        toast.error(result.error.message);
+        return;
+      }
+      toast.success(
+        `Candidate created — complimentary invoice ${result.data.invoiceNumber} (0.00)`,
+      );
+      router.replace(`/candidates/${result.data.personId}?just_created=1`);
+      router.refresh();
+      return;
+    }
     const result = await finaliseDraftAction({
       personId: draft.personId,
       payment,
@@ -469,34 +508,37 @@ export function OnboardingForm({
                 title="Payment details"
                 sub="Record the payment that the customer has already made to us."
               />
-              <div className="mt-4 grid gap-4 pl-10 md:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="amount">Amount received *</Label>
-                  <div className="flex gap-2">
-                    <span className="grid w-9 shrink-0 place-items-center rounded-lg border bg-muted/40 text-sm text-muted-foreground">
-                      {currencySymbol}
+              {canComplimentary && (
+                <label className="mt-3 flex cursor-pointer items-start gap-2 pl-10 text-xs">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={complimentaryMode}
+                    onChange={(e) => setComplimentaryMode(e.currentTarget.checked)}
+                  />
+                  <span>
+                    <span className="font-semibold text-foreground">
+                      Complimentary service (€0.00 — no payment)
                     </span>
-                    <Input
-                      id="amount"
-                      type="text"
-                      inputMode="decimal"
-                      value={payment.amount}
-                      onChange={(e) => {
-                        const v = e.currentTarget.value;
-                        setPayment((p) => ({ ...p, amount: v }));
-                      }}
-                      placeholder="e.g. 750.00"
-                      aria-invalid={Boolean(fieldErrors['payment.amount'])}
-                      className="min-w-0 flex-1"
-                    />
+                    <span className="block text-muted-foreground">
+                      Issues a genuine €0.00 invoice with the next official number. No payment is
+                      recorded and no receipt is issued. Requires a reason; the action is audited.
+                    </span>
+                  </span>
+                </label>
+              )}
+              {complimentaryMode ? (
+                <div className="mt-4 grid gap-4 pl-10 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="comp-currency">Currency *</Label>
                     <Select
-                      aria-label="Currency"
+                      id="comp-currency"
                       value={payment.currencyCode}
                       onChange={(e) => {
                         const v = e.currentTarget.value;
                         setPayment((p) => ({ ...p, currencyCode: v }));
                       }}
-                      className="w-24 shrink-0"
+                      className="w-32"
                     >
                       {currencies.map((c) => (
                         <option key={c.code} value={c.code}>
@@ -505,64 +547,126 @@ export function OnboardingForm({
                       ))}
                     </Select>
                   </div>
-                  {fieldErrors['payment.amount'] && (
-                    <p className="text-xs text-destructive" role="alert">
-                      {fieldErrors['payment.amount']}
+                  <div className="space-y-1.5 md:col-span-2">
+                    <Label htmlFor="comp-reason">Reason (required, audited) *</Label>
+                    <Textarea
+                      id="comp-reason"
+                      className="min-h-16"
+                      value={complimentaryReason}
+                      onChange={(e) => setComplimentaryReason(e.currentTarget.value)}
+                      placeholder="e.g. Hardship waiver approved by management — see email of 20 Oct"
+                      maxLength={500}
+                      aria-invalid={Boolean(fieldErrors.reason)}
+                    />
+                    {complimentaryReason.trim().length > 0 &&
+                      complimentaryReason.trim().length < 10 && (
+                        <p className="text-xs text-status-warning">
+                          Give a real reason — at least 10 characters.
+                        </p>
+                      )}
+                    {fieldErrors.reason && (
+                      <p className="text-xs text-destructive" role="alert">
+                        {fieldErrors.reason}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-4 pl-10 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="amount">Amount received *</Label>
+                    <div className="flex gap-2">
+                      <span className="grid w-9 shrink-0 place-items-center rounded-lg border bg-muted/40 text-sm text-muted-foreground">
+                        {currencySymbol}
+                      </span>
+                      <Input
+                        id="amount"
+                        type="text"
+                        inputMode="decimal"
+                        value={payment.amount}
+                        onChange={(e) => {
+                          const v = e.currentTarget.value;
+                          setPayment((p) => ({ ...p, amount: v }));
+                        }}
+                        placeholder="e.g. 750.00"
+                        aria-invalid={Boolean(fieldErrors['payment.amount'])}
+                        className="min-w-0 flex-1"
+                      />
+                      <Select
+                        aria-label="Currency"
+                        value={payment.currencyCode}
+                        onChange={(e) => {
+                          const v = e.currentTarget.value;
+                          setPayment((p) => ({ ...p, currencyCode: v }));
+                        }}
+                        className="w-24 shrink-0"
+                      >
+                        {currencies.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.code}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    {fieldErrors['payment.amount'] && (
+                      <p className="text-xs text-destructive" role="alert">
+                        {fieldErrors['payment.amount']}
+                      </p>
+                    )}
+                  </div>
+                  <FieldPair
+                    id="receivedAt"
+                    label="Payment date *"
+                    type="date"
+                    value={payment.receivedAt}
+                    onChange={(v) => setPayment((p) => ({ ...p, receivedAt: v }))}
+                    error={fieldErrors['payment.receivedAt']}
+                  />
+                  <div className="space-y-1.5">
+                    <Label htmlFor="method">Payment method *</Label>
+                    <Select
+                      id="method"
+                      value={payment.method}
+                      onChange={(e) => {
+                        const v = e.currentTarget.value as typeof payment.method;
+                        setPayment((p) => ({ ...p, method: v }));
+                      }}
+                    >
+                      <option value="BANK_TRANSFER">Bank transfer</option>
+                      <option value="CASH">Cash</option>
+                      <option value="OTHER">Other</option>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="proofReference">Reference number (optional)</Label>
+                    <Input
+                      id="proofReference"
+                      value={payment.proofReference}
+                      onChange={(e) => {
+                        const v = e.currentTarget.value;
+                        setPayment((p) => ({ ...p, proofReference: v }));
+                      }}
+                      placeholder="TXN-784512"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      e.g. bank reference, receipt number, transaction ID
                     </p>
-                  )}
+                  </div>
+                  <div className="space-y-1.5 md:col-span-2">
+                    <Label htmlFor="paymentNotes">Payment notes</Label>
+                    <Textarea
+                      id="paymentNotes"
+                      className="min-h-16"
+                      value={payment.notes}
+                      onChange={(e) => {
+                        const v = e.currentTarget.value;
+                        setPayment((p) => ({ ...p, notes: v }));
+                      }}
+                      maxLength={2000}
+                    />
+                  </div>
                 </div>
-                <FieldPair
-                  id="receivedAt"
-                  label="Payment date *"
-                  type="date"
-                  value={payment.receivedAt}
-                  onChange={(v) => setPayment((p) => ({ ...p, receivedAt: v }))}
-                  error={fieldErrors['payment.receivedAt']}
-                />
-                <div className="space-y-1.5">
-                  <Label htmlFor="method">Payment method *</Label>
-                  <Select
-                    id="method"
-                    value={payment.method}
-                    onChange={(e) => {
-                      const v = e.currentTarget.value as typeof payment.method;
-                      setPayment((p) => ({ ...p, method: v }));
-                    }}
-                  >
-                    <option value="BANK_TRANSFER">Bank transfer</option>
-                    <option value="CASH">Cash</option>
-                    <option value="OTHER">Other</option>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="proofReference">Reference number (optional)</Label>
-                  <Input
-                    id="proofReference"
-                    value={payment.proofReference}
-                    onChange={(e) => {
-                      const v = e.currentTarget.value;
-                      setPayment((p) => ({ ...p, proofReference: v }));
-                    }}
-                    placeholder="TXN-784512"
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    e.g. bank reference, receipt number, transaction ID
-                  </p>
-                </div>
-                <div className="space-y-1.5 md:col-span-2">
-                  <Label htmlFor="paymentNotes">Payment notes</Label>
-                  <Textarea
-                    id="paymentNotes"
-                    className="min-h-16"
-                    value={payment.notes}
-                    onChange={(e) => {
-                      const v = e.currentTarget.value;
-                      setPayment((p) => ({ ...p, notes: v }));
-                    }}
-                    maxLength={2000}
-                  />
-                </div>
-              </div>
+              )}
             </section>
 
             {/* ── Step 3 · Services included ────────────────────── */}
@@ -668,11 +772,18 @@ export function OnboardingForm({
               />
               <div className="mt-4 pl-10">
                 <ul className="space-y-2 rounded-lg border border-sky-200/70 bg-sky-50/50 p-4 text-xs text-foreground/90">
-                  {[
-                    'Candidate profile will be created as Active',
-                    'Payment will be recorded in the system',
-                    'An official invoice and receipt will be generated automatically',
-                  ].map((line) => (
+                  {(complimentaryMode
+                    ? [
+                        'Candidate profile will be created as Active',
+                        'No payment will be recorded and no receipt issued — nothing is owed',
+                        'An official €0.00 complimentary invoice will be generated with the next sequential number',
+                      ]
+                    : [
+                        'Candidate profile will be created as Active',
+                        'Payment will be recorded in the system',
+                        'An official invoice and receipt will be generated automatically',
+                      ]
+                  ).map((line) => (
                     <li key={line} className="flex items-start gap-2">
                       <CheckCircle2
                         className="mt-0.5 size-3.5 shrink-0 text-status-success"
@@ -744,7 +855,9 @@ export function OnboardingForm({
                   </>
                 ) : (
                   <>
-                    Accept payment &amp; create candidate
+                    {complimentaryMode
+                      ? 'Grant complimentary & create candidate'
+                      : 'Accept payment & create candidate'}
                     <ArrowRight className="ml-2 size-4" aria-hidden />
                   </>
                 )}

@@ -520,6 +520,10 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Payment>
         'Cannot record payment on a cancelled engagement',
       );
     }
+    // Stage B Wave 4 — a complimentary (€0.00) service owes nothing; a
+    // payment recorded against it would masquerade as revenue.
+    const { assertEngagementNotComplimentary } = await import('@/modules/billing/complimentary');
+    await assertEngagementNotComplimentary(tx, data.serviceEngagementId);
 
     const initialStatus = data.proofReference?.trim() ? 'PROOF_UPLOADED' : 'PENDING';
     const created = await insertPayment(tx, {

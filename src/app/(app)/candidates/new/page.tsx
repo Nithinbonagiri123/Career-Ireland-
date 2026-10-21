@@ -5,6 +5,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { buttonVariants } from '@/components/ui/button';
 import { requirePermission } from '@/lib/auth/session';
+import { canGrantComplimentary } from '@/modules/billing/complimentary';
 import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
 import { createDraft, getDraft } from '@/modules/candidates/onboarding-service';
 import { fetchCurrencies } from '@/modules/currencies/service';
@@ -42,14 +43,17 @@ export default async function NewCandidatePage({
     redirect('/candidates/new');
   }
 
-  const [currencies, allDocTypes, existingDocuments, occupations, services] = await Promise.all([
-    fetchCurrencies(),
-    fetchDocumentTypes(),
-    fetchPersonDocuments(draft.id),
-    fetchOccupations(),
-    // Stage 6G Screen 09 — step 3's "Services included" table.
-    fetchInvoiceableServicesFor('PERSON'),
-  ]);
+  const [currencies, allDocTypes, existingDocuments, occupations, services, canComplimentary] =
+    await Promise.all([
+      fetchCurrencies(),
+      fetchDocumentTypes(),
+      fetchPersonDocuments(draft.id),
+      fetchOccupations(),
+      // Stage 6G Screen 09 — step 3's "Services included" table.
+      fetchInvoiceableServicesFor('PERSON'),
+      // Stage B Wave 4 — may this user grant complimentary (€0.00) services?
+      canGrantComplimentary(),
+    ]);
   // Only person-applicable types are meaningful during candidate intake.
   const personDocTypes = allDocTypes.filter(
     (t) => t.isActive && (t.appliesTo === 'PERSON' || t.appliesTo === 'BOTH'),
@@ -93,6 +97,7 @@ export default async function NewCandidatePage({
         }}
         currencies={currencies.map((c) => ({ code: c.code, symbol: c.symbol }))}
         services={services}
+        canComplimentary={canComplimentary}
         docTypes={personDocTypes.map((t) => ({
           id: t.id,
           name: t.name,

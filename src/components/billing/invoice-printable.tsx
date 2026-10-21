@@ -91,6 +91,12 @@ export function InvoicePrintable({
 }) {
   const address = settings.addressLines.join(', ');
   const isVoided = invoice.status === 'VOIDED';
+  // Stage B Wave 4 — a complimentary invoice is a genuine document with
+  // zero totals: no bank details, no payment instructions, and the
+  // admin-editable complimentary note instead. The operator's reason
+  // stays internal (row + audit + detail page), never on the customer
+  // document.
+  const isComplimentary = invoice.settlementKind === 'COMPLIMENTARY';
   const desc = lineDescription ?? invoice.lineDescription;
   const currency = invoice.currencyCode;
   const money = (v: string) => formatCurrency(v, currency);
@@ -294,6 +300,12 @@ export function InvoicePrintable({
         </p>
       )}
 
+      {isComplimentary && !isVoided && (
+        <p className="mt-3 border-l-2 border-emerald-700 bg-emerald-50 px-3 py-2 text-[12px] font-semibold text-emerald-900">
+          COMPLIMENTARY — {settings.complimentaryInvoiceNote}
+        </p>
+      )}
+
       {/* ── Credit notes (if any) ──────────────────────────────
           Legal reversal path under Irish VAT rules. Shown even
           on the printable so a scanned/printed copy carries the
@@ -342,7 +354,7 @@ export function InvoicePrintable({
       )}
 
       {/* ── Bank details (only if configured) ──────────────────── */}
-      {!isVoided && bankBlockVisible && (
+      {!isVoided && !isComplimentary && bankBlockVisible && (
         <>
           <h2 className="mt-6 text-sm font-bold uppercase tracking-widest text-emerald-900">
             Bank Details
@@ -392,16 +404,18 @@ export function InvoicePrintable({
         </p>
       ) : (
         <>
-          <p className="mt-8 text-sm text-slate-700">
-            Please quote the Invoice Number in your Bank Reference and email proof of payment
-            {settings.contactEmail ? (
-              <>
-                {' '}
-                to <span className="font-medium">{settings.contactEmail}</span>
-              </>
-            ) : null}
-            .
-          </p>
+          {!isComplimentary && (
+            <p className="mt-8 text-sm text-slate-700">
+              Please quote the Invoice Number in your Bank Reference and email proof of payment
+              {settings.contactEmail ? (
+                <>
+                  {' '}
+                  to <span className="font-medium">{settings.contactEmail}</span>
+                </>
+              ) : null}
+              .
+            </p>
+          )}
           <p className="mt-4 text-sm font-semibold text-emerald-900">Thank you for your support.</p>
 
           {/* Compact registration + VAT line at the very bottom.
