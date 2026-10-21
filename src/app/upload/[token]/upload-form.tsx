@@ -3,6 +3,7 @@
 import { CheckCircle2, Loader2, UploadCloud, XCircle } from 'lucide-react';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { effectiveMimeType, stageProblem } from '@/lib/upload-validation';
 import { registerUploadForTokenAction } from './actions';
 
 type Requirement = {
@@ -10,6 +11,8 @@ type Requirement = {
   documentTypeId: string;
   documentTypeCode: string;
   documentTypeName: string;
+  /** Wave 2.4 — the type tracks an expiry date (passports, permits). */
+  hasExpiry?: boolean;
   fulfilled: boolean;
 };
 
@@ -35,11 +38,21 @@ export function UploadForm({
   const [requirements, setRequirements] = useState(initialRequirements);
   const [rowState, setRowState] = useState<Record<string, RowState>>({});
   const [rowError, setRowError] = useState<Record<string, string | null>>({});
+  // Wave 2.4 — optional expiry date entered before choosing the file,
+  // sent along with the upload for types that track one.
+  const [rowExpiry, setRowExpiry] = useState<Record<string, string>>({});
   const [, startTransition] = useTransition();
 
   const allDone = useMemo(() => requirements.every((r) => r.fulfilled), [requirements]);
 
   const handleFile = async (req: Requirement, file: File) => {
+    // Wave 2.3 — explain unsupported files before any network call.
+    const problem = stageProblem(file);
+    if (problem) {
+      setRowState((s) => ({ ...s, [req.id]: 'error' }));
+      setRowError((s) => ({ ...s, [req.id]: problem }));
+      return;
+    }
     setRowState((s) => ({ ...s, [req.id]: 'uploading' }));
     setRowError((s) => ({ ...s, [req.id]: null }));
 
@@ -50,7 +63,7 @@ export function UploadForm({
         body: JSON.stringify({
           requirementId: req.id,
           originalFilename: file.name,
-          mimeType: file.type,
+          mimeType: effectiveMimeType(file),
           fileSizeBytes: file.size,
         }),
       });
@@ -62,7 +75,7 @@ export function UploadForm({
 
       const putResp = await fetch(uploadUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': file.type },
+        headers: { 'Content-Type': effectiveMimeType(file) },
         body: file,
       });
       if (!putResp.ok) throw new Error(`Upload failed (HTTP ${putResp.status})`);
@@ -72,8 +85,9 @@ export function UploadForm({
         requirementId: req.id,
         s3ObjectKey: key,
         originalFilename: file.name,
-        mimeType: file.type,
+        mimeType: effectiveMimeType(file),
         fileSizeBytes: file.size,
+        expiresOn: req.hasExpiry ? rowExpiry[req.id] || undefined : undefined,
       });
       if (!registerResult.ok) throw new Error(registerResult.error.message);
 
@@ -119,7 +133,22 @@ export function UploadForm({
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                {req.hasExpiry && (
+                  <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                    Expiry date
+                    <input
+                      type="date"
+                      value={rowExpiry[req.id] ?? ''}
+                      onChange={(e) => {
+                        const v = e.currentTarget.value;
+                        setRowExpiry((s0) => ({ ...s0, [req.id]: v }));
+                      }}
+                      disabled={state === 'uploading'}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+                    />
+                  </label>
+                )}
                 {state === 'ok' && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-status-success-soft px-2 py-0.5 text-xs font-medium text-status-success">
                     <CheckCircle2 className="size-3.5" />

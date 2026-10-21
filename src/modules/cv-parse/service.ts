@@ -72,6 +72,14 @@ async function parseBufferToText(buffer: Buffer, mimeType: string): Promise<stri
  * already has a cached extraction, return that immediately. If not, fetch
  * the S3 object, parse, insert, and return.
  */
+/**
+ * Stage B Wave 2.1 — below this many characters a "successful" parse is
+ * treated as no text at all. Scanned/image-only PDFs parse without error
+ * but yield an empty (or whitespace-only) text layer; reporting that as
+ * success produced the client's "empty Extracted CV Information" panel.
+ */
+const MIN_EXTRACTED_CHARS = 40;
+
 export async function extractCvText(
   documentInstanceId: string,
 ): Promise<{ textContent: string; parsedAt: Date; cached: boolean }> {
@@ -82,7 +90,9 @@ export async function extractCvText(
     .from(cvExtractions)
     .where(eq(cvExtractions.documentInstanceId, documentInstanceId))
     .limit(1);
-  if (cached) {
+  // Wave 2.1 — a historically cached EMPTY extraction is not a result;
+  // fall through and re-parse instead of replaying the bad cache.
+  if (cached && cached.textContent.trim().length >= MIN_EXTRACTED_CHARS) {
     return { textContent: cached.textContent, parsedAt: cached.parsedAt, cached: true };
   }
 
@@ -106,6 +116,15 @@ export async function extractCvText(
 
   const buffer = await fetchObjectBuffer(doc.s3ObjectKey);
   const textContent = await parseBufferToText(buffer, doc.mimeType);
+
+  // Wave 2.1 — an empty text layer is an error, not a result, and it is
+  // never cached (so a replacement upload re-parses cleanly).
+  if (textContent.trim().length < MIN_EXTRACTED_CHARS) {
+    throw new BusinessRuleError(
+      'NO_TEXT_LAYER',
+      'No readable text found — this looks like a scanned or image-only document. OCR is not available; upload a text-based PDF or Word (.docx) version of the CV.',
+    );
+  }
 
   const [row] = await db
     .insert(cvExtractions)

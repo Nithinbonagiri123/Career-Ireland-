@@ -167,7 +167,7 @@ function looksLikeAtomicItem(phrase: string): boolean {
  * line or a long blank run.
  *
  * Each surviving line is split on common list separators (`,`, `;`,
- * `·`, `|`, double-spaces, ` - `). Chunks that look like comma-split
+ * `·`, `|`, double-spaces, ` - `, ` – `, ` — `). Chunks that look like comma-split
  * sentence fragments (`and emergency handling`) or narrative prose
  * (`Demonstrated ability in route planning`) are rejected — see
  * `looksLikeAtomicItem`. The remaining chunks become suggestions.
@@ -216,7 +216,7 @@ export function customCandidatesFrom(
 
     const parts = line
       .replace(/^[\s•\-*·▪◦]+/, '')
-      .split(/[,;·|]| {2,}| - /)
+      .split(/[,;·|]| {2,}| [-–—] /)
       .map((p) => p.trim())
       .filter(looksLikeAtomicItem);
 
@@ -662,4 +662,19 @@ export function extractEmploymentCandidates(
   out.push(...extractByDateAnchors(lines, taken));
 
   return out;
+}
+
+// Wave 2.1 — moved here from suggest.ts so the vitest fixture suite can
+// load it without dragging the session/auth module graph in. Phrases that
+// look like qualifications or certifications: degree shapes, professional
+// bodies, and the Irish trade/care credentials the client reported missing.
+// Degree prefixes (MSc, BTech, PhD, …), full words (Bachelor, Master,
+// Diploma, Certificate), and the most common standalone professional
+// certifications. Case-insensitive whole-word match — a phrase like
+// "National College of Ireland" has none of these, so it drops out.
+const QUALIFICATION_PATTERN =
+  /\b(MSc|BSc|MA|BA|MBA|MEng|BEng|MTech|BTech|MPhil|PhD|DPhil|MD|DO|JD|LLB|LLM|BE|ME|BCom|MCom|BBA|BCA|MCA|HDip|PGDip|PGCert|HNC|HND|Bachelor|Masters?|Doctorate|Doctoral|Diploma|Certificate|Certified|Qualified|CFA|CPA|ACCA|CIMA|FRM|CISA|CISM|CISSP|PMP|PRINCE2|CCNA|CCNP|AWS\s+Certified|Azure\s+Certified|GCP\s+Certified|Google\s+Certified|Microsoft\s+Certified|Scrum\s+Master|Six\s+Sigma|Manual\s+Handling|Safe\s+Pass|First\s+Aid|HACCP|Patient\s+Moving|Infection\s+(?:Prevention|Control)|Garda\s+Vetting|Forklift|SOLAS|FETAC|QQI(?:\s+Level\s+\d)?|City\s*&\s*Guilds|Driving\s+Licence|Driver'?s?\s+Licen[cs]e|Food\s+Safety|Fire\s+Safety|Health\s*(?:&|and)\s*Safety|CPR|BLS|Care\s+Skills|Care\s+of\s+the\s+Older\s+Person)\b/i;
+
+export function looksLikeQualification(phrase: string): boolean {
+  return QUALIFICATION_PATTERN.test(phrase);
 }

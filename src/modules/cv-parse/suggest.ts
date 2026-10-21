@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
@@ -11,7 +11,14 @@ import { documentTypes } from '@/lib/db/schema/reference';
 import { fetchQualifications } from '@/modules/qualifications/service';
 import { fetchSkills } from '@/modules/skills/service';
 import { extractCvText } from './service';
-import { catalogHitsFor, customCandidatesFrom, extractEmploymentCandidates } from './text';
+import {
+  catalogHitsFor,
+  customCandidatesFrom,
+  extractEmploymentCandidates,
+  looksLikeQualification,
+} from './text';
+
+export { looksLikeQualification };
 
 /**
  * CV-derived suggestions for a candidate.
@@ -71,7 +78,23 @@ async function findLatestCvForPerson(
     })
     .from(documentInstances)
     .innerJoin(documentTypes, eq(documentTypes.id, documentInstances.documentTypeId))
-    .where(and(eq(documentInstances.ownerPersonId, personId), eq(documentTypes.code, 'CV')))
+    .where(
+      and(
+        eq(documentInstances.ownerPersonId, personId),
+        // Wave 2.1 — honour the doc comment: voided CVs are deleted
+        // documents and must never be the scan target (a voided newest
+        // CV used to shadow an older valid one and error the scan).
+        isNull(documentInstances.voidedAt),
+        // Staff-created "Resume" types are CVs too.
+        inArray(documentTypes.code, ['CV', 'RESUME']),
+        // Only types the parser can actually read — a .doc or unknown-
+        // MIME upload must not shadow an older parseable CV.
+        inArray(documentInstances.mimeType, [
+          'application/pdf',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ]),
+      ),
+    )
     .orderBy(desc(documentInstances.createdAt))
     .limit(1);
   if (!row) return null;
@@ -213,15 +236,4 @@ export async function buildCvSuggestions(personId: string): Promise<CvSuggestion
     qualifications: { catalogHits: qualHits, customCandidates: customQuals },
     employment: { candidates: employmentCandidates },
   };
-}
-
-// Degree prefixes (MSc, BTech, PhD, …), full words (Bachelor, Master,
-// Diploma, Certificate), and the most common standalone professional
-// certifications. Case-insensitive whole-word match — a phrase like
-// "National College of Ireland" has none of these, so it drops out.
-const QUALIFICATION_PATTERN =
-  /\b(MSc|BSc|MA|BA|MBA|MEng|BEng|MTech|BTech|MPhil|PhD|DPhil|MD|DO|JD|LLB|LLM|BE|ME|BCom|MCom|BBA|BCA|MCA|HDip|PGDip|PGCert|HNC|HND|Bachelor|Masters?|Doctorate|Doctoral|Diploma|Certificate|Certified|Qualified|CFA|CPA|ACCA|CIMA|FRM|CISA|CISM|CISSP|PMP|PRINCE2|CCNA|CCNP|AWS\s+Certified|Azure\s+Certified|GCP\s+Certified|Google\s+Certified|Microsoft\s+Certified|Scrum\s+Master|Six\s+Sigma)\b/i;
-
-export function looksLikeQualification(phrase: string): boolean {
-  return QUALIFICATION_PATTERN.test(phrase);
 }

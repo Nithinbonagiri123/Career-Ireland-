@@ -36,13 +36,13 @@ const SEEDS: Seed[] = [
   {
     code: 'PASSPORT_BIOMETRIC',
     name: 'Biometric Page of Passport',
-    hasExpiry: false,
+    hasExpiry: true,
     appliesTo: 'PERSON',
   },
   {
     code: 'PASSPORT_FULL',
     name: 'Passport (full copy — current + previous)',
-    hasExpiry: false,
+    hasExpiry: true,
     appliesTo: 'PERSON',
   },
   {

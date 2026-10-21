@@ -1,7 +1,10 @@
 import { format } from 'date-fns';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import Image from 'next/image';
-import { validateUploadRequest } from '@/modules/document-upload-requests/service';
+import {
+  getCompletedUploadRequest,
+  validateUploadRequest,
+} from '@/modules/document-upload-requests/service';
 import { fetchAppSettings } from '@/modules/settings/service';
 import { UploadForm } from './upload-form';
 
@@ -26,6 +29,28 @@ export default async function UploadPage({ params }: { params: Promise<{ token: 
   ]);
 
   if (!validated) {
+    // Stage B Wave 2 — a COMPLETED link is a success, not an error: the
+    // candidate who just uploaded their final document lands here when
+    // the server re-renders (and on any later revisit). Only revoked,
+    // expired-unused and unknown tokens fall through to the generic
+    // invalid screen.
+    const completed = await getCompletedUploadRequest(token);
+    if (completed) {
+      return (
+        <Shell legalName={settings.legalName}>
+          <div className="mx-auto max-w-lg rounded-xl border border-status-success/40 bg-status-success-soft p-8 text-center shadow-sm">
+            <CheckCircle2 className="mx-auto size-10 text-status-success" />
+            <h1 className="mt-4 text-lg font-semibold text-status-success">
+              All documents received
+            </h1>
+            <p className="mt-2 text-sm text-slate-700">
+              Thank you, {completed.firstName}. Our team will review your uploads and get back to
+              you shortly. You can close this window.
+            </p>
+          </div>
+        </Shell>
+      );
+    }
     return (
       <Shell legalName={settings.legalName}>
         <div className="mx-auto max-w-lg rounded-xl border bg-white p-8 text-center shadow-sm">

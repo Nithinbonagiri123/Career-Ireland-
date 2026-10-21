@@ -25,6 +25,8 @@ import {
   MAX_UPLOAD_BYTES,
   presignUpload,
 } from '@/lib/s3/presign';
+import { ObjectVerificationError, verifyStoredObject } from '@/lib/s3/verify';
+import { assertKeyBelongsToOwner } from '@/modules/documents/key-ownership';
 import { fetchAppSettings } from '@/modules/settings/read';
 import { renderDocumentRequestEmail } from './email';
 
@@ -321,6 +323,44 @@ export type ValidatedUploadRequest = {
  * render one generic "link is no longer valid" screen and avoid
  * leaking which failure mode it was (defence against enumeration).
  */
+/**
+ * Stage B Wave 2 (client acceptance) — companion reader for the public
+ * page only. A link whose every requirement has been fulfilled sets
+ * `completedAt`, which makes `validateUploadRequest` (correctly) refuse
+ * it for any further presign/register — but the candidate who just
+ * finished uploading deserves a success screen, not "link no longer
+ * valid". Returns the first name for the thank-you header when the
+ * token matches a COMPLETED, non-revoked link; null otherwise. Revoked,
+ * expired-unused and unknown tokens still collapse into the one generic
+ * invalid screen (no enumeration leak beyond "this link was used").
+ */
+export async function getCompletedUploadRequest(
+  token: string,
+): Promise<{ firstName: string } | null> {
+  if (!token || typeof token !== 'string' || token.length < 20) return null;
+  const inputHash = hashToken(token);
+  const [row] = await db
+    .select({
+      tokenHash: documentUploadRequests.tokenHash,
+      completedAt: documentUploadRequests.completedAt,
+      revokedAt: documentUploadRequests.revokedAt,
+      personId: documentUploadRequests.personId,
+    })
+    .from(documentUploadRequests)
+    .where(eq(documentUploadRequests.tokenHash, inputHash))
+    .limit(1);
+  if (!row) return null;
+  if (!safeHexEqual(row.tokenHash, inputHash)) return null;
+  if (row.revokedAt) return null;
+  if (!row.completedAt) return null;
+  const [person] = await db
+    .select({ firstName: persons.firstName })
+    .from(persons)
+    .where(eq(persons.id, row.personId))
+    .limit(1);
+  return { firstName: person?.firstName ?? 'there' };
+}
+
 export async function validateUploadRequest(token: string): Promise<ValidatedUploadRequest | null> {
   if (!token || typeof token !== 'string' || token.length < 20) return null;
   const inputHash = hashToken(token);
@@ -363,6 +403,7 @@ export async function validateUploadRequest(token: string): Promise<ValidatedUpl
       documentTypeId: personDocumentRequirements.documentTypeId,
       documentTypeCode: documentTypes.code,
       documentTypeName: documentTypes.name,
+      documentTypeHasExpiry: documentTypes.hasExpiry,
       fulfilmentCount: sql<number>`COUNT(${documentRequirementFulfillments.documentInstanceId})::int`,
     })
     .from(personDocumentRequirements)
@@ -377,6 +418,7 @@ export async function validateUploadRequest(token: string): Promise<ValidatedUpl
       personDocumentRequirements.documentTypeId,
       documentTypes.code,
       documentTypes.name,
+      documentTypes.hasExpiry,
     );
 
   return {
@@ -388,6 +430,9 @@ export async function validateUploadRequest(token: string): Promise<ValidatedUpl
       documentTypeId: r.documentTypeId,
       documentTypeCode: r.documentTypeCode,
       documentTypeName: r.documentTypeName,
+      // Wave 2.4 — lets the public form ask for the document's expiry
+      // date when the type tracks one (passports, permits).
+      hasExpiry: r.documentTypeHasExpiry,
       fulfilled: r.fulfilmentCount > 0,
     })),
   };
@@ -460,6 +505,8 @@ export async function registerUploadForToken(input: {
   originalFilename: string;
   mimeType: string;
   fileSizeBytes: number;
+  /** Wave 2.4 — optional YYYY-MM-DD expiry captured on upload. */
+  expiresOn?: string;
 }) {
   const validated = await validateUploadRequest(input.token);
   if (!validated) {
@@ -477,6 +524,27 @@ export async function registerUploadForToken(input: {
   }
   if (input.fileSizeBytes > MAX_UPLOAD_BYTES) {
     throw new BusinessRuleError('FILE_TOO_LARGE', 'File too large');
+  }
+  // Stage B Wave 1 (client remediation #7) — the registered key must sit
+  // under this person's own storage prefix (see buildObjectKey); a token
+  // holder must not be able to attach someone else's stored object.
+  assertKeyBelongsToOwner('PERSON', validated.personId, input.s3ObjectKey);
+  // Release-readiness WARN-3 — same storage-truth check as the staff
+  // register path: the object must actually exist with the declared
+  // size and type before a database row describes it. The token flow
+  // itself (hashing, constant-time compare, expiry/revocation) is
+  // untouched.
+  try {
+    await verifyStoredObject({
+      key: input.s3ObjectKey,
+      expectedMimeType: input.mimeType,
+      expectedSizeBytes: input.fileSizeBytes,
+    });
+  } catch (err) {
+    if (err instanceof ObjectVerificationError) {
+      throw new BusinessRuleError(err.code, err.message);
+    }
+    throw err;
   }
 
   const uploaderUserId = validated.request.createdByUserId;
@@ -509,6 +577,8 @@ export async function registerUploadForToken(input: {
         s3Bucket: DOCUMENTS_BUCKET,
         s3ObjectKey: input.s3ObjectKey,
         uploadedByUserId: uploaderUserId,
+        expiresOn:
+          input.expiresOn && /^\d{4}-\d{2}-\d{2}$/.test(input.expiresOn) ? input.expiresOn : null,
       })
       .returning();
     if (!inserted) throw new Error('document_instances insert returned no row');

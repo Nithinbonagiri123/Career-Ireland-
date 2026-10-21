@@ -2,7 +2,7 @@
 
 import { Award, Briefcase, GraduationCap, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { type ReactElement, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
 import { EmptyState } from '@/components/empty-state';
@@ -79,6 +79,20 @@ function SkillDialog({
   const router = useRouter();
 
   const excludeIds = new Set([...existing].filter((id): id is string => Boolean(id)));
+  // Wave 2.2 — typing alone used to leave Add disabled: the autosuggest
+  // only set a selection on an explicit row click/Enter, so "type a
+  // certification and press Add" silently did nothing. Raw typed text
+  // now counts as a custom entry at submit time.
+  const [typedText, setTypedText] = useState(
+    initialSelection?.kind === 'custom'
+      ? initialSelection.customName
+      : initialSelection?.kind === 'catalog'
+        ? initialSelection.label
+        : '',
+  );
+  const effectiveSelection: Selection =
+    selection ??
+    (typedText.trim().length > 0 ? { kind: 'custom', customName: typedText.trim() } : null);
 
   const submit = () => {
     startTransition(async () => {
@@ -154,6 +168,7 @@ function SkillDialog({
                 options={allSkills}
                 value={selection}
                 onChange={setSelection}
+                onTextChange={setTypedText}
                 excludeIds={excludeIds}
                 placeholder="Type to search — or paste from the CV"
                 autoFocus
@@ -200,7 +215,7 @@ function SkillDialog({
           <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={pending || (!editingRow && !selection)}>
+          <Button onClick={submit} disabled={pending || (!editingRow && !effectiveSelection)}>
             {editingRow ? 'Save' : 'Add'}
           </Button>
         </DialogFooter>
@@ -308,18 +323,25 @@ export function SkillsSection({
 
 // ─── Qualifications ───────────────────────────────────────────────────────────
 
-function QualificationDialog({
+export function QualificationDialog({
   personId,
   allQuals,
   existing,
   editingRow,
   onDone,
+  trigger,
 }: {
   personId: string;
   allQuals: Qualification[];
   existing: Set<string>;
   editingRow?: CandidateQualificationRow;
-  onDone: () => void;
+  /** Optional — the Overview card renders this dialog from a Server
+   *  Component, which cannot pass functions; router.refresh() inside
+   *  the dialog already repaints the page. */
+  onDone?: () => void;
+  /** Wave 2.2 — optional custom trigger (the Overview card's "+ Add"
+   *  opens this dialog directly instead of linking to another tab). */
+  trigger?: ReactElement;
 }) {
   const [open, setOpen] = useState(false);
   const initialSelection: Selection = editingRow?.qualificationId
@@ -336,6 +358,20 @@ function QualificationDialog({
   const router = useRouter();
 
   const excludeIds = new Set([...existing].filter((id): id is string => Boolean(id)));
+  // Wave 2.2 — typing alone used to leave Add disabled: the autosuggest
+  // only set a selection on an explicit row click/Enter, so "type a
+  // certification and press Add" silently did nothing. Raw typed text
+  // now counts as a custom entry at submit time.
+  const [typedText, setTypedText] = useState(
+    initialSelection?.kind === 'custom'
+      ? initialSelection.customName
+      : initialSelection?.kind === 'catalog'
+        ? initialSelection.label
+        : '',
+  );
+  const effectiveSelection: Selection =
+    selection ??
+    (typedText.trim().length > 0 ? { kind: 'custom', customName: typedText.trim() } : null);
 
   const submit = () => {
     startTransition(async () => {
@@ -353,21 +389,21 @@ function QualificationDialog({
         if (r.ok) {
           toast.success('Qualification updated');
           setOpen(false);
-          onDone();
+          onDone?.();
           router.refresh();
         } else {
           toast.error(r.error.message);
         }
         return;
       }
-      if (!selection) {
+      if (!effectiveSelection) {
         toast.error('Pick a qualification or type one to add');
         return;
       }
       const r = await addCandidateQualificationAction({
         personId,
-        qualificationId: selection.kind === 'catalog' ? selection.id : '',
-        customName: selection.kind === 'custom' ? selection.customName : '',
+        qualificationId: effectiveSelection.kind === 'catalog' ? effectiveSelection.id : '',
+        customName: effectiveSelection.kind === 'custom' ? effectiveSelection.customName : '',
         awardedOn,
         institution,
         referenceNumber: refNumber,
@@ -376,7 +412,7 @@ function QualificationDialog({
       if (r.ok) {
         toast.success('Qualification added');
         setOpen(false);
-        onDone();
+        onDone?.();
         router.refresh();
       } else {
         toast.error(r.error.message);
@@ -388,7 +424,8 @@ function QualificationDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          editingRow ? (
+          trigger ??
+          (editingRow ? (
             <Button size="sm" variant="ghost" aria-label="Edit qualification">
               <Pencil className="size-3.5" />
             </Button>
@@ -396,7 +433,7 @@ function QualificationDialog({
             <Button size="sm" variant="outline">
               <Plus className="mr-1 size-3.5" /> Add qualification
             </Button>
-          )
+          ))
         }
       />
       <DialogContent>
@@ -412,6 +449,7 @@ function QualificationDialog({
                 options={allQuals}
                 value={selection}
                 onChange={setSelection}
+                onTextChange={setTypedText}
                 excludeIds={excludeIds}
                 placeholder="Type to search — or paste from the CV"
                 autoFocus
@@ -450,7 +488,7 @@ function QualificationDialog({
           <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={pending || (!editingRow && !selection)}>
+          <Button onClick={submit} disabled={pending || (!editingRow && !effectiveSelection)}>
             {editingRow ? 'Save' : 'Add'}
           </Button>
         </DialogFooter>

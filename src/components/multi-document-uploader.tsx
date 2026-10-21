@@ -7,6 +7,7 @@ import { type DocumentTypeOption, DocumentTypePicker } from '@/components/docume
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
+import { effectiveMimeType, stageProblem } from '@/lib/upload-validation';
 import { registerUploadAction } from '@/modules/documents/actions';
 
 type OwnerType = 'PERSON' | 'EMPLOYER';
@@ -18,6 +19,8 @@ type Row = {
   file: File;
   documentTypeId: string;
   displayName: string;
+  /** Wave 2.4 — optional YYYY-MM-DD expiry for types that track one. */
+  expiresOn?: string;
   state: RowState;
   error?: string;
 };
@@ -68,14 +71,20 @@ export function MultiDocumentUploader({
     if (!files) return;
     setRows((prev) => [
       ...prev,
-      ...Array.from(files).map((f) => ({
-        key: `${f.name}-${f.size}-${crypto.randomUUID()}`,
-        file: f,
-        documentTypeId: '',
-        // Strip extension for the default display name so staff type less.
-        displayName: f.name.replace(/\.[^.]+$/, ''),
-        state: 'idle' as RowState,
-      })),
+      ...Array.from(files).map((f) => {
+        // Wave 2.3 — validate up-front so the row explains exactly why a
+        // file can't be uploaded (HEIC, ZIP, oversize, unknown type).
+        const problem = stageProblem(f);
+        return {
+          key: `${f.name}-${f.size}-${crypto.randomUUID()}`,
+          file: f,
+          documentTypeId: '',
+          // Strip extension for the default display name so staff type less.
+          displayName: f.name.replace(/\.[^.]+$/, ''),
+          state: (problem ? 'error' : 'idle') as RowState,
+          error: problem ?? undefined,
+        };
+      }),
     ]);
   };
 
@@ -102,7 +111,7 @@ export function MultiDocumentUploader({
           ownerId,
           documentTypeId: row.documentTypeId,
           originalFilename: row.file.name,
-          mimeType: row.file.type,
+          mimeType: effectiveMimeType(row.file),
           fileSizeBytes: row.file.size,
         }),
       });
@@ -113,7 +122,7 @@ export function MultiDocumentUploader({
       const { uploadUrl, key } = await presignResp.json();
       const putResp = await fetch(uploadUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': row.file.type },
+        headers: { 'Content-Type': effectiveMimeType(row.file) },
         body: row.file,
       });
       if (!putResp.ok) throw new Error(`S3 upload failed (HTTP ${putResp.status})`);
@@ -124,8 +133,9 @@ export function MultiDocumentUploader({
         s3ObjectKey: key,
         originalFilename: row.file.name,
         displayName: row.displayName.trim(),
-        mimeType: row.file.type,
+        mimeType: effectiveMimeType(row.file),
         fileSizeBytes: row.file.size,
+        expiresOn: row.expiresOn || undefined,
       });
       if (!registerResult.ok) throw new Error(registerResult.error.message);
       updateRow(row.key, { state: 'ok' });
@@ -205,6 +215,19 @@ export function MultiDocumentUploader({
                     onOptionsChanged={(created) => setTypes((prev) => [...prev, created])}
                     disabled={r.state === 'uploading' || r.state === 'ok'}
                   />
+                  {/* Wave 2.4 — expiry input for expiry-tracked types. */}
+                  {types.find((t) => t.id === r.documentTypeId)?.hasExpiry && (
+                    <label className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      Expiry date (optional)
+                      <input
+                        type="date"
+                        value={r.expiresOn ?? ''}
+                        onChange={(e) => updateRow(r.key, { expiresOn: e.target.value })}
+                        disabled={r.state === 'uploading' || r.state === 'ok'}
+                        className="rounded-md border px-2 py-0.5 text-xs"
+                      />
+                    </label>
+                  )}
                 </div>
                 <div>
                   <Input

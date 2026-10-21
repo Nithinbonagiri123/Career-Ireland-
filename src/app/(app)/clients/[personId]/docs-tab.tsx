@@ -2,10 +2,10 @@
 
 import { format } from 'date-fns';
 import {
+  CalendarDays,
   CheckCircle2,
   ChevronDown,
   CloudUpload,
-  Edit,
   FileScan,
   FileText,
   Loader2,
@@ -27,6 +27,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
+import { effectiveMimeType, stageProblem } from '@/lib/upload-validation';
 import { cn } from '@/lib/utils';
 import { acceptCvSuggestionsAction, buildCvSuggestionsAction } from '@/modules/cv-parse/actions';
 import type { CvSuggestions } from '@/modules/cv-parse/suggest';
@@ -34,6 +35,7 @@ import { ensureCvTypeAction } from '@/modules/document-types/actions';
 import {
   reclassifyDocumentAction,
   registerUploadAction,
+  setDocumentExpiryAction,
   voidDocumentAction,
 } from '@/modules/documents/actions';
 
@@ -63,13 +65,18 @@ const DEFAULT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.doc,.docx';
 const CV_ACCEPT = '.pdf,.doc,.docx';
 
 /** One staged (not yet uploaded) file with its operator-chosen type. */
-type StagedFile = { key: string; file: File; typeId: string };
+type StagedFile = { key: string; file: File; typeId: string; expiresOn?: string };
 
 /**
  * Shared presign → S3 PUT → register sequence. Throws on any step so
  * callers can count successes/failures.
  */
-async function uploadDocumentFile(personId: string, file: File, documentTypeId: string) {
+async function uploadDocumentFile(
+  personId: string,
+  file: File,
+  documentTypeId: string,
+  expiresOn?: string,
+) {
   const presignResp = await fetch('/api/documents/presign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -78,18 +85,23 @@ async function uploadDocumentFile(personId: string, file: File, documentTypeId: 
       ownerId: personId,
       documentTypeId,
       originalFilename: file.name,
-      mimeType: file.type || 'application/octet-stream',
+      mimeType: effectiveMimeType(file),
       fileSizeBytes: file.size,
     }),
   });
-  if (!presignResp.ok) throw new Error('presign failed');
+  if (!presignResp.ok) {
+    // Wave 2.3 — surface the server's real reason (file type, size,
+    // permission) instead of a generic "presign failed".
+    const body = await presignResp.json().catch(() => null);
+    throw new Error(body?.error?.message ?? 'The server refused this upload.');
+  }
   const { uploadUrl, key } = await presignResp.json();
   const putResp = await fetch(uploadUrl, {
     method: 'PUT',
-    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    headers: { 'Content-Type': effectiveMimeType(file) },
     body: file,
   });
-  if (!putResp.ok) throw new Error(`S3 PUT failed (${putResp.status})`);
+  if (!putResp.ok) throw new Error(`Storage upload failed (${putResp.status}). Try again.`);
   const reg = await registerUploadAction({
     ownerType: 'PERSON',
     ownerId: personId,
@@ -97,8 +109,11 @@ async function uploadDocumentFile(personId: string, file: File, documentTypeId: 
     s3ObjectKey: key,
     originalFilename: file.name,
     displayName: file.name.replace(/\.[^.]+$/, ''),
-    mimeType: file.type || 'application/octet-stream',
+    mimeType: effectiveMimeType(file),
     fileSizeBytes: file.size,
+    // Wave 2.4 — optional expiry captured at upload for types that
+    // track one (passports, permits).
+    expiresOn: expiresOn || undefined,
   });
   if (!reg.ok) throw new Error(reg.error.message);
 }
@@ -107,8 +122,8 @@ async function uploadDocumentFile(personId: string, file: File, documentTypeId: 
  *  row's picker; the operator confirms or changes it before upload. */
 function guessTypeCode(filename: string): string {
   const n = filename.toLowerCase();
-  if (/\b(cv|resume|résumé|curriculum)\b|_cv\b|cv_|-cv\b/.test(n)) return 'CV';
-  if (/passport|id[-_ ]?card|national[-_ ]?id/.test(n)) return 'PASSPORT';
+  if (/resume|résumé|curriculum|(^|[^a-z])cv(?=[^a-z]|$)|cv\./.test(n)) return 'CV';
+  if (/passport|id[-_ ]?card|national[-_ ]?id/.test(n)) return 'PASSPORT_BIOMETRIC';
   if (/qualif|certificat|degree|diploma|transcript/.test(n)) return 'QUALIFICATION';
   if (/reference/.test(n)) return 'REFERENCE_LETTER';
   if (/experience|employment/.test(n)) return 'EMPLOYMENT_LETTER';
@@ -118,7 +133,7 @@ function guessTypeCode(filename: string): string {
 
 const COMMON_TYPES: Array<{ code: string; label: string }> = [
   { code: 'CV', label: 'CV / Resume' },
-  { code: 'PASSPORT', label: 'Passport / ID' },
+  { code: 'PASSPORT_BIOMETRIC', label: 'Passport / ID' },
   { code: 'QUALIFICATION', label: 'Qualifications' },
   { code: 'EMPLOYMENT_LETTER', label: 'Work experience letters' },
   { code: 'REFERENCE_LETTER', label: 'Reference letters' },
@@ -157,13 +172,29 @@ export function CandidateDocsTab({
   // lands here with a guessed type the operator confirms (or changes,
   // or replaces with a brand-new type) before pressing Upload.
   const [staged, setStaged] = useState<StagedFile[]>([]);
+  const hasExpiryById = useMemo(
+    () => new Map(allTypes.map((t) => [t.id, t.hasExpiry] as const)),
+    [allTypes],
+  );
 
   function stageFiles(fileList: FileList | File[]) {
     const files = Array.from(fileList);
     if (files.length === 0) return;
+    // Wave 2.3 — validate at staging time (covers drag-and-drop, which
+    // bypasses the picker's accept filter) and keep the reasons visible
+    // until dismissed instead of a vanishing toast.
+    const problems: string[] = [];
+    const accepted: File[] = [];
+    for (const file of files) {
+      const problem = stageProblem(file);
+      if (problem) problems.push(problem);
+      else accepted.push(file);
+    }
+    if (problems.length > 0) setUploadErrors((prev) => [...prev, ...problems]);
+    if (accepted.length === 0) return;
     setStaged((prev) => [
       ...prev,
-      ...files.map((file) => ({
+      ...accepted.map((file) => ({
         key: `${file.name}-${file.size}-${Math.random().toString(36).slice(2, 8)}`,
         file,
         typeId: typeIdByCode.get(guessTypeCode(file.name)) ?? typeIdByCode.get('OTHER') ?? '',
@@ -177,6 +208,9 @@ export function CandidateDocsTab({
   // build gave each button its own handler and two of them silently
   // discarded the results.
   const [cvSuggestions, setCvSuggestions] = useState<CvSuggestions | null>(null);
+  // Wave 2.3 — persistent, dismissible upload problems (staging
+  // rejections + per-file upload failures with the server's reason).
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const [scanning, startScan] = useTransition();
   const scanCv = () =>
     startScan(async () => {
@@ -192,7 +226,10 @@ export function CandidateDocsTab({
         return;
       }
       if (r.data.parseError) {
-        toast.error(`Could not read ${r.data.filename ?? 'the CV'}: ${r.data.parseError}`);
+        // Wave 2.1 — keep the failure visible in the Extracted CV panel
+        // itself (persistent), not only in a vanishing toast.
+        setCvSuggestions(r.data);
+        toast.error(`Could not read ${r.data.filename ?? 'the CV'}.`);
         return;
       }
       setCvSuggestions(r.data);
@@ -218,18 +255,20 @@ export function CandidateDocsTab({
     const batch = staged;
     startUpload(async () => {
       let ok = 0;
-      let fail = 0;
-      for (const { file, typeId } of batch) {
+      const failures: string[] = [];
+      for (const { file, typeId, expiresOn } of batch) {
         try {
-          await uploadDocumentFile(personId, file, typeId);
+          await uploadDocumentFile(personId, file, typeId, expiresOn);
           ok += 1;
-        } catch {
-          fail += 1;
+        } catch (err) {
+          // Wave 2.3 — name the file and the server's actual reason.
+          const reason = err instanceof Error ? err.message : 'Upload failed.';
+          failures.push(`${file.name}: ${reason}`);
         }
       }
       setStaged([]);
       if (ok > 0) toast.success(`${ok} file${ok === 1 ? '' : 's'} uploaded`);
-      if (fail > 0) toast.error(`${fail} file${fail === 1 ? '' : 's'} failed`);
+      if (failures.length > 0) setUploadErrors((prev) => [...prev, ...failures]);
       router.refresh();
     });
   }
@@ -371,6 +410,33 @@ export function CandidateDocsTab({
             }}
           />
 
+          {/* Wave 2.3 — persistent upload problems (staging rejections
+              and per-file failures with the server's reason). Stays
+              until dismissed so the operator can actually read it. */}
+          {uploadErrors.length > 0 && (
+            <div
+              className="mt-4 space-y-1 rounded-xl border border-amber-400/40 bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-900/30 dark:text-amber-100"
+              role="alert"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-semibold">Some files could not be uploaded</p>
+                <button
+                  type="button"
+                  onClick={() => setUploadErrors([])}
+                  aria-label="Dismiss upload errors"
+                  className="rounded p-0.5 hover:bg-amber-100 dark:hover:bg-amber-900/60"
+                >
+                  <X className="size-3.5" aria-hidden />
+                </button>
+              </div>
+              <ul className="list-disc space-y-0.5 pl-4">
+                {uploadErrors.map((e) => (
+                  <li key={e}>{e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Staging panel — files wait here with a type picker per row
               (including "+ New type…") until the operator confirms.
               Nothing is uploaded until "Upload n files" is pressed. */}
@@ -412,6 +478,24 @@ export function CandidateDocsTab({
                           );
                         }}
                       />
+                      {/* Wave 2.4 — optional expiry for expiry-tracked types. */}
+                      {hasExpiryById.get(s.typeId) && (
+                        <label className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          Expiry date (optional)
+                          <input
+                            type="date"
+                            value={s.expiresOn ?? ''}
+                            disabled={uploading}
+                            onChange={(e) => {
+                              const v = e.currentTarget.value;
+                              setStaged((prev) =>
+                                prev.map((p) => (p.key === s.key ? { ...p, expiresOn: v } : p)),
+                              );
+                            }}
+                            className="rounded-md border px-2 py-0.5 text-xs"
+                          />
+                        </label>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -533,6 +617,7 @@ export function CandidateDocsTab({
                       <th className="px-4 py-2 font-medium">Name</th>
                       <th className="px-4 py-2 font-medium">Type</th>
                       <th className="px-4 py-2 font-medium">Uploaded</th>
+                      <th className="px-4 py-2 font-medium">Expiry</th>
                       <th className="px-4 py-2 font-medium">Size</th>
                       <th className="px-4 py-2 text-right font-medium">Actions</th>
                     </tr>
@@ -564,6 +649,21 @@ export function CandidateDocsTab({
                         </td>
                         <td className="px-4 py-3 text-muted-foreground tabular-nums">
                           {format(new Date(d.createdAt), 'dd MMM yyyy')}
+                        </td>
+                        <td className="px-4 py-3 tabular-nums">
+                          {d.expiresOn ? (
+                            <span
+                              className={cn(
+                                new Date(d.expiresOn) < new Date()
+                                  ? 'font-medium text-destructive'
+                                  : 'text-muted-foreground',
+                              )}
+                            >
+                              {format(new Date(d.expiresOn), 'dd MMM yyyy')}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground tabular-nums">
                           {formatBytes(d.fileSizeBytes)}
@@ -812,6 +912,7 @@ function ExtractedCvCard({
   });
   const [tab, setTab] = useState<'skills' | 'qualifications' | 'work' | 'personal'>('skills');
   const [saving, startSave] = useTransition();
+  const [saveErrors, setSaveErrors] = useState<string[]>([]);
   const router = useRouter();
 
   const toggle = (bucket: keyof typeof picked, key: string) => {
@@ -845,9 +946,22 @@ function ExtractedCvCard({
         employment: employmentPicks,
       });
       if (!r.ok) {
+        setSaveErrors([r.error.message]);
         toast.error(r.error.message);
         return;
       }
+      // Wave 2.1 — a partial save is not a clean success: keep the
+      // per-item failures visible in the panel and leave the preview
+      // up so the operator can retry the failed items.
+      if (r.data.errors && r.data.errors.length > 0) {
+        setSaveErrors(r.data.errors);
+        toast.warning(
+          `Saved with ${r.data.errors.length} item${r.data.errors.length === 1 ? '' : 's'} skipped — see the notes in the panel.`,
+        );
+        router.refresh();
+        return;
+      }
+      setSaveErrors([]);
       toast.success('Saved to profile');
       onSaved();
       setPicked({
@@ -860,12 +974,19 @@ function ExtractedCvCard({
       router.refresh();
     });
 
+  const pickedCount =
+    picked.skillIds.size +
+    picked.customSkills.size +
+    picked.qualificationIds.size +
+    picked.customQualifications.size +
+    picked.employmentKeys.size;
   const empty = suggestions === null;
+  // Wave 2.1 — the "Personal Info" tab was a hard-coded "coming soon"
+  // placeholder; honest UI shows only what extraction actually does.
   const tabs: Array<{ key: typeof tab; label: string }> = [
     { key: 'skills', label: 'Skills' },
     { key: 'qualifications', label: 'Qualifications' },
     { key: 'work', label: 'Work Experience' },
-    { key: 'personal', label: 'Personal Info' },
   ];
 
   return (
@@ -940,6 +1061,28 @@ function ExtractedCvCard({
                 <ScanLine className="mr-1.5 size-3" aria-hidden />
               )}
               Scan CV now
+            </Button>
+          </div>
+        ) : suggestions.parseError ? (
+          <div
+            className="space-y-1.5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive"
+            role="alert"
+          >
+            <p className="font-semibold">Could not read {suggestions.filename ?? 'the CV'}</p>
+            <p className="leading-relaxed">{suggestions.parseError}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onScan}
+              disabled={scanning}
+              className="mt-1"
+            >
+              {scanning ? (
+                <Loader2 className="mr-1.5 size-3 animate-spin" aria-hidden />
+              ) : (
+                <ScanLine className="mr-1.5 size-3" aria-hidden />
+              )}
+              Try again
             </Button>
           </div>
         ) : tab === 'skills' ? (
@@ -1096,40 +1239,40 @@ function ExtractedCvCard({
               </>
             )}
           </div>
-        ) : (
-          <p className="italic text-muted-foreground">
-            Personal info extraction coming soon. For now, edit personal details via the Overview →
-            Personal details card.
-          </p>
-        )}
+        ) : null}
 
         {!empty && (
           <>
-            <div className="my-2 border-t" />
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-medium text-foreground">Suggested Professional Summary</p>
-                <Button variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-[10px]" disabled>
-                  <Edit className="size-3" aria-hidden /> Edit
+            {saveErrors.length > 0 && (
+              <div
+                className="space-y-1 rounded-md border border-amber-400/40 bg-amber-50 p-2.5 text-[11px] text-amber-900 dark:bg-amber-900/30 dark:text-amber-100"
+                role="alert"
+              >
+                <p className="font-semibold">Some items could not be saved:</p>
+                <ul className="list-disc pl-4">
+                  {saveErrors.slice(0, 6).map((e) => (
+                    <li key={e}>{e}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-2 border-t pt-2">
+              <p className="text-[11px] text-muted-foreground">
+                Nothing is written to the profile until you save your ticked selections.
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={onSaved} disabled={saving}>
+                  Discard
+                </Button>
+                <Button size="sm" onClick={save} disabled={saving || pickedCount === 0}>
+                  {saving ? (
+                    <Loader2 className="mr-1.5 size-3 animate-spin" aria-hidden />
+                  ) : (
+                    <CheckCircle2 className="mr-1.5 size-3" aria-hidden />
+                  )}
+                  Save to profile
                 </Button>
               </div>
-              <p className="rounded-md border bg-muted/30 p-2 text-[11px] leading-relaxed text-muted-foreground">
-                Experienced candidate with the extracted CV content. Review the suggestion above and
-                click Save to profile to commit skills, qualifications and employment history.
-              </p>
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <Button variant="outline" size="sm" onClick={onSaved} disabled={saving}>
-                Discard
-              </Button>
-              <Button size="sm" onClick={save} disabled={saving}>
-                {saving ? (
-                  <Loader2 className="mr-1.5 size-3 animate-spin" aria-hidden />
-                ) : (
-                  <CheckCircle2 className="mr-1.5 size-3" aria-hidden />
-                )}
-                Save to profile
-              </Button>
             </div>
           </>
         )}
@@ -1146,7 +1289,8 @@ function DocRowMenu({
   documentTypes: DocumentTypeLite[];
 }) {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<'menu' | 'retype'>('menu');
+  const [mode, setMode] = useState<'menu' | 'retype' | 'expiry'>('menu');
+  const [expiry, setExpiry] = useState<string>(doc.expiresOn ?? '');
   const [pending, start] = useTransition();
   const router = useRouter();
 
@@ -1165,6 +1309,20 @@ function DocRowMenu({
       const r = await voidDocumentAction({ documentInstanceId: doc.id, reason: reason.trim() });
       if (r.ok) {
         toast.success('Document deleted');
+        close();
+        router.refresh();
+      } else {
+        toast.error(r.error.message);
+      }
+    });
+  };
+
+  // Wave 2.4 — set/clear the document's expiry date. Audited server-side.
+  const saveExpiry = (value: string) => {
+    start(async () => {
+      const r = await setDocumentExpiryAction({ documentInstanceId: doc.id, expiresOn: value });
+      if (r.ok) {
+        toast.success(value ? 'Expiry date saved' : 'Expiry date cleared');
         close();
         router.refresh();
       } else {
@@ -1222,6 +1380,14 @@ function DocRowMenu({
                 </button>
                 <button
                   type="button"
+                  onClick={() => setMode('expiry')}
+                  disabled={pending}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-foreground hover:bg-muted"
+                >
+                  <CalendarDays className="size-3" aria-hidden /> Set expiry…
+                </button>
+                <button
+                  type="button"
                   onClick={voidDoc}
                   disabled={pending}
                   className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-destructive hover:bg-destructive/10"
@@ -1229,6 +1395,35 @@ function DocRowMenu({
                   <Trash2 className="size-3" aria-hidden /> Delete
                 </button>
               </>
+            ) : mode === 'expiry' ? (
+              <div className="space-y-1.5 p-1.5">
+                <p className="font-medium text-foreground">Expiry date</p>
+                <input
+                  type="date"
+                  value={expiry}
+                  disabled={pending}
+                  onChange={(e) => setExpiry(e.currentTarget.value)}
+                  className="w-full rounded-md border px-2 py-1"
+                />
+                <div className="flex items-center justify-end gap-1.5 pt-0.5">
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => saveExpiry('')}
+                    className="rounded px-2 py-1 text-muted-foreground hover:bg-muted"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => saveExpiry(expiry)}
+                    className="rounded bg-primary px-2 py-1 text-primary-foreground"
+                  >
+                    {pending ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
             ) : (
               <div className="space-y-1.5 p-1.5">
                 <p className="font-medium text-foreground">Change document type</p>

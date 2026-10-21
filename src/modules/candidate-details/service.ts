@@ -270,18 +270,34 @@ export async function addCandidateQualification(
         );
       }
     }
-    const [row] = await tx
-      .insert(candidateQualifications)
-      .values({
-        personId: d.personId,
-        qualificationId,
-        customName,
-        awardedOn: blankToNull(d.awardedOn ?? undefined),
-        institution: blankToNull(d.institution ?? undefined),
-        referenceNumber: blankToNull(d.referenceNumber ?? undefined),
-        notes: blankToNull(d.notes ?? undefined),
-      })
-      .returning();
+    let row: typeof candidateQualifications.$inferSelect | undefined;
+    try {
+      [row] = await tx
+        .insert(candidateQualifications)
+        .values({
+          personId: d.personId,
+          qualificationId,
+          customName,
+          awardedOn: blankToNull(d.awardedOn ?? undefined),
+          institution: blankToNull(d.institution ?? undefined),
+          referenceNumber: blankToNull(d.referenceNumber ?? undefined),
+          notes: blankToNull(d.notes ?? undefined),
+        })
+        .returning();
+    } catch (err) {
+      // Wave 2.2 — a unique-constraint race past the pre-checks used to
+      // surface as a generic "Something went wrong"; name it instead.
+      const code =
+        (err as { cause?: { code?: string }; code?: string }).code ??
+        (err as { cause?: { code?: string } }).cause?.code;
+      if (code === '23505') {
+        throw new BusinessRuleError(
+          'QUALIFICATION_ALREADY_ADDED',
+          'This qualification is already on the profile.',
+        );
+      }
+      throw err;
+    }
     if (!row) throw new Error('insert returned no row');
     await recordAudit(tx, {
       actorUserId: session.user.id,

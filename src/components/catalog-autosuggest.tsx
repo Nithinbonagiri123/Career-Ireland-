@@ -47,6 +47,7 @@ export function CatalogAutosuggest({
   inputId,
   onCreateNew,
   createLabel = 'Add to catalog',
+  onTextChange,
 }: {
   options: CatalogEntry[];
   value: Selection;
@@ -63,6 +64,12 @@ export function CatalogAutosuggest({
   onCreateNew?: (name: string) => Promise<{ id: string; label: string }>;
   /** Prefix for the create row, e.g. "Add skill", "Add occupation". */
   createLabel?: string;
+  /**
+   * Wave 2.2 — notifies the parent of the raw typed text so it can
+   * treat an un-committed phrase as a custom entry on submit (typing
+   * alone used to leave the dialog's Add button dead).
+   */
+  onTextChange?: (text: string) => void;
 }) {
   const [creating, setCreating] = useState(false);
   const [text, setText] = useState<string>(() => {
@@ -106,7 +113,9 @@ export function CatalogAutosuggest({
 
   const commit = (v: Selection) => {
     onChange(v);
-    setText(v?.kind === 'catalog' ? v.label : v?.kind === 'custom' ? v.customName : '');
+    const label = v?.kind === 'catalog' ? v.label : v?.kind === 'custom' ? v.customName : '';
+    setText(label);
+    onTextChange?.(label);
     setOpen(false);
   };
 
@@ -163,6 +172,7 @@ export function CatalogAutosuggest({
         placeholder={placeholder}
         onChange={(e) => {
           setText(e.target.value);
+          onTextChange?.(e.target.value);
           setOpen(true);
           // Clear the selection if the user edits the text.
           if (value) onChange(null);

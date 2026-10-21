@@ -16,6 +16,7 @@ export async function registerUploadForTokenAction(input: {
   originalFilename: string;
   mimeType: string;
   fileSizeBytes: number;
+  expiresOn?: string;
 }) {
   const r = await toActionResult(() => registerUploadForToken(input));
   if (r.ok) {
