@@ -1,6 +1,8 @@
 import { env } from '@/lib/env';
+import { logger } from '@/lib/logger';
 import { consoleMailer } from './console-mailer';
 import { resendMailer } from './resend-mailer';
+import { isRecipientAllowed, parseAllowedDomains, recipientDomain } from './sink';
 import type { Mailer } from './types';
 
 /**
@@ -12,7 +14,25 @@ import type { Mailer } from './types';
  * call getMailer, restore).
  */
 export function getMailer(): Mailer {
-  return env.MAIL_PROVIDER === 'resend' ? resendMailer : consoleMailer;
+  const base = env.MAIL_PROVIDER === 'resend' ? resendMailer : consoleMailer;
+  // Staging mail safety — with MAIL_ALLOWED_RECIPIENT_DOMAINS set, any
+  // recipient outside the allowlist is suppressed here, below every
+  // feature, so a tester typing a real address can never cause a real
+  // send. Unset (production/dev default) → zero behaviour change.
+  const allowed = parseAllowedDomains(env.MAIL_ALLOWED_RECIPIENT_DOMAINS);
+  if (allowed === null) return base;
+  return {
+    async send(message) {
+      if (!isRecipientAllowed(message.to, allowed)) {
+        logger.warn(
+          { recipientDomain: recipientDomain(message.to), subject: message.subject },
+          'mail suppressed by MAIL_ALLOWED_RECIPIENT_DOMAINS (staging sink)',
+        );
+        return;
+      }
+      return base.send(message);
+    },
+  };
 }
 
 export type { Mailer, MailMessage } from './types';

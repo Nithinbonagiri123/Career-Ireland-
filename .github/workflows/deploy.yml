@@ -113,6 +113,56 @@ jobs:
   # promote step, or to run more pre-deploy scripts), disable the
   # Vercel-side integration in Project Settings → Git and re-add the
   # `deploy: needs: db-push` job here that runs `vercel deploy --prod`.
+  # Stage B Wave 1 release gating — with the Vercel dashboard's
+  # production branch pointed at the placeholder branch `production-gate`
+  # (Project Settings -> Git), pushes to main only produce PREVIEW
+  # builds. Nothing reaches production until this job promotes the
+  # preview for this exact SHA - which runs strictly AFTER wait-for-ci
+  # (CI green) and db-push (schema applied). This closes the window
+  # where Vercel's auto-promotion could serve new code against the old
+  # schema before CI finished.
+  # Release-readiness item 5 — PROMOTION IS NO LONGER AUTOMATIC.
+  # With the Vercel dashboard's production branch pointed at
+  # `production-gate`, a push to main only produces a PREVIEW build.
+  # This job waits for that preview to be READY and prints its URL for
+  # smoke testing. Exposing it to customers requires a human: the owner
+  # runs the "Promote to production" workflow (promote-production.yml),
+  # which re-verifies CI + migrations for the SHA and only then promotes.
+  await-preview-build:
+    name: Await preview build (promotion is manual)
+    needs: db-push
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+    steps:
+      - name: Wait for this SHA's preview build and print its URL
+        run: |
+          set -euo pipefail
+          SHA="${{ github.sha }}"
+          echo "Waiting for a READY preview build of $SHA…"
+          dep_url=""
+          for i in $(seq 1 60); do
+            resp=$(curl -sf -H "Authorization: Bearer $VERCEL_TOKEN"               "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID&limit=20")
+            dep_url=$(echo "$resp" | jq -r --arg sha "$SHA"               'first(.deployments[]? | select(.meta.githubCommitSha == $sha and .readyState == "READY") | .url) // ""')
+            state=$(echo "$resp" | jq -r --arg sha "$SHA"               'first(.deployments[]? | select(.meta.githubCommitSha == $sha) | .readyState) // ""')
+            if [[ -n "$dep_url" ]]; then break; fi
+            case "$state" in
+              ERROR|CANCELED) echo "✗ Build for $SHA ended $state"; exit 1;;
+              *) echo "  [$i/60] build state for $SHA: ${state:-not seen yet}";;
+            esac
+            sleep 10
+          done
+          if [[ -z "$dep_url" ]]; then
+            echo "✗ No READY build for $SHA within 10 minutes."
+            exit 1
+          fi
+          echo "✓ Preview ready: https://$dep_url"
+          echo "### Preview ready — promotion is manual" >> "$GITHUB_STEP_SUMMARY"
+          echo "Smoke-test: https://$dep_url" >> "$GITHUB_STEP_SUMMARY"
+          echo "Then run the **Promote to production** workflow for SHA $SHA." >> "$GITHUB_STEP_SUMMARY"
+
   rollback-on-db-failure:
     name: Rollback Vercel if db-push failed
     needs: db-push
@@ -148,63 +198,4 @@ jobs:
           echo "✓ Rolled back live production to $prev_id"
           # Fail the overall workflow run so the red X is visible on the
           # commit — the rollback worked but the deploy itself didn't.
-          exit 1
-
-  post-deploy-check:
-    name: Confirm Vercel deploy is live
-    needs: db-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait for Vercel's own deploy to reach READY
-        # Poll Vercel's API for the latest production deployment on this
-        # SHA. 5-minute budget (30 × 10s).
-        #
-        # Exit codes:
-        #   0  — saw readyState=READY for this SHA, OR timed out but
-        #        Vercel never produced a build for this SHA (likely
-        #        superseded by a newer push; see "skip" branch below)
-        #   1  — saw readyState=ERROR / CANCELED for this SHA, OR timed
-        #        out while a build for this SHA was still BUILDING /
-        #        QUEUED / INITIALIZING (real stuck deployment, not a
-        #        skip)
-        #
-        # The "skip on timeout when SHA not seen" branch exists because
-        # Vercel's git integration dedupes queued builds — if two
-        # commits land within seconds, only the newer one gets built.
-        # The earlier commit's workflow would otherwise sit here for 5
-        # minutes polling for a build that will never happen, then
-        # exit 1 and paint `main` red for no real reason.
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-        run: |
-          set -euo pipefail
-          SHA="${{ github.sha }}"
-          echo "Watching Vercel for prod deploy of $SHA…"
-          last_state=""
-          for i in $(seq 1 30); do
-            resp=$(curl -sf -H "Authorization: Bearer $VERCEL_TOKEN" \
-              "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID&target=production&limit=5")
-            # jq extracts readyState of the first deployment whose meta
-            # commit SHA matches ours. Empty string when no match yet.
-            match=$(echo "$resp" | jq -r --arg sha "$SHA" 'first(.deployments[]? | select(.meta.githubCommitSha == $sha) | .readyState) // ""')
-            last_state="$match"
-            case "$match" in
-              READY)     echo "✓ Vercel deploy READY"; exit 0;;
-              ERROR)     echo "✗ Vercel deploy ERROR";  exit 1;;
-              CANCELED)  echo "✗ Vercel deploy CANCELED"; exit 1;;
-              "")        echo "  [$i/30] no matching deployment yet for $SHA";;
-              *)         echo "  [$i/30] state=$match";;
-            esac
-            sleep 10
-          done
-
-          # Timeout branch — decide whether this is a real failure or
-          # a superseded-build skip based on the last state we saw.
-          if [ -z "$last_state" ]; then
-            echo "ⓘ Timed out — Vercel never produced a build for $SHA (likely superseded by a newer push). Treating as success-skip; the newer commit's workflow will own prod verification."
-            exit 0
-          fi
-          echo "✗ Timed out while deployment state was '$last_state' (build never finished)."
           exit 1

@@ -1,0 +1,123 @@
+name: Promote to production
+
+# Release-readiness item 5 — the ONLY path that exposes new code to
+# customers, and it never runs on its own: the owner starts it by hand
+# (Actions → "Promote to production" → Run workflow) and must type
+# PROMOTE to confirm. Before touching Vercel it independently re-checks,
+# for the exact SHA being promoted:
+#   1. CI (Verify + E2E) succeeded,
+#   2. the Deploy workflow's migration job (db-push) succeeded,
+# so a promotion can never outrun CI or the schema. After promoting it
+# polls production until the SHA is actually serving.
+#
+# Prerequisite (one-time, Vercel dashboard): Project Settings → Git →
+# Production Branch = `production-gate`, so pushes to main build
+# previews only. Rollback at any time = re-run this workflow with the
+# previous good SHA.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Full commit SHA to promote (must have green CI + applied migrations)"
+        required: true
+      confirm:
+        description: 'Type PROMOTE to confirm exposing this build to customers'
+        required: true
+
+jobs:
+  promote:
+    name: Verify gates, then promote
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Require explicit confirmation
+        run: |
+          if [[ "${{ github.event.inputs.confirm }}" != "PROMOTE" ]]; then
+            echo "✗ Confirmation text mismatch — type PROMOTE exactly to proceed."
+            exit 1
+          fi
+
+      - name: 'Gate 1: CI green for this SHA'
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.event.inputs.sha }}
+          check-name: Verify
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+          allowed-conclusions: success
+
+      - name: 'Gate 1b: E2E green for this SHA'
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.event.inputs.sha }}
+          check-name: E2E
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+          allowed-conclusions: success
+
+      - name: 'Gate 2: migrations applied for this SHA (Deploy / db-push succeeded)'
+        run: |
+          set -euo pipefail
+          SHA="${{ github.event.inputs.sha }}"
+          run_id=$(gh run list --repo "${{ github.repository }}" \
+            --workflow Deploy --commit "$SHA" --json databaseId,conclusion \
+            --jq 'first(.[]) | .databaseId' || true)
+          if [[ -z "${run_id:-}" ]]; then
+            echo "✗ No Deploy workflow run found for $SHA — push it to main first."
+            exit 1
+          fi
+          db_ok=$(gh run view "$run_id" --repo "${{ github.repository }}" \
+            --json jobs --jq '[.jobs[] | select(.name | contains("migrations")) | .conclusion] | first')
+          if [[ "$db_ok" != "success" ]]; then
+            echo "✗ Migration job for $SHA concluded: ${db_ok:-not found}. Refusing to promote."
+            exit 1
+          fi
+          echo "✓ Migrations applied for $SHA (Deploy run $run_id)."
+
+      - name: 'Gate 3: locate the READY build for this SHA'
+        id: locate
+        run: |
+          set -euo pipefail
+          SHA="${{ github.event.inputs.sha }}"
+          resp=$(curl -sf -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID&limit=50")
+          dep_id=$(echo "$resp" | jq -r --arg sha "$SHA" \
+            'first(.deployments[]? | select(.meta.githubCommitSha == $sha and .readyState == "READY") | .uid) // ""')
+          if [[ -z "$dep_id" ]]; then
+            echo "✗ No READY build for $SHA — check the Deploy run's preview job."
+            exit 1
+          fi
+          echo "dep_id=$dep_id" >> "$GITHUB_OUTPUT"
+          echo "✓ READY build: $dep_id"
+
+      - name: Promote
+        run: |
+          set -euo pipefail
+          curl -sf -X POST \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/${{ steps.locate.outputs.dep_id }}?teamId=$VERCEL_ORG_ID" > /dev/null
+          echo "✓ Promotion requested for ${{ github.event.inputs.sha }}"
+
+      - name: Confirm production serves this SHA
+        run: |
+          set -euo pipefail
+          SHA="${{ github.event.inputs.sha }}"
+          for i in $(seq 1 30); do
+            resp=$(curl -sf -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID&target=production&limit=5")
+            live=$(echo "$resp" | jq -r \
+              'first(.deployments[]? | select(.readyState == "READY")) | .meta.githubCommitSha // ""')
+            if [[ "$live" == "$SHA" ]]; then
+              echo "✓ Production now serves $SHA"
+              exit 0
+            fi
+            echo "  [$i/30] production currently: ${live:-unknown}"
+            sleep 10
+          done
+          echo "✗ Production did not report $SHA within 5 minutes — check the Vercel dashboard."
+          exit 1

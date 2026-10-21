@@ -29,6 +29,13 @@ const EnvSchema = z.object({
    * on `console`.
    */
   MAIL_PROVIDER: z.enum(['console', 'resend']).default('console'),
+  /**
+   * Staging mail safety — comma-separated recipient domains that are
+   * allowed to receive real email (e.g. "example.test"). When set, any
+   * send to another domain is suppressed at the mailer layer and logged
+   * (domain only, never the address). Leave UNSET in production.
+   */
+  MAIL_ALLOWED_RECIPIENT_DOMAINS: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   /** Sender address, e.g. `Ireland Career Gateway <no-reply@yourdomain.ie>`. Required in production. */
   MAIL_FROM: z.string().optional(),
