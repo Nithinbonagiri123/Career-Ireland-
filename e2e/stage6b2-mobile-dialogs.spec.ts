@@ -205,9 +205,12 @@ test('mobile: record payment dialog is scrollable + inputs are reachable at 390Ã
     // Record payment button on the ACCEPTED pro-forma row.
     const recordBtn = page.getByRole('button', { name: /^Record payment$/i }).first();
     await expect(recordBtn).toBeVisible({ timeout: 15_000 });
-    await recordBtn.click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible();
+    // Re-click until hydration has attached the trigger (slow CI runners).
+    await expect(async () => {
+      await recordBtn.click();
+      await expect(dialog).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
     // Overflow check: the dialog's own box must not exceed the viewport.
     const box = await dialog.boundingBox();
     expect(box?.width ?? 0).toBeLessThanOrEqual(390);
@@ -280,12 +283,15 @@ test('mobile: workspace renders long names + handles the quote composer dialog',
     // Switch to Billing + open the quote composer dialog. Mobile dialog
     // must be scrollable + readable; take a focused screenshot.
     await page.getByRole('tab', { name: 'Billing' }).click();
-    await page
-      .getByRole('button', { name: /\+ New quote/i })
-      .first()
-      .click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible();
+    // Re-click until hydration has attached the trigger (slow CI runners).
+    await expect(async () => {
+      await page
+        .getByRole('button', { name: /\+ New quote/i })
+        .first()
+        .click();
+      await expect(dialog).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
     await page.screenshot({
       path: path.join(SHOTS_DIR, 'mobile-composer-dialog.png'),
       fullPage: false,

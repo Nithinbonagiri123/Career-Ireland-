@@ -204,7 +204,9 @@ test.describe('Stage 4.2 — lead-to-candidate conversion', () => {
       // the auto-converted end state on the Client Workspace.
       await page.goto(`/clients/${seeded.personId}`);
       await expect(page.getByText(/S42First/).first()).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByText(/Active candidate/i).first()).toBeVisible({ timeout: 10_000 });
+      // Stage B Wave 3 — the paid activation leaves a live engagement,
+      // so the derived hero status reads "In progress".
+      await expect(page.getByText(/In progress/i).first()).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText(seeded.occupationName).first()).toBeVisible();
       await shot(page, '03-candidate-workspace');
 

@@ -224,12 +224,15 @@ test('full happy-path: lead → quote → partial pays → invoice → activate'
 
     // ── Step 2: Billing tab + + New quote dialog ─────────────────────────
     await page.getByRole('tab', { name: 'Billing' }).click();
-    await page
-      .getByRole('button', { name: /\+ New quote/i })
-      .first()
-      .click();
     const composer = page.getByRole('dialog');
-    await expect(composer).toBeVisible();
+    // Re-click until hydration has attached the trigger (slow CI runners).
+    await expect(async () => {
+      await page
+        .getByRole('button', { name: /\+ New quote/i })
+        .first()
+        .click();
+      await expect(composer).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
     await expect(composer.getByText(/create pro forma/i)).toBeVisible();
 
     // Composer pre-fills service[0] + packages[0] price. Add a 2nd line to
@@ -332,10 +335,10 @@ test('full happy-path: lead → quote → partial pays → invoice → activate'
     await expect(page.getByText(/Invoice & receipts/i).first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/Settled/i).first()).toBeVisible({ timeout: 10_000 });
     // Stage 6E — verifying the final instalment auto-activates the
-    // candidate in the same transaction, so there is no manual
-    // "Activate candidate" step any more: the hero flips straight to
-    // Active candidate.
-    await expect(page.getByText(/Active candidate/i).first()).toBeVisible({ timeout: 10_000 });
+    // candidate in the same transaction (no manual step). Stage B Wave 3
+    // — the paid activation leaves a live engagement, so the derived
+    // hero status reads "In progress".
+    await expect(page.getByText(/In progress/i).first()).toBeVisible({ timeout: 10_000 });
     // Stage 6B+3 — the invoice row now shows "Paid" directly from the DB
     // status (the pro-forma verify call atomically runs
     // recomputeInvoiceStatus so no UI display override is involved).

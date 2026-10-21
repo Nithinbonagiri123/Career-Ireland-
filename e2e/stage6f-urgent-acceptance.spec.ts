@@ -344,9 +344,10 @@ test('A: full-paid verified payment auto-issues invoice + receipt + activates ca
     expect(counts.profiles).toBe(1);
     expect(counts.leadStatus).toBe('CONVERTED');
 
-    // Workspace shows "Active candidate" as the sole primary status.
+    // Stage B Wave 3 — the paid activation leaves a live engagement, so
+    // the derived primary status reads "In progress".
     await page.goto(`/clients/${seed.personId}`);
-    await expect(page.getByText('Active candidate').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('In progress').first()).toBeVisible({ timeout: 15_000 });
     // No stray "Activate candidate" prompt — the Phase 1 fix removes
     // the second-step onboarding click.
     expect(await page.getByRole('button', { name: /^Activate candidate$/ }).count()).toBe(0);
@@ -604,7 +605,8 @@ test('H: workspace renders cleanly on desktop + tablet + mobile with real popula
       await expect(
         page.getByRole('heading', { name: new RegExp(`Flow-${seed.stamp}`, 'i') }),
       ).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByText('Active candidate').first()).toBeVisible();
+      // Stage B Wave 3 — live engagement → derived "In progress" chip.
+      await expect(page.getByText('In progress').first()).toBeVisible();
       await expect(page.getByText(/Service billing/i).first()).toBeVisible();
       await page.screenshot({
         path: path.join(SHOTS_DIR, `${label}-active-${seed.stamp}.png`),

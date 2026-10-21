@@ -169,10 +169,8 @@ test('04 · Employer invoice — dialog + manual price flow', async ({ page }) =
       if (v) await pkgSelect.selectOption(v);
     }
   }
-  // …then always override with a per-run unique price. The duplicate-
-  // invoice guard rejects a second unpaid invoice for the same service
-  // AND amount, so a fixed amount breaks every retry/re-run against a
-  // non-fresh database.
+  // Per-run unique price keeps the invoice rows distinguishable across
+  // re-runs against a non-fresh database.
   await page
     .locator('#unitPrice')
     .fill(`${200 + (Date.now() % 700)}.${String((Date.now() % 90) + 10)}`);
@@ -181,6 +179,24 @@ test('04 · Employer invoice — dialog + manual price flow', async ({ page }) =
     .getByRole('dialog')
     .getByRole('button', { name: /^generate invoice$/i })
     .click();
+  // Stage B Wave 1 — the duplicate guard now fires on same payer +
+  // service regardless of amount, so a re-run against a non-fresh DB
+  // (live Ads invoices already on the fixture employer) surfaces the
+  // inline warning. Walk the audited override path when it appears.
+  const overrideBox = page
+    .getByRole('dialog')
+    .getByLabel(/Reason for proceeding despite a possible duplicate/i);
+  const warned = await overrideBox
+    .waitFor({ state: 'visible', timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (warned) {
+    await overrideBox.fill('QA run — intentional repeat sale on the fixture employer.');
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: /^generate invoice$/i })
+      .click();
+  }
   await page.waitForURL(/\/employers\/[^/]+\/invoices\/INV-/, { timeout: 20_000 });
   await expect(page.getByText(/^INVOICE$/)).toBeVisible();
   await fullShot(page, 'e2e__employer-invoice-print');

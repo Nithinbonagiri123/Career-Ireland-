@@ -54,9 +54,13 @@ async function recordAndVerifyViaUI(
   amount: string,
 ) {
   await page.goto(`/leads/${leadId}/pro-formas/${pfId}`);
-  await page.getByRole('button', { name: /Record payment/i }).click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  // CI runners hydrate the page well after first paint; a click that lands
+  // before React attaches is silently lost. Re-click until the dialog mounts.
+  await expect(async () => {
+    await page.getByRole('button', { name: /Record payment/i }).click();
+    await expect(dialog).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
   await dialog.getByLabel(/Amount/i).fill(amount);
   await dialog.getByRole('button', { name: /Record payment/i }).click();
   await expect(dialog).toBeHidden({ timeout: 10_000 });

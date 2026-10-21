@@ -282,7 +282,8 @@ test('stage 6G — realistic healthcare candidate rendered in the redesigned wor
       page.getByRole('heading', { name: new RegExp(`Mokoena-${stamp}`, 'i') }),
     ).toBeVisible({ timeout: 15_000 });
     // Hero chips.
-    await expect(page.getByText(/Active candidate/i).first()).toBeVisible();
+    // Stage B Wave 3 — live engagement → derived "In progress" chip.
+    await expect(page.getByText(/In progress/i).first()).toBeVisible();
     await expect(page.getByText(/South African/).first()).toBeVisible();
     // Overview shows the Service billing summary; the detailed
     // engagement cards live in the Services & Billing tab (Stage 6G).
