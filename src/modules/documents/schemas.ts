@@ -57,6 +57,18 @@ export const VoidDocumentSchema = z.object({
 });
 export type VoidDocumentInput = z.infer<typeof VoidDocumentSchema>;
 
+/** Stage B Wave 2.4 — set or clear a document's expiry date. */
+export const SetDocumentExpirySchema = z.object({
+  documentInstanceId: z.string().uuid(),
+  /** YYYY-MM-DD, or empty string to clear. */
+  expiresOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .or(z.literal('')),
+});
+export type SetDocumentExpiryInput = z.infer<typeof SetDocumentExpirySchema>;
+
 export const ReclassifyDocumentSchema = z.object({
   documentInstanceId: z.string().uuid(),
   documentTypeId: z.string().uuid(),

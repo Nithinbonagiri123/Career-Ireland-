@@ -116,32 +116,41 @@ export async function updatePerson(input: UpdatePersonInput): Promise<Person> {
     const [before] = await tx.select().from(persons).where(eq(persons.id, d.personId)).limit(1);
     if (!before) throw new BusinessRuleError('PERSON_NOT_FOUND', 'Person not found');
 
+    // Stage B Wave 1 (client remediation #6) — patch semantics. A field
+    // the caller did not send (undefined) is left untouched; an empty
+    // string remains an explicit "clear this field". The old behaviour
+    // wrote every column unconditionally, so any caller that rendered a
+    // subset of the fields (the Edit dialog never shows employment
+    // status, professional summary or currently-in-Ireland) silently
+    // NULLed the lead-captured values on every save.
+    const patch: Record<string, unknown> = {
+      firstName: d.firstName.trim(),
+      lastName: d.lastName.trim(),
+      updatedAt: sql`NOW()`,
+    };
+    if (d.middleName !== undefined) patch.middleName = blankToNull(d.middleName);
+    if (d.email !== undefined) patch.email = blankToNull(d.email);
+    if (d.phone !== undefined) patch.phone = blankToNull(d.phone);
+    if (d.dateOfBirth !== undefined) patch.dateOfBirth = blankToNull(d.dateOfBirth);
+    if (d.nationality !== undefined) patch.nationality = blankToNull(d.nationality);
+    if (d.currentCountry !== undefined) patch.currentCountry = blankToNull(d.currentCountry);
+    if (d.currentCity !== undefined) patch.currentCity = blankToNull(d.currentCity);
+    if (d.addressLine1 !== undefined) patch.addressLine1 = blankToNull(d.addressLine1);
+    if (d.addressLine2 !== undefined) patch.addressLine2 = blankToNull(d.addressLine2);
+    if (d.postcode !== undefined) patch.postcode = blankToNull(d.postcode);
+    if (d.employmentStatus !== undefined)
+      patch.employmentStatus = d.employmentStatus ? d.employmentStatus : null;
+    if (d.professionalSummary !== undefined)
+      patch.professionalSummary = blankToNull(d.professionalSummary);
+    if (d.workEligibility !== undefined) patch.workEligibility = blankToNull(d.workEligibility);
+    if (d.currentlyInIreland !== undefined) patch.currentlyInIreland = d.currentlyInIreland;
+    if (d.irishImmigrationStatus !== undefined)
+      patch.irishImmigrationStatus = d.irishImmigrationStatus ? d.irishImmigrationStatus : null;
+    if (d.notes !== undefined) patch.notes = blankToNull(d.notes);
+
     const [after] = await tx
       .update(persons)
-      .set({
-        firstName: d.firstName.trim(),
-        middleName: blankToNull(d.middleName),
-        lastName: d.lastName.trim(),
-        email: blankToNull(d.email),
-        phone: blankToNull(d.phone),
-        dateOfBirth: blankToNull(d.dateOfBirth),
-        nationality: blankToNull(d.nationality),
-        currentCountry: blankToNull(d.currentCountry),
-        currentCity: blankToNull(d.currentCity),
-        addressLine1: blankToNull(d.addressLine1),
-        addressLine2: blankToNull(d.addressLine2),
-        // Stage 6G Screen 02 — persist the New Lead form's new fields.
-        postcode: blankToNull(d.postcode),
-        employmentStatus: d.employmentStatus ? d.employmentStatus : null,
-        professionalSummary: blankToNull(d.professionalSummary),
-        workEligibility: blankToNull(d.workEligibility),
-        currentlyInIreland: typeof d.currentlyInIreland === 'boolean' ? d.currentlyInIreland : null,
-        // Stage 6F Phase 3 — same `'' | null | undefined → NULL` rule
-        // we use on create. Enum-coded value otherwise.
-        irishImmigrationStatus: d.irishImmigrationStatus ? d.irishImmigrationStatus : null,
-        notes: blankToNull(d.notes),
-        updatedAt: sql`NOW()`,
-      })
+      .set(patch)
       .where(eq(persons.id, d.personId))
       .returning();
     if (!after) throw new Error('update returned no row');

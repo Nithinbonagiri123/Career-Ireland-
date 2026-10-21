@@ -1,6 +1,12 @@
 import { and, desc, eq, inArray, isNull, or, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireInternalStaff, requireRole, requireSession } from '@/lib/auth/session';
+import {
+  checkPermission,
+  INTERNAL_STAFF_ROLES,
+  requireInternalStaff,
+  requireRole,
+  requireSession,
+} from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import {
@@ -23,6 +29,8 @@ import {
   presignDownload,
   presignUpload,
 } from '@/lib/s3/presign';
+import { ObjectVerificationError, verifyStoredObject } from '@/lib/s3/verify';
+import { assertKeyBelongsToOwner } from './key-ownership';
 import {
   type AddRequirementForPersonInput,
   AddRequirementForPersonSchema,
@@ -36,6 +44,8 @@ import {
   RegisterUploadSchema,
   type ReviewDocumentInput,
   ReviewDocumentSchema,
+  type SetDocumentExpiryInput,
+  SetDocumentExpirySchema,
   type UpsertRequirementRuleInput,
   UpsertRequirementRuleSchema,
   type VoidDocumentInput,
@@ -53,11 +63,32 @@ function blankToNull(v: string | undefined | null): string | null {
 async function assertOwnershipOrStaff(
   ownerType: 'PERSON' | 'EMPLOYER',
   ownerId: string,
+  verb: 'view' | 'create' | 'edit',
 ): Promise<{ userId: string }> {
   const session = await requireSession();
   const role = session.user.role;
 
-  if (role === 'ADMIN' || role === 'STAFF') return { userId: session.user.id };
+  // Stage B Wave 1 (client remediation #7) — grant-based, not
+  // role-blanket. ADMIN keeps full access (as everywhere); every other
+  // internal role needs the matching fine-grained grant, which is the
+  // permission model's own intent (STAFF defaults are deliberately
+  // empty until the owner grants modules). Person-owned documents are
+  // governed by candidate_services.documents; employer-owned documents
+  // by recruitment.employers. Owners bypass inside checkPermission.
+  if (role === 'ADMIN') return { userId: session.user.id };
+  if ((INTERNAL_STAFF_ROLES as readonly string[]).includes(role)) {
+    const allowed =
+      ownerType === 'PERSON'
+        ? await checkPermission('candidate_services', 'documents', verb)
+        : await checkPermission('recruitment', 'employers', verb);
+    if (!allowed) {
+      throw new BusinessRuleError(
+        'FORBIDDEN',
+        'You do not have the documents permission for this record. Ask an owner to grant it.',
+      );
+    }
+    return { userId: session.user.id };
+  }
 
   if (role === 'CANDIDATE') {
     if (ownerType !== 'PERSON' || session.user.personId !== ownerId) {
@@ -87,7 +118,7 @@ export async function presignDocumentUpload(input: PresignUploadInput) {
     );
   }
   const d = parsed.data;
-  await assertOwnershipOrStaff(d.ownerType, d.ownerId);
+  await assertOwnershipOrStaff(d.ownerType, d.ownerId, 'create');
 
   if (!ALLOWED_UPLOAD_MIME.has(d.mimeType)) {
     throw new BusinessRuleError(
@@ -125,7 +156,22 @@ export async function registerUpload(input: RegisterUploadInput): Promise<Docume
     );
   }
   const d = parsed.data;
-  const { userId } = await assertOwnershipOrStaff(d.ownerType, d.ownerId);
+  const { userId } = await assertOwnershipOrStaff(d.ownerType, d.ownerId, 'create');
+  assertKeyBelongsToOwner(d.ownerType, d.ownerId, d.s3ObjectKey);
+  // Stage B Wave 1 — the object must really exist in storage with the
+  // declared size and type before a database row is written for it.
+  try {
+    await verifyStoredObject({
+      key: d.s3ObjectKey,
+      expectedMimeType: d.mimeType,
+      expectedSizeBytes: d.fileSizeBytes,
+    });
+  } catch (err) {
+    if (err instanceof ObjectVerificationError) {
+      throw new BusinessRuleError(err.code, err.message);
+    }
+    throw err;
+  }
 
   // Defence-in-depth: presign already gated these, but the client could call
   // register directly with a spoofed MIME or size. Re-enforce so the DB row
@@ -226,8 +272,21 @@ export async function presignDocumentDownload(documentInstanceId: string) {
   if (!instance) throw new BusinessRuleError('NOT_FOUND', 'Document not found');
 
   const role = session.user.role;
-  if (role === 'ADMIN' || role === 'STAFF') {
+  if (role === 'ADMIN') {
     // ok
+  } else if ((INTERNAL_STAFF_ROLES as readonly string[]).includes(role)) {
+    // Stage B Wave 1 — downloads need the matching view grant (see
+    // assertOwnershipOrStaff): candidate_services.documents for
+    // person-owned files, recruitment.employers for employer-owned.
+    const allowed = instance.ownerPersonId
+      ? await checkPermission('candidate_services', 'documents', 'view')
+      : await checkPermission('recruitment', 'employers', 'view');
+    if (!allowed) {
+      throw new BusinessRuleError(
+        'FORBIDDEN',
+        'You do not have the documents permission for this record. Ask an owner to grant it.',
+      );
+    }
   } else if (role === 'CANDIDATE') {
     if (instance.ownerPersonId !== session.user.personId) {
       throw new BusinessRuleError('FORBIDDEN', 'Not your document');
@@ -646,6 +705,68 @@ export async function fetchAllDocumentsForStaff(
  * Staff-wide (same population that can upload); audited with the
  * before/after type so support can trace the re-classification.
  */
+/** Stage B Wave 2.4 — set or clear the expiry date on a document (e.g.
+ *  a passport). Audited; voided documents are immutable. */
+export async function setDocumentExpiry(input: SetDocumentExpiryInput) {
+  const parsed = SetDocumentExpirySchema.parse(input);
+  const expiresOn = parsed.expiresOn ? parsed.expiresOn : null;
+
+  // Release-readiness WARN-1 — expiry edits obey the same grant +
+  // ownership model as every other document operation (Wave 1): ADMIN
+  // or the matching fine-grained grant for the document's owner type.
+  // The owner lookup happens BEFORE the transaction so the permission
+  // check never holds a second pooled connection inside it.
+  const [ownerRow] = await db
+    .select({
+      ownerPersonId: documentInstances.ownerPersonId,
+      ownerEmployerId: documentInstances.ownerEmployerId,
+    })
+    .from(documentInstances)
+    .where(eq(documentInstances.id, parsed.documentInstanceId))
+    .limit(1);
+  if (!ownerRow) throw new BusinessRuleError('NOT_FOUND', 'Document not found');
+  const session = await requireInternalStaff();
+  if (session.user.role !== 'ADMIN') {
+    const allowed = ownerRow.ownerPersonId
+      ? await checkPermission('candidate_services', 'documents', 'edit')
+      : await checkPermission('recruitment', 'employers', 'edit');
+    if (!allowed) {
+      throw new BusinessRuleError(
+        'FORBIDDEN',
+        'You do not have the documents permission for this record. Ask an owner to grant it.',
+      );
+    }
+  }
+
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(documentInstances)
+      .where(eq(documentInstances.id, parsed.documentInstanceId))
+      .limit(1);
+    if (!before) throw new BusinessRuleError('NOT_FOUND', 'Document not found');
+    if (before.voidedAt) {
+      throw new BusinessRuleError('ALREADY_VOIDED', 'Cannot edit a voided document');
+    }
+    const [after] = await tx
+      .update(documentInstances)
+      .set({ expiresOn, updatedAt: sql`NOW()` })
+      .where(eq(documentInstances.id, parsed.documentInstanceId))
+      .returning();
+    if (!after) throw new Error('expiry update returned no row');
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'document_instance',
+      entityId: after.id,
+      action: 'EXPIRY_SET',
+      before: { expiresOn: before.expiresOn },
+      after: { expiresOn: after.expiresOn },
+      context: { originalFilename: after.originalFilename },
+    });
+    return after;
+  });
+}
+
 export async function reclassifyDocument(input: ReclassifyDocumentInput) {
   const session = await requireInternalStaff();
   const parsed = ReclassifyDocumentSchema.parse(input);

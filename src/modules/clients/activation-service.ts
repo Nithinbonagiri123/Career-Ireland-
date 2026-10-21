@@ -87,7 +87,10 @@ export async function activateCandidateInTx(
     profileId = existingProfile.id;
   } else {
     const [personRow] = await tx
-      .select({ primaryOccupationId: persons.primaryOccupationId })
+      .select({
+        primaryOccupationId: persons.primaryOccupationId,
+        workEligibility: persons.workEligibility,
+      })
       .from(persons)
       .where(eq(persons.id, lead.personId))
       .limit(1);
@@ -97,6 +100,10 @@ export async function activateCandidateInTx(
         personId: lead.personId,
         assignedUserId: args.actorUserId,
         primaryOccupationId: personRow?.primaryOccupationId ?? null,
+        // Stage B Wave 1 (client remediation #6) — carry the
+        // lead-captured eligibility onto the profile so the workspace
+        // shows it after activation.
+        workEligibility: personRow?.workEligibility ?? null,
       })
       .returning();
     if (!created) throw new Error('candidate_profiles insert returned no row.');

@@ -109,7 +109,10 @@ export function EditPersonDialog({
       notes: person.notes ?? '',
       primaryOccupationId: candidateProfile?.primaryOccupationId ?? '',
       yearsOfExperience: candidateProfile?.yearsOfExperience ?? '',
-      workEligibility: candidateProfile?.workEligibility ?? '',
+      // Stage B Wave 1 — fall back to the person row so saving the
+      // dialog for a not-yet-activated person round-trips the
+      // lead-captured eligibility instead of clearing it.
+      workEligibility: candidateProfile?.workEligibility ?? person.workEligibility ?? '',
       preferredLocation: candidateProfile?.preferredLocation ?? '',
       profileSummary: candidateProfile?.profileSummary ?? '',
     },

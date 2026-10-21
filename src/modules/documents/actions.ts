@@ -8,6 +8,7 @@ import type {
   ReclassifyDocumentInput,
   RegisterUploadInput,
   ReviewDocumentInput,
+  SetDocumentExpiryInput,
   UpsertRequirementRuleInput,
   VoidDocumentInput,
 } from './schemas';
@@ -19,6 +20,7 @@ import {
   reclassifyDocument,
   registerUpload,
   reviewDocument,
+  setDocumentExpiry,
   upsertRequirementRule,
   voidDocument,
 } from './service';
@@ -70,6 +72,10 @@ export async function addPersonSpecificRequirementAction(input: AddRequirementFo
 /** Fetch a person's documents filtered by document-type code — used by the CV picker. */
 export async function listPersonDocumentsByTypeCodeAction(personId: string, typeCode: string) {
   return toActionResult(() => fetchPersonDocumentsByTypeCode(personId, typeCode));
+}
+
+export async function setDocumentExpiryAction(input: SetDocumentExpiryInput) {
+  return toActionResult(() => setDocumentExpiry(input));
 }
 
 export async function reclassifyDocumentAction(input: ReclassifyDocumentInput) {
