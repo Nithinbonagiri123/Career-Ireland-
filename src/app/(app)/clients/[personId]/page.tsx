@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { ApplicationsPanel } from '@/app/(app)/candidates/[id]/applications-panel';
 import {
   EducationSection,
   EmploymentHistorySection,
@@ -63,6 +64,7 @@ import {
 import { statusTone } from '@/lib/ui/status-tone';
 import { cn } from '@/lib/utils';
 import type { CommunicationRow } from '@/modules/activities/service';
+import type { CandidateApplicationRow } from '@/modules/applications/service';
 import { canGrantComplimentary } from '@/modules/billing/complimentary';
 import type {
   CandidateQualificationRow,
@@ -73,6 +75,7 @@ import {
   PRIMARY_STATUS_LABEL,
   PRIMARY_STATUS_TONE,
 } from '@/modules/clients/onboarding-status';
+import { derivePaymentState } from '@/modules/clients/payment-state';
 import { fetchClientWorkspace, fetchJustCreatedDocNumbers } from '@/modules/clients/workspace-data';
 import { type CandidateNote, CandidateNotesCard } from './candidate-notes-card';
 import { ClientWorkspaceTabs } from './client-workspace-tabs';
@@ -179,6 +182,7 @@ export default async function ClientWorkspacePage({
     allQualifications,
     occupations,
     noteRows,
+    employerRows,
   ] = await Promise.all([
     // Overview also needs applications + documents counts for the
     // new summary cards; load them for both tabs so the cards populate
@@ -221,6 +225,11 @@ export default async function ClientWorkspacePage({
     // Stage B Wave 3 — internal notes for the Overview Notes card.
     activeTab === 'overview'
       ? import('@/modules/activities/service').then((m) => m.fetchPersonNotes(personId))
+      : Promise.resolve([] as const),
+    // Stage C workflow collapse — employer options for recording an
+    // external application from the Applications tab.
+    activeTab === 'applications'
+      ? import('@/modules/employers/service').then((m) => m.fetchEmployers())
       : Promise.resolve([] as const),
   ]);
 
@@ -598,14 +607,13 @@ export default async function ClientWorkspacePage({
         paid: paidNum.toFixed(2),
         balance: balanceNum.toFixed(2),
         currencyCode: pf.currencyCode,
+        // Stage C1 — payment state comes from the ONE shared derivation
+        // so history and the billing cards can never disagree. Draft
+        // quotes keep their own label (no payment is expected yet).
         status:
           pf.status === 'DRAFT'
             ? ('Draft quote' as const)
-            : balanceNum <= 0 && paidNum > 0
-              ? ('Paid' as const)
-              : paidNum > 0
-                ? ('Partially paid' as const)
-                : ('In progress' as const),
+            : derivePaymentState(subtotalNum, paidNum),
       };
     });
   // Direct Payment & Convert engagements never had a quote — their
@@ -626,7 +634,6 @@ export default async function ClientWorkspacePage({
           i.liability === 'PERSONAL' &&
           i.status !== 'VOIDED',
       );
-      const settled = Number.parseFloat(e.outstanding) <= 0;
       // Stage B Wave 4 — a complimentary engagement's history row names
       // the kind; "Paid" would read as money received.
       const isComplimentary = inv?.settlementKind === 'COMPLIMENTARY';
@@ -642,11 +649,12 @@ export default async function ClientWorkspacePage({
         paid: e.verifiedPaid,
         balance: e.outstanding,
         currencyCode: e.currencyCode,
+        // Stage C1 — the reported bug lived here: a two-state label
+        // printed "Partially paid" for €0 received. Shared derivation
+        // now; complimentary keeps its own kind label.
         status: isComplimentary
           ? ('Complimentary' as const)
-          : settled
-            ? ('Paid' as const)
-            : ('Partially paid' as const),
+          : derivePaymentState(e.agreedAmount, e.verifiedPaid),
       };
     });
   const serviceHistoryRows = [...quoteHistoryRows, ...directHistoryRows].sort((a, b) =>
@@ -775,13 +783,14 @@ export default async function ClientWorkspacePage({
           // badge on the right. Derived from the engagement + payment
           // state, not duplicated with the primary onboarding status in
           // the hero.
-          const rowStatusLabel = isSettled
-            ? 'Fully paid'
-            : progressPct > 0
-              ? 'Awaiting payment'
-              : e.status === 'PENDING_PAYMENT'
-                ? 'Awaiting payment'
-                : e.status.replace(/_/g, ' ').toLowerCase();
+          // Stage C1 — payment states come from the shared derivation
+          // (settled → "Paid", partial → "Partially paid", none due yet
+          // → "Awaiting payment"); engagement-lifecycle rows that carry
+          // no payment expectation keep their status fallback.
+          const rowStatusLabel =
+            isSettled || progressPct > 0 || e.status === 'PENDING_PAYMENT'
+              ? derivePaymentState(e.agreedAmount, e.verifiedPaid)
+              : e.status.replace(/_/g, ' ').toLowerCase();
           const rowStatusTone = isSettled
             ? 'border-status-success/30 bg-status-success-soft text-status-success'
             : progressPct > 0
@@ -979,7 +988,7 @@ export default async function ClientWorkspacePage({
                           (pf) => pf.engagementId === p.serviceEngagementId,
                         );
                         const canPreIssuanceRefund =
-                          parentPf?.status === 'ACCEPTED' &&
+                          (parentPf?.status === 'ACCEPTED' || parentPf?.status === 'ISSUED') &&
                           (p.status === 'VERIFIED' || p.status === 'PARTIALLY_REFUNDED');
                         const relatedInvoice = relatedInvoices.find((i) => i.status !== 'VOIDED');
                         const canPostIssuanceRefund =
@@ -1160,15 +1169,19 @@ export default async function ClientWorkspacePage({
   // query; renders a compact list and links out to the full detail page
   // for state transitions. Loaded only when the Applications tab is
   // active (see activeTab check at the top of this component).
+  // Stage C workflow collapse — the Applications tab is the full
+  // working surface: record internal/external applications, advance
+  // them through interview/offer/accepted, and record the placement
+  // that flips the derived "Placed" status. Same component family the
+  // candidate pages always used; no new screens.
   const applicationsTab = (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Job applications</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ApplicationsSummary personId={personId} applications={applications} />
-      </CardContent>
-    </Card>
+    <ApplicationsPanel
+      personId={personId}
+      rows={applications as CandidateApplicationRow[]}
+      knownEmployers={(
+        employerRows as Array<{ id: string; legalName: string; tradingName: string | null }>
+      ).map((e) => ({ id: e.id, legalName: e.legalName, tradingName: e.tradingName }))}
+    />
   );
 
   // Stage 6F Phase 2 — Candidate docs tab hosts the full
@@ -1491,7 +1504,7 @@ export default async function ClientWorkspacePage({
                             : 'bg-amber-100 text-amber-800',
                         )}
                       >
-                        {isSettled ? 'Fully paid' : 'Awaiting payment'}
+                        {derivePaymentState(e.agreedAmount, e.verifiedPaid)}
                       </Badge>
                     </div>
                   </div>
@@ -1959,57 +1972,6 @@ export default async function ClientWorkspacePage({
           activity={activityTab}
         />
       </div>
-    </div>
-  );
-}
-
-function ApplicationsSummary({
-  personId,
-  applications,
-}: {
-  personId: string;
-  applications: ReadonlyArray<{
-    id: string;
-    status: string;
-    appliedAt: Date;
-    requisitionTitle: string | null;
-    displayCompany: string | null;
-  }>;
-}) {
-  if (applications.length === 0) {
-    return (
-      <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
-        No job applications on file. Shortlists and applications from Recruitment land here.
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-2 text-sm">
-      {applications.map((a) => (
-        <div
-          key={a.id}
-          className="flex items-center justify-between gap-2 border-b pb-2 text-xs last:border-b-0 last:pb-0"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="font-medium">
-              {a.requisitionTitle ?? a.displayCompany ?? 'External role'}
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              {a.status.replace(/_/g, ' ')} · applied{' '}
-              <time dateTime={a.appliedAt.toISOString()}>{a.appliedAt.toLocaleDateString()}</time>
-            </div>
-          </div>
-          {/* Deep-link to the full applications panel on the candidate
-              profile — Wave 4's redirect will route this back into the
-              workspace, so no need to invent a new URL. */}
-          <a
-            href={`/candidates/${personId}?tab=applications`}
-            className="shrink-0 text-foreground underline-offset-2 hover:underline"
-          >
-            Open
-          </a>
-        </div>
-      ))}
     </div>
   );
 }

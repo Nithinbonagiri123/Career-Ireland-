@@ -78,6 +78,15 @@ export function QuoteActionsRow({
       )}
       {pf.status === 'ISSUED' && (
         <>
+          {/* Stage C workflow collapse — taking the payment IS the
+              acceptance (recorded + audited server-side), so the money
+              action leads. The explicit acceptance button stays for the
+              said-yes-but-not-paid-yet case. */}
+          <RecordPaymentDialog
+            proFormaInvoiceId={pf.id}
+            currencyCode={pf.currencyCode}
+            defaultAmount={pf.subtotal}
+          />
           <ProFormaComposer
             mode="revise"
             leadId={pf.sourceLeadId}

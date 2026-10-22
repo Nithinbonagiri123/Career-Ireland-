@@ -1,7 +1,7 @@
 'use client';
 
 import { format, formatDistanceToNow } from 'date-fns';
-import { ExternalLink, Globe, Plus, Send } from 'lucide-react';
+import { ExternalLink, Globe, MoreHorizontal, Plus, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
@@ -20,13 +20,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
 import { statusTone } from '@/lib/ui/status-tone';
-import { createExternalApplicationAction } from '@/modules/applications/actions';
+import {
+  createExternalApplicationAction,
+  updateApplicationStatusAction,
+} from '@/modules/applications/actions';
 import type { CandidateApplicationRow } from '@/modules/applications/service';
+import { markApplicationPlacedAction } from '@/modules/placements/actions';
 
 const SOURCE_LABEL = {
   INTERNAL: 'Internal',
@@ -297,14 +307,118 @@ export function ApplicationsPanel({
                     </a>
                   )}
                 </div>
-                <Badge variant={statusTone(r.status)} className="rounded-full">
-                  {r.status.replace(/_/g, ' ')}
-                </Badge>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge variant={statusTone(r.status)} className="rounded-full">
+                    {r.status.replace(/_/g, ' ')}
+                  </Badge>
+                  {/* Stage C workflow collapse — advance the case right
+                      here: only the legal next hops for this status, the
+                      same transitions the Recruitment pipeline enforces
+                      server-side. Placement runs the real Recruitment
+                      workflow, which is what flips the derived "Placed". */}
+                  {/* Placements exist only on OUR requisitions — the
+                      Recruitment rule. External-board hires stay
+                      ACCEPTED without a placement record. */}
+                  {r.status === 'ACCEPTED' && r.jobRequisitionId && (
+                    <RowAction
+                      label="Record placement"
+                      variant="default"
+                      run={() => markApplicationPlacedAction(r.id)}
+                      done="Placement recorded — candidate is now Placed"
+                    />
+                  )}
+                  <StatusMenu row={r} />
+                </div>
               </li>
             ))}
           </ul>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+const NEXT_STATUS: Record<string, Array<CandidateApplicationRow['status']>> = {
+  APPLIED: ['UNDER_REVIEW', 'SHORTLISTED', 'INTERVIEW', 'REJECTED', 'WITHDRAWN'],
+  UNDER_REVIEW: ['SHORTLISTED', 'INTERVIEW', 'REJECTED', 'WITHDRAWN'],
+  SHORTLISTED: ['INTERVIEW', 'OFFER', 'REJECTED', 'WITHDRAWN'],
+  INTERVIEW: ['OFFER', 'REJECTED', 'WITHDRAWN'],
+  OFFER: ['ACCEPTED', 'REJECTED', 'WITHDRAWN'],
+  ACCEPTED: ['WITHDRAWN'],
+  REJECTED: ['WITHDRAWN'],
+  WITHDRAWN: [],
+};
+
+function StatusMenu({ row }: { row: CandidateApplicationRow }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const nexts = NEXT_STATUS[row.status] ?? [];
+  if (nexts.length === 0) return null;
+  const advance = (status: CandidateApplicationRow['status']) =>
+    startTransition(async () => {
+      const r = await updateApplicationStatusAction(
+        { applicationId: row.id, status },
+        row.jobRequisitionId ?? null,
+      );
+      if (r.ok) {
+        toast.success(`Application moved to ${status.replace(/_/g, ' ').toLowerCase()}`);
+        router.refresh();
+      } else toast.error(r.error.message);
+    });
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Update application status"
+        className="grid size-7 place-items-center rounded-md border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <MoreHorizontal className="size-3.5" aria-hidden />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {nexts.map((s) => (
+          <DropdownMenuItem key={s} disabled={pending} onClick={() => advance(s)}>
+            {s === 'REJECTED'
+              ? 'Reject'
+              : s === 'WITHDRAWN'
+                ? 'Withdraw'
+                : `Move to ${s.replace(/_/g, ' ').toLowerCase()}`}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function RowAction({
+  label,
+  run,
+  done,
+  variant,
+}: {
+  label: string;
+  run: () => Promise<{ ok: true; data: unknown } | { ok: false; error: { message: string } }>;
+  done: string;
+  variant: 'default' | 'outline';
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={variant}
+      disabled={pending}
+      className="h-7 px-2.5 text-[11px]"
+      onClick={() =>
+        startTransition(async () => {
+          const r = await run();
+          if (r.ok) {
+            toast.success(done);
+            router.refresh();
+          } else toast.error(r.error.message);
+        })
+      }
+    >
+      {pending ? '…' : label}
+    </Button>
   );
 }

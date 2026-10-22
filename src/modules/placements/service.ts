@@ -226,6 +226,32 @@ export async function markApplicationPlaced(applicationId: string): Promise<Plac
           .set({ status: 'ACCEPTED', updatedAt: sql`NOW()` })
           .where(eq(jobApplications.id, applicationId));
       }
+      // Stage C workflow collapse — accepting an application auto-creates
+      // a PROPOSED placement (applications/service.ts), so "mark placed"
+      // on it means CONFIRM that placement: the same PROPOSED→CONFIRMED
+      // hop updatePlacementStatus performs, with the same availability
+      // flip and audit. Without this, the one-click path returned the
+      // proposed row untouched and the candidate never read as Placed.
+      if (existing.status === 'PROPOSED') {
+        const [confirmed] = await tx
+          .update(placements)
+          .set({ status: 'CONFIRMED', updatedAt: sql`NOW()` })
+          .where(eq(placements.id, existing.id))
+          .returning();
+        if (!confirmed) throw new Error('placement confirm returned no row');
+        await recordAudit(tx, {
+          actorUserId: session.user.id,
+          entityType: 'placement',
+          entityId: confirmed.id,
+          action: 'STATUS_CHANGED',
+          before: { status: 'PROPOSED' },
+          after: { status: 'CONFIRMED' },
+          context: { via: 'pipeline_mark_placed', applicationId },
+        });
+        await flipAvailabilityToPlaced(tx, session.user.id, confirmed.personId, confirmed.id);
+        await recomputeRequisitionFillCount(tx, session.user.id, confirmed.jobRequisitionId);
+        return confirmed;
+      }
       return existing;
     }
 

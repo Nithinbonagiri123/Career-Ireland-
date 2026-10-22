@@ -36,7 +36,9 @@ import { Select } from '@/components/ui/select';
 import { formatCurrency } from '@/lib/currency';
 import { cn } from '@/lib/utils';
 import type { InvoiceableService } from '@/modules/billing/read';
+import { derivePaymentState } from '@/modules/clients/payment-state';
 import { createServiceItemFromNameAction } from '@/modules/services-catalog/actions';
+import { AddLeadButton } from './add-lead-button';
 import { ComplimentaryGrantDialog } from './complimentary-grant-dialog';
 
 /**
@@ -78,7 +80,13 @@ export type ServiceHistoryRow = {
   paid: string;
   balance: string;
   currencyCode: string;
-  status: 'Paid' | 'Partially paid' | 'In progress' | 'Draft quote' | 'Complimentary';
+  status:
+    | 'Paid'
+    | 'Partially paid'
+    | 'Awaiting payment'
+    | 'In progress'
+    | 'Draft quote'
+    | 'Complimentary';
 };
 
 const CARD_ICONS = [FileText, Briefcase, Users, MessageSquare, ChartNoAxesColumn, Send];
@@ -499,11 +507,12 @@ export function ServicesBillingTab({
                                   : 'bg-amber-100 text-amber-800',
                             )}
                           >
+                            {/* Stage C1 — same shared three-state derivation
+                                as Service history, so the two surfaces can
+                                never disagree. */}
                             {a.complimentary
                               ? 'No payment due'
-                              : a.settled
-                                ? 'Fully paid'
-                                : 'Awaiting payment'}
+                              : derivePaymentState(a.agreed, a.paid)}
                           </Badge>
                         </div>
                       </div>
@@ -541,15 +550,17 @@ export function ServicesBillingTab({
                 }}
               />
               {createProFormaButton}
-              <Button
-                type="button"
-                onClick={() => setDirectPayOpen(true)}
-                disabled={!leadId}
-                title={leadId ? undefined : 'No active lead on this client'}
-              >
-                <CreditCard className="mr-1.5 size-4" aria-hidden />
-                Direct Payment &amp; Activate
-              </Button>
+              {/* Stage C workflow collapse — without a lead, the first
+                  step IS creating one, right here; with a lead, the
+                  payment action takes its place. */}
+              {leadId ? (
+                <Button type="button" onClick={() => setDirectPayOpen(true)}>
+                  <CreditCard className="mr-1.5 size-4" aria-hidden />
+                  Direct Payment &amp; Activate
+                </Button>
+              ) : (
+                <AddLeadButton personId={personId} />
+              )}
               {canComplimentary && (
                 <ComplimentaryGrantDialog
                   personId={personId}

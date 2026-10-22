@@ -60,7 +60,17 @@ export function RecordPaymentDialog({
         proofReference: proofReference || undefined,
       });
       if (r.ok) {
-        toast.success('Payment recorded (pending verification)');
+        // Stage C workflow collapse — finance roles verify in the same
+        // action; the toast tells the truth about which path ran.
+        if (r.data.autoVerified) {
+          toast.success(
+            r.data.issuedInvoiceNumber
+              ? `Payment verified — invoice ${r.data.issuedInvoiceNumber} issued and candidate activated`
+              : 'Payment verified — receipt issued',
+          );
+        } else {
+          toast.success('Payment recorded (pending verification)');
+        }
         setOpen(false);
         router.refresh();
       } else {

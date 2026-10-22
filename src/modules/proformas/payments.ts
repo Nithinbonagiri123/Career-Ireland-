@@ -146,11 +146,34 @@ export type RecordPaymentInput = {
   proofReference?: string | null;
 };
 
-export async function recordPaymentForProForma(
-  input: RecordPaymentInput,
-): Promise<{ paymentId: string; engagementId: string }> {
+export async function recordPaymentForProForma(input: RecordPaymentInput): Promise<{
+  paymentId: string;
+  engagementId: string;
+  /** Stage C workflow collapse — set when the recorder's role allowed
+   *  the finance fast-path: the payment was verified in the same
+   *  action (receipt issued; invoice + activation when it completed
+   *  the quote). Other roles' payments stay pending for finance, the
+   *  Wave 1 safeguard. */
+  autoVerified?: boolean;
+  issuedInvoiceNumber?: string | null;
+  candidatePersonId?: string | null;
+}> {
   const session = await requirePermission('candidate_services', 'proformas', 'edit');
-  return recordPaymentForProFormaAs(input, session.user.id);
+  const recorded = await recordPaymentForProFormaAs(input, session.user.id);
+  const canAutoVerify =
+    session.user.isOwner || session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
+  if (!canAutoVerify) return recorded;
+  // Same two steps a finance operator performed by hand, collapsed into
+  // one action. Sequential transactions on purpose: if verification
+  // fails, the recorded payment survives as pending — truthful and
+  // recoverable, never half-verified.
+  const verified = await verifyPaymentForProFormaAs(recorded.paymentId, session.user.id);
+  return {
+    ...recorded,
+    autoVerified: true,
+    issuedInvoiceNumber: verified.issuedInvoiceNumber,
+    candidatePersonId: verified.candidatePersonId,
+  };
 }
 
 /** Session-less variant for testing / background jobs. Caller is
@@ -167,6 +190,32 @@ export async function recordPaymentForProFormaAs(
       .for('update')
       .limit(1);
     if (!pf) throw new NotFoundError('Pro forma');
+    // Stage C workflow collapse — a payment against an ISSUED quote IS
+    // the client's acceptance: record it as ACCEPTED here (audited with
+    // its provenance) instead of demanding a separate manual step. The
+    // money is stronger evidence than a typed note. DRAFT and terminal
+    // states still refuse below.
+    if (pf.status === 'ISSUED') {
+      await tx
+        .update(proFormaInvoices)
+        .set({
+          status: 'ACCEPTED',
+          acceptedAt: new Date(),
+          acceptedByUserId: actorUserId,
+          updatedAt: sql`NOW()`,
+        })
+        .where(eq(proFormaInvoices.id, pf.id));
+      await recordAudit(tx, {
+        actorUserId,
+        entityType: 'pro_forma_invoice',
+        entityId: pf.id,
+        action: 'ACCEPTED',
+        before: { status: 'ISSUED' },
+        after: { status: 'ACCEPTED' },
+        context: { via: 'implied_by_payment' },
+      });
+      pf.status = 'ACCEPTED';
+    }
     if (pf.status !== 'ACCEPTED' && pf.status !== 'CONVERTED') {
       throw new BusinessRuleError(
         'PROFORMA_NOT_ACCEPTED',
