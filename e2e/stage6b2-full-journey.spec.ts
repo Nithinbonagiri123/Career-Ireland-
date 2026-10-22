@@ -237,9 +237,24 @@ test('full happy-path: lead → quote → partial pays → invoice → activate'
 
     // Composer pre-fills service[0] + packages[0] price. Add a 2nd line to
     // satisfy the user's "two service lines" acceptance requirement.
-    await composer.getByRole('button', { name: /add line/i }).click();
-    await composer.getByRole('button', { name: /save draft/i }).click();
-    await expect(composer).not.toBeVisible({ timeout: 10_000 });
+    // CI's dev server can remount the dialog subtree mid-click ("element
+    // was detached from the DOM"), so each click runs inside a toPass
+    // loop that reopens the composer if a remount closed it.
+    await expect(async () => {
+      if (!(await composer.isVisible())) {
+        await page
+          .getByRole('button', { name: /\+ New quote/i })
+          .first()
+          .click();
+      }
+      await composer.getByRole('button', { name: /add line/i }).click({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
+    await expect(async () => {
+      if (await composer.isVisible()) {
+        await composer.getByRole('button', { name: /save draft/i }).click({ timeout: 2_000 });
+      }
+      await expect(composer).not.toBeVisible({ timeout: 5_000 });
+    }).toPass({ timeout: 30_000 });
 
     // ── Step 3: DRAFT quote exists, click Issue inline ───────────────────
     await expect(page.getByText(/draft quote/i).first()).toBeVisible({ timeout: 10_000 });

@@ -154,8 +154,20 @@ test('Stage B final acceptance: complete candidate journey across Waves 1–4', 
         .click();
       await expect(composer).toBeVisible({ timeout: 2_000 });
     }).toPass({ timeout: 20_000 });
-    await composer.getByRole('button', { name: /save draft/i }).click();
-    await expect(composer).not.toBeVisible({ timeout: 10_000 });
+    // CI's dev server can remount the dialog subtree mid-click; retry
+    // the click (reopening the composer if a remount closed it).
+    await expect(async () => {
+      if (!(await composer.isVisible())) {
+        await page
+          .getByRole('button', { name: /\+ New quote/i })
+          .first()
+          .click();
+      }
+      if (await composer.isVisible()) {
+        await composer.getByRole('button', { name: /save draft/i }).click({ timeout: 2_000 });
+      }
+      await expect(composer).not.toBeVisible({ timeout: 5_000 });
+    }).toPass({ timeout: 30_000 });
     await page
       .getByRole('button', { name: /^Issue$/i })
       .first()

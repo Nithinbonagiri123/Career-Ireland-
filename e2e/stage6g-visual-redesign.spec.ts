@@ -261,12 +261,22 @@ test('stage 6G — realistic healthcare candidate rendered in the redesigned wor
     if (second) {
       const partial = (Number.parseFloat(second.amount) * 0.4).toFixed(2);
       await page.goto(`/leads/${second.leadId}/pro-formas/${second.pfId}`);
-      await page.getByRole('button', { name: /Record payment/i }).click();
       const dlg = page.getByRole('dialog');
-      await expect(dlg).toBeVisible({ timeout: 10_000 });
+      // Re-click until hydration attached the trigger (slow CI runners),
+      // reopening if a server re-render closed the dialog.
+      await expect(async () => {
+        if (!(await dlg.isVisible())) {
+          await page.getByRole('button', { name: /Record payment/i }).click();
+        }
+        await expect(dlg.getByLabel(/Amount/i)).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 30_000 });
       await dlg.getByLabel(/Amount/i).fill(partial);
-      await dlg.getByRole('button', { name: /Record payment/i }).click();
-      await expect(dlg).toBeHidden({ timeout: 10_000 });
+      await expect(async () => {
+        if (await dlg.isVisible()) {
+          await dlg.getByRole('button', { name: /Record payment/i }).click({ timeout: 2_000 });
+        }
+        await expect(dlg).toBeHidden({ timeout: 5_000 });
+      }).toPass({ timeout: 30_000 });
       // Stage C workflow collapse — recorded and verified in one action.
       await expect(page.getByText(/Payment verified/i).first()).toBeVisible({ timeout: 15_000 });
     }
