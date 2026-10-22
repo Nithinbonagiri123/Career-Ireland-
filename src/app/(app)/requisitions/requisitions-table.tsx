@@ -145,7 +145,7 @@ export function RequisitionsTable({
                     Open detail
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onSelect={() => setArchiveTarget(r)}>
+                  <DropdownMenuItem variant="destructive" onClick={() => setArchiveTarget(r)}>
                     <Archive className="mr-2 size-4" /> Archive
                   </DropdownMenuItem>
                 </DropdownMenuContent>

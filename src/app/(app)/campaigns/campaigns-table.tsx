@@ -128,7 +128,7 @@ export function CampaignsTable({ campaigns }: { campaigns: CampaignListRow[] }) 
                     Open detail
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onSelect={() => setArchiveTarget(c)}>
+                  <DropdownMenuItem variant="destructive" onClick={() => setArchiveTarget(c)}>
                     <Archive className="mr-2 size-4" /> Archive
                   </DropdownMenuItem>
                 </DropdownMenuContent>

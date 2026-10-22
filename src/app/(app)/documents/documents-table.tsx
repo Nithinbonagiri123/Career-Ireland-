@@ -267,7 +267,7 @@ export function DocumentsTable({ documents }: { documents: DocumentsHubRow[] }) 
                       <DropdownMenuSeparator />
                     </>
                   )}
-                  <DropdownMenuItem variant="destructive" onSelect={() => setVoidTarget(doc)}>
+                  <DropdownMenuItem variant="destructive" onClick={() => setVoidTarget(doc)}>
                     <Ban className="mr-2 size-4" /> Void document…
                   </DropdownMenuItem>
                 </DropdownMenuContent>

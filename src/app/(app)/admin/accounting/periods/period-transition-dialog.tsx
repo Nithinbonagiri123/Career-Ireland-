@@ -129,7 +129,7 @@ export function PeriodTransitionMenu({
                 {i > 0 && <DropdownMenuSeparator />}
                 <DropdownMenuItem
                   variant={COPY[t].destructive ? 'destructive' : undefined}
-                  onSelect={() => setTarget(t)}
+                  onClick={() => setTarget(t)}
                 >
                   <Icon className="mr-2 size-3.5" /> {COPY[t].label}
                 </DropdownMenuItem>

@@ -158,22 +158,22 @@ export function EngagementsTable({ engagements }: { engagements: EngagementListR
               <DropdownMenuContent align="end">
                 {e.status === 'REQUESTED' && (
                   <DropdownMenuItem
-                    onSelect={() => transition(e, 'PENDING_PAYMENT', 'moved to awaiting payment')}
+                    onClick={() => transition(e, 'PENDING_PAYMENT', 'moved to awaiting payment')}
                   >
                     <Clock className="mr-2 size-4" /> Mark awaiting payment
                   </DropdownMenuItem>
                 )}
                 {(e.status === 'REQUESTED' || e.status === 'PENDING_PAYMENT') && (
-                  <DropdownMenuItem onSelect={() => transition(e, 'ACTIVE', 'started')}>
+                  <DropdownMenuItem onClick={() => transition(e, 'ACTIVE', 'started')}>
                     <Play className="mr-2 size-4" /> Start service
                   </DropdownMenuItem>
                 )}
                 {e.status === 'ACTIVE' && (
-                  <DropdownMenuItem onSelect={() => transition(e, 'COMPLETED', 'completed')}>
+                  <DropdownMenuItem onClick={() => transition(e, 'COMPLETED', 'completed')}>
                     <CheckCircle2 className="mr-2 size-4" /> Complete service
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem variant="destructive" onSelect={() => setArchiveTarget(e)}>
+                <DropdownMenuItem variant="destructive" onClick={() => setArchiveTarget(e)}>
                   <Archive className="mr-2 size-4" /> Archive
                 </DropdownMenuItem>
               </DropdownMenuContent>

@@ -124,11 +124,11 @@ export function CommsTable({ comms }: { comms: CommunicationRow[] }) {
                 <MoreHorizontal className="size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setEditTarget(c)}>
+                <DropdownMenuItem onClick={() => setEditTarget(c)}>
                   <Pencil className="mr-2 size-4" /> Edit…
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onSelect={() => setArchiveTarget(c)}>
+                <DropdownMenuItem variant="destructive" onClick={() => setArchiveTarget(c)}>
                   <Archive className="mr-2 size-4" /> Archive…
                 </DropdownMenuItem>
               </DropdownMenuContent>

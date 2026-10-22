@@ -87,7 +87,7 @@ export function ProspectRowActions({ prospect }: { prospect: ProspectListRow }) 
           {!alreadyConverted && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setStatus('CONVERTED_TO_CANDIDATE')}>
+              <DropdownMenuItem onClick={() => setStatus('CONVERTED_TO_CANDIDATE')}>
                 Mark converted (no profile)
               </DropdownMenuItem>
             </>

@@ -231,7 +231,7 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
                 }
               />
               <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={() => setArchiveTarget(p)}>
+              <DropdownMenuItem variant="destructive" onClick={() => setArchiveTarget(p)}>
                 <Archive className="mr-2 size-4" /> Archive placement…
               </DropdownMenuItem>
             </DropdownMenuContent>

@@ -188,7 +188,7 @@ export function ProspectsTable({ prospects }: { prospects: ProspectRow[] }) {
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   {CHANGEABLE_STATUSES.filter((s) => s !== p.status).map((s) => (
-                    <DropdownMenuItem key={s} onSelect={() => setStatus(p, s)}>
+                    <DropdownMenuItem key={s} onClick={() => setStatus(p, s)}>
                       Mark {STATUS_LABEL[s].toLowerCase()}
                     </DropdownMenuItem>
                   ))}

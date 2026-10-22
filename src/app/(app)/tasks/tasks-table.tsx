@@ -183,11 +183,11 @@ export function TasksTable({ tasks, staffUsers }: { tasks: TaskRow[]; staffUsers
                   <MoreHorizontal className="size-4" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => setEditTarget(t)}>
+                  <DropdownMenuItem onClick={() => setEditTarget(t)}>
                     <Pencil className="mr-2 size-4" /> Edit…
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onSelect={() => setArchiveTarget(t)}>
+                  <DropdownMenuItem variant="destructive" onClick={() => setArchiveTarget(t)}>
                     <Archive className="mr-2 size-4" /> Archive…
                   </DropdownMenuItem>
                 </DropdownMenuContent>
