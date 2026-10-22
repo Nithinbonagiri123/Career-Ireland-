@@ -158,52 +158,121 @@ export type ClientWorkspace = {
 export async function fetchClientWorkspace(personId: string): Promise<ClientWorkspace | null> {
   const session = await requireInternalStaff();
 
-  const [person] = await db.select().from(persons).where(eq(persons.id, personId)).limit(1);
+  // Perf (owner's navigation-lag fix): this function used to await its
+  // ~15 queries one after another. On localhost that's invisible; behind
+  // a real network hop to the database (Vercel) every await adds a full
+  // round-trip, so the workspace cost N x RTT per view. The queries are
+  // grouped into dependency waves below — identical rows fetched, same
+  // order-sensitive logic, a fraction of the wall time.
+  const [personRows, profileRows, leadRows, engagementRows, [services, currencies], perms] =
+    await Promise.all([
+      db.select().from(persons).where(eq(persons.id, personId)).limit(1),
+      db
+        .select({
+          profile: candidateProfiles,
+          occupationName: occupations.name,
+          assignedUserName: users.fullName,
+        })
+        .from(candidateProfiles)
+        .leftJoin(occupations, eq(occupations.id, candidateProfiles.primaryOccupationId))
+        .leftJoin(users, eq(users.id, candidateProfiles.assignedUserId))
+        .where(eq(candidateProfiles.personId, personId))
+        .limit(1),
+      db
+        .select({
+          id: leads.id,
+          status: leads.status,
+          targetBusiness: leads.targetBusiness,
+          createdAt: leads.createdAt,
+          acceptedAt: leads.acceptedAt,
+        })
+        .from(leads)
+        .where(eq(leads.personId, personId))
+        .orderBy(desc(leads.createdAt)),
+      db
+        .select({
+          id: serviceEngagements.id,
+          status: serviceEngagements.status,
+          agreedAmount: serviceEngagements.agreedAmount,
+          currencyCode: serviceEngagements.currencyCode,
+          archivedAt: serviceEngagements.archivedAt,
+          serviceName: serviceCatalogItems.name,
+        })
+        .from(serviceEngagements)
+        .innerJoin(
+          serviceCatalogItems,
+          eq(serviceCatalogItems.id, serviceEngagements.serviceCatalogItemId),
+        )
+        .where(
+          or(
+            eq(serviceEngagements.payerPersonId, personId),
+            eq(serviceEngagements.beneficiaryPersonId, personId),
+          ),
+        ),
+      Promise.all([fetchInvoiceableServicesFor('PERSON'), fetchCurrencies()]),
+      loadCurrentUserPermissions(),
+    ]);
+  const [person] = personRows;
   if (!person) return null;
-
-  const [profileRow] = await db
-    .select({
-      profile: candidateProfiles,
-      occupationName: occupations.name,
-      assignedUserName: users.fullName,
-    })
-    .from(candidateProfiles)
-    .leftJoin(occupations, eq(occupations.id, candidateProfiles.primaryOccupationId))
-    .leftJoin(users, eq(users.id, candidateProfiles.assignedUserId))
-    .where(eq(candidateProfiles.personId, personId))
-    .limit(1);
+  const [profileRow] = profileRows;
   const candidateProfile = profileRow?.profile ?? null;
   const assignedUserName = profileRow?.assignedUserName ?? null;
 
-  // Also pull the person-level occupation if the profile doesn't have one;
-  // the header falls back to it so a lead-stage client still shows a role.
-  const [personOccRow] = person.primaryOccupationId
-    ? await db
-        .select({ name: occupations.name })
-        .from(occupations)
-        .where(eq(occupations.id, person.primaryOccupationId))
-        .limit(1)
-    : [];
-  const occupationName = profileRow?.occupationName ?? personOccRow?.name ?? null;
-
-  const leadRows = await db
-    .select({
-      id: leads.id,
-      status: leads.status,
-      targetBusiness: leads.targetBusiness,
-      createdAt: leads.createdAt,
-      acceptedAt: leads.acceptedAt,
-    })
-    .from(leads)
-    .where(eq(leads.personId, personId))
-    .orderBy(desc(leads.createdAt));
-
   const leadIds = leadRows.map((l) => l.id);
 
-  // Pro-formas on any of this person's leads.
-  const pfRows =
+  // Stage 6D Wave 3 — invoices visible to this client's workspace.
+  // The query combines two routes so no historical row is missed:
+  //   (a) invoices on an engagement where this person is payer or
+  //       beneficiary (the ordinary CS / Immigration flow);
+  //   (b) invoices where this person is the DIRECT payer regardless of
+  //       whether the engagement names them (covers direct generate +
+  //       onboarding + legacy flows that didn't link via engagement).
+  // Each row carries payerPersonId + payerEmployerId so we can
+  // tag liability below and the UI never confuses an employer's
+  // obligation with the client's.
+  const engagementIds = engagementRows.map((e) => e.id);
+  const invoiceWhereClauses: SQL[] = [eq(invoices.payerPersonId, personId)];
+  if (engagementIds.length > 0) {
+    invoiceWhereClauses.push(inArray(invoices.serviceEngagementId, engagementIds));
+  }
+  const [invoiceRawRows, paymentRows, pfRows, personOccRows] = await Promise.all([
+    db
+      .select({
+        id: invoices.id,
+        number: invoices.number,
+        status: invoices.status,
+        settlementKind: invoices.settlementKind,
+        totalAmount: invoices.totalAmount,
+        currencyCode: invoices.currencyCode,
+        issuedAt: invoices.issuedAt,
+        serviceEngagementId: invoices.serviceEngagementId,
+        payerPersonId: invoices.payerPersonId,
+        payerEmployerId: invoices.payerEmployerId,
+      })
+      .from(invoices)
+      .where(or(...invoiceWhereClauses))
+      .orderBy(desc(invoices.issuedAt)),
+    engagementIds.length > 0
+      ? db
+          .select({
+            id: payments.id,
+            serviceEngagementId: payments.serviceEngagementId,
+            proFormaInvoiceId: payments.proFormaInvoiceId,
+            amount: payments.amount,
+            currencyCode: payments.currencyCode,
+            status: payments.status,
+            method: payments.method,
+            proofReference: payments.proofReference,
+            receivedAt: payments.receivedAt,
+            createdAt: payments.createdAt,
+          })
+          .from(payments)
+          .where(inArray(payments.serviceEngagementId, engagementIds))
+          .orderBy(desc(payments.createdAt))
+      : Promise.resolve([]),
+    // Pro-formas on any of this person's leads.
     leadIds.length > 0
-      ? await db
+      ? db
           .select({
             id: proFormaInvoices.id,
             number: proFormaInvoices.number,
@@ -221,123 +290,73 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
           .from(proFormaInvoices)
           .where(inArray(proFormaInvoices.sourceLeadId, leadIds))
           .orderBy(desc(proFormaInvoices.createdAt))
-      : [];
-
-  // Resolve the engagement each pro-forma eventually produced: a
-  // CONVERTED pro-forma maps to one or more official invoices via
-  // pro_forma_official_invoices, and each invoice carries a
-  // serviceEngagementId.
+      : Promise.resolve([]),
+    // Person-level occupation fallback — the header falls back to it so
+    // a lead-stage client still shows a role.
+    person.primaryOccupationId
+      ? db
+          .select({ name: occupations.name })
+          .from(occupations)
+          .where(eq(occupations.id, person.primaryOccupationId))
+          .limit(1)
+      : Promise.resolve([]),
+  ]);
+  // Dedupe (an invoice can satisfy both legs of the OR); keep the first.
+  const invoiceRows = Array.from(new Map(invoiceRawRows.map((r) => [r.id, r])).values());
+  const occupationName = profileRow?.occupationName ?? personOccRows[0]?.name ?? null;
   const pfIds = pfRows.map((p) => p.id);
-  const pfOfficialRows =
+
+  // Pre-issuance refunds against those payments. Post-issuance refunds
+  // (via credit note) also exist in the `refunds` table — included so
+  // the engagement balance reflects both kinds.
+  const paymentIds = paymentRows.map((p) => p.id);
+  const [preRefunds, postRefunds, pfOfficialRows, lineRows] = await Promise.all([
+    paymentIds.length > 0
+      ? db
+          .select({
+            paymentId: proFormaPaymentRefunds.paymentId,
+            amount: proFormaPaymentRefunds.amount,
+          })
+          .from(proFormaPaymentRefunds)
+          .where(inArray(proFormaPaymentRefunds.paymentId, paymentIds))
+      : Promise.resolve([]),
+    paymentIds.length > 0
+      ? db
+          .select({
+            paymentId: refunds.paymentId,
+            amount: refunds.amount,
+          })
+          .from(refunds)
+          .where(inArray(refunds.paymentId, paymentIds))
+      : Promise.resolve([]),
+    // Resolve the engagement each pro-forma eventually produced: a
+    // CONVERTED pro-forma maps to official invoices, each carrying a
+    // serviceEngagementId.
     pfIds.length > 0
-      ? await db
+      ? db
           .select({
             proFormaInvoiceId: proFormaOfficialInvoices.proFormaInvoiceId,
             invoiceId: proFormaOfficialInvoices.invoiceId,
           })
           .from(proFormaOfficialInvoices)
           .where(inArray(proFormaOfficialInvoices.proFormaInvoiceId, pfIds))
-      : [];
-
-  // Engagements where this person is payer or beneficiary.
-  const engagementRows = await db
-    .select({
-      id: serviceEngagements.id,
-      status: serviceEngagements.status,
-      agreedAmount: serviceEngagements.agreedAmount,
-      currencyCode: serviceEngagements.currencyCode,
-      archivedAt: serviceEngagements.archivedAt,
-      serviceName: serviceCatalogItems.name,
-    })
-    .from(serviceEngagements)
-    .innerJoin(
-      serviceCatalogItems,
-      eq(serviceCatalogItems.id, serviceEngagements.serviceCatalogItemId),
-    )
-    .where(
-      or(
-        eq(serviceEngagements.payerPersonId, personId),
-        eq(serviceEngagements.beneficiaryPersonId, personId),
-      ),
-    );
-
-  // Stage 6D Wave 3 — invoices visible to this client's workspace.
-  // The query combines two routes so no historical row is missed:
-  //   (a) invoices on an engagement where this person is payer or
-  //       beneficiary (the ordinary CS / Immigration flow);
-  //   (b) invoices where this person is the DIRECT payer regardless of
-  //       whether the engagement names them (covers direct generate +
-  //       onboarding + legacy flows that didn't link via engagement).
-  // Each row carries payerPersonId + payerEmployerId so we can
-  // tag liability below and the UI never confuses an employer's
-  // obligation with the client's.
-  const engagementIds = engagementRows.map((e) => e.id);
-  const invoiceWhereClauses: SQL[] = [eq(invoices.payerPersonId, personId)];
-  if (engagementIds.length > 0) {
-    invoiceWhereClauses.push(inArray(invoices.serviceEngagementId, engagementIds));
-  }
-  const invoiceRawRows = await db
-    .select({
-      id: invoices.id,
-      number: invoices.number,
-      status: invoices.status,
-      settlementKind: invoices.settlementKind,
-      totalAmount: invoices.totalAmount,
-      currencyCode: invoices.currencyCode,
-      issuedAt: invoices.issuedAt,
-      serviceEngagementId: invoices.serviceEngagementId,
-      payerPersonId: invoices.payerPersonId,
-      payerEmployerId: invoices.payerEmployerId,
-    })
-    .from(invoices)
-    .where(or(...invoiceWhereClauses))
-    .orderBy(desc(invoices.issuedAt));
-  // Dedupe (an invoice can satisfy both legs of the OR); keep the first.
-  const invoiceRows = Array.from(new Map(invoiceRawRows.map((r) => [r.id, r])).values());
-
-  const paymentRows =
-    engagementIds.length > 0
-      ? await db
+      : Promise.resolve([]),
+    // Pro-forma line items for the inline composer (edit + revise).
+    pfIds.length > 0
+      ? db
           .select({
-            id: payments.id,
-            serviceEngagementId: payments.serviceEngagementId,
-            proFormaInvoiceId: payments.proFormaInvoiceId,
-            amount: payments.amount,
-            currencyCode: payments.currencyCode,
-            status: payments.status,
-            method: payments.method,
-            proofReference: payments.proofReference,
-            receivedAt: payments.receivedAt,
-            createdAt: payments.createdAt,
+            proFormaInvoiceId: proFormaLineItems.proFormaInvoiceId,
+            serviceCatalogItemId: proFormaLineItems.serviceCatalogItemId,
+            description: proFormaLineItems.description,
+            quantity: proFormaLineItems.quantity,
+            unitPrice: proFormaLineItems.unitPrice,
+            sortOrder: proFormaLineItems.sortOrder,
           })
-          .from(payments)
-          .where(inArray(payments.serviceEngagementId, engagementIds))
-          .orderBy(desc(payments.createdAt))
-      : [];
-
-  // Pre-issuance refunds against those payments. Post-issuance refunds
-  // (via credit note) also exist in the `refunds` table — included so
-  // the engagement balance reflects both kinds.
-  const paymentIds = paymentRows.map((p) => p.id);
-  const [preRefunds, postRefunds] =
-    paymentIds.length > 0
-      ? await Promise.all([
-          db
-            .select({
-              paymentId: proFormaPaymentRefunds.paymentId,
-              amount: proFormaPaymentRefunds.amount,
-            })
-            .from(proFormaPaymentRefunds)
-            .where(inArray(proFormaPaymentRefunds.paymentId, paymentIds)),
-          db
-            .select({
-              paymentId: refunds.paymentId,
-              amount: refunds.amount,
-            })
-            .from(refunds)
-            .where(inArray(refunds.paymentId, paymentIds)),
-        ])
-      : [[], []];
+          .from(proFormaLineItems)
+          .where(inArray(proFormaLineItems.proFormaInvoiceId, pfIds))
+          .orderBy(proFormaLineItems.sortOrder)
+      : Promise.resolve([]),
+  ]);
   const allRefunds = [...preRefunds, ...postRefunds];
 
   // Compute invoice outstanding client-side: totalAmount minus verified
@@ -405,24 +424,6 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
     if (inv) engagementIdByPf.set(link.proFormaInvoiceId, inv.serviceEngagementId);
   }
 
-  // Pro-forma line items — needed by the inline composer in edit + revise
-  // modes. One IN() query across all this person's pro-formas; small
-  // volume per client so no pagination needed.
-  const lineRows =
-    pfIds.length > 0
-      ? await db
-          .select({
-            proFormaInvoiceId: proFormaLineItems.proFormaInvoiceId,
-            serviceCatalogItemId: proFormaLineItems.serviceCatalogItemId,
-            description: proFormaLineItems.description,
-            quantity: proFormaLineItems.quantity,
-            unitPrice: proFormaLineItems.unitPrice,
-            sortOrder: proFormaLineItems.sortOrder,
-          })
-          .from(proFormaLineItems)
-          .where(inArray(proFormaLineItems.proFormaInvoiceId, pfIds))
-          .orderBy(proFormaLineItems.sortOrder)
-      : [];
   const linesByPf = new Map<
     string,
     Array<{
@@ -448,14 +449,6 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
     engagementId: engagementIdByPf.get(p.id) ?? null,
     lines: linesByPf.get(p.id) ?? [],
   }));
-
-  // Catalog + currencies for the inline composer. Both are small reference
-  // tables; one trip each. Running in parallel with the other reads keeps
-  // the overall request latency flat.
-  const [services, currencies] = await Promise.all([
-    fetchInvoiceableServicesFor('PERSON'),
-    fetchCurrencies(),
-  ]);
 
   const balance = buildClientBalance({
     engagements: engagementRows.map((e) => ({
@@ -494,7 +487,6 @@ export async function fetchClientWorkspace(personId: string): Promise<ClientWork
   // rather than `fetchUserPermissionSnapshot` which guards against ad-hoc
   // introspection with `main/admin/manage` and would 403 an ordinary
   // STAFF opening their own workspace page.
-  const perms = await loadCurrentUserPermissions();
   const canVerifyPayments = Boolean(
     perms?.isOwner ||
       (perms && hasPermission(perms.granted, 'candidate_services', 'proformas', 'edit')),

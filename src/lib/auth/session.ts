@@ -58,7 +58,17 @@ export type Session = {
   };
 };
 
-export async function getSession(): Promise<Session | null> {
+/**
+ * Per-request memoized session. `auth()`'s jwt callback revalidates the
+ * user against the DB (deactivation / role change / invalidation) on
+ * every call; a single page render calls getSession via its gate
+ * helpers 15–20 times, which used to mean 15–20 identical users-table
+ * round-trips per request. React cache() collapses that to ONE while
+ * keeping the exact security contract: revalidation still runs on every
+ * request, so demotion/deactivation still takes effect within one
+ * request cycle.
+ */
+export const getSession = cache(async (): Promise<Session | null> => {
   const raw = await auth();
   if (!raw?.user?.id || !raw.user.role) return null;
   const u = raw.user as typeof raw.user & {
@@ -77,7 +87,7 @@ export async function getSession(): Promise<Session | null> {
       isOwner: u.isOwner === true,
     },
   };
-}
+});
 
 /**
  * Require an authenticated session. Redirects to /login if missing OR revoked.
