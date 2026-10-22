@@ -205,8 +205,14 @@ test('stage 6F — workspace acceptance walk (profile edit + docs + CV + navigat
     await expect(page.getByText(/Service billing/i).first()).toBeVisible({ timeout: 10_000 });
 
     // ── Applications ──────────────────────────────────────────────
+    // Stage C one-card workflow — the tab now hosts the interactive
+    // ApplicationsPanel (titled "Applications", with the log-application
+    // affordance) instead of the read-only "Job applications" list.
     await page.goto(`/clients/${seeded.personId}?tab=applications`);
-    await expect(page.getByText(/Job applications/i).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/^Applications$/).first()).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByRole('button', { name: /Log external application/i }).first(),
+    ).toBeVisible({ timeout: 10_000 });
 
     // ── Activity ──────────────────────────────────────────────────
     await page.goto(`/clients/${seeded.personId}?tab=activity`);

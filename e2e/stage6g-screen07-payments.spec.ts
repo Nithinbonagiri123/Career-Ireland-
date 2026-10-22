@@ -50,7 +50,6 @@ async function recordPayment(
   leadId: string,
   pfId: string,
   amount: string,
-  verify: boolean,
 ) {
   await page.goto(`/leads/${leadId}/pro-formas/${pfId}`);
   await page.getByRole('button', { name: /Record payment/i }).click();
@@ -59,13 +58,36 @@ async function recordPayment(
   await dialog.getByLabel(/Amount/i).fill(amount);
   await dialog.getByRole('button', { name: /Record payment/i }).click();
   await expect(dialog).toBeHidden({ timeout: 10_000 });
-  if (verify) {
-    await page
-      .getByRole('button', { name: /^Verify$/ })
-      .first()
-      .click();
-    await expect(page.getByText(/Payment verified/i).first()).toBeVisible({ timeout: 15_000 });
-  }
+  // Stage C workflow collapse — an ADMIN's recording verifies in the
+  // same action; no separate Verify step exists any more.
+  await expect(page.getByText(/Payment verified/i).first()).toBeVisible({ timeout: 15_000 });
+}
+
+/**
+ * Stage C workflow collapse — the admin UI can no longer leave a payment
+ * pending, so the pending instalment this screen needs is seeded the way
+ * it now arises (a non-finance recording): a PENDING payments row on the
+ * pro forma's existing engagement.
+ */
+async function seedPendingInstalment(pfId: string, amount: string) {
+  const m = await dbModules();
+  const [existing] = await m.db
+    .select({
+      engagementId: m.schemas.payments.serviceEngagementId,
+      currencyCode: m.schemas.payments.currencyCode,
+    })
+    .from(m.schemas.payments)
+    .where(m.eq(m.schemas.payments.proFormaInvoiceId, pfId))
+    .limit(1);
+  if (!existing) throw new Error('no prior payment/engagement to attach the pending instalment to');
+  await m.db.insert(m.schemas.payments).values({
+    serviceEngagementId: existing.engagementId,
+    proFormaInvoiceId: pfId,
+    amount,
+    currencyCode: existing.currencyCode,
+    method: 'BANK_TRANSFER',
+    status: 'PENDING',
+  });
 }
 
 test('stage 6G screen 07 — payments page matches the approved layout', async ({ page }) => {
@@ -159,11 +181,11 @@ test('stage 6G screen 07 — payments page matches the approved layout', async (
     const first = seedPfs[0];
     const second = seedPfs[1];
     // Fully paid → invoice + receipt + candidate activation.
-    if (first) await recordPayment(page, first.leadId, first.pfId, '300.00', true);
+    if (first) await recordPayment(page, first.leadId, first.pfId, '300.00');
     // Partial verified + one pending instalment.
     if (second) {
-      await recordPayment(page, second.leadId, second.pfId, '200.00', true);
-      await recordPayment(page, second.leadId, second.pfId, '100.00', false);
+      await recordPayment(page, second.leadId, second.pfId, '200.00');
+      await seedPendingInstalment(second.pfId, '100.00');
     }
 
     // ── Desktop ───────────────────────────────────────────────────

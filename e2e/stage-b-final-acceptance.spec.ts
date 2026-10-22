@@ -193,19 +193,15 @@ test('Stage B final acceptance: complete candidate journey across Waves 1–4', 
       .fill(first);
     await payDialog.getByRole('button', { name: /^Record payment$/i }).click();
     await expect(payDialog).not.toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/awaiting finance confirmation/i).first()).toBeVisible({
+    // Stage C workflow collapse — an ADMIN's recording verifies in the
+    // same action, so the partial is live immediately and no Verify
+    // button exists. Wave 1 regression guard preserved: the owed chip
+    // shows the remaining balance once — not total + quote-again.
+    await expect(page.getByText(/Payment verified/i).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(`€${second} owed`).first()).toBeVisible({
       timeout: 10_000,
     });
-    // Wave 1 regression guard: the owed chip shows the remaining total
-    // once — not total + quote-again. The hero shows "€<total> owed"
-    // before verification (recorded ≠ verified yet).
-    await expect(page.getByText(`€${total.toFixed(2)} owed`).first()).toBeVisible({
-      timeout: 10_000,
-    });
-    await page
-      .getByRole('button', { name: /^Verify$/i })
-      .first()
-      .click();
+    expect(await page.getByRole('button', { name: /^Verify$/i }).count()).toBe(0);
     await expect(page.getByText(/record payment/i).first()).toBeVisible({ timeout: 15_000 });
     await page
       .getByRole('button', { name: /^Record payment$/i })
@@ -218,12 +214,10 @@ test('Stage B final acceptance: complete candidate journey across Waves 1–4', 
       .fill(second);
     await payDialog2.getByRole('button', { name: /^Record payment$/i }).click();
     await expect(payDialog2).not.toBeVisible({ timeout: 10_000 });
-    await page
-      .getByRole('button', { name: /^Verify$/i })
-      .first()
-      .click();
 
     // ── 4. Automatic activation + official invoice + receipts ───────
+    // Stage C workflow collapse — the settling payment verifies, issues
+    // the invoice and activates the candidate in the one recording.
     await expect(page.getByText(/Invoice & receipts/i).first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/Settled/i).first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/In progress/i).first()).toBeVisible({ timeout: 10_000 });

@@ -285,13 +285,21 @@ test('mobile: workspace renders long names + handles the quote composer dialog',
     await page.getByRole('tab', { name: 'Billing' }).click();
     const dialog = page.getByRole('dialog');
     // Re-click until hydration has attached the trigger (slow CI runners).
+    // On CI's dev server a late streamed re-render of the Billing tab can
+    // unmount a dialog that already opened, so the loop (a) reopens it if
+    // it vanished and (b) only settles once the composer's own content
+    // ("Add line") is rendered, not just the dialog shell.
     await expect(async () => {
-      await page
-        .getByRole('button', { name: /\+ New quote/i })
-        .first()
-        .click();
-      await expect(dialog).toBeVisible({ timeout: 2_000 });
-    }).toPass({ timeout: 20_000 });
+      if (!(await dialog.isVisible())) {
+        await page
+          .getByRole('button', { name: /\+ New quote/i })
+          .first()
+          .click();
+      }
+      await expect(dialog.getByRole('button', { name: /add line/i })).toBeVisible({
+        timeout: 2_000,
+      });
+    }).toPass({ timeout: 30_000 });
     await page.screenshot({
       path: path.join(SHOTS_DIR, 'mobile-composer-dialog.png'),
       fullPage: false,

@@ -168,9 +168,10 @@ test.describe('Stage 3 — add alternative + partial payment issuance', () => {
     await amountInput.fill('200.00');
     await shot(page, '08-record-first-payment');
     await page.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click();
-    await expect(page.getByText(/Payment recorded/).first()).toBeVisible();
-    await page.getByRole('button', { name: 'Verify' }).first().click();
+    // Stage C workflow collapse — an ADMIN's recording verifies in the
+    // same action; no separate Verify click exists any more.
     await expect(page.getByText(/Payment verified/).first()).toBeVisible();
+    expect(await page.getByRole('button', { name: 'Verify' }).count()).toBe(0);
     // Outstanding should now show €300.
     await expect(page.getByText('€300.00')).toBeVisible();
     await shot(page, '09-after-first-payment');
@@ -180,8 +181,6 @@ test.describe('Stage 3 — add alternative + partial payment issuance', () => {
     const amount2 = page.getByLabel(/^Amount \(EUR\)$/);
     await amount2.fill('200.00');
     await page.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click();
-    await expect(page.getByText(/Payment recorded/).first()).toBeVisible();
-    await page.getByRole('button', { name: 'Verify' }).first().click();
     await expect(page.getByText(/Payment verified/).first()).toBeVisible();
     // Outstanding should now show €100.
     await expect(page.getByText('€100.00')).toBeVisible();
@@ -192,10 +191,10 @@ test.describe('Stage 3 — add alternative + partial payment issuance', () => {
     const amount3 = page.getByLabel(/^Amount \(EUR\)$/);
     await amount3.fill('100.00');
     await page.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click();
-    await expect(page.getByText(/Payment recorded/).first()).toBeVisible();
-    await page.getByRole('button', { name: 'Verify' }).first().click();
-    // Toast now includes the newly minted INV number.
-    await expect(page.getByText(/Official invoice (issued: INV-|INV-\S+ issued)/)).toBeVisible({
+    // Stage C workflow collapse — the settling payment verifies, issues
+    // the official invoice and activates the candidate in one action;
+    // the toast carries the newly minted INV number.
+    await expect(page.getByText(/invoice INV-\S+ issued/)).toBeVisible({
       timeout: 10_000,
     });
     // Status flipped to CONVERTED. Outstanding is 0.
@@ -230,7 +229,15 @@ test.describe('Stage 3 — add alternative + partial payment issuance', () => {
     const amount = page.getByLabel(/^Amount \(EUR\)$/);
     await amount.fill('150.00');
     await page.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click();
-    await expect(page.getByText(/Payment recorded/).first()).toBeVisible();
+    // Stage C workflow collapse — the inline verification refuses the
+    // over-allocation immediately. The guard itself is unchanged.
+    await expect(page.getByText(/would exceed the accepted pro forma total/i)).toBeVisible({
+      timeout: 5_000,
+    });
+    // The recorded payment survives as pending (recoverable), and the
+    // manual Verify path refuses it just the same.
+    await page.keyboard.press('Escape');
+    await page.reload();
     await page.getByRole('button', { name: 'Verify' }).first().click();
     await expect(page.getByText(/would exceed the accepted pro forma total/i)).toBeVisible({
       timeout: 5_000,

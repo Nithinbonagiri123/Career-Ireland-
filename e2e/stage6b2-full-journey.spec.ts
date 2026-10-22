@@ -291,20 +291,19 @@ test('full happy-path: lead → quote → partial pays → invoice → activate'
     await payDialog.getByRole('button', { name: /^Record payment$/i }).click();
     await expect(payDialog).not.toBeVisible({ timeout: 10_000 });
 
-    // ── Step 6: Partial-payment awaiting finance confirmation ───────────
-    await expect(page.getByText(/awaiting finance confirmation/i).first()).toBeVisible({
-      timeout: 10_000,
-    });
+    // ── Step 6: Partial payment verifies in the same action ─────────────
+    // Stage C workflow collapse — an ADMIN's recording is verified
+    // immediately (receipt issued); nothing waits on finance and no
+    // Verify button exists. The partial state is still truthful.
+    await expect(page.getByText(/Payment verified/i).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/Partially paid/i).first()).toBeVisible({ timeout: 10_000 });
+    expect(await page.getByRole('button', { name: /^Verify$/i }).count()).toBe(0);
     await page.screenshot({
       path: path.join(SHOTS_DIR, 'desktop-after-partial-payment.png'),
       fullPage: true,
     });
 
-    // ── Step 7: Verify the partial payment ──────────────────────────────
-    await page
-      .getByRole('button', { name: /^Verify$/i })
-      .first()
-      .click();
+    // ── Step 7 (retired): the manual Verify step no longer exists ───────
     await expect(page.getByText(/record payment/i).first()).toBeVisible({ timeout: 15_000 });
 
     // ── Step 8: Record the exact remaining amount ───────────────────────
@@ -320,12 +319,11 @@ test('full happy-path: lead → quote → partial pays → invoice → activate'
     await payDialog2.getByRole('button', { name: /^Record payment$/i }).click();
     await expect(payDialog2).not.toBeVisible({ timeout: 10_000 });
 
-    // ── Step 9: Verify the second payment → invoice auto-issues ─────────
-    await page
-      .getByRole('button', { name: /^Verify$/i })
-      .first()
-      .click();
-    // Server toast: "Payment verified. Official invoice issued: INV-…".
+    // ── Step 9: the settling payment auto-issues the invoice ────────────
+    // Stage C workflow collapse — recording the remaining amount verifies
+    // it, issues the official invoice and activates the candidate in the
+    // same action. Toast: "Payment verified — invoice INV-… issued and
+    // candidate activated".
     // Three independent signals the full-payment branch fired:
     //   (a) Invoices card appears
     //   (b) Engagement balance now shows "Settled"

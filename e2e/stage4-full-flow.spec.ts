@@ -142,25 +142,23 @@ test.describe('Stage 4 — full CS workflow', () => {
     await card.getByRole('button', { name: 'Record payment' }).click();
     await page.getByLabel(/^Amount \(EUR\)$/).fill((pA + 150).toFixed(2));
     await page.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click();
-    await expect(page.getByText(/Payment recorded/).first()).toBeVisible();
-    // The quote converts into an engagement card; its details element is
-    // collapsed when the client has several services, so expand before
-    // looking for the per-payment Verify button. Scoping by the per-run
-    // total keeps leftover engagements from earlier runs out of play.
+    // Stage C workflow collapse — an ADMIN's full payment verifies and
+    // issues the official invoice in the same action; the toast carries
+    // the INV number and no per-payment Verify button remains.
+    await expect(page.getByText(/invoice INV-\S+ issued/)).toBeVisible({
+      timeout: 10_000,
+    });
     const eng = page.locator('[data-testid="engagement-card"]').filter({ hasText: total }).first();
     await expect(eng).toBeVisible({ timeout: 10_000 });
     if ((await eng.locator('details').getAttribute('open')) === null) {
       await eng.locator('summary').first().click();
     }
-    await eng.getByRole('button', { name: 'Verify' }).first().click();
-    await expect(page.getByText(/Official invoice (issued: INV-|INV-\S+ issued)/)).toBeVisible({
-      timeout: 10_000,
-    });
+    expect(await eng.getByRole('button', { name: 'Verify' }).count()).toBe(0);
     await shot(page, '06-pf-converted-invoice-issued');
 
-    // Verify triggered a refresh — the engagement card may have
-    // re-collapsed; expand it again, then follow its same-tab
-    // "View invoice" link to the ICG print template.
+    // The refresh may have re-collapsed the engagement card; expand it
+    // again, then follow its same-tab "View invoice" link to the ICG
+    // print template.
     if ((await eng.locator('details').getAttribute('open')) === null) {
       await eng.locator('summary').first().click();
     }

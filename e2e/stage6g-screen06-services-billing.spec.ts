@@ -59,11 +59,10 @@ async function payAndVerify(
   await dialog.getByLabel(/Amount/i).fill(amount);
   await dialog.getByRole('button', { name: /Record payment/i }).click();
   await expect(dialog).toBeHidden({ timeout: 10_000 });
-  await page
-    .getByRole('button', { name: /^Verify$/ })
-    .first()
-    .click();
+  // Stage C workflow collapse — an ADMIN's recording verifies in the
+  // same action; the manual Verify button no longer exists.
   await expect(page.getByText(/Payment verified/i).first()).toBeVisible({ timeout: 15_000 });
+  expect(await page.getByRole('button', { name: /^Verify$/ }).count()).toBe(0);
 }
 
 test('stage 6G screen 06 — services & billing tab matches the approved layout', async ({
@@ -224,14 +223,15 @@ test('stage 6G screen 06 — services & billing tab matches the approved layout'
     await expect(page.getByRole('button', { name: 'Add service' }).first()).toBeVisible();
     // Active services column + the create-new-service action card.
     await expect(page.getByText(/Active services for this candidate/).first()).toBeVisible();
-    await expect(page.getByText('Fully paid').first()).toBeVisible();
+    // Stage C1 — settled rows read "Paid" (shared three-state labels).
+    await expect(page.getByText('Paid', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Awaiting payment').first()).toBeVisible();
     await expect(page.getByRole('button', { name: /Direct Payment & Activate/ })).toBeVisible();
     // Service history table rows: paid, partially paid, in progress.
     await expect(page.getByRole('heading', { name: /Service history/ })).toBeVisible();
     await expect(page.locator('tbody').getByText('Paid').first()).toBeVisible();
     await expect(page.locator('tbody').getByText('Partially paid').first()).toBeVisible();
-    await expect(page.locator('tbody').getByText('In progress').first()).toBeVisible();
+    await expect(page.locator('tbody').getByText('Awaiting payment').first()).toBeVisible();
     await page.screenshot({
       path: path.join(SHOTS_DIR, `screen06-desktop-${stamp}.png`),
       fullPage: true,

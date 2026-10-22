@@ -64,10 +64,10 @@ async function recordAndVerifyViaUI(
   await dialog.getByLabel(/Amount/i).fill(amount);
   await dialog.getByRole('button', { name: /Record payment/i }).click();
   await expect(dialog).toBeHidden({ timeout: 10_000 });
-  const verifyBtn = page.getByRole('button', { name: /^Verify$/ }).first();
-  await expect(verifyBtn).toBeVisible({ timeout: 10_000 });
-  await verifyBtn.click();
+  // Stage C workflow collapse — an ADMIN's recording verifies in the
+  // same action; the manual Verify button no longer exists.
   await expect(page.getByText(/Payment verified/i).first()).toBeVisible({ timeout: 15_000 });
+  expect(await page.getByRole('button', { name: /^Verify$/ }).count()).toBe(0);
 }
 
 test('final: three services on one client — compact summaries, tabs still reachable', async ({

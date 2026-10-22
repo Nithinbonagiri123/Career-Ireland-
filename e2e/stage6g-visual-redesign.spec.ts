@@ -70,10 +70,8 @@ async function fillPayViaUI(
   await dialog.getByLabel(/Amount/i).fill(amount);
   await dialog.getByRole('button', { name: /Record payment/i }).click();
   await expect(dialog).toBeHidden({ timeout: 10_000 });
-  await page
-    .getByRole('button', { name: /^Verify$/ })
-    .first()
-    .click();
+  // Stage C workflow collapse — an ADMIN's recording verifies in the
+  // same action; the manual Verify button no longer exists.
   await expect(page.getByText(/Payment verified/i).first()).toBeVisible({ timeout: 15_000 });
 }
 
@@ -257,7 +255,8 @@ test('stage 6G — realistic healthcare candidate rendered in the redesigned wor
     // First service: fully paid.
     const first = seedPfs[0];
     if (first) await fillPayViaUI(page, first.leadId, first.pfId, first.amount);
-    // Second service: partial payment (40% of agreed) → "Awaiting payment".
+    // Second service: partial payment (40% of agreed) → "Partially paid"
+    // (Stage C1 shared three-state labels).
     const second = seedPfs[1];
     if (second) {
       const partial = (Number.parseFloat(second.amount) * 0.4).toFixed(2);
@@ -268,10 +267,7 @@ test('stage 6G — realistic healthcare candidate rendered in the redesigned wor
       await dlg.getByLabel(/Amount/i).fill(partial);
       await dlg.getByRole('button', { name: /Record payment/i }).click();
       await expect(dlg).toBeHidden({ timeout: 10_000 });
-      await page
-        .getByRole('button', { name: /^Verify$/ })
-        .first()
-        .click();
+      // Stage C workflow collapse — recorded and verified in one action.
       await expect(page.getByText(/Payment verified/i).first()).toBeVisible({ timeout: 15_000 });
     }
 
@@ -292,8 +288,9 @@ test('stage 6G — realistic healthcare candidate rendered in the redesigned wor
     await expect(page.locator('[data-testid="engagement-card"]')).toHaveCount(2, {
       timeout: 10_000,
     });
-    await expect(page.getByText(/Fully paid/i).first()).toBeVisible();
-    await expect(page.getByText(/Awaiting payment/i).first()).toBeVisible();
+    // Stage C1 — settled rows read "Paid" (shared three-state labels).
+    await expect(page.getByText('Paid', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Partially paid', { exact: true }).first()).toBeVisible();
     await page.goto(`/clients/${personId}`);
     // Tab bar: Overview + Profile + Documents & CV + Applications + Activity.
     await expect(page.getByRole('tab', { name: /Overview/i })).toBeVisible();

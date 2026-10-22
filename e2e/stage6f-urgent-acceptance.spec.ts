@@ -305,6 +305,10 @@ async function recordPaymentViaUI(
   await amountInput.fill(amount);
   await dialog.getByRole('button', { name: /Record payment/i }).click();
   await expect(dialog).toBeHidden({ timeout: 10_000 });
+  // Stage C workflow collapse — an ADMIN's recorded payment is verified
+  // in the same action (receipt + invoice + activation when it settles
+  // the quote), so the chain completes here.
+  await expect(page.getByText(/Payment verified/i).first()).toBeVisible({ timeout: 15_000 });
 }
 
 /**
@@ -316,14 +320,13 @@ async function verifyFirstPendingPaymentViaUI(
   page: import('@playwright/test').Page,
   seed: { leadId: string; pfId: string },
 ) {
+  // Stage C workflow collapse — recordPaymentViaUI already completed
+  // verification (ADMIN fast-path). This helper now asserts the manual
+  // step is truly gone: the pro-forma page shows no pending Verify
+  // button, because there is nothing pending.
   await page.goto(`/leads/${seed.leadId}/pro-formas/${seed.pfId}`);
-  const verifyBtn = page.getByRole('button', { name: /^Verify$/ }).first();
-  await expect(verifyBtn).toBeVisible({ timeout: 10_000 });
-  await verifyBtn.click();
-  // Toast confirms either "Payment verified. Official invoice issued"
-  // or "Payment verified. Receipt issued." Wait for one of them so
-  // the server action has returned and the revalidation has committed.
-  await expect(page.getByText(/Payment verified/i).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Payments/i).first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: /^Verify$/ })).toHaveCount(0);
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -515,7 +518,34 @@ test('F: a pending (unverified) payment does NOT activate the candidate or issue
 }) => {
   const seed = await seedAcceptedProForma();
   try {
-    await recordPaymentViaUI(page, seed, (seed.agreedCents / 100).toFixed(2));
+    // Stage C workflow collapse — an ADMIN's UI recording now auto-
+    // verifies, so a pending payment can no longer be produced through
+    // this browser session. It still arises in real use when a non-
+    // finance staff member records one, so seed exactly the rows the
+    // record step writes (engagement PENDING_PAYMENT + payment PENDING)
+    // and keep every downstream guard assertion unchanged.
+    const m0 = await dbModules();
+    const [eng] = await m0.db
+      .insert(m0.schemas.serviceEngagements)
+      .values({
+        serviceCatalogItemId: seed.serviceCatalogItemId,
+        payerPersonId: seed.personId,
+        beneficiaryPersonId: seed.personId,
+        agreedAmount: (seed.agreedCents / 100).toFixed(2),
+        currencyCode: seed.currencyCode,
+        status: 'PENDING_PAYMENT',
+        notes: `Auto-created at first payment for ${seed.pfNumber}`,
+      })
+      .returning({ id: m0.schemas.serviceEngagements.id });
+    if (!eng) throw new Error('engagement seed failed');
+    await m0.db.insert(m0.schemas.payments).values({
+      serviceEngagementId: eng.id,
+      proFormaInvoiceId: seed.pfId,
+      amount: (seed.agreedCents / 100).toFixed(2),
+      currencyCode: seed.currencyCode,
+      method: 'BANK_TRANSFER',
+      status: 'PENDING',
+    });
     // Do NOT verify.
     const counts = await countForPerson(seed.personId);
     expect(counts.payments).toBe(1);

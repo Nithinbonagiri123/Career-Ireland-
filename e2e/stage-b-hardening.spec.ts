@@ -125,3 +125,84 @@ test('expiry edits: ADMIN allowed, ungranted STAFF refused by the server', async
     await m.db.delete(m.schemas.persons).where(m.eq(m.schemas.persons.id, personId));
   }
 });
+
+test('services page row actions work: complete + archive (Base UI onClick regression)', async ({
+  page,
+}) => {
+  // Regression for the dead `onSelect` menu items (Base UI MenuItem has
+  // onClick only) — reported on /engagements, fixed app-wide.
+  test.setTimeout(180_000);
+  const stamp = Math.random().toString(36).slice(2, 6);
+  const m = await dbModules();
+  const commerce = await import('../src/lib/db/schema/commerce');
+  const services = await import('../src/lib/db/schema/services');
+  const [person] = await m.db
+    .insert(m.schemas.persons)
+    .values({
+      firstName: 'MenuFix',
+      lastName: `Svc-${stamp}`,
+      email: `menufix-${stamp}@example.test`,
+      source: 'DIRECT',
+    })
+    .returning({ id: m.schemas.persons.id });
+  if (!person) throw new Error('seed failed');
+  const [svc] = await m.db
+    .select({ id: services.serviceCatalogItems.id })
+    .from(services.serviceCatalogItems)
+    .where(m.eq(services.serviceCatalogItems.isActive, true))
+    .limit(1);
+  if (!svc) throw new Error('no catalog item');
+  const [eng] = await m.db
+    .insert(commerce.serviceEngagements)
+    .values({
+      serviceCatalogItemId: svc.id,
+      payerPersonId: person.id,
+      agreedAmount: '50.00',
+      currencyCode: 'EUR',
+      status: 'ACTIVE',
+    })
+    .returning({ id: commerce.serviceEngagements.id });
+  if (!eng) throw new Error('engagement seed failed');
+
+  try {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    // "Complete service" fires window.confirm — accept it.
+    page.on('dialog', (d) => d.accept());
+    await page.goto('/engagements');
+    const row = page.locator('tr', { hasText: `MenuFix Svc-${stamp}` });
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await expect(async () => {
+      await row.getByRole('button', { name: 'Actions' }).click();
+      await expect(page.getByText('Complete service')).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
+    await page.getByText('Complete service').click();
+    await expect(page.getByText('Service completed')).toBeVisible({ timeout: 15_000 });
+    const [afterComplete] = await m.db
+      .select({ status: commerce.serviceEngagements.status })
+      .from(commerce.serviceEngagements)
+      .where(m.eq(commerce.serviceEngagements.id, eng.id));
+    expect(afterComplete?.status).toBe('COMPLETED');
+
+    // Archive via the PromptDialog (audited reason).
+    await expect(async () => {
+      await row.getByRole('button', { name: 'Actions' }).click();
+      await expect(page.getByText('Archive', { exact: true })).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
+    await page.getByText('Archive', { exact: true }).click();
+    await page
+      .getByPlaceholder('e.g. Duplicate entry, cancelled at intake')
+      .fill('Menu regression e2e — archive works again');
+    await page.getByRole('button', { name: 'Archive', exact: true }).last().click();
+    await expect(row).toHaveCount(0, { timeout: 15_000 });
+    const [afterArchive] = await m.db
+      .select({ archivedAt: commerce.serviceEngagements.archivedAt })
+      .from(commerce.serviceEngagements)
+      .where(m.eq(commerce.serviceEngagements.id, eng.id));
+    expect(afterArchive?.archivedAt).toBeTruthy();
+  } finally {
+    await m.db
+      .delete(commerce.serviceEngagements)
+      .where(m.eq(commerce.serviceEngagements.id, eng.id));
+    await m.db.delete(m.schemas.persons).where(m.eq(m.schemas.persons.id, person.id));
+  }
+});

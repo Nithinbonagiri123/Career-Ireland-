@@ -199,11 +199,10 @@ test('P0 regression: part-paid accepted quote is counted once in the workspace b
     await dialog.getByLabel(/Amount/i).fill('200.00');
     await dialog.getByRole('button', { name: /Record payment/i }).click();
     await expect(dialog).toBeHidden({ timeout: 10_000 });
-    await page
-      .getByRole('button', { name: /^Verify$/ })
-      .first()
-      .click();
+    // Stage C workflow collapse — an ADMIN's recording verifies in the
+    // same action; the manual Verify button no longer exists.
     await expect(page.getByText(/Payment verified/i).first()).toBeVisible({ timeout: 15_000 });
+    expect(await page.getByRole('button', { name: /^Verify$/ }).count()).toBe(0);
 
     // The workspace hero must show €300 owed — not the doubled €800.
     await page.goto(`/clients/${personId}`);

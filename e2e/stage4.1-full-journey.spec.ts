@@ -138,11 +138,12 @@ test.describe('Stage 4.1 — final journey', () => {
     await page.getByRole('button', { name: 'Record payment' }).click();
     await page.getByLabel(/^Amount \(EUR\)$/).fill('100.00');
     await page.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click();
-    await expect(page.getByText(/Payment recorded/).first()).toBeVisible();
-    await page.getByRole('button', { name: 'Verify' }).first().click();
-    await expect(page.getByText(/Official invoice (issued: INV-|INV-\S+ issued)/)).toBeVisible({
+    // Stage C workflow collapse — the full payment verifies and issues
+    // the official invoice in the same action; no Verify click exists.
+    await expect(page.getByText(/invoice INV-\S+ issued/)).toBeVisible({
       timeout: 10_000,
     });
+    expect(await page.getByRole('button', { name: 'Verify' }).count()).toBe(0);
     await expect(page.getByText(/CONVERTED/).first()).toBeVisible();
     await shot(page, '04-invoice-issued-pf-converted');
 
