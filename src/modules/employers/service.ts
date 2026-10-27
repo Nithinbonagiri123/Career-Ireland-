@@ -1,14 +1,17 @@
-import { and, asc, desc, eq, isNull, or, type SQL, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
+import { auditEvents } from '@/lib/db/schema/audit_events';
 import {
   type Employer,
   type EmployerContact,
   employerContacts,
   employers,
+  jobRequisitions,
 } from '@/lib/db/schema/recruitment';
+import { users } from '@/lib/db/schema/users';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { type AssignmentScope, assignmentCondition } from '@/lib/scope';
 import {
@@ -318,6 +321,116 @@ export async function markEmployerOnboardingComplete(employerId: string): Promis
     });
 
     return after;
+  });
+}
+
+/**
+ * R1 — contacts gained delete. Hard delete with a full before-snapshot
+ * in the audit trail (same pattern as checklist DELETED events), so the
+ * record of who was removed, by whom and when survives the row.
+ */
+/**
+ * R1 — the workspace Activity tab: the audit trail touching this
+ * employer (the record itself, its contacts, and its requisitions),
+ * newest first. entity_id is text in audit_events, so ids are compared
+ * as strings.
+ */
+export async function fetchEmployerActivity(
+  employerId: string,
+  opts?: { limit?: number },
+): Promise<
+  Array<{
+    id: string;
+    occurredAt: Date;
+    actorName: string | null;
+    entityType: string;
+    action: string;
+    summary: string;
+  }>
+> {
+  await requireInternalStaff();
+  const limit = Math.min(opts?.limit ?? 30, 100);
+  const contactIds = (
+    await db
+      .select({ id: employerContacts.id })
+      .from(employerContacts)
+      .where(eq(employerContacts.employerId, employerId))
+  ).map((r) => r.id);
+  const requisitionIds = (
+    await db
+      .select({ id: jobRequisitions.id })
+      .from(jobRequisitions)
+      .where(eq(jobRequisitions.employerId, employerId))
+  ).map((r) => r.id);
+
+  const conds: SQL[] = [
+    and(eq(auditEvents.entityType, 'employer'), eq(auditEvents.entityId, employerId)) as SQL,
+  ];
+  if (contactIds.length > 0) {
+    conds.push(
+      and(
+        eq(auditEvents.entityType, 'employer_contact'),
+        inArray(auditEvents.entityId, contactIds),
+      ) as SQL,
+    );
+  }
+  if (requisitionIds.length > 0) {
+    conds.push(
+      and(
+        eq(auditEvents.entityType, 'job_requisition'),
+        inArray(auditEvents.entityId, requisitionIds),
+      ) as SQL,
+    );
+  }
+
+  const rows = await db
+    .select({
+      id: auditEvents.id,
+      occurredAt: auditEvents.occurredAt,
+      entityType: auditEvents.entityType,
+      action: auditEvents.action,
+      actorName: users.fullName,
+    })
+    .from(auditEvents)
+    .leftJoin(users, eq(users.id, auditEvents.actorUserId))
+    .where(or(...conds))
+    .orderBy(desc(auditEvents.occurredAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    id: r.id,
+    occurredAt: r.occurredAt,
+    actorName: r.actorName,
+    entityType: r.entityType,
+    action: r.action,
+    summary: `${r.entityType.replace(/_/g, ' ')} ${r.action.replace(/_/g, ' ').toLowerCase()}`,
+  }));
+}
+
+export async function deleteEmployerContact(contactId: string): Promise<void> {
+  const session = await requireInternalStaff();
+  await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(employerContacts)
+      .where(eq(employerContacts.id, contactId))
+      .limit(1);
+    if (!before) throw new BusinessRuleError('CONTACT_NOT_FOUND', 'Contact not found');
+    await tx.delete(employerContacts).where(eq(employerContacts.id, contactId));
+    await recordAudit(tx, {
+      actorUserId: session.user.id,
+      entityType: 'employer_contact',
+      entityId: contactId,
+      action: 'DELETED',
+      before: {
+        employerId: before.employerId,
+        fullName: before.fullName,
+        jobTitle: before.jobTitle,
+        email: before.email,
+        phone: before.phone,
+        isPrimary: before.isPrimary,
+      },
+    });
   });
 }
 

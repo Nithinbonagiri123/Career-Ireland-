@@ -10,6 +10,7 @@ import type {
 } from './schemas';
 import {
   archiveEmployer,
+  deleteEmployerContact,
   findSimilarEmployers,
   markEmployerOnboardingComplete,
   unarchiveEmployer,
@@ -37,6 +38,15 @@ export async function markEmployerOnboardingCompleteAction(employerId: string) {
 
 export async function upsertEmployerContactAction(input: UpsertContactInput) {
   const r = await toActionResult(() => upsertEmployerContact(input));
+  if (r.ok) revalidatePath(`/employers/${input.employerId}`);
+  return r;
+}
+
+export async function deleteEmployerContactAction(input: {
+  contactId: string;
+  employerId: string;
+}) {
+  const r = await toActionResult(() => deleteEmployerContact(input.contactId));
   if (r.ok) revalidatePath(`/employers/${input.employerId}`);
   return r;
 }

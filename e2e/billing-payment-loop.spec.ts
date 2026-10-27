@@ -78,8 +78,10 @@ test('billing loop: employer profile renders Billing card with same shape', asyn
   await firstOpen.click();
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
-  // Billing history card must render. Its shape is the same as the person
-  // profile — the shared BillingSection component.
-  await expect(page.getByText(/billing history/i)).toBeVisible();
+  // R1 — the employer profile became a tabbed workspace; billing lives
+  // on the Billing & VAT tab. Same shared BillingSection shape as the
+  // person profile, one tab click away.
+  await page.getByRole('tab', { name: 'Billing & VAT' }).click();
+  await expect(page.getByText(/billing history/i)).toBeVisible({ timeout: 15_000 });
   await shot(page, 'e2e__billing-loop-04-employer-billing-card');
 });
