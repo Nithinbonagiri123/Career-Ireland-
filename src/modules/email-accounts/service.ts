@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { requireInternalStaff, requireRole } from '@/lib/auth/session';
 import { open, seal } from '@/lib/crypto/secret-box';
 import { db } from '@/lib/db/client';
 import { type CandidateEmailAccount, candidateEmailAccounts } from '@/lib/db/schema/email_accounts';
@@ -13,6 +13,14 @@ import {
   type UpsertEmailAccountInput,
   UpsertEmailAccountSchema,
 } from './schemas';
+
+/**
+ * SEC-03 — storing, revealing and deleting a candidate's mailbox password
+ * is admin authority only (role ADMIN, or the owner via decision B1).
+ * Reading the metadata view stays open to staff; it never contains the
+ * secret.
+ */
+const requireMailboxAdmin = () => requireRole(['ADMIN']);
 
 function blankToNull(v: string | undefined | null): string | null {
   return v && v.trim().length > 0 ? v : null;
@@ -43,7 +51,7 @@ export async function getEmailAccountForCandidate(
 export async function upsertEmailAccount(
   input: UpsertEmailAccountInput,
 ): Promise<EmailAccountView> {
-  const session = await requireInternalStaff();
+  const session = await requireMailboxAdmin();
   const parsed = UpsertEmailAccountSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -120,7 +128,7 @@ export async function upsertEmailAccount(
  * with the caller-supplied reason — this is HIGH-sensitivity access.
  */
 export async function revealPassword(input: RevealPasswordInput): Promise<string> {
-  const session = await requireInternalStaff();
+  const session = await requireMailboxAdmin();
   const parsed = RevealPasswordSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -135,16 +143,8 @@ export async function revealPassword(input: RevealPasswordInput): Promise<string
     .limit(1);
   if (!row) throw new NotFoundError('Email account');
 
-  let plaintext: string;
-  try {
-    plaintext = open(row.passwordCiphertext);
-  } catch {
-    throw new BusinessRuleError(
-      'DECRYPT_FAILED',
-      'Unable to decrypt password — check EMAIL_CRED_ENC_KEY',
-    );
-  }
-
+  // Audit FIRST (reason only — never the value), so every reveal attempt
+  // is on record even if decryption then fails.
   await recordAudit(db, {
     actorUserId: session.user.id,
     entityType: 'candidate_email_account',
@@ -153,11 +153,18 @@ export async function revealPassword(input: RevealPasswordInput): Promise<string
     context: { reason: parsed.data.reason },
   });
 
-  return plaintext;
+  try {
+    return open(row.passwordCiphertext);
+  } catch {
+    throw new BusinessRuleError(
+      'DECRYPT_FAILED',
+      'Unable to decrypt password — check EMAIL_CRED_ENC_KEY',
+    );
+  }
 }
 
 export async function removeEmailAccount(input: RemoveEmailAccountInput): Promise<void> {
-  const session = await requireInternalStaff();
+  const session = await requireMailboxAdmin();
   const parsed = RemoveEmailAccountSchema.parse(input);
   await db.transaction(async (tx) => {
     const [before] = await tx
