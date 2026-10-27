@@ -38,6 +38,9 @@ type Props = {
   currencies: Currency[];
   initial?: JobRequisition;
   defaultEmployerId?: string;
+  /** R0 — lets next-action deep links (?edit=1 / ?newRequisition=1)
+   *  land with the dialog already open. */
+  defaultOpen?: boolean;
 };
 
 export function RequisitionDialog({
@@ -47,6 +50,7 @@ export function RequisitionDialog({
   currencies,
   initial,
   defaultEmployerId,
+  defaultOpen,
 }: Props) {
   const isEdit = Boolean(initial);
   const form = useForm<UpsertRequisitionInput>({
@@ -76,7 +80,7 @@ export function RequisitionDialog({
     setValue,
     formState: { errors, isSubmitting },
   } = form;
-  const { open, onOpenChange, formError, submit } = useFormDialog(form);
+  const { open, onOpenChange, formError, submit } = useFormDialog(form, { defaultOpen });
 
   const [locallyCreatedOccupations, setLocallyCreatedOccupations] = useState<OccupationOption[]>(
     [],

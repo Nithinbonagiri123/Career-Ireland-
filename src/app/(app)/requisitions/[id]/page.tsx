@@ -53,7 +53,14 @@ import { WorkLogSection } from './work-log-section';
 
 export const dynamic = 'force-dynamic';
 
-export default async function RequisitionDetail({ params }: { params: Promise<{ id: string }> }) {
+export default async function RequisitionDetail({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string; edit?: string; close?: string }>;
+}) {
+  const { edit, close } = await searchParams;
   const session = await requireInternalStaff();
   const { id } = await params;
   const requisition = await fetchRequisition(id);
@@ -381,6 +388,7 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
                   occupations={occupationList}
                   currencies={currencies}
                   initial={requisition}
+                  defaultOpen={edit === '1'}
                   trigger={
                     <Button size="sm" variant="outline">
                       <Pencil className="mr-1.5 size-4" /> Edit
@@ -419,6 +427,11 @@ export default async function RequisitionDetail({ params }: { params: Promise<{ 
 
       {nextAction && (
         <FadeUp delay={0.02}>
+          {close === '1' &&
+            requisition.status !== 'CLOSED' &&
+            requisition.status !== 'CANCELLED' && (
+              <CloseRequisitionButton requisitionId={id} defaultOpen hideTrigger />
+            )}
           <NextActionCard
             label={nextAction.label}
             dueHint={nextAction.dueHint}

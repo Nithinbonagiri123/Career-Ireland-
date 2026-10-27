@@ -5,7 +5,7 @@ import { DateRangeFilter } from '@/components/date-range-filter';
 import { EmptyMineNudge } from '@/components/empty-mine-nudge';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { ScopeFilter } from '@/components/scope-filter';
-import { requirePermission } from '@/lib/auth/session';
+import { requireAnyPermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import type { Lead } from '@/lib/db/schema/leads';
 import { parseAssignmentScope } from '@/lib/scope';
@@ -35,7 +35,13 @@ export default async function LeadsPage({
 }: {
   searchParams: Promise<{ assigned?: string; created?: string; from?: string; to?: string }>;
 }) {
-  const session = await requirePermission('candidate_services', 'leads', 'view');
+  // R0 — leads serve every workspace; the recruitment sidebar used to
+  // demand the candidate-services grant.
+  const session = await requireAnyPermission([
+    { business: 'candidate_services', module: 'leads', verb: 'view' },
+    { business: 'recruitment', module: 'leads', verb: 'view' },
+    { business: 'main', module: 'leads', verb: 'view' },
+  ]);
   const { assigned, created, from, to } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const createdRange = parseDateRangeParams({ created, from, to });
@@ -97,8 +103,9 @@ export default async function LeadsPage({
               <div className="min-w-0">
                 <h1 className="text-2xl font-semibold tracking-tight text-foreground">Leads</h1>
                 <p className="mt-1 max-w-2xl text-sm text-foreground/70">
-                  Every candidate begins as a Lead. Convert via verified payment or a staff manual
-                  override (audited).
+                  {targetBusiness === 'RECRUITMENT'
+                    ? 'Employer enquiries. Qualify, assign and convert into an employer profile and requisition — no payment required to convert.'
+                    : 'Every candidate begins as a Lead. Convert via verified payment or a staff manual override (audited).'}
                 </p>
               </div>
             </div>

@@ -21,8 +21,11 @@ import type { ActionResult } from '@/lib/result';
  * Returns everything the caller needs. Reduces ~50 boilerplate lines per
  * dialog to a single hook call.
  */
-export function useFormDialog<TValues extends FieldValues>(form: UseFormReturn<TValues>) {
-  const [open, setOpen] = useState(false);
+export function useFormDialog<TValues extends FieldValues>(
+  form: UseFormReturn<TValues>,
+  opts?: { defaultOpen?: boolean },
+) {
+  const [open, setOpen] = useState(opts?.defaultOpen ?? false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const onOpenChange = useCallback(

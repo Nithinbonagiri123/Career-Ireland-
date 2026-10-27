@@ -43,7 +43,7 @@ export function computeRequisitionNextAction(
       dueHint: null,
       sentence: 'Open this requisition so recruiters can start sourcing.',
       tone: 'default',
-      primary: { label: 'Open & edit', href: `/requisitions/${requisitionId}` },
+      primary: { label: 'Open & edit', href: `/requisitions/${requisitionId}?edit=1` },
     };
   }
 
@@ -53,7 +53,7 @@ export function computeRequisitionNextAction(
       dueHint: null,
       sentence: 'All positions filled — close the requisition.',
       tone: 'default',
-      primary: { label: 'Open & close', href: `/requisitions/${requisitionId}` },
+      primary: { label: 'Close requisition', href: `/requisitions/${requisitionId}?close=1` },
     };
   }
 

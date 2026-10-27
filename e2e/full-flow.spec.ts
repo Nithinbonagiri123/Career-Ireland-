@@ -104,21 +104,42 @@ test('lead → candidate → requisition → pipeline → placement → fee invo
   await expect(nameCell).toBeVisible({ timeout: 10_000 });
   await shot(page, '03-candidates-list');
 
-  // ── STEP 3 · Find a requisition to work with ─────────────────────────
-  await page.goto('/requisitions');
-  await expect(page.getByRole('heading', { name: /requisitions/i, level: 1 })).toBeVisible();
-  // Prefer an OPEN requisition. The card view shows a status badge; the
-  // table view a status column. Either way, "OPEN" text is queryable.
-  const firstRequisition = page.locator('a[href^="/requisitions/"]').first();
-  const requisitionCount = await firstRequisition.count();
-  test.skip(
-    requisitionCount === 0,
-    'No requisitions seeded — full-flow needs at least one to walk the pipeline. Seed one under /admin and re-run.',
-  );
-  await firstRequisition.click();
-  await page.waitForURL(/\/requisitions\/[0-9a-f-]+$/, { timeout: 20_000 });
+  // ── STEP 3 · Seed a fresh requisition to work with ───────────────────
+  // R0 — this walk used to grab the FIRST requisition on the list, which
+  // in a lived-in DB is the shared fixture that historic runs overfilled
+  // (15 confirmed placements on 2 positions). The new seat guards now
+  // correctly refuse another placement there, so the journey gets its
+  // own one-seat requisition, created and cleaned up per run.
+  const { config: loadEnv } = await import('dotenv');
+  loadEnv({ path: '.env.local' });
+  const { eq } = await import('drizzle-orm');
+  const { db } = await import('../src/lib/db/client');
+  const rec = await import('../src/lib/db/schema/recruitment');
+  const usersSchema = await import('../src/lib/db/schema/users');
+  const [adminRow] = await db
+    .select({ id: usersSchema.users.id })
+    .from(usersSchema.users)
+    .where(eq(usersSchema.users.email, 'e2e-admin@ireland-careers.test'));
+  const [empRow] = await db
+    .insert(rec.employers)
+    .values({ legalName: `Full Flow Employer ${suffix}` })
+    .returning({ id: rec.employers.id });
+  if (!adminRow || !empRow) throw new Error('full-flow seed failed');
+  const [reqRow] = await db
+    .insert(rec.jobRequisitions)
+    .values({
+      employerId: empRow.id,
+      title: `Full Flow Req ${suffix}`,
+      positionsRequired: 1,
+      employmentType: 'FULL_TIME',
+      status: 'OPEN',
+      assignedUserId: adminRow.id,
+    })
+    .returning({ id: rec.jobRequisitions.id });
+  if (!reqRow) throw new Error('full-flow requisition seed failed');
+  const requisitionUrl = `/requisitions/${reqRow.id}`;
+  await page.goto(requisitionUrl, { waitUntil: 'networkidle' });
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  const requisitionUrl = page.url();
   await shot(page, '04-requisition-detail');
 
   // ── STEP 4 · Add candidate to the pipeline ───────────────────────────
@@ -154,7 +175,7 @@ test('lead → candidate → requisition → pipeline → placement → fee invo
     { label: /promote to applied/i, expect: /promoted to applied/i, snap: '06-applied' },
     { label: /move to interview/i, expect: /moved to interview/i, snap: '07-interview' },
     { label: /move to offer/i, expect: /moved to offer/i, snap: '08-offer' },
-    { label: /accept offer|mark placed/i, expect: /placed/i, snap: '09-placed' },
+    { label: /accept offer|mark placed/i, expect: /Flow-.* placed/i, snap: '09-placed' },
   ];
   for (const step of advanceSequence) {
     // The candidate card for OUR candidate is the one whose text contains

@@ -542,10 +542,24 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
         context: { via: 'lead_accept', leadId: lead.id, targetBusiness: lead.targetBusiness },
       });
 
-      // VAT rate from settings; treatment stays STANDARD at MVP scale
-      // (per-employer treatment can be layered on later).
+      // R0 — mirror generateInvoiceForPayer exactly: an employer payer's
+      // own VAT treatment and payment terms apply. This path used to
+      // hardcode STANDARD + the app default, so a reverse-charge
+      // employer's accept-lead invoice carried the wrong VAT line.
       const settings = await fetchAppSettings();
-      const effectiveVatRate = settings.vatRegistered ? settings.vatRatePercent : '0.00';
+      let vatTreatment: 'STANDARD' | 'REVERSE_CHARGE' | 'EXEMPT' | 'OUTSIDE_SCOPE' = 'STANDARD';
+      let paymentTermsDays: number | null = settings.defaultPaymentTermsDays;
+      if (lead.targetBusiness === 'RECRUITMENT' && lead.employerId) {
+        const [emp] = await tx
+          .select({ terms: employers.paymentTermsDays, treatment: employers.vatTreatment })
+          .from(employers)
+          .where(eq(employers.id, lead.employerId))
+          .limit(1);
+        if (emp?.terms != null) paymentTermsDays = emp.terms;
+        if (emp?.treatment) vatTreatment = emp.treatment;
+      }
+      const effectiveVatRate =
+        settings.vatRegistered && vatTreatment === 'STANDARD' ? settings.vatRatePercent : '0.00';
       const newInvoice = await insertInvoice(tx, {
         payerPersonId: lead.targetBusiness === 'RECRUITMENT' ? null : lead.personId,
         payerEmployerId: lead.targetBusiness === 'RECRUITMENT' ? lead.employerId : null,
@@ -554,11 +568,11 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
         qty: 1,
         unitPrice: parsed.amount,
         vatRatePercent: effectiveVatRate,
-        vatTreatment: 'STANDARD',
+        vatTreatment,
         currencyCode: parsed.currencyCode,
         lineDescription: service.name,
         issuedByUserId: session.user.id,
-        paymentTermsDays: settings.defaultPaymentTermsDays,
+        paymentTermsDays,
         immigrationCaseId: lead.targetBusiness === 'IMMIGRATION' ? entityId : null,
         jobRequisitionId: lead.targetBusiness === 'RECRUITMENT' ? entityId : null,
         placementId: null,

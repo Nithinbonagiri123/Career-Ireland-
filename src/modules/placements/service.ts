@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
@@ -13,7 +13,11 @@ import {
   placements,
 } from '@/lib/db/schema/recruitment';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
-import { assertTransition, PLACEMENT_TRANSITIONS } from '@/lib/state-machine';
+import {
+  APPLICATION_TRANSITIONS,
+  assertTransition,
+  PLACEMENT_TRANSITIONS,
+} from '@/lib/state-machine';
 import {
   type ArchivePlacementInput,
   ArchivePlacementSchema,
@@ -198,6 +202,13 @@ export async function markApplicationPlaced(applicationId: string): Promise<Plac
         'APPLICATION_EXTERNAL',
         'External applications cannot be placed on our requisitions',
       );
+    // R0 — this used to jump an application to ACCEPTED from any status
+    // with no transition check and no audit row. Placement is only legal
+    // from OFFER (the OFFER→ACCEPTED hop) or from an already-ACCEPTED
+    // application (the pipeline's confirm path).
+    if (app.status !== 'ACCEPTED') {
+      assertTransition('application', app.status, 'ACCEPTED', APPLICATION_TRANSITIONS);
+    }
 
     const [req] = await tx
       .select({ employerId: jobRequisitions.employerId })
@@ -225,6 +236,15 @@ export async function markApplicationPlaced(applicationId: string): Promise<Plac
           .update(jobApplications)
           .set({ status: 'ACCEPTED', updatedAt: sql`NOW()` })
           .where(eq(jobApplications.id, applicationId));
+        await recordAudit(tx, {
+          actorUserId: session.user.id,
+          entityType: 'job_application',
+          entityId: applicationId,
+          action: 'STATUS_CHANGED',
+          before: { status: app.status },
+          after: { status: 'ACCEPTED' },
+          context: { via: 'pipeline_mark_placed' },
+        });
       }
       // Stage C workflow collapse — accepting an application auto-creates
       // a PROPOSED placement (applications/service.ts), so "mark placed"
@@ -233,6 +253,11 @@ export async function markApplicationPlaced(applicationId: string): Promise<Plac
       // flip and audit. Without this, the one-click path returned the
       // proposed row untouched and the candidate never read as Placed.
       if (existing.status === 'PROPOSED') {
+        await assertSeatAvailable(tx, {
+          requisitionId: app.jobRequisitionId,
+          forPersonId: app.personId,
+          excludePlacementId: existing.id,
+        });
         const [confirmed] = await tx
           .update(placements)
           .set({ status: 'CONFIRMED', updatedAt: sql`NOW()` })
@@ -255,6 +280,10 @@ export async function markApplicationPlaced(applicationId: string): Promise<Plac
       return existing;
     }
 
+    await assertSeatAvailable(tx, {
+      requisitionId: app.jobRequisitionId,
+      forPersonId: app.personId,
+    });
     const [created] = await tx
       .insert(placements)
       .values({
@@ -283,10 +312,21 @@ export async function markApplicationPlaced(applicationId: string): Promise<Plac
 
     // Flip the application status alongside the placement so the two
     // tables agree.
-    await tx
-      .update(jobApplications)
-      .set({ status: 'ACCEPTED', updatedAt: sql`NOW()` })
-      .where(eq(jobApplications.id, applicationId));
+    if (app.status !== 'ACCEPTED') {
+      await tx
+        .update(jobApplications)
+        .set({ status: 'ACCEPTED', updatedAt: sql`NOW()` })
+        .where(eq(jobApplications.id, applicationId));
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'job_application',
+        entityId: applicationId,
+        action: 'STATUS_CHANGED',
+        before: { status: app.status },
+        after: { status: 'ACCEPTED' },
+        context: { via: 'pipeline_mark_placed' },
+      });
+    }
 
     await flipAvailabilityToPlaced(tx, session.user.id, created.personId, created.id);
     await recomputeRequisitionFillCount(tx, session.user.id, created.jobRequisitionId);
@@ -307,6 +347,30 @@ export async function createPlacement(input: CreatePlacementInput): Promise<Plac
   const d = parsed.data;
 
   return db.transaction(async (tx) => {
+    // R0 — direct creation used to accept any employer/requisition pair,
+    // duplicates, and overfills. The guard locks the requisition row so
+    // concurrent confirmations cannot both pass.
+    if (d.status === 'CONFIRMED' || d.status === 'STARTED' || d.status === 'COMPLETED') {
+      await assertSeatAvailable(tx, {
+        requisitionId: d.jobRequisitionId,
+        forPersonId: d.personId,
+        employerId: d.employerId,
+      });
+    } else {
+      // Even a PROPOSED placement must belong to the requisition's employer.
+      const [reqRow] = await tx
+        .select({ employerId: jobRequisitions.employerId })
+        .from(jobRequisitions)
+        .where(eq(jobRequisitions.id, d.jobRequisitionId))
+        .limit(1);
+      if (!reqRow) throw new BusinessRuleError('REQUISITION_NOT_FOUND', 'Requisition not found');
+      if (reqRow.employerId !== d.employerId) {
+        throw new BusinessRuleError(
+          'PLACEMENT_EMPLOYER_MISMATCH',
+          'The placement employer does not match the requisition employer',
+        );
+      }
+    }
     const [created] = await tx
       .insert(placements)
       .values({
@@ -379,6 +443,96 @@ async function flipAvailabilityToPlaced(
   });
 }
 
+/** Seats actually consumed: DISTINCT persons with a live (non-archived)
+ *  CONFIRMED / STARTED / COMPLETED placement on the requisition. R0 —
+ *  the old count included archived placements and counted duplicate
+ *  rows per person. */
+async function countSeatsFilled(
+  tx: Parameters<typeof recordAudit>[0],
+  requisitionId: string,
+): Promise<number> {
+  const [row] = await tx
+    .select({ filled: sql<number>`COUNT(DISTINCT ${placements.personId})::int` })
+    .from(placements)
+    .where(
+      and(
+        eq(placements.jobRequisitionId, requisitionId),
+        inArray(placements.status, ['CONFIRMED', 'STARTED', 'COMPLETED']),
+        isNull(placements.archivedAt),
+      ),
+    );
+  return row?.filled ?? 0;
+}
+
+/**
+ * R0 transaction-safe seat guard. Locks the requisition row (FOR UPDATE)
+ * so two concurrent confirmations cannot both pass the check, then
+ * refuses:
+ *  - a requisition that doesn't exist,
+ *  - an employer mismatch (when employerId is supplied),
+ *  - a duplicate live placement for the same person (when the person is
+ *    not already the one being confirmed),
+ *  - overfilling: confirming one more seat than positionsRequired.
+ * `forPersonId` names the person about to take a seat: if they already
+ * hold one of the counted seats, confirming them again is the duplicate
+ * refusal, not an overfill.
+ */
+async function assertSeatAvailable(
+  tx: Parameters<typeof recordAudit>[0],
+  opts: {
+    requisitionId: string;
+    forPersonId: string;
+    employerId?: string;
+    /** placement being transitioned (its own row shouldn't trip the duplicate check) */
+    excludePlacementId?: string;
+  },
+): Promise<void> {
+  const [req] = await tx
+    .select({
+      id: jobRequisitions.id,
+      employerId: jobRequisitions.employerId,
+      positionsRequired: jobRequisitions.positionsRequired,
+    })
+    .from(jobRequisitions)
+    .where(eq(jobRequisitions.id, opts.requisitionId))
+    .for('update')
+    .limit(1);
+  if (!req) throw new BusinessRuleError('REQUISITION_NOT_FOUND', 'Requisition not found');
+  if (opts.employerId && opts.employerId !== req.employerId) {
+    throw new BusinessRuleError(
+      'PLACEMENT_EMPLOYER_MISMATCH',
+      'The placement employer does not match the requisition employer',
+    );
+  }
+
+  const liveSeatConds = [
+    eq(placements.jobRequisitionId, opts.requisitionId),
+    inArray(placements.status, ['CONFIRMED', 'STARTED', 'COMPLETED']),
+    isNull(placements.archivedAt),
+  ];
+
+  const [dup] = await tx
+    .select({ id: placements.id })
+    .from(placements)
+    .where(and(...liveSeatConds, eq(placements.personId, opts.forPersonId)))
+    .limit(1);
+  if (dup && dup.id !== opts.excludePlacementId) {
+    throw new BusinessRuleError(
+      'PLACEMENT_DUPLICATE',
+      'This candidate already holds a confirmed placement on this requisition',
+    );
+  }
+  if (dup) return; // the person already holds the seat being re-confirmed — no new seat consumed
+
+  const filled = await countSeatsFilled(tx, opts.requisitionId);
+  if (filled >= req.positionsRequired) {
+    throw new BusinessRuleError(
+      'REQUISITION_OVERFILLED',
+      `All ${req.positionsRequired} position(s) on this requisition are already filled`,
+    );
+  }
+}
+
 /**
  * Recomputes `positions_filled` from the placements table (source of truth) rather than
  * tracking a delta. A placement counts as "filling a seat" while it is CONFIRMED, STARTED
@@ -390,7 +544,7 @@ async function flipAvailabilityToPlaced(
  *  - filled == 0 and was FILLED/PARTIAL → IN_PROGRESS (staff can reopen manually)
  *  - otherwise                          → unchanged
  */
-async function recomputeRequisitionFillCount(
+export async function recomputeRequisitionFillCount(
   tx: Parameters<typeof recordAudit>[0],
   actorUserId: string,
   requisitionId: string,
@@ -402,19 +556,16 @@ async function recomputeRequisitionFillCount(
     .limit(1);
   if (!req) return;
 
-  const [{ filled }] = await tx
-    .select({ filled: count() })
-    .from(placements)
-    .where(
-      and(
-        eq(placements.jobRequisitionId, requisitionId),
-        inArray(placements.status, ['CONFIRMED', 'STARTED', 'COMPLETED']),
-      ),
-    );
-
-  const newFilled = filled ?? 0;
+  const newFilled = await countSeatsFilled(tx, requisitionId);
   let newStatus: typeof req.status = req.status;
-  if (newFilled >= req.positionsRequired) {
+  // R0 — a terminal or draft requisition keeps its lifecycle status: the
+  // recompute used to resurrect CLOSED/CANCELLED rows to FILLED. Only the
+  // counter is corrected for those.
+  const statusLocked =
+    req.status === 'CLOSED' || req.status === 'CANCELLED' || req.status === 'DRAFT';
+  if (statusLocked) {
+    newStatus = req.status;
+  } else if (newFilled >= req.positionsRequired) {
     newStatus = 'FILLED';
   } else if (newFilled > 0) {
     newStatus = 'PARTIALLY_FILLED';
@@ -454,6 +605,16 @@ export async function updatePlacementStatus(input: UpdatePlacementStatusInput): 
     if (before.status === parsed.status) return before;
 
     assertTransition('placement', before.status, parsed.status, PLACEMENT_TRANSITIONS);
+
+    // R0 — confirming a seat must pass the same duplicate/overfill guard
+    // as every other confirmation path.
+    if (before.status === 'PROPOSED' && parsed.status === 'CONFIRMED') {
+      await assertSeatAvailable(tx, {
+        requisitionId: before.jobRequisitionId,
+        forPersonId: before.personId,
+        excludePlacementId: before.id,
+      });
+    }
 
     const [after] = await tx
       .update(placements)

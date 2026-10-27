@@ -1,5 +1,6 @@
 'use client';
 
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -10,7 +11,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
  * / Applications / Checklists) to three, replacing the first three with
  * the unified **Pipeline** tab (the Pipeline Wall). Overview and
  * Checklists stay as they were.
+ *
+ * R0 — the tabs now honour `?tab=` (deep links from requisition cards,
+ * next-action buttons and bookmarks used to be silently ignored) and
+ * write the choice back to the URL so back/forward and sharing work.
  */
+const TAB_VALUES = ['pipeline', 'overview', 'checklists'] as const;
+type TabValue = (typeof TAB_VALUES)[number];
+
 export function RequisitionTabs({
   overview,
   pipeline,
@@ -25,8 +33,24 @@ export function RequisitionTabs({
     checklists: number;
   };
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requested = searchParams.get('tab');
+  const active: TabValue = TAB_VALUES.includes(requested as TabValue)
+    ? (requested as TabValue)
+    : 'pipeline';
   return (
-    <Tabs defaultValue="pipeline">
+    <Tabs
+      value={active}
+      onValueChange={(next) => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (next === 'pipeline') params.delete('tab');
+        else params.set('tab', next);
+        const qs = params.toString();
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      }}
+    >
       <TabsList>
         <TabsTrigger value="pipeline">
           Pipeline

@@ -59,11 +59,15 @@ export default async function EmployerDetail({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ raisePlacement?: string; raiseRequisition?: string }>;
+  searchParams: Promise<{
+    raisePlacement?: string;
+    raiseRequisition?: string;
+    newRequisition?: string;
+  }>;
 }) {
   const session = await requireInternalStaff();
   const { id } = await params;
-  const { raisePlacement, raiseRequisition } = await searchParams;
+  const { raisePlacement, raiseRequisition, newRequisition } = await searchParams;
   const employer = await fetchEmployer(id);
   if (!employer) notFound();
 
@@ -285,6 +289,7 @@ export default async function EmployerDetail({
                   currencies={currencies}
                   occupations={occupationList}
                   defaultEmployerId={employer.id}
+                  defaultOpen={newRequisition === '1'}
                   trigger={
                     <Button size="sm">
                       <Plus className="mr-1.5 size-4" /> New requisition

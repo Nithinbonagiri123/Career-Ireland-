@@ -6,10 +6,11 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
-import { requirePermission } from '@/lib/auth/session';
+import { requireAnyPermission } from '@/lib/auth/session';
 import { formatCurrency } from '@/lib/currency';
 import { db } from '@/lib/db/client';
 import { persons } from '@/lib/db/schema/persons';
+import { employers, jobRequisitions } from '@/lib/db/schema/recruitment';
 import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchLead } from '@/modules/leads/service';
@@ -38,7 +39,13 @@ function statusTone(status: ProFormaView['status']) {
 }
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePermission('candidate_services', 'leads', 'view');
+  // R0 — leads are multi-workspace: a recruitment lead used to demand the
+  // candidate-services grant even inside the Recruitment workspace.
+  await requireAnyPermission([
+    { business: 'candidate_services', module: 'leads', verb: 'view' },
+    { business: 'recruitment', module: 'leads', verb: 'view' },
+    { business: 'main', module: 'leads', verb: 'view' },
+  ]);
   const { id } = await params;
 
   const lead = await fetchLead(id);
@@ -82,9 +89,40 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         .limit(1)
     : [null];
 
+  // R0 — an employer (Recruitment) lead used to render as "Unknown"
+  // because this page only knew how to fetch a person. Load the employer
+  // and its requisitions so the page shows the company, links to its
+  // profile, and surfaces what the lead turned into.
+  const [employer] = lead.employerId
+    ? await db
+        .select({
+          id: employers.id,
+          legalName: employers.legalName,
+          industry: employers.industry,
+          city: employers.city,
+          country: employers.country,
+          relationshipStatus: employers.relationshipStatus,
+        })
+        .from(employers)
+        .where(eq(employers.id, lead.employerId))
+        .limit(1)
+    : [null];
+
+  const employerRequisitions = lead.employerId
+    ? await db
+        .select({
+          id: jobRequisitions.id,
+          title: jobRequisitions.title,
+          status: jobRequisitions.status,
+        })
+        .from(jobRequisitions)
+        .where(eq(jobRequisitions.employerId, lead.employerId))
+        .limit(10)
+    : [];
+
   const payerName = person
     ? [person.firstName, person.middleName, person.lastName].filter(Boolean).join(' ')
-    : 'Unknown';
+    : (employer?.legalName ?? 'Unknown');
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
@@ -100,6 +138,25 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           title={payerName}
           description={`${lead.targetBusiness.replaceAll('_', ' ').toLowerCase()} · ${lead.status.toLowerCase()}`}
         />
+        {employer && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+            <span>
+              Employer enquiry from {employer.legalName}
+              {employer.industry ? ` · ${employer.industry}` : ''}
+              {employer.city
+                ? ` · ${[employer.city, employer.country].filter(Boolean).join(', ')}`
+                : ''}
+              {' — '}status {employer.relationshipStatus.toLowerCase()}. Contacts, requisitions and
+              billing live on the employer profile.
+            </span>
+            <Link
+              href={`/employers/${employer.id}`}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}
+            >
+              Open employer profile
+            </Link>
+          </div>
+        )}
         {lead.personId && (
           /* Stage 6B compatibility banner — this detail page keeps the
              quote composer and the pro-forma lifecycle actions. Everything
@@ -142,6 +199,22 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               <>
                 <dt className="text-muted-foreground">Location</dt>
                 <dd>{[person.currentCity, person.currentCountry].filter(Boolean).join(', ')}</dd>
+              </>
+            )}
+            {employerRequisitions.length > 0 && (
+              <>
+                <dt className="text-muted-foreground">Requisitions</dt>
+                <dd className="space-y-0.5">
+                  {employerRequisitions.map((r) => (
+                    <Link
+                      key={r.id}
+                      href={`/requisitions/${r.id}`}
+                      className="block truncate hover:underline"
+                    >
+                      {r.title} · {r.status.replaceAll('_', ' ').toLowerCase()}
+                    </Link>
+                  ))}
+                </dd>
               </>
             )}
             <dt className="text-muted-foreground">Created</dt>

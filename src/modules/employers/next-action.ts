@@ -57,7 +57,11 @@ export function computeEmployerNextAction(
       dueHint: 'overdue',
       sentence: `Chase the overdue placement fee — invoice ${overduePlacement.latestInvoice.number} is ${days} days past due.`,
       tone: 'urgent',
-      primary: { label: 'Open invoice', href: `/employers/${employerId}` },
+      primary: {
+        label: 'Open invoice',
+        // R0 — used to link back to the page you were already on.
+        href: `/employers/${employerId}/invoices/${overduePlacement.latestInvoice.number}`,
+      },
     };
   }
 
@@ -85,7 +89,11 @@ export function computeEmployerNextAction(
       dueHint: null,
       sentence: 'Create the first requisition so candidates can be sourced for this employer.',
       tone: 'default',
-      primary: { label: 'New requisition', href: `/employers/${employerId}` },
+      primary: {
+        label: 'New requisition',
+        // R0 — ?newRequisition=1 opens the dialog instead of self-linking.
+        href: `/employers/${employerId}?newRequisition=1`,
+      },
     };
   }
 

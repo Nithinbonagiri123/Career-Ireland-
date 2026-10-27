@@ -215,11 +215,24 @@ export async function upsertEmployer(input: UpsertEmployerInput): Promise<Employ
         entityType: 'employer',
         entityId: after.id,
         action: 'UPDATED',
+        // R0 — VAT, terms and billing email changes were invisible in
+        // the audit trail; they are exactly the fields finance cares about.
         before: {
           legalName: before.legalName,
           relationshipStatus: before.relationshipStatus,
+          vatTreatment: before.vatTreatment,
+          vatId: before.vatId,
+          paymentTermsDays: before.paymentTermsDays,
+          billingEmail: before.billingEmail,
         },
-        after: { legalName: after.legalName, relationshipStatus: after.relationshipStatus },
+        after: {
+          legalName: after.legalName,
+          relationshipStatus: after.relationshipStatus,
+          vatTreatment: after.vatTreatment,
+          vatId: after.vatId,
+          paymentTermsDays: after.paymentTermsDays,
+          billingEmail: after.billingEmail,
+        },
       });
       return after;
     }
@@ -330,12 +343,26 @@ export async function upsertEmployerContact(input: UpsertContactInput): Promise<
   return db.transaction(async (tx) => {
     // If this contact is being made primary, unset any other primary for the same employer.
     if (d.isPrimary) {
-      await tx
+      const demoted = await tx
         .update(employerContacts)
         .set({ isPrimary: false, updatedAt: sql`NOW()` })
         .where(
           and(eq(employerContacts.employerId, d.employerId), eq(employerContacts.isPrimary, true)),
-        );
+        )
+        .returning({ id: employerContacts.id, fullName: employerContacts.fullName });
+      // R0 — the demotion used to leave no audit trace.
+      for (const c of demoted) {
+        if (d.id && c.id === d.id) continue;
+        await recordAudit(tx, {
+          actorUserId: session.user.id,
+          entityType: 'employer_contact',
+          entityId: c.id,
+          action: 'UPDATED',
+          before: { fullName: c.fullName, isPrimary: true },
+          after: { fullName: c.fullName, isPrimary: false },
+          context: { via: 'primary_contact_change', employerId: d.employerId },
+        });
+      }
     }
 
     if (d.id) {

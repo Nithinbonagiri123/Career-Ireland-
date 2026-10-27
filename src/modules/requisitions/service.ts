@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, type SQL, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
@@ -10,6 +10,7 @@ import {
   type JobRequisition,
   jobApplications,
   jobRequisitions,
+  placements,
   type RequisitionQualification,
   type RequisitionSkill,
   requisitionQualifications,
@@ -21,6 +22,7 @@ import { users } from '@/lib/db/schema/users';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { type AssignmentScope, assignmentCondition } from '@/lib/scope';
 import { assertTransition, REQUISITION_TRANSITIONS } from '@/lib/state-machine';
+import { recomputeRequisitionFillCount } from '@/modules/placements/service';
 import {
   type ArchiveRequisitionInput,
   ArchiveRequisitionSchema,
@@ -227,8 +229,38 @@ export async function upsertRequisition(input: UpsertRequisitionInput): Promise<
         .select()
         .from(jobRequisitions)
         .where(eq(jobRequisitions.id, d.id))
+        .for('update')
         .limit(1);
       if (!before) throw new BusinessRuleError('REQUISITION_NOT_FOUND', 'Requisition not found');
+
+      // R0 — the edit form used to write any status straight through,
+      // bypassing the requisition state machine entirely.
+      if (d.status !== before.status) {
+        assertTransition('requisition', before.status, d.status, REQUISITION_TRANSITIONS);
+      }
+
+      // R0 / D8 — positions may never fall below the seats already
+      // confirmed. Counted live (distinct persons, archived excluded).
+      if (d.positionsRequired !== before.positionsRequired) {
+        const [seatRow] = await tx
+          .select({ filled: sql<number>`COUNT(DISTINCT ${placements.personId})::int` })
+          .from(placements)
+          .where(
+            and(
+              eq(placements.jobRequisitionId, d.id),
+              inArray(placements.status, ['CONFIRMED', 'STARTED', 'COMPLETED']),
+              isNull(placements.archivedAt),
+            ),
+          );
+        const liveFilled = seatRow?.filled ?? 0;
+        if (d.positionsRequired < liveFilled) {
+          throw new BusinessRuleError(
+            'REQUISITION_POSITIONS_BELOW_FILLED',
+            `Cannot reduce positions to ${d.positionsRequired}: ${liveFilled} are already filled by confirmed placements. Close the requisition instead.`,
+          );
+        }
+      }
+
       const [after] = await tx
         .update(jobRequisitions)
         .set({ ...values, updatedAt: sql`NOW()` })
@@ -240,9 +272,31 @@ export async function upsertRequisition(input: UpsertRequisitionInput): Promise<
         entityType: 'job_requisition',
         entityId: after.id,
         action: 'UPDATED',
-        before: { title: before.title, status: before.status },
-        after: { title: after.title, status: after.status },
+        // R0 — audit the fields that matter, not just title/status.
+        before: {
+          title: before.title,
+          status: before.status,
+          positionsRequired: before.positionsRequired,
+          salaryMin: before.salaryMin,
+          salaryMax: before.salaryMax,
+          targetFillDate: before.targetFillDate,
+        },
+        after: {
+          title: after.title,
+          status: after.status,
+          positionsRequired: after.positionsRequired,
+          salaryMin: after.salaryMin,
+          salaryMax: after.salaryMax,
+          targetFillDate: after.targetFillDate,
+        },
       });
+
+      // R0 — changing positionsRequired alters the fill roll-up
+      // (e.g. 2/2 FILLED becomes 2/3 PARTIALLY_FILLED when a seat is
+      // added), so recompute from the source of truth.
+      if (after.positionsRequired !== before.positionsRequired) {
+        await recomputeRequisitionFillCount(tx, session.user.id, after.id);
+      }
       return after;
     }
     const [created] = await tx
@@ -338,6 +392,19 @@ export async function attachRequisitionSkill(
         )
         .returning();
       if (!updated) throw new Error('update returned no row');
+      // R0 — the update branch used to write no audit row at all.
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'requisition_skill',
+        entityId: parsed.jobRequisitionId,
+        action: 'SKILL_UPDATED',
+        before: {
+          skillId: parsed.skillId,
+          isRequired: existing.isRequired,
+          weight: existing.weight,
+        },
+        after: { skillId: parsed.skillId, isRequired: updated.isRequired, weight: updated.weight },
+      });
       return updated;
     }
     const [row] = await tx.insert(requisitionSkills).values(parsed).returning();
@@ -424,6 +491,15 @@ export async function attachRequisitionQualification(
         )
         .returning();
       if (!updated) throw new Error('update returned no row');
+      // R0 — the update branch used to write no audit row at all.
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'requisition_qualification',
+        entityId: parsed.jobRequisitionId,
+        action: 'QUALIFICATION_UPDATED',
+        before: { qualificationId: parsed.qualificationId, isRequired: existing.isRequired },
+        after: { qualificationId: parsed.qualificationId, isRequired: updated.isRequired },
+      });
       return updated;
     }
     const [row] = await tx.insert(requisitionQualifications).values(parsed).returning();
