@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { AlertCircle, Loader2, Mail, Plus, Search, User, UserPlus } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,10 +15,12 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import type { Person } from '@/lib/db/schema/persons';
+import { useServerSearch } from '@/lib/hooks/use-server-search';
 import { cn } from '@/lib/utils';
 import { manuallyShortlistPersonAction } from '@/modules/matching/actions';
 import { createPersonAction } from '@/modules/persons/actions';
+import { searchPersonsForPickerAction } from '@/modules/pickers/actions';
+import type { PersonPickerItem } from '@/modules/pickers/service';
 
 /**
  * "Add candidate" for the requisition pipeline. Complements Run assisted
@@ -32,39 +34,28 @@ import { createPersonAction } from '@/modules/persons/actions';
 export function AddCandidateDialog({
   requisitionId,
   requisitionTitle,
-  persons,
 }: {
   requisitionId: string;
   requisitionTitle: string;
-  persons: Person[];
 }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [personId, setPersonId] = useState('');
-  const [locallyCreated, setLocallyCreated] = useState<Person[]>([]);
+  const [selected, setSelected] = useState<PersonPickerItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-
-  const allPersons = useMemo(() => [...locallyCreated, ...persons], [persons, locallyCreated]);
-
-  // Filter by name or email; cap at 30 rows so a huge list stays scrollable
-  // without turning the dialog into a wall of names.
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return allPersons.slice(0, 30);
-    return allPersons
-      .filter((p) => `${p.firstName} ${p.lastName} ${p.email ?? ''}`.toLowerCase().includes(q))
-      .slice(0, 30);
-  }, [allPersons, query]);
+  // R2 — candidates are searched on the server (paginated, access-checked)
+  // instead of shipping every person to the browser with the page.
+  const search = useServerSearch(searchPersonsForPickerAction, { enabled: open });
+  const query = search.query;
+  const personId = selected?.id ?? '';
 
   const reset = () => {
-    setQuery('');
-    setPersonId('');
+    search.reset();
+    setSelected(null);
     setFormError(null);
     setSubmitting(false);
   };
 
-  const submit = async (id: string) => {
+  const submit = async (id: string, name?: string) => {
     setSubmitting(true);
     setFormError(null);
     const r = await manuallyShortlistPersonAction(id, requisitionId);
@@ -73,12 +64,8 @@ export function AddCandidateDialog({
       setFormError(r.error.message);
       return;
     }
-    const picked = allPersons.find((p) => p.id === id);
-    toast.success(
-      picked
-        ? `${picked.firstName} ${picked.lastName} added to Shortlisted`
-        : 'Added to Shortlisted',
-    );
+    const label = name ?? (selected ? `${selected.firstName} ${selected.lastName}` : null);
+    toast.success(label ? `${label} added to Shortlisted` : 'Added to Shortlisted');
     reset();
     setOpen(false);
   };
@@ -113,8 +100,7 @@ export function AddCandidateDialog({
       setFormError(rp.error.message);
       return;
     }
-    setLocallyCreated((prev) => [rp.data, ...prev]);
-    await submit(rp.data.id);
+    await submit(rp.data.id, `${rp.data.firstName} ${rp.data.lastName}`);
   };
 
   return (
@@ -152,29 +138,53 @@ export function AddCandidateDialog({
           />
           <Input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => search.setQuery(e.target.value)}
             placeholder="Search by name or email…"
             className="pl-9"
             autoFocus
           />
         </div>
 
-        <div className="max-h-64 overflow-y-auto rounded-md border">
-          {filtered.length === 0 ? (
+        <div
+          className="max-h-64 overflow-y-auto rounded-md border"
+          aria-busy={search.status === 'loading'}
+          data-testid="candidate-search-results"
+        >
+          {search.status === 'error' ? (
+            <div
+              className="flex flex-col items-center gap-2 px-4 py-6 text-center text-xs text-destructive"
+              role="alert"
+            >
+              <span>{search.error}</span>
+              <Button type="button" size="sm" variant="outline" onClick={search.retry}>
+                Try again
+              </Button>
+            </div>
+          ) : search.items.length === 0 && search.status !== 'ready' ? (
+            <div className="flex items-center justify-center gap-2 px-4 py-6 text-xs text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" aria-hidden /> Searching…
+            </div>
+          ) : search.items.length === 0 ? (
             <div className="px-4 py-6 text-center text-xs text-muted-foreground">
-              No candidates match "{query.trim()}". Use{' '}
-              <span className="font-medium text-foreground">Add + shortlist</span> below to create
-              them.
+              {query.trim() ? (
+                <>
+                  No candidates match "{query.trim()}". Use{' '}
+                  <span className="font-medium text-foreground">Add + shortlist</span> below to
+                  create them.
+                </>
+              ) : (
+                'No active candidates yet. Type a name to add one.'
+              )}
             </div>
           ) : (
             <ul className="divide-y">
-              {filtered.map((p) => {
+              {search.items.map((p) => {
                 const isSelected = personId === p.id;
                 return (
                   <li key={p.id}>
                     <button
                       type="button"
-                      onClick={() => setPersonId(p.id)}
+                      onClick={() => setSelected(p)}
                       className={cn(
                         'flex w-full items-center gap-3 px-3 py-2 text-left transition-colors',
                         isSelected ? 'bg-accent/10' : 'hover:bg-muted',
@@ -204,11 +214,28 @@ export function AddCandidateDialog({
                   </li>
                 );
               })}
+              {search.hasMore && (
+                <li>
+                  <button
+                    type="button"
+                    onClick={search.loadMore}
+                    disabled={search.status === 'loading'}
+                    className="flex w-full items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted disabled:opacity-60"
+                  >
+                    {search.status === 'loading' && (
+                      <Loader2 className="size-3 animate-spin" aria-hidden />
+                    )}
+                    Show more
+                  </button>
+                </li>
+              )}
             </ul>
           )}
         </div>
 
-        {query.trim() && (
+        {/* Offered only once the search for exactly this text has finished,
+            so nobody creates a duplicate of a candidate still loading. */}
+        {query.trim() && search.settled && (
           <button
             type="button"
             onClick={createAndShortlist}

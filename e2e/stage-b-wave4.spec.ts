@@ -318,11 +318,13 @@ test.describe('Wave 4 — complimentary intake (Screen 09)', () => {
       await expect(page.getByText(/complimentary invoice INV-/)).toBeVisible({ timeout: 30_000 });
 
       // Lands on the workspace; Wave 3 derived status shows the live
-      // engagement as In progress.
-      await expect(page).toHaveURL(/\/candidates\/[0-9a-f-]+\?just_created=1/, {
+      // engagement as In progress. The form goes to /candidates/<id>, which
+      // redirects to the client workspace — wait for that FINAL URL rather
+      // than racing the intermediate one.
+      await expect(page).toHaveURL(/\/clients\/[0-9a-f-]+\?just_created=1/, {
         timeout: 20_000,
       });
-      personId = page.url().match(/candidates\/([0-9a-f-]+)/)?.[1] ?? null;
+      personId = page.url().match(/clients\/([0-9a-f-]+)/)?.[1] ?? null;
       expect(personId).toBeTruthy();
       await page.goto(`/clients/${personId}`);
       await expect(page.locator('[title^="Primary onboarding status"]')).toHaveText(/In progress/, {

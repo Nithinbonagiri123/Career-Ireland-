@@ -3,6 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { type ReactElement, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { type EmployerOption, EmployerSearchSelect } from '@/components/employer-search-select';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';
 import { FormSection } from '@/components/form-section';
@@ -33,7 +34,11 @@ import {
 
 type Props = {
   trigger: ReactElement;
-  employers: Employer[];
+  /** Full employer list → classic dropdown (existing callers, unchanged). */
+  employers?: Employer[];
+  /** R2 — when no list is passed, the employer is chosen with a server-side
+   *  search instead; this is the current selection it starts from. */
+  initialEmployer?: EmployerOption | null;
   occupations: Occupation[];
   currencies: Currency[];
   initial?: JobRequisition;
@@ -46,18 +51,23 @@ type Props = {
 export function RequisitionDialog({
   trigger,
   employers,
+  initialEmployer,
   occupations,
   currencies,
   initial,
   defaultEmployerId,
   defaultOpen,
 }: Props) {
+  const [pickedEmployer, setPickedEmployer] = useState<EmployerOption | null>(
+    initialEmployer ?? null,
+  );
   const isEdit = Boolean(initial);
   const form = useForm<UpsertRequisitionInput>({
     resolver: zodResolver(UpsertRequisitionSchema),
     defaultValues: {
       id: initial?.id,
-      employerId: initial?.employerId ?? defaultEmployerId ?? employers[0]?.id ?? '',
+      employerId:
+        initial?.employerId ?? defaultEmployerId ?? initialEmployer?.id ?? employers?.[0]?.id ?? '',
       primaryContactId: initial?.primaryContactId ?? '',
       title: initial?.title ?? '',
       occupationId: initial?.occupationId ?? '',
@@ -112,14 +122,28 @@ export function RequisitionDialog({
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-6" noValidate>
           <FormSection title="Role">
-            <FormField id="jr-employer" label="Employer">
-              <Select id="jr-employer" {...register('employerId')}>
-                {employers.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.legalName}
-                  </option>
-                ))}
-              </Select>
+            <FormField id="jr-employer" label="Employer" error={errors.employerId?.message}>
+              {employers ? (
+                <Select id="jr-employer" {...register('employerId')}>
+                  {employers.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.legalName}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <>
+                  <input type="hidden" {...register('employerId')} />
+                  <EmployerSearchSelect
+                    id="jr-employer"
+                    value={pickedEmployer}
+                    onChange={(next) => {
+                      setPickedEmployer(next);
+                      setValue('employerId', next.id, { shouldDirty: true, shouldValidate: true });
+                    }}
+                  />
+                </>
+              )}
             </FormField>
             <FormField id="jr-title" label="Job title" error={errors.title?.message}>
               <Input id="jr-title" aria-invalid={Boolean(errors.title)} {...register('title')} />

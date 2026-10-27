@@ -207,15 +207,15 @@ test('lead → candidate → requisition → pipeline → placement → fee invo
   await expect(page.getByText(new RegExp(fullName, 'i'))).toHaveCount(0);
   await shot(page, '11-interviews-empty-of-candidate');
 
-  // Requisition detail defaults to the Pipeline tab; the Placements & Fees
-  // section lives on the Overview tab so we have to switch first.
+  // R2 — placements and their fees live on the Seats & placements tab.
   await page.goto(requisitionUrl, { waitUntil: 'networkidle' });
-  const overviewTab = page.getByRole('tab', { name: /^overview$/i });
-  await expect(overviewTab).toBeVisible({ timeout: 15_000 });
-  await overviewTab.click();
-  await expect(page.getByText(/placements & fees/i).first()).toBeVisible({ timeout: 15_000 });
-  // Confirm our candidate name appears in that section.
-  await expect(page.getByText(new RegExp(fullName, 'i')).first()).toBeVisible();
+  const seatsTab = page.getByRole('tab', { name: /seats & placements/i });
+  await expect(seatsTab).toBeVisible({ timeout: 15_000 });
+  await seatsTab.click();
+  const seatRows = page.getByTestId('seat-rows');
+  await expect(seatRows).toBeVisible({ timeout: 15_000 });
+  // Confirm our candidate holds a seat on this job.
+  await expect(seatRows.getByText(new RegExp(fullName, 'i')).first()).toBeVisible();
   await shot(page, '12-requisition-placements-fees');
 
   // ── STEP 8 · Raise placement fee invoice ─────────────────────────────
@@ -262,12 +262,12 @@ test('lead → candidate → requisition → pipeline → placement → fee invo
   expect(invoiceNumberMatch).not.toBeNull();
   const invoiceNumber = invoiceNumberMatch?.[1] ?? '';
 
-  // ── STEP 9 · Requisition Placements & Fees now shows the invoice ─────
-  // Requisition detail defaults to Pipeline tab; the Placements & Fees
-  // section (where the fee invoice number renders) lives on Overview.
-  await page.goto(requisitionUrl, { waitUntil: 'networkidle' });
-  await page.getByRole('tab', { name: /^overview$/i }).click();
-  await expect(page.getByText(invoiceNumber).first()).toBeVisible({ timeout: 15_000 });
+  // ── STEP 9 · The seat row now shows the fee invoice ──────────────────
+  // R2 — the fee invoice number renders on the Seats & placements tab.
+  await page.goto(`${requisitionUrl}?tab=seats`, { waitUntil: 'networkidle' });
+  await expect(page.getByTestId('seat-rows').getByText(invoiceNumber).first()).toBeVisible({
+    timeout: 15_000,
+  });
   await shot(page, '15-requisition-shows-fee-invoice');
 
   // ── STEP 10 · Finance KPI card reflects the outstanding invoice ──────
