@@ -1,52 +1,103 @@
 name: Deploy
 
-# Deploy pipeline for main. Gated so nothing ships until the whole
-# verification suite (typecheck, lint, unit tests, integration tests,
-# e2e tests) has already passed on the same SHA via ci.yml.
+# Production database migrations — MANUAL, OWNER-ONLY, DISABLED BY DEFAULT.
 #
-# Flow:
-#   1. `wait-for-ci`  — hard block until ci.yml (both verify + e2e jobs)
-#                       completes successfully for this commit. If CI is
-#                       still running we wait; if it failed we abort.
-#   2. `db-push`      — apply schema changes to the production database.
-#                       Uses `drizzle-kit push` for a state-based apply
-#                       rather than the migration file replay CI uses.
-#                       DATABASE_URL comes from secrets, never from env.
-#   3. `deploy`       — placeholder for the platform-specific push
-#                       (Vercel / Fly / Docker / etc.). Wire this up
-#                       once the deploy target is chosen — the guard
-#                       and db-push steps above are the immovable ones.
+# Phase 1 (G1) hardening. This workflow no longer runs on push. A merge
+# to main can never touch the production database on its own.
 #
-# Branch protection on main should require BOTH `CI / verify` and
-# `CI / e2e` as required status checks so a merge can't happen without
-# a green CI run. This workflow doubles that guarantee for direct
-# pushes (which shouldn't happen under branch protection, but belt &
-# braces).
+# A production migration run requires ALL of the following. The
+# owner-account check is defence in depth, never the only gate:
+#   1. Kill switch: the repository variable PROD_MIGRATIONS_ENABLED must
+#      be exactly 'true'. It is unset today, so every run stops here
+#      before reading any credential. Turning it on is a separate,
+#      explicitly approved step.
+#   2. Started by hand (Actions → Deploy → Run workflow) on main, by the
+#      repository owner account, typing MIGRATE.
+#   3. CI (Verify + E2E) green for the exact commit being run.
+#   4. Protected credentials: PROD_DATABASE_URL must be present. When the
+#      GitHub plan supports it, this job's secrets move into the
+#      `production` environment with required reviewers; see the
+#      limitation note below.
+#   5. Verified target: the database host's SHA-256 fingerprint must equal
+#      the repository variable PROD_DB_HOST_SHA256 (the URL is never
+#      printed), and the server must report itself as a primary.
+#   6. Reviewed contents: in `plan` mode the job lists the pending
+#      migration files and prints a SHA-256 digest of their exact
+#      contents, read-only. `apply` mode refuses unless the typed
+#      `reviewed_digest` matches the digest recomputed at apply time, so
+#      only the files that were reviewed can run.
+#
+# LIMITATION (GitHub Free + private repository): repository secrets are
+# readable by any workflow run on any branch by anyone with write
+# access, and environment required reviewers are unavailable. Until the
+# repository plan supports protected environments, the kill switch in
+# (1) stays OFF and migrations stay disabled unless separately approved.
+#
+# The old automatic `rollback-on-db-failure` job is retired. It could
+# re-promote an older production build whenever a run failed or was
+# declined. Rollback is the manual "Promote to production" workflow with
+# the previous good SHA.
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'plan = read-only list of pending migrations + digest; apply = run them'
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
+      confirm:
+        description: 'Type MIGRATE to confirm'
+        required: true
+      reviewed_digest:
+        description: 'apply only: the digest printed by the plan run you reviewed'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  checks: read
 
 concurrency:
-  # Only one deploy at a time on main — cancel any in-flight run when a
-  # newer commit lands.
-  group: deploy-${{ github.ref }}
+  group: prod-migrations
   cancel-in-progress: false
 
 jobs:
-  wait-for-ci:
-    name: Wait for CI
+  gate:
+    name: Gate checks (no credentials)
     runs-on: ubuntu-latest
     steps:
-      - name: Wait for CI/Verify to succeed
-        # `lewagon/wait-on-check-action` polls the checks API for the
-        # given commit SHA. If the check fails or is cancelled, this
-        # step fails and the rest of the pipeline is skipped.
-        # The check names are the job names from ci.yml ("Verify" +
-        # "E2E") — GitHub does NOT prefix them with the workflow name
-        # in the checks API, only in the PR summary UI.
-        uses: lewagon/wait-on-check-action@v1.3.4
+      - name: Kill switch, branch, owner, confirmation
+        env:
+          ENABLED: ${{ vars.PROD_MIGRATIONS_ENABLED }}
+          REF: ${{ github.ref }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          OWNER: ${{ github.repository_owner }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [[ "${ENABLED:-}" != "true" ]]; then
+            echo "✗ Production migrations are disabled (PROD_MIGRATIONS_ENABLED is not 'true'). Enabling them requires separate approval."
+            exit 1
+          fi
+          if [[ "$REF" != "refs/heads/main" ]]; then
+            echo "✗ Runs only on main (got $REF)."
+            exit 1
+          fi
+          if [[ "$ACTOR" != "$OWNER" || "$TRIGGERING_ACTOR" != "$OWNER" ]]; then
+            echo "✗ Only the repository owner account may run production migrations."
+            exit 1
+          fi
+          if [[ "$CONFIRM" != "MIGRATE" ]]; then
+            echo "✗ Type MIGRATE exactly to proceed."
+            exit 1
+          fi
+          echo "✓ Gate checks passed."
+
+      - name: CI Verify green for this commit
+        uses: lewagon/wait-on-check-action@ccfb013c15c8afb7bf2b7c028fb74dc5a068cccc # v1.3.4
         with:
           ref: ${{ github.sha }}
           check-name: Verify
@@ -54,8 +105,8 @@ jobs:
           wait-interval: 15
           allowed-conclusions: success
 
-      - name: Wait for CI/E2E to succeed
-        uses: lewagon/wait-on-check-action@v1.3.4
+      - name: CI E2E green for this commit
+        uses: lewagon/wait-on-check-action@ccfb013c15c8afb7bf2b7c028fb74dc5a068cccc # v1.3.4
         with:
           ref: ${{ github.sha }}
           check-name: E2E
@@ -64,89 +115,110 @@ jobs:
           allowed-conclusions: success
 
   db-push:
+    # Job name kept: promote-production.yml looks for "migrations".
     name: Apply DB migrations (psql)
-    needs: wait-for-ci
+    needs: gate
     runs-on: ubuntu-latest
-    env:
-      # Production DATABASE_URL comes from a repository secret. Never
-      # commit a real URL.
-      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install psql
-        # scripts/ci/apply-migrations.sh needs psql; postgresql-client is
-        # tiny and installs in <5 s. We deliberately avoid depending on
-        # pnpm / node / drizzle-kit in this job — the point of this
-        # replacement is to NOT touch drizzle-kit's interactive CLI from
-        # CI (its arrow-key prompts can't be reliably scripted). See the
-        # script's header for the full rationale.
         run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
 
-      - name: Apply pending migrations
-        # scripts/ci/apply-migrations.sh walks src/lib/db/migrations/*.sql
-        # in order, tracks applied filenames in a `__ic_migrations` table,
-        # and skips anything already recorded. Idempotent and
-        # non-destructive — if any .sql file fails, exits 1 and the
-        # rollback job below promotes the previous production deploy
-        # back.
-        run: ./scripts/ci/apply-migrations.sh
+      - name: Verify target database (fingerprint, primary, credentials present)
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          EXPECTED_HOST_SHA256: ${{ vars.PROD_DB_HOST_SHA256 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${DATABASE_URL:-}" ]]; then
+            echo "✗ PROD_DATABASE_URL is not available to this run."
+            exit 1
+          fi
+          if [[ -z "${EXPECTED_HOST_SHA256:-}" ]]; then
+            echo "✗ PROD_DB_HOST_SHA256 is not set — refusing to guess the target."
+            exit 1
+          fi
+          host=$(python3 -c 'import os, urllib.parse; print(urllib.parse.urlsplit(os.environ["DATABASE_URL"]).hostname or "")')
+          actual=$(printf '%s' "$host" | sha256sum | cut -d' ' -f1)
+          if [[ "$actual" != "$EXPECTED_HOST_SHA256" ]]; then
+            echo "✗ Database host fingerprint does not match PROD_DB_HOST_SHA256."
+            exit 1
+          fi
+          in_recovery=$(psql "$DATABASE_URL" -tA -c "SELECT pg_is_in_recovery()")
+          if [[ "$in_recovery" != "f" ]]; then
+            echo "✗ Target is not a writable primary."
+            exit 1
+          fi
+          echo "✓ Target verified by fingerprint (value not printed)."
 
-  # Deploy is handled by Vercel's native GitHub integration — every push
-  # to main triggers a build+deploy on Vercel's side, using the env vars
-  # configured in the Vercel dashboard. That flow was set up when the
-  # project was first linked via `vercel link`.
-  #
-  # This workflow owns the three things Vercel's integration doesn't:
-  #   1. wait-for-ci — deploy only proceeds if CI has passed for the SHA
-  #   2. db-push — drizzle-kit push against the prod DB before the app
-  #      picks up the new schema
-  #   3. rollback-on-db-failure — because Vercel's auto-deploy fires in
-  #      parallel with this workflow (it watches the branch, not our
-  #      jobs), the app ships even when `db-push` fails. In that case we
-  #      promote the previous READY production deployment back so the
-  #      live app isn't talking to a stale schema. Belt & braces: db-push
-  #      is also structured to no-op cleanly if nothing is new.
-  #
-  # If you ever want CI-driven deploys (e.g. more control over the
-  # promote step, or to run more pre-deploy scripts), disable the
-  # Vercel-side integration in Project Settings → Git and re-add the
-  # `deploy: needs: db-push` job here that runs `vercel deploy --prod`.
-  # Stage B Wave 1 release gating — with the Vercel dashboard's
-  # production branch pointed at the placeholder branch `production-gate`
-  # (Project Settings -> Git), pushes to main only produce PREVIEW
-  # builds. Nothing reaches production until this job promotes the
-  # preview for this exact SHA - which runs strictly AFTER wait-for-ci
-  # (CI green) and db-push (schema applied). This closes the window
-  # where Vercel's auto-promotion could serve new code against the old
-  # schema before CI finished.
-  # Release-readiness item 5 — PROMOTION IS NO LONGER AUTOMATIC.
-  # With the Vercel dashboard's production branch pointed at
-  # `production-gate`, a push to main only produces a PREVIEW build.
-  # This job waits for that preview to be READY and prints its URL for
-  # smoke testing. Exposing it to customers requires a human: the owner
-  # runs the "Promote to production" workflow (promote-production.yml),
-  # which re-verifies CI + migrations for the SHA and only then promotes.
+      - name: Pending migrations and content digest (read-only)
+        id: pending
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          applied=$(psql "$DATABASE_URL" -tA -v ON_ERROR_STOP=1 \
+            -c "SET default_transaction_read_only = on" \
+            -c "SELECT CASE WHEN to_regclass('__ic_migrations') IS NULL THEN '' ELSE (SELECT string_agg(filename, E'\n') FROM __ic_migrations) END")
+          : > pending.txt
+          shopt -s nullglob
+          for f in src/lib/db/migrations/*.sql; do
+            name=$(basename "$f")
+            if ! grep -qxF "$name" <<<"$applied"; then echo "$name" >> pending.txt; fi
+          done
+          if [[ -s pending.txt ]]; then
+            digest=$(while read -r n; do printf '%s\n' "$n"; sha256sum "src/lib/db/migrations/$n" | cut -d' ' -f1; done < pending.txt | sha256sum | cut -d' ' -f1)
+          else
+            digest=none
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Pending production migrations"
+            if [[ -s pending.txt ]]; then sed 's/^/- /' pending.txt; else echo "None."; fi
+            echo ""
+            echo "Content digest: \`$digest\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Pending: $(wc -l < pending.txt) file(s). Digest: $digest"
+
+      - name: Apply (only the reviewed set)
+        if: inputs.mode == 'apply'
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          REVIEWED: ${{ inputs.reviewed_digest }}
+          DIGEST: ${{ steps.pending.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [[ "$DIGEST" == "none" ]]; then
+            echo "✓ Nothing to apply."
+            exit 0
+          fi
+          if [[ "$REVIEWED" != "$DIGEST" ]]; then
+            echo "✗ reviewed_digest does not match the pending set — run plan again and review it."
+            exit 1
+          fi
+          ./scripts/ci/apply-migrations.sh
+
   await-preview-build:
     name: Await preview build (promotion is manual)
     needs: db-push
     runs-on: ubuntu-latest
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
     steps:
       - name: Wait for this SHA's preview build and print its URL
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          SHA="${{ github.sha }}"
           echo "Waiting for a READY preview build of $SHA…"
           dep_url=""
           for i in $(seq 1 60); do
-            resp=$(curl -sf -H "Authorization: Bearer $VERCEL_TOKEN"               "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID&limit=20")
-            dep_url=$(echo "$resp" | jq -r --arg sha "$SHA"               'first(.deployments[]? | select(.meta.githubCommitSha == $sha and .readyState == "READY") | .url) // ""')
-            state=$(echo "$resp" | jq -r --arg sha "$SHA"               'first(.deployments[]? | select(.meta.githubCommitSha == $sha) | .readyState) // ""')
+            resp=$(curl -sf -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID&limit=20")
+            dep_url=$(echo "$resp" | jq -r --arg sha "$SHA" 'first(.deployments[]? | select(.meta.githubCommitSha == $sha and .readyState == "READY") | .url) // ""')
+            state=$(echo "$resp" | jq -r --arg sha "$SHA" 'first(.deployments[]? | select(.meta.githubCommitSha == $sha) | .readyState) // ""')
             if [[ -n "$dep_url" ]]; then break; fi
             case "$state" in
               ERROR|CANCELED) echo "✗ Build for $SHA ended $state"; exit 1;;
@@ -162,40 +234,3 @@ jobs:
           echo "### Preview ready — promotion is manual" >> "$GITHUB_STEP_SUMMARY"
           echo "Smoke-test: https://$dep_url" >> "$GITHUB_STEP_SUMMARY"
           echo "Then run the **Promote to production** workflow for SHA $SHA." >> "$GITHUB_STEP_SUMMARY"
-
-  rollback-on-db-failure:
-    name: Rollback Vercel if db-push failed
-    needs: db-push
-    if: failure()
-    runs-on: ubuntu-latest
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-    steps:
-      - name: Promote previous READY production deployment
-        # Vercel auto-deployed this SHA in parallel to db-push, so the
-        # live site is now running new app code against the old schema.
-        # Find the most recent READY production deploy whose commit SHA
-        # differs from this one, and promote it back to production via
-        # the project-promote endpoint.
-        run: |
-          set -euo pipefail
-          SHA="${{ github.sha }}"
-          echo "db-push failed — looking for a previous READY deploy to promote back…"
-          resp=$(curl -sf -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID&target=production&state=READY&limit=10")
-          prev_id=$(echo "$resp" | jq -r --arg sha "$SHA" \
-            'first(.deployments[]? | select(.meta.githubCommitSha != $sha) | .uid) // ""')
-          if [[ -z "$prev_id" ]]; then
-            echo "✗ No previous READY production deployment found — manual rollback required."
-            exit 1
-          fi
-          echo "Promoting deployment $prev_id back to production…"
-          curl -sf -X POST \
-            -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$prev_id?teamId=$VERCEL_ORG_ID" > /dev/null
-          echo "✓ Rolled back live production to $prev_id"
-          # Fail the overall workflow run so the red X is visible on the
-          # commit — the rollback worked but the deploy itself didn't.
-          exit 1
