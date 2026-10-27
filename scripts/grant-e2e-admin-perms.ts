@@ -1,6 +1,8 @@
 import { config } from 'dotenv';
+import { assertLocalDatabase } from './_assert-local-db';
 
 config({ path: '.env.local' });
+assertLocalDatabase('grant-e2e-admin-perms');
 
 /**
  * One-off: grant the ADMIN preset to the e2e-admin user. The seed in

@@ -73,6 +73,16 @@ jobs:
         # doubles as a "migrations are internally consistent" check.
         run: pnpm db:migrate
 
+      - name: Generate test-only credentials
+        # Fresh random passwords for the e2e accounts on every run — never
+        # committed to source, masked in logs, gone when the job ends.
+        run: |
+          for name in E2E_ADMIN_PASSWORD E2E_STAFF_PASSWORD; do
+            value="Ci-$(openssl rand -hex 16)-Aa1!"
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
+
       - name: Seed E2E admin user
         # Non-interactive, idempotent. task-generator.race.test.ts and
         # interviews/conflict.test.ts read this row.
@@ -187,6 +197,16 @@ jobs:
 
       - name: Apply migrations to CI Postgres
         run: pnpm db:migrate
+
+      - name: Generate test-only credentials
+        # Fresh random passwords for the e2e accounts on every run — never
+        # committed to source, masked in logs, gone when the job ends.
+        run: |
+          for name in E2E_ADMIN_PASSWORD E2E_STAFF_PASSWORD; do
+            value="Ci-$(openssl rand -hex 16)-Aa1!"
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
 
       - name: Seed E2E admin user
         run: pnpm db:seed:e2e-admin

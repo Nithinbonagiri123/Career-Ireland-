@@ -10,15 +10,22 @@
 #
 # Console:  http://localhost:9001  (login: minioadmin / minioadmin)
 # S3 API:   http://localhost:9000
+#
+# Both ports are bound to 127.0.0.1 only, so other devices on the same
+# network cannot reach the dev bucket or its default credentials. The
+# bucket is private: the app always serves files through short-lived
+# presigned URLs (src/lib/s3/presign.ts), never anonymous reads.
+# Images are pinned by digest so `docker compose pull` never silently
+# swaps them.
 
 services:
   minio:
-    image: minio/minio:latest
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     container_name: career-ireland-minio
     restart: unless-stopped
     ports:
-      - '9000:9000' # S3 API
-      - '9001:9001' # Web console
+      - '127.0.0.1:9000:9000' # S3 API (this machine only)
+      - '127.0.0.1:9001:9001' # Web console (this machine only)
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -32,10 +39,11 @@ services:
       retries: 20
 
   # One-shot init container — waits for MinIO, creates the documents bucket
-  # if it doesn't already exist, and sets a permissive dev CORS policy so
+  # if it doesn't already exist, keeps it private (no anonymous reads), and
+  # sets a permissive dev CORS policy so
   # browser uploads via presigned URLs work.
   minio-bootstrap:
-    image: minio/mc:latest
+    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
     container_name: career-ireland-minio-bootstrap
     depends_on:
       minio:
@@ -46,7 +54,7 @@ services:
       mc alias set local http://minio:9000 minioadmin minioadmin;
       mc mb --ignore-existing local/career-ireland-documents-dev;
       echo '{\"CORSRules\":[{\"AllowedOrigins\":[\"*\"],\"AllowedMethods\":[\"GET\",\"PUT\",\"POST\",\"HEAD\"],\"AllowedHeaders\":[\"*\"],\"ExposeHeaders\":[\"ETag\"],\"MaxAgeSeconds\":3000}]}' > /tmp/cors.json;
-      mc anonymous set download local/career-ireland-documents-dev || true;
+      mc anonymous set none local/career-ireland-documents-dev || true;
       echo 'MinIO bootstrap complete.';
       "
 

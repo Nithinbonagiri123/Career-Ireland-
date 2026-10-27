@@ -1,6 +1,8 @@
 import { config } from 'dotenv';
+import { assertLocalDatabase } from './_assert-local-db';
 
 config({ path: '.env.local' });
+assertLocalDatabase('set-owner');
 
 /**
  * Designate the business owner. The owner bypasses every permission

@@ -1,6 +1,8 @@
 import { config } from 'dotenv';
+import { assertLocalDatabase } from './_assert-local-db';
 
 config({ path: '.env.local' });
+assertLocalDatabase('seed-billing-fixtures');
 
 /**
  * Seed a minimal set of billing fixtures so `qa-billing-e2e.spec.ts`

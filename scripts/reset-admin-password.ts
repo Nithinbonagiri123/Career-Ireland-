@@ -1,9 +1,11 @@
 import { stdin, stdout } from 'node:process';
 import readline from 'node:readline/promises';
 import { config } from 'dotenv';
+import { assertLocalDatabase } from './_assert-local-db';
 
 // Load env BEFORE any import that touches env.ts.
 config({ path: '.env.local' });
+assertLocalDatabase('reset-admin-password');
 
 async function main() {
   const { eq } = await import('drizzle-orm');

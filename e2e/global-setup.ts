@@ -5,13 +5,47 @@ import { config as loadEnv } from 'dotenv';
 // Load .env.local BEFORE any module that touches env.ts (that would validate too early).
 loadEnv({ path: '.env.local' });
 
+/**
+ * Test-only secrets are never committed. Locally they come from
+ * .env.local (E2E_ADMIN_PASSWORD / E2E_STAFF_PASSWORD); CI generates
+ * fresh random values on every run. A literal password used to live
+ * here and is permanently burned — it is in public git history.
+ */
+function requireTestSecret(name: string): string {
+  const value = process.env[name];
+  if (!value || value.length < 12) {
+    throw new Error(
+      `${name} is not set (or shorter than 12 characters). Add it to .env.local for local runs; CI generates it per run.`,
+    );
+  }
+  return value;
+}
+
+const LOCAL_DB_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+/** The e2e seed resets passwords and owner flags — local / CI databases only. */
+function assertLocalDatabase(): void {
+  let host = '';
+  try {
+    host = new URL(process.env.DATABASE_URL ?? '').hostname.toLowerCase();
+  } catch {
+    host = '';
+  }
+  if (!LOCAL_DB_HOSTS.has(host)) {
+    throw new Error(
+      'e2e global setup refuses to run: DATABASE_URL does not point at a local database (localhost / 127.0.0.1 / ::1).',
+    );
+  }
+}
+
 export const E2E_ADMIN = {
   email: 'e2e-admin@ireland-careers.test',
   fullName: 'E2E Admin',
   // 16 chars, meets password policy (upper + lower + digit + symbol), doesn't
   // contain 'e2e' or 'admin' as substrings would only fire on 4+ chars matching
   // the local-part 'e2e-admin' — 'e2e-' is 4 chars but that's not in the pw.
-  password: 'Ir3land-Careers!23',
+  get password() {
+    return requireTestSecret('E2E_ADMIN_PASSWORD');
+  },
 };
 
 export const E2E_STAFF = {
@@ -20,7 +54,9 @@ export const E2E_STAFF = {
   // Same complexity rule as E2E_ADMIN. Role is STAFF so the user
   // intentionally lacks ADMIN / FINANCE grants — this account proves
   // the server-side gate rejects finance actions and the UI hides them.
-  password: 'St4ff-Workspace!99',
+  get password() {
+    return requireTestSecret('E2E_STAFF_PASSWORD');
+  },
 };
 
 async function ensureAdminUser() {
@@ -189,6 +225,10 @@ async function ensureBaselineDocumentTypes() {
 }
 
 export default async function globalSetup(config: FullConfig) {
+  assertLocalDatabase();
+  // Fail fast with a clear message before any seeding if a secret is missing.
+  void E2E_ADMIN.password;
+  void E2E_STAFF.password;
   const baseURL =
     config.projects[0]?.use.baseURL ?? process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
 

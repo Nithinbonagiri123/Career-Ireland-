@@ -20,8 +20,10 @@
  */
 
 import { config } from 'dotenv';
+import { assertLocalDatabase } from './_assert-local-db';
 
 config({ path: '.env.local' });
+assertLocalDatabase('seed-e2e-minimal');
 
 const FIXTURES = {
   employer: {

@@ -8,19 +8,22 @@
  *     but the DB-dependent vitest tests (task-generator.race, interviews/
  *     conflict) also need this row to exist and can't spin up a browser.
  *
- * Credentials mirror e2e/global-setup.ts's E2E_ADMIN constant. Never use
- * these on any real user-facing environment.
+ * The password comes from E2E_ADMIN_PASSWORD (.env.local locally; CI
+ * generates a fresh value per run) — never from source. The script
+ * refuses any database that is not on this machine.
  */
 
 import { config } from 'dotenv';
+import { assertLocalDatabase, requireTestSecret } from './_assert-local-db';
 
 // Load env BEFORE any import that transitively loads src/lib/env.ts.
 config({ path: '.env.local' });
+assertLocalDatabase('seed-e2e-admin');
 
 const E2E_ADMIN = {
   email: 'e2e-admin@ireland-careers.test',
   fullName: 'E2E Admin',
-  password: 'Ir3land-Careers!23',
+  password: requireTestSecret('E2E_ADMIN_PASSWORD'),
 };
 
 async function main() {
@@ -29,14 +32,18 @@ async function main() {
   const { db } = await import('../src/lib/db/client');
   const { users } = await import('../src/lib/db/schema/users');
 
-  // The schema enforces a single-owner unique index. Demote any OTHER
-  // owner before promoting the E2E admin so this seed stays idempotent
-  // even on a DB that already has an owner. Safe because this script
-  // is E2E-only ("Never use on any real user-facing environment").
-  await db
-    .update(users)
-    .set({ isOwner: false })
-    .where(and(eq(users.isOwner, true), ne(users.email, E2E_ADMIN.email)));
+  // Never demote a real owner. The E2E admin claims the owner flag only
+  // when nobody else holds it (CI's scratch DB); on a local DB with a
+  // real owner it stays a plain ADMIN — same rule as e2e/global-setup.
+  const [otherOwner] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.isOwner, true), ne(users.email, E2E_ADMIN.email)))
+    .limit(1);
+  const claimOwner = !otherOwner;
+  if (otherOwner) {
+    console.warn('  ⚠ Another user already owns this DB — leaving the E2E admin as plain ADMIN.');
+  }
 
   // Mirror src/modules/auth/service.ts's ARGON2_OPTIONS so the hash format
   // matches what the login flow expects.
@@ -56,11 +63,8 @@ async function main() {
       .set({
         passwordHash,
         isActive: true,
-        // isOwner bypasses every permission check — required for the
-        // E2E admin because Playwright pages hit every route without
-        // any per-business grant setup. Safe on the CI scratch DB
-        // (no other users) and idempotent locally.
-        isOwner: true,
+        // Owner only when no real owner exists (see above).
+        ...(claimOwner ? { isOwner: true } : {}),
         sessionsInvalidatedAfter: new Date(),
       })
       .where(eq(users.id, existing.id));
@@ -75,7 +79,7 @@ async function main() {
       fullName: E2E_ADMIN.fullName,
       passwordHash,
       role: 'ADMIN',
-      isOwner: true,
+      isOwner: claimOwner,
     })
     .returning({ id: users.id });
   if (!created) throw new Error('failed to insert E2E admin');

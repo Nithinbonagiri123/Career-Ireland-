@@ -6,6 +6,7 @@ import './_bootstrap-env';
 import 'dotenv/config';
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
+import { assertLocalDatabase } from './_assert-local-db';
 
 /**
  * ─── RESET-DATA — hand-off cleaner ───────────────────────────────────
@@ -90,6 +91,7 @@ const RESET_COUNTER_TABLES = new Set<string>(['document_sequences']);
 const DRY_RUN = process.env.DRY_RUN !== 'false';
 
 async function main() {
+  assertLocalDatabase('reset-data');
   // 1. Discover every table currently in the DB.
   const allTables = await db.execute<{ table_name: string }>(sql`
     SELECT table_name

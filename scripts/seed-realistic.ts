@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { config } from 'dotenv';
+import { assertLocalDatabase } from './_assert-local-db';
 
 // Load env BEFORE importing anything that reads process.env at import time.
 config({ path: '.env.local' });
+assertLocalDatabase('seed-realistic');
 
 /**
  * Wipe + reseed the DB with realistic demo data.
