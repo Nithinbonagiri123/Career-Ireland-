@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { buttonVariants } from '@/components/ui/button';
+import { canFinance } from '@/lib/auth/finance-policy';
 import { requirePermission } from '@/lib/auth/session';
 import { canGrantComplimentary } from '@/modules/billing/complimentary';
 import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
@@ -43,17 +44,26 @@ export default async function NewCandidatePage({
     redirect('/candidates/new');
   }
 
-  const [currencies, allDocTypes, existingDocuments, occupations, services, canComplimentary] =
-    await Promise.all([
-      fetchCurrencies(),
-      fetchDocumentTypes(),
-      fetchPersonDocuments(draft.id),
-      fetchOccupations(),
-      // Stage 6G Screen 09 — step 3's "Services included" table.
-      fetchInvoiceableServicesFor('PERSON'),
-      // Stage B Wave 4 — may this user grant complimentary (€0.00) services?
-      canGrantComplimentary(),
-    ]);
+  const [
+    currencies,
+    allDocTypes,
+    existingDocuments,
+    occupations,
+    services,
+    canComplimentary,
+    canRecordPayment,
+  ] = await Promise.all([
+    fetchCurrencies(),
+    fetchDocumentTypes(),
+    fetchPersonDocuments(draft.id),
+    fetchOccupations(),
+    // Stage 6G Screen 09 — step 3's "Services included" table.
+    fetchInvoiceableServicesFor('PERSON'),
+    // Stage B Wave 4 — may this user grant complimentary (€0.00) services?
+    canGrantComplimentary(),
+    // Decision D1 — only finance authority records a paid intake.
+    canFinance('VERIFY'),
+  ]);
   // Only person-applicable types are meaningful during candidate intake.
   const personDocTypes = allDocTypes.filter(
     (t) => t.isActive && (t.appliesTo === 'PERSON' || t.appliesTo === 'BOTH'),
@@ -98,6 +108,7 @@ export default async function NewCandidatePage({
         currencies={currencies.map((c) => ({ code: c.code, symbol: c.symbol }))}
         services={services}
         canComplimentary={canComplimentary}
+        canRecordPayment={canRecordPayment}
         docTypes={personDocTypes.map((t) => ({
           id: t.id,
           name: t.name,

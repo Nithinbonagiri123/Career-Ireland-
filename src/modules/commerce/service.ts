@@ -1,6 +1,11 @@
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireInternalStaff, requireRole } from '@/lib/auth/session';
+import {
+  assertFinanceActor,
+  hasFinanceAuthority,
+  requireFinanceAuthority,
+} from '@/lib/auth/finance-policy';
+import { requireInternalStaff } from '@/lib/auth/session';
 import type { DateRange } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import { creditNotes, invoices, receipts } from '@/lib/db/schema/billing';
@@ -476,6 +481,34 @@ export async function updateEngagementStatus(
     const before = await getEngagement(parsed.engagementId);
     if (!before) throw new BusinessRuleError('ENGAGEMENT_NOT_FOUND', 'Engagement not found');
     if (before.status === parsed.status) return before;
+    // Phase 1 — activation is a privileged side effect. Moving an unpaid
+    // engagement (REQUESTED / PENDING_PAYMENT) to ACTIVE needs either a
+    // VERIFIED payment on it, a €0.00 complimentary agreement, or finance
+    // authority (an audited override). Resuming ON_HOLD → ACTIVE and every
+    // other transition (incl. Close case → COMPLETED) are unchanged.
+    let activationOverride = false;
+    if (
+      parsed.status === 'ACTIVE' &&
+      (before.status === 'REQUESTED' || before.status === 'PENDING_PAYMENT')
+    ) {
+      const [paid] = await tx.execute<{ ok: boolean }>(sql`
+        SELECT EXISTS(
+          SELECT 1 FROM payments
+          WHERE service_engagement_id = ${before.id}
+            AND status IN ('VERIFIED','PARTIALLY_REFUNDED')
+        ) AS ok
+      `);
+      const isComplimentary = Number.parseFloat(before.agreedAmount) === 0;
+      if (!paid?.ok && !isComplimentary) {
+        if (!hasFinanceAuthority(session.user, 'VERIFY')) {
+          throw new BusinessRuleError(
+            'ENGAGEMENT_UNPAID',
+            'This service has no verified payment yet. Ask Finance to verify the payment (or activate it) first.',
+          );
+        }
+        activationOverride = true;
+      }
+    }
     const after = await updateEngagement(tx, parsed.engagementId, { status: parsed.status });
     await recordAudit(tx, {
       actorUserId: session.user.id,
@@ -484,7 +517,15 @@ export async function updateEngagementStatus(
       action: 'STATUS_CHANGED',
       before: { status: before.status },
       after: { status: after.status },
-      context: parsed.reason ? { reason: parsed.reason } : undefined,
+      context:
+        parsed.reason || activationOverride
+          ? {
+              ...(parsed.reason ? { reason: parsed.reason } : {}),
+              ...(activationOverride
+                ? { financeOverride: 'activated_without_verified_payment' }
+                : {}),
+            }
+          : undefined,
     });
     return after;
   });
@@ -507,7 +548,9 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Payment>
   // the full verification side-effect chain inline (receipt, engagement
   // ACTIVE, invoice recompute, ledger event). Lesser roles still land at
   // PENDING / PROOF_UPLOADED so an ADMIN can review and verify later.
-  const canAutoVerify = session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
+  // Central finance policy (owner, ADMIN, FINANCE). Everyone else's
+  // payment stays PENDING for finance to verify.
+  const canAutoVerify = hasFinanceAuthority(session.user, 'VERIFY');
 
   return db.transaction(async (tx) => {
     const engagement = await getEngagement(data.serviceEngagementId);
@@ -562,7 +605,7 @@ export async function verifyPayment(input: VerifyPaymentInput): Promise<Payment>
   // ADMIN + FINANCE can flip PENDING → VERIFIED so anyone else on the
   // internal team can't accidentally trip an audit-relevant financial
   // state change.
-  const session = await requireRole(['ADMIN', 'FINANCE']);
+  const session = await requireFinanceAuthority('VERIFY', 'verifyPayment');
   const parsed = VerifyPaymentSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await getPayment(parsed.paymentId);
@@ -592,6 +635,10 @@ export async function performPaymentVerification(
   before: Payment,
   actorUserId: string,
 ): Promise<Payment> {
+  // Defence in depth: the side effect itself re-checks the actor, so no
+  // caller (lead acceptance, a future job) can verify money for a user
+  // without finance authority.
+  await assertFinanceActor(tx, actorUserId, 'VERIFY', 'performPaymentVerification');
   // Overpayment guard: if this payment would take the settled amount
   // past the invoice total (existing verified payments + credit notes
   // + this payment), refuse. Prevents accidental double-verification
@@ -745,7 +792,7 @@ export async function performPaymentVerification(
 export async function rejectPayment(input: RejectPaymentInput): Promise<Payment> {
   // Same gating as verifyPayment — rejecting a payment is also a
   // financial state change with audit consequences.
-  const session = await requireRole(['ADMIN', 'FINANCE']);
+  const session = await requireFinanceAuthority('VERIFY', 'rejectPayment');
   const parsed = RejectPaymentSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await getPayment(parsed.paymentId);

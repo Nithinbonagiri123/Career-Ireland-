@@ -1,12 +1,13 @@
 import { and, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { checkPermission, requireInternalStaff } from '@/lib/auth/session';
+import { requireFinanceAuthority } from '@/lib/auth/finance-policy';
+import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { payments, serviceEngagements } from '@/lib/db/schema/commerce';
 import { currencies } from '@/lib/db/schema/currencies';
 import { candidateProfiles, type Person, persons } from '@/lib/db/schema/persons';
 import { serviceCatalogItems } from '@/lib/db/schema/services';
-import { AuthorizationError, BusinessRuleError, ValidationError } from '@/lib/errors';
+import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { insertInvoice, insertReceipt, recomputeInvoiceStatus } from '@/modules/billing/service';
 import { fetchAppSettings } from '@/modules/settings/service';
 import {
@@ -246,7 +247,11 @@ export type FinaliseResult = {
  * Any failure rolls back the whole thing.
  */
 export async function finaliseDraft(input: FinaliseDraftInput): Promise<FinaliseResult> {
-  const session = await requireInternalStaff();
+  // Decision D1 — a paid intake books the payment as VERIFIED and issues
+  // the invoice + receipt, so it needs finance authority. Other staff
+  // use "Create — invoice later" (finaliseDraftWithoutPayment) and
+  // finance records the payment from the profile.
+  const session = await requireFinanceAuthority('VERIFY', 'finaliseDraft');
   const parsed = FinaliseDraftSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -482,17 +487,14 @@ export async function finaliseDraft(input: FinaliseDraftInput): Promise<Finalise
  * intake: a second submit finds no draft and throws instead of
  * double-issuing.
  *
- * Gated like the workspace grant: ADMIN / owner or the explicit
- * ('candidate_services','complimentary','create') permission.
+ * Gated by the central finance policy (decision J1): Finance, Admin or
+ * the owner. The reason is mandatory and audited.
  */
 export async function finaliseDraftComplimentary(
   input: FinaliseDraftComplimentaryInput,
 ): Promise<{ personId: string; candidateProfileId: string; invoiceNumber: string }> {
-  const session = await requireInternalStaff();
-  if (!(session.user.isOwner || session.user.role === 'ADMIN')) {
-    const granted = await checkPermission('candidate_services', 'complimentary', 'create');
-    if (!granted) throw new AuthorizationError();
-  }
+  // Decision J1 — waiving payment is REVERSE-tier (Finance, Admin, owner).
+  const session = await requireFinanceAuthority('REVERSE', 'finaliseDraftComplimentary');
   const parsed = FinaliseDraftComplimentarySchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(

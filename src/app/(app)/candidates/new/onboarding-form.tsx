@@ -115,6 +115,9 @@ function StepHeader({ n, title, sub }: { n: number; title: string; sub: string }
   );
 }
 
+const PAID_INTAKE_RESTRICTED_NOTE =
+  'Recording a payment at intake is limited to Finance, Admin or the owner. Use “Create — invoice later” and Finance will record the payment from the profile.';
+
 export function OnboardingForm({
   draft,
   currencies,
@@ -123,6 +126,7 @@ export function OnboardingForm({
   services,
   existingDocuments,
   canComplimentary = false,
+  canRecordPayment = false,
 }: {
   draft: Draft;
   currencies: Currency[];
@@ -132,6 +136,8 @@ export function OnboardingForm({
   existingDocuments: UploadedDoc[];
   /** Stage B Wave 4 — current user may grant complimentary services. */
   canComplimentary?: boolean;
+  /** Decision D1 — current user may record a paid intake (finance authority). */
+  canRecordPayment?: boolean;
 }) {
   const router = useRouter();
 
@@ -214,6 +220,8 @@ export function OnboardingForm({
   // Stage B Wave 4 — complimentary mode: no payment at all; a genuine
   // €0.00 invoice is issued instead. Reason is mandatory and audited.
   const [complimentaryMode, setComplimentaryMode] = useState(false);
+  // Recording money at intake is finance-only; complimentary has its own gate.
+  const paidIntakeRestricted = !complimentaryMode && !canRecordPayment;
   const [complimentaryReason, setComplimentaryReason] = useState('');
 
   // Stage 6G Screen 09 — step 3: which services this payment covers.
@@ -813,6 +821,12 @@ export function OnboardingForm({
               )}
             </AnimatePresence>
 
+            {paidIntakeRestricted && (
+              <p className="text-xs text-muted-foreground" data-testid="paid-intake-restricted">
+                {PAID_INTAKE_RESTRICTED_NOTE}
+              </p>
+            )}
+
             {/* ── Footer actions ────────────────────────────────── */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-5">
               <div className="flex flex-wrap items-center gap-2">
@@ -845,7 +859,8 @@ export function OnboardingForm({
               <Button
                 type="button"
                 onClick={handleCreate}
-                disabled={!canFinalise || submitting || discarding}
+                disabled={!canFinalise || paidIntakeRestricted || submitting || discarding}
+                title={paidIntakeRestricted ? PAID_INTAKE_RESTRICTED_NOTE : undefined}
                 className="h-11 px-5 font-semibold"
               >
                 {submitting ? (

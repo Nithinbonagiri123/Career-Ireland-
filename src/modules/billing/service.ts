@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { type DbExecutor, recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { assertFinanceActor, requireFinanceAuthority } from '@/lib/auth/finance-policy';
 import { db } from '@/lib/db/client';
 import {
   creditNotes,
@@ -252,6 +252,9 @@ export async function insertReceipt(
     issuedByUserId: string;
   },
 ): Promise<Receipt> {
+  // A receipt is proof that money was confirmed — its issuer must hold
+  // finance authority, re-checked at the side effect itself.
+  await assertFinanceActor(tx, args.issuedByUserId, 'VERIFY', 'insertReceipt');
   const hasPerson = Boolean(args.payerPersonId);
   const hasEmployer = Boolean(args.payerEmployerId);
   if (hasPerson === hasEmployer) {
@@ -437,7 +440,7 @@ export async function voidInvoice(invoiceId: string, reason: string): Promise<In
   // Voiding is destructive to the financial trail. ADMIN + FINANCE
   // only; staff who made a mistake must escalate rather than fix in
   // place. Audit trail still records the reason.
-  const session = await requireRole(['ADMIN', 'FINANCE']);
+  const session = await requireFinanceAuthority('REVERSE', 'voidInvoice');
   const trimmed = reason.trim();
   if (trimmed.length < 3) {
     throw new ValidationError('A void reason of at least 3 characters is required.', {
@@ -578,7 +581,7 @@ export async function issueCreditNote(input: {
   amount: string;
   currencyCode: string;
 }> {
-  const session = await requireRole(['ADMIN', 'FINANCE']);
+  const session = await requireFinanceAuthority('REVERSE', 'issueCreditNote');
   const trimmedReason = input.reason.trim();
   if (trimmedReason.length < 3) {
     throw new ValidationError('A credit-note reason of at least 3 characters is required.', {
@@ -784,7 +787,7 @@ export async function issueRefund(input: {
   creditNoteNumber: string;
   paymentStatusAfter: 'PARTIALLY_REFUNDED' | 'REFUNDED';
 }> {
-  const session = await requireRole(['ADMIN', 'FINANCE']);
+  const session = await requireFinanceAuthority('REVERSE', 'issueRefund');
   const trimmedReason = input.reason.trim();
   if (trimmedReason.length < 3) {
     throw new ValidationError('A refund reason of at least 3 characters is required.', {

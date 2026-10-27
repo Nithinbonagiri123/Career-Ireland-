@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { DbExecutor } from '@/lib/audit/withAudit';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireFinanceAuthority } from '@/lib/auth/finance-policy';
 import { db } from '@/lib/db/client';
 import { invoices } from '@/lib/db/schema/billing';
 import { serviceEngagements } from '@/lib/db/schema/commerce';
@@ -87,7 +87,7 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
   // that. The remaining buttons (employer page, immigration case page,
   // Immigration lead's optional first invoice) are all finance-level
   // actions — STAFF should not create invoices directly.
-  const session = await requireRole(['ADMIN', 'FINANCE']);
+  const session = await requireFinanceAuthority('ISSUE', 'generateInvoiceForPayer');
   const parsed = GenerateInvoiceSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(

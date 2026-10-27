@@ -1,17 +1,12 @@
 import { eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import {
-  checkPermission,
-  getSession,
-  requireInternalStaff,
-  type Session,
-} from '@/lib/auth/session';
+import { canFinance, requireFinanceAuthority } from '@/lib/auth/finance-policy';
 import { db } from '@/lib/db/client';
 import { serviceEngagements } from '@/lib/db/schema/commerce';
 import { currencies } from '@/lib/db/schema/currencies';
 import { persons } from '@/lib/db/schema/persons';
 import { serviceCatalogItems } from '@/lib/db/schema/services';
-import { AuthorizationError, BusinessRuleError, ValidationError } from '@/lib/errors';
+import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { fetchAppSettings } from '@/modules/settings/service';
 import {
   type GrantComplimentaryServiceInput,
@@ -44,8 +39,7 @@ import { insertInvoice } from './service';
 export async function grantComplimentaryService(
   input: GrantComplimentaryServiceInput,
 ): Promise<{ invoiceNumber: string; engagementId: string; replayed: boolean }> {
-  const session = await requireInternalStaff();
-  await assertCanGrantComplimentary(session);
+  const session = await requireFinanceAuthority('REVERSE', 'grantComplimentaryService');
 
   const parsed = GrantComplimentaryServiceSchema.safeParse(input);
   if (!parsed.success) {
@@ -209,21 +203,15 @@ export async function grantComplimentaryService(
 }
 
 /**
- * ADMIN / owner, or the explicit complimentary grant. Exported for the
- * page-level `canComplimentary` flags so UI visibility and the server
- * gate share one rule.
+ * Decision J1 — granting a complimentary (€0.00) service waives what the
+ * client owes, so it is REVERSE-tier: Finance, Admin or the owner only.
+ * The old per-user `complimentary.create` grant no longer suffices on its
+ * own. Exported for the page-level `canComplimentary` flags so UI
+ * visibility and the server gate share one rule. The reason stays
+ * mandatory (schema + DB CHECK) and is audited.
  */
 export async function canGrantComplimentary(): Promise<boolean> {
-  const s = await getSession();
-  if (!s) return false;
-  if (s.user.isOwner || s.user.role === 'ADMIN') return true;
-  return checkPermission('candidate_services', 'complimentary', 'create');
-}
-
-async function assertCanGrantComplimentary(session: Session): Promise<void> {
-  if (session.user.isOwner || session.user.role === 'ADMIN') return;
-  const granted = await checkPermission('candidate_services', 'complimentary', 'create');
-  if (!granted) throw new AuthorizationError();
+  return canFinance('REVERSE');
 }
 
 /**

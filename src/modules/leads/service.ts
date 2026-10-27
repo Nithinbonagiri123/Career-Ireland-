@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
+import { hasFinanceAuthority } from '@/lib/auth/finance-policy-rules';
 import { requireInternalStaff } from '@/lib/auth/session';
 import type { DateRange } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
@@ -286,7 +287,15 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
   const parsed = AcceptLeadSchema.parse(input);
 
   return db.transaction(async (tx) => {
-    const [lead] = await tx.select().from(leads).where(eq(leads.id, parsed.leadId)).limit(1);
+    // Row lock: two concurrent acceptances of the same lead serialize here,
+    // so the second sees acceptedAt and refuses (no duplicate entity,
+    // engagement or invoice).
+    const [lead] = await tx
+      .select()
+      .from(leads)
+      .where(eq(leads.id, parsed.leadId))
+      .for('update')
+      .limit(1);
     if (!lead) throw new BusinessRuleError('LEAD_NOT_FOUND', 'Lead not found');
     if (lead.acceptedAt) {
       throw new BusinessRuleError(
@@ -466,13 +475,36 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
     // whole transaction rolls back — no entity half-created, no lead
     // half-converted.
     const [service] = await tx
-      .select({ id: serviceCatalogItems.id, name: serviceCatalogItems.name })
+      .select({
+        id: serviceCatalogItems.id,
+        name: serviceCatalogItems.name,
+        isActive: serviceCatalogItems.isActive,
+        payerType: serviceCatalogItems.payerType,
+        defaultPrice: serviceCatalogItems.defaultPrice,
+        defaultCurrencyCode: serviceCatalogItems.defaultCurrencyCode,
+      })
       .from(serviceCatalogItems)
       .where(eq(serviceCatalogItems.id, parsed.serviceCatalogItemId))
       .limit(1);
     if (!service) {
       throw new BusinessRuleError('SERVICE_NOT_FOUND', 'Selected service no longer exists');
     }
+
+    // Decision K1 — lead conversion is the one place non-finance staff may
+    // cause an invoice to be issued (Immigration / Recruitment conversion
+    // workflow). It is a narrow, server-enforced exception: the invoice must
+    // match an active catalog service, the right payer, the catalog's
+    // authorized price and currency, and never duplicate an existing one.
+    const actorHasFinance = hasFinanceAuthority(session.user, 'VERIFY');
+    const conversion = validateLeadConversionCharge({
+      targetBusiness: lead.targetBusiness,
+      personId: lead.personId,
+      employerId: lead.employerId,
+      service,
+      amount: parsed.amount,
+      currencyCode: parsed.currencyCode,
+      actorHasFinance,
+    });
 
     // If the operator already generated an invoice on this lead (via the
     // "+ Invoice" button on the leads table), that invoice already came
@@ -506,6 +538,18 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
         throw new Error('invoice references an engagement that no longer exists');
       }
       engagementId = existingEng.id;
+      if (existingLeadInvoice.currencyCode !== parsed.currencyCode) {
+        throw new BusinessRuleError(
+          'LEAD_INVOICE_CURRENCY_MISMATCH',
+          `This lead already has invoice in ${existingLeadInvoice.currencyCode}; record the payment in that currency.`,
+        );
+      }
+      if (moneyCents(parsed.amount) > moneyCents(existingLeadInvoice.totalAmount)) {
+        throw new BusinessRuleError(
+          'LEAD_INVOICE_AMOUNT_EXCEEDS',
+          `The amount is more than the lead's existing invoice total (${existingLeadInvoice.totalAmount}).`,
+        );
+      }
       await recordAudit(tx, {
         actorUserId: session.user.id,
         entityType: 'invoice',
@@ -588,7 +632,15 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
           totalAmount: newInvoice.totalAmount,
           currency: newInvoice.currencyCode,
         },
-        context: { via: 'lead_accept', leadId: lead.id, engagementId },
+        context: {
+          via: 'lead_accept',
+          leadId: lead.id,
+          engagementId,
+          // K1 — issued under the lead-conversion exception.
+          issuedUnder: 'lead_conversion_exception',
+          actorHasFinanceAuthority: actorHasFinance,
+          priceSource: conversion.priceSource,
+        },
       });
     }
 
@@ -637,7 +689,21 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
         context: { via: 'lead_accept', leadId: lead.id, engagementId },
       });
 
-      await performPaymentVerification(tx, payment, session.user.id);
+      // Decision C1 — only finance authority (owner, ADMIN, FINANCE)
+      // confirms money at acceptance. Anyone else accepts the lead with
+      // the payment left PENDING, and the engagement stays
+      // PENDING_PAYMENT until finance verifies it.
+      if (hasFinanceAuthority(session.user, 'VERIFY')) {
+        await performPaymentVerification(tx, payment, session.user.id);
+      } else {
+        await recordAudit(tx, {
+          actorUserId: session.user.id,
+          entityType: 'payment',
+          entityId: payment.id,
+          action: 'AWAITING_FINANCE_VERIFICATION',
+          context: { via: 'lead_accept', leadId: lead.id, engagementId },
+        });
+      }
     } else {
       await recordAudit(tx, {
         actorUserId: session.user.id,
@@ -693,4 +759,75 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
       invoicesLinked,
     };
   });
+}
+
+/* ─── Decision K1 — lead-conversion charge validation ─────────────────── */
+
+function moneyCents(v: string): number {
+  return Math.round(Number.parseFloat(v) * 100);
+}
+
+/**
+ * Server-side rules for the charge raised when a lead is accepted
+ * (Immigration / Recruitment conversion — Candidate Services is already
+ * finance-only above). Exported for unit tests.
+ *   - the service is active and matches the payer (person vs employer);
+ *   - the payer exists on the lead;
+ *   - the currency matches the catalog currency when the catalog sets one;
+ *   - when the catalog sets a price it is the authorized price: non-finance
+ *     staff must use it exactly; finance may deviate (audited);
+ *   - quote-based services (no catalog price) keep the operator-entered
+ *     amount, marked as such in the audit trail.
+ */
+export function validateLeadConversionCharge(args: {
+  targetBusiness: Lead['targetBusiness'];
+  personId: string | null;
+  employerId: string | null;
+  service: {
+    isActive: boolean;
+    payerType: 'PERSON' | 'EMPLOYER' | 'ANY';
+    defaultPrice: string | null;
+    defaultCurrencyCode: string | null;
+  };
+  amount: string;
+  currencyCode: string;
+  actorHasFinance: boolean;
+}): { priceSource: 'catalog' | 'finance_override' | 'operator_entered_no_catalog_price' } {
+  const { service } = args;
+  if (!service.isActive) {
+    throw new BusinessRuleError('SERVICE_INACTIVE', 'This service is no longer offered.');
+  }
+  const employerPays = args.targetBusiness === 'RECRUITMENT';
+  if (employerPays ? !args.employerId : !args.personId) {
+    throw new BusinessRuleError('LEAD_PAYER_MISSING', 'This lead has no payer to invoice.');
+  }
+  const payerOk =
+    service.payerType === 'ANY' || service.payerType === (employerPays ? 'EMPLOYER' : 'PERSON');
+  if (!payerOk) {
+    throw new BusinessRuleError(
+      'SERVICE_PAYER_MISMATCH',
+      employerPays
+        ? 'This service is billed to people, not employers. Choose an employer service.'
+        : 'This service is billed to employers. Choose a service billed to the person.',
+    );
+  }
+  if (service.defaultCurrencyCode && service.defaultCurrencyCode !== args.currencyCode) {
+    throw new BusinessRuleError(
+      'SERVICE_CURRENCY_MISMATCH',
+      `This service is priced in ${service.defaultCurrencyCode}.`,
+    );
+  }
+  if (moneyCents(args.amount) <= 0) {
+    throw new ValidationError('Amount must be greater than zero.', { amount: 'Must be > 0' });
+  }
+  if (service.defaultPrice === null) return { priceSource: 'operator_entered_no_catalog_price' };
+  if (moneyCents(args.amount) === moneyCents(service.defaultPrice))
+    return { priceSource: 'catalog' };
+  if (!args.actorHasFinance) {
+    throw new BusinessRuleError(
+      'PRICE_NOT_AUTHORIZED',
+      `The catalog price for this service is ${service.defaultPrice}. A different amount needs Finance, Admin or the owner.`,
+    );
+  }
+  return { priceSource: 'finance_override' };
 }

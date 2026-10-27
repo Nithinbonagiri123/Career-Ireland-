@@ -3,7 +3,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { requireFinanceAuthority } from '@/lib/auth/finance-policy';
 import { db } from '@/lib/db/client';
 import { invoices } from '@/lib/db/schema/billing';
 import { serviceEngagements } from '@/lib/db/schema/commerce';
@@ -67,7 +67,7 @@ export async function directPaymentAndConvertAction(
 async function directPaymentAndConvert(input: unknown): Promise<DirectPaymentAndConvertResult> {
   // ADMIN / FINANCE only — this writes an invoice directly, no
   // operator-visible pro-forma. Matches generateInvoiceForPayer's gate.
-  const session = await requireRole(['ADMIN', 'FINANCE']);
+  const session = await requireFinanceAuthority('VERIFY', 'directPaymentAndConvert');
   const parsed = DirectPaymentAndConvertSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(

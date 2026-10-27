@@ -1,9 +1,11 @@
 'use server';
 
+import { sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { hasFinanceAuthority } from '@/lib/auth/finance-policy-rules';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
-import { ValidationError } from '@/lib/errors';
+import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { toActionResult } from '@/lib/result';
 import { type ActivateResult, activateCandidateInTx } from './activation-service';
 
@@ -39,11 +41,34 @@ async function activateCandidate(input: { leadId: string }): Promise<ActivateRes
     throw new ValidationError('leadId is required.', { leadId: 'Required.' });
   }
 
-  return db.transaction((tx) =>
-    activateCandidateInTx(tx, {
+  return db.transaction(async (tx) => {
+    // Phase 1 — manual activation opens the candidate's service, so the
+    // server (not only the UI) requires settled money first: a VERIFIED
+    // payment or a complimentary invoice for the lead's person, unless
+    // the caller holds finance authority.
+    if (!hasFinanceAuthority(session.user, 'VERIFY')) {
+      const [row] = await tx.execute<{ ok: boolean }>(sql`
+        SELECT EXISTS(
+          SELECT 1 FROM leads l
+          JOIN service_engagements e ON e.payer_person_id = l.person_id
+          LEFT JOIN payments p ON p.service_engagement_id = e.id
+            AND p.status IN ('VERIFIED','PARTIALLY_REFUNDED')
+          LEFT JOIN invoices i ON i.service_engagement_id = e.id
+            AND i.settlement_kind = 'COMPLIMENTARY' AND i.status <> 'VOIDED'
+          WHERE l.id = ${input.leadId} AND (p.id IS NOT NULL OR i.id IS NOT NULL)
+        ) AS ok
+      `);
+      if (!row?.ok) {
+        throw new BusinessRuleError(
+          'ACTIVATION_REQUIRES_PAYMENT',
+          'Activate a candidate once their payment is verified. Ask Finance to verify the payment first.',
+        );
+      }
+    }
+    return activateCandidateInTx(tx, {
       leadId: input.leadId,
       actorUserId: session.user.id,
       via: 'activate_candidate',
-    }),
-  );
+    });
+  });
 }

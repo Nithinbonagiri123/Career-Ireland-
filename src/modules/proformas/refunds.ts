@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireRole } from '@/lib/auth/session';
+import { assertFinanceActor, requireFinanceAuthority } from '@/lib/auth/finance-policy';
 import { db } from '@/lib/db/client';
 import { payments } from '@/lib/db/schema/commerce';
 import {
@@ -23,7 +23,7 @@ import { centsToMoney, moneyToCents } from './money';
  * NOT create a credit note or fictional invoice.
  *
  * ── Guards ───────────────────────────────────────────────────────────
- *   - Finance or Admin only (requireRole).
+ *   - Finance authority only (central finance policy, REVERSE tier).
  *   - Pro forma must be ACCEPTED (not CONVERTED — CONVERTED means an
  *     invoice exists, and the standard refund path with credit note
  *     applies instead).
@@ -58,7 +58,7 @@ export type IssuePreIssuanceRefundResult = {
 export async function issuePreIssuanceRefund(
   input: IssuePreIssuanceRefundInput,
 ): Promise<IssuePreIssuanceRefundResult> {
-  const session = await requireRole(['ADMIN', 'FINANCE']);
+  const session = await requireFinanceAuthority('REVERSE', 'issuePreIssuanceRefund');
   return issuePreIssuanceRefundAs(input, session.user.id);
 }
 
@@ -83,6 +83,7 @@ export async function issuePreIssuanceRefundAs(
   if (refundCents <= 0) throw new ValidationError('Refund amount must be positive');
 
   return db.transaction(async (tx) => {
+    await assertFinanceActor(tx, actorUserId, 'REVERSE', 'issuePreIssuanceRefundAs');
     // Idempotency pre-check: return the existing row if the caller
     // retries with the same key.
     const [existing] = await tx

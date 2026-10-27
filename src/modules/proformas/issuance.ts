@@ -1,5 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { type DbExecutor, recordAudit } from '@/lib/audit/withAudit';
+import { assertFinanceActor } from '@/lib/auth/finance-policy';
 import { type Invoice, invoiceLineItems, invoices } from '@/lib/db/schema/billing';
 import { payments } from '@/lib/db/schema/commerce';
 import {
@@ -58,6 +59,9 @@ export async function issueOfficialInvoiceForProForma(
   tx: DbExecutor,
   args: IssueProFormaArgs,
 ): Promise<Invoice> {
+  // Phase 1 — issuing an official invoice is ISSUE-tier: the issuer must
+  // hold finance authority, re-checked here at the side effect itself.
+  await assertFinanceActor(tx, args.issuedByUserId, 'ISSUE', 'issueOfficialInvoiceForProForma');
   // 1. Idempotency pre-check. If an invoice already exists for this
   //    (pro_forma, purpose, issuance_key) triple, return it.
   const [existing] = await tx

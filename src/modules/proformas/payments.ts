@@ -1,5 +1,10 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
+import {
+  assertFinanceActor,
+  hasFinanceAuthority,
+  requireFinanceAuthority,
+} from '@/lib/auth/finance-policy';
 import { requirePermission } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { invoices } from '@/lib/db/schema/billing';
@@ -160,8 +165,7 @@ export async function recordPaymentForProForma(input: RecordPaymentInput): Promi
 }> {
   const session = await requirePermission('candidate_services', 'proformas', 'edit');
   const recorded = await recordPaymentForProFormaAs(input, session.user.id);
-  const canAutoVerify =
-    session.user.isOwner || session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
+  const canAutoVerify = hasFinanceAuthority(session.user, 'VERIFY');
   if (!canAutoVerify) return recorded;
   // Same two steps a finance operator performed by hand, collapsed into
   // one action. Sequential transactions on purpose: if verification
@@ -337,7 +341,10 @@ export type VerifyPaymentResult = {
 };
 
 export async function verifyPaymentForProForma(paymentId: string): Promise<VerifyPaymentResult> {
-  const session = await requirePermission('candidate_services', 'proformas', 'edit');
+  // FIN-04 — the pro forma edit grant alone no longer confirms money:
+  // verification needs finance authority as well.
+  await requirePermission('candidate_services', 'proformas', 'edit');
+  const session = await requireFinanceAuthority('VERIFY', 'verifyPaymentForProForma');
   return verifyPaymentForProFormaAs(paymentId, session.user.id);
 }
 
@@ -348,6 +355,10 @@ export async function verifyPaymentForProFormaAs(
   actorUserId: string,
 ): Promise<VerifyPaymentResult> {
   return db.transaction(async (tx) => {
+    // Defence in depth for the session-less path: the acting user must
+    // hold finance authority (verifies, issues the receipt + invoice and
+    // activates the candidate).
+    await assertFinanceActor(tx, actorUserId, 'VERIFY', 'verifyPaymentForProFormaAs');
     // Lock the payment row.
     const [payment] = await tx
       .select()
