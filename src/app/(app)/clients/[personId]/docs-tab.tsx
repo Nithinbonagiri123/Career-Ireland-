@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { type DocumentTypeOption, DocumentTypePicker } from '@/components/document-type-picker';
 import { Badge } from '@/components/ui/badge';
@@ -212,10 +212,32 @@ export function CandidateDocsTab({
   // rejections + per-file upload failures with the server's reason).
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const [scanning, startScan] = useTransition();
-  const scanCv = () =>
+  // Every page refresh in this tab goes through ONE tracked transition, so
+  // `refreshing` is true exactly while router.refresh() is still in flight.
+  // Next 16.4 cancels a server action that starts during a refresh (the
+  // scan then silently did nothing); the scan buttons therefore stay
+  // disabled until the refresh has committed, and a scan requested during
+  // an upload/refresh is queued and runs as soon as it settles.
+  const [refreshing, startRefresh] = useTransition();
+  const refreshPage = useCallback(() => startRefresh(() => router.refresh()), [router]);
+  const [scanQueued, setScanQueued] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const scanBlocked = scanning || refreshing || uploading;
+  const runScan = () =>
     startScan(async () => {
-      const r = await buildCvSuggestionsAction({ personId });
+      setScanError(null);
+      let r: Awaited<ReturnType<typeof buildCvSuggestionsAction>>;
+      try {
+        r = await buildCvSuggestionsAction({ personId });
+      } catch {
+        // Network / aborted request — never fail silently.
+        const message = 'The CV scan did not complete. Check your connection and scan again.';
+        setScanError(message);
+        toast.error(message);
+        return;
+      }
       if (!r.ok) {
+        setScanError(r.error.message);
         toast.error(r.error.message);
         return;
       }
@@ -233,6 +255,7 @@ export function CandidateDocsTab({
         return;
       }
       setCvSuggestions(r.data);
+      setScanError(null);
       const total =
         r.data.skills.catalogHits.length +
         r.data.skills.customCandidates.length +
@@ -249,6 +272,19 @@ export function CandidateDocsTab({
         );
       }
     });
+
+  // Every Scan request is queued and runs only when no scan, upload or
+  // refresh is pending — including the auto-scan that follows a CV upload,
+  // whose refresh starts in the same tick.
+  const scanCv = () => setScanQueued(true);
+  // Run the queued scan once the upload / refresh it waited for has settled.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runScan is recreated each render; the trigger is the pending state.
+  useEffect(() => {
+    if (scanQueued && !scanning && !refreshing && !uploading) {
+      setScanQueued(false);
+      runScan();
+    }
+  }, [scanQueued, scanning, refreshing, uploading]);
 
   function uploadStaged() {
     if (staged.length === 0 || staged.some((s) => !s.typeId)) return;
@@ -269,7 +305,7 @@ export function CandidateDocsTab({
       setStaged([]);
       if (ok > 0) toast.success(`${ok} file${ok === 1 ? '' : 's'} uploaded`);
       if (failures.length > 0) setUploadErrors((prev) => [...prev, ...failures]);
-      router.refresh();
+      refreshPage();
     });
   }
 
@@ -312,7 +348,7 @@ export function CandidateDocsTab({
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <ScanCvButton onScan={scanCv} scanning={scanning} />
+          <ScanCvButton onScan={scanCv} scanning={scanning || scanQueued} blocked={scanBlocked} />
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -542,7 +578,9 @@ export function CandidateDocsTab({
             personId={personId}
             cvTypeId={typeIdByCode.get('CV') ?? null}
             onScan={scanCv}
-            scanning={scanning}
+            scanning={scanning || scanQueued}
+            blocked={scanBlocked}
+            onRefresh={refreshPage}
           />
         </div>
       </div>
@@ -694,7 +732,7 @@ export function CandidateDocsTab({
                               <CloudUpload className="size-3 rotate-180" />
                               Download
                             </Link>
-                            <DocRowMenu doc={d} documentTypes={allTypes} />
+                            <DocRowMenu doc={d} documentTypes={allTypes} onRefresh={refreshPage} />
                           </div>
                         </td>
                       </tr>
@@ -710,9 +748,12 @@ export function CandidateDocsTab({
           <ExtractedCvCard
             personId={personId}
             suggestions={cvSuggestions}
-            scanning={scanning}
+            scanning={scanning || scanQueued}
+            blocked={scanBlocked}
+            scanError={scanError}
             onScan={scanCv}
             onSaved={() => setCvSuggestions(null)}
+            onRefresh={refreshPage}
           />
         </div>
       </div>
@@ -722,11 +763,19 @@ export function CandidateDocsTab({
 
 /* ──────────────────────────────────────────────────────────────────── */
 
-function ScanCvButton({ onScan, scanning }: { onScan: () => void; scanning: boolean }) {
+function ScanCvButton({
+  onScan,
+  scanning,
+  blocked,
+}: {
+  onScan: () => void;
+  scanning: boolean;
+  blocked: boolean;
+}) {
   return (
     <button
       type="button"
-      disabled={scanning}
+      disabled={blocked}
       onClick={onScan}
       className={cn(
         buttonVariants({ variant: 'outline', size: 'sm' }),
@@ -748,16 +797,20 @@ function ScanCvCard({
   cvTypeId,
   onScan,
   scanning,
+  blocked,
+  onRefresh,
 }: {
   personId: string;
   cvTypeId: string | null;
   onScan: () => void;
   scanning: boolean;
+  /** True while a scan, upload or page refresh is still pending. */
+  blocked: boolean;
+  onRefresh: () => void;
 }) {
   const [cvUploading, startCvUpload] = useTransition();
   const [cvDragOver, setCvDragOver] = useState(false);
   const cvInputRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
 
   // Dedicated CV intake — always typed CV/Résumé (never mis-filed as
   // another document type) so the scan below has a fresh CV to read.
@@ -777,7 +830,8 @@ function ScanCvCard({
         }
         await uploadDocumentFile(personId, file, typeId);
         toast.success('CV uploaded — scanning…');
-        router.refresh();
+        // The parent queues this scan until the refresh has committed.
+        onRefresh();
         onScan();
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'CV upload failed');
@@ -853,7 +907,7 @@ function ScanCvCard({
         <button
           type="button"
           onClick={onScan}
-          disabled={scanning || cvUploading}
+          disabled={blocked || cvUploading}
           className={cn(
             buttonVariants({ variant: 'default', size: 'sm' }),
             'inline-flex w-fit items-center gap-1.5',
@@ -886,16 +940,24 @@ function ExtractedCvCard({
   personId,
   suggestions,
   scanning,
+  blocked,
+  scanError,
   onScan,
   onSaved,
+  onRefresh,
 }: {
   personId: string;
   /** Latest scan result, owned by the parent so every Scan button feeds
    *  this panel. null = not scanned yet. */
   suggestions: CvSuggestions | null;
   scanning: boolean;
+  /** True while a scan, upload or page refresh is still pending. */
+  blocked: boolean;
+  /** Last scan failure (network / server), shown persistently. */
+  scanError: string | null;
   onScan: () => void;
   onSaved: () => void;
+  onRefresh: () => void;
 }) {
   const [picked, setPicked] = useState<{
     skillIds: Set<string>;
@@ -913,7 +975,6 @@ function ExtractedCvCard({
   const [tab, setTab] = useState<'skills' | 'qualifications' | 'work' | 'personal'>('skills');
   const [saving, startSave] = useTransition();
   const [saveErrors, setSaveErrors] = useState<string[]>([]);
-  const router = useRouter();
 
   const toggle = (bucket: keyof typeof picked, key: string) => {
     setPicked((prev) => {
@@ -958,7 +1019,7 @@ function ExtractedCvCard({
         toast.warning(
           `Saved with ${r.data.errors.length} item${r.data.errors.length === 1 ? '' : 's'} skipped — see the notes in the panel.`,
         );
-        router.refresh();
+        onRefresh();
         return;
       }
       setSaveErrors([]);
@@ -971,7 +1032,7 @@ function ExtractedCvCard({
         customQualifications: new Set(),
         employmentKeys: new Set(),
       });
-      router.refresh();
+      onRefresh();
     });
 
   const pickedCount =
@@ -1035,6 +1096,15 @@ function ExtractedCvCard({
       </div>
 
       <div className="space-y-3 p-4 text-xs">
+        {scanError && (
+          <div
+            className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive"
+            role="alert"
+            data-testid="cv-scan-error"
+          >
+            {scanError}
+          </div>
+        )}
         {empty ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <span
@@ -1052,7 +1122,7 @@ function ExtractedCvCard({
               variant="outline"
               size="sm"
               onClick={onScan}
-              disabled={scanning}
+              disabled={blocked}
               className="mt-2"
             >
               {scanning ? (
@@ -1074,7 +1144,7 @@ function ExtractedCvCard({
               variant="outline"
               size="sm"
               onClick={onScan}
-              disabled={scanning}
+              disabled={blocked}
               className="mt-1"
             >
               {scanning ? (
@@ -1284,15 +1354,17 @@ function ExtractedCvCard({
 function DocRowMenu({
   doc,
   documentTypes,
+  onRefresh,
 }: {
   doc: DocumentInstance;
   documentTypes: DocumentTypeLite[];
+  /** Parent's tracked refresh, so the scan buttons wait for it. */
+  onRefresh: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'menu' | 'retype' | 'expiry'>('menu');
   const [expiry, setExpiry] = useState<string>(doc.expiresOn ?? '');
   const [pending, start] = useTransition();
-  const router = useRouter();
 
   const close = () => {
     setOpen(false);
@@ -1310,7 +1382,7 @@ function DocRowMenu({
       if (r.ok) {
         toast.success('Document deleted');
         close();
-        router.refresh();
+        onRefresh();
       } else {
         toast.error(r.error.message);
       }
@@ -1324,7 +1396,7 @@ function DocRowMenu({
       if (r.ok) {
         toast.success(value ? 'Expiry date saved' : 'Expiry date cleared');
         close();
-        router.refresh();
+        onRefresh();
       } else {
         toast.error(r.error.message);
       }
@@ -1342,7 +1414,7 @@ function DocRowMenu({
       if (r.ok) {
         toast.success('Document type updated');
         close();
-        router.refresh();
+        onRefresh();
       } else {
         toast.error(r.error.message);
       }
