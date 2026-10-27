@@ -1,12 +1,14 @@
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { checkPasswordPolicy } from '@/lib/auth/password-policy';
+import type { Role } from '@/lib/auth/permissions';
 import { requireInternalStaff, requireOwner, requireRole } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { users } from '@/lib/db/schema/users';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { hashPassword } from '@/modules/auth/service';
 import { listUsers, type UserListRow, updateUserActive, updateUserRole } from './repository';
+import { replaceGrantsWithRolePreset } from './role-grants';
 import {
   type ChangeRoleInput,
   ChangeRoleSchema,
@@ -97,6 +99,14 @@ export async function createUser(input: unknown): Promise<UserListRow> {
       });
     if (!row) throw new Error('user insert returned no row');
 
+    // CH-04 / decision A1 — a new account starts with exactly its role's
+    // preset grants instead of none.
+    const grants = await replaceGrantsWithRolePreset(tx, {
+      userId: row.id,
+      role: row.role as Role,
+      actorUserId: session.user.id,
+    });
+
     await recordAudit(tx, {
       actorUserId: session.user.id,
       entityType: 'user',
@@ -107,6 +117,7 @@ export async function createUser(input: unknown): Promise<UserListRow> {
         fullName: row.fullName,
         role: row.role,
         isOwner: row.isOwner,
+        grantCount: grants.after.length,
       },
     });
 
@@ -139,11 +150,12 @@ export async function setUserOwner(input: SetOwnerInput): Promise<UserListRow> {
     if (before.isOwner === parsed.isOwner) return before as UserListRow;
 
     if (!parsed.isOwner) {
-      // Last-owner guard — count OTHER active owners before removing this one.
+      // Last-owner guard — count OTHER *active* owners before removing this
+      // one (a deactivated owner cannot act, so it does not count).
       const [{ count }] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(users)
-        .where(and(eq(users.isOwner, true), ne(users.id, parsed.userId)));
+        .where(and(eq(users.isOwner, true), eq(users.isActive, true), ne(users.id, parsed.userId)));
       if ((count ?? 0) === 0) {
         throw new BusinessRuleError(
           'LAST_OWNER',
@@ -192,18 +204,30 @@ export async function changeUserRole(input: ChangeRoleInput): Promise<UserListRo
     const [before] = await tx.select().from(users).where(eq(users.id, parsed.userId)).limit(1);
     if (!before) throw new BusinessRuleError('USER_NOT_FOUND', 'User not found');
     if (before.role === parsed.role) return before as UserListRow;
+    // Owner protection — only an owner may change another owner's role.
+    if (before.isOwner && !session.user.isOwner) {
+      throw new BusinessRuleError('OWNER_ONLY', "Only an owner can change another owner's role.");
+    }
 
     const after = await updateUserRole(tx, parsed.userId, parsed.role);
     if (!after) throw new Error('updateUserRole returned no row');
+
+    // CH-02 / decision A1 — grants are REPLACED by the new role's preset,
+    // so a demotion never leaves the old role's access behind.
+    const grants = await replaceGrantsWithRolePreset(tx, {
+      userId: parsed.userId,
+      role: parsed.role as Role,
+      actorUserId: session.user.id,
+    });
 
     await recordAudit(tx, {
       actorUserId: session.user.id,
       entityType: 'user',
       entityId: parsed.userId,
       action: 'ROLE_CHANGED',
-      before: { role: before.role },
-      after: { role: after.role },
-      context: { sessionsInvalidated: true },
+      before: { role: before.role, grants: grants.before },
+      after: { role: after.role, grants: grants.after },
+      context: { sessionsInvalidated: true, grantsReplacedWithPreset: true },
     });
 
     return after as UserListRow;
@@ -222,6 +246,23 @@ export async function setUserActive(input: SetActiveInput): Promise<UserListRow>
     const [before] = await tx.select().from(users).where(eq(users.id, parsed.userId)).limit(1);
     if (!before) throw new BusinessRuleError('USER_NOT_FOUND', 'User not found');
     if (before.isActive === parsed.isActive) return before as UserListRow;
+    if (before.isOwner && !parsed.isActive) {
+      // Owner protection — only an owner may deactivate another owner,
+      // and the last active owner can never be deactivated.
+      if (!session.user.isOwner) {
+        throw new BusinessRuleError('OWNER_ONLY', 'Only an owner can deactivate another owner.');
+      }
+      const [{ count }] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(and(eq(users.isOwner, true), eq(users.isActive, true), ne(users.id, parsed.userId)));
+      if ((count ?? 0) === 0) {
+        throw new BusinessRuleError(
+          'LAST_OWNER',
+          'This is the only active owner. Promote another user first before deactivating this one.',
+        );
+      }
+    }
 
     const after = await updateUserActive(tx, parsed.userId, parsed.isActive);
     if (!after) throw new Error('updateUserActive returned no row');

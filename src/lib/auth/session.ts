@@ -9,6 +9,9 @@ import { type UserRole, users } from '@/lib/db/schema/users';
 import { AuthorizationError } from '../errors';
 import { auth } from './config';
 import { type Business, encodeKey, hasPermission, type Verb } from './permissions';
+import { roleSatisfies } from './role-rules';
+
+export { roleSatisfies } from './role-rules';
 
 /**
  * Write an AUTH_DENIED audit event. Called by the gate helpers before
@@ -123,7 +126,7 @@ export type InternalStaffRole = (typeof INTERNAL_STAFF_ROLES)[number];
 /** Internal staff role check — throws AuthorizationError for any other role. */
 export async function requireRole(roles: UserRole[]): Promise<Session> {
   const s = await requireSession();
-  if (!roles.includes(s.user.role)) {
+  if (!roleSatisfies(s.user, roles)) {
     await logAuthDenied(s.user.id, 'role', { required: roles, actual: s.user.role });
     throw new AuthorizationError();
   }
