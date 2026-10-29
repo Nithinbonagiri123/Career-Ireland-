@@ -25,7 +25,7 @@ export function fieldError(errors: FieldErrors, key: string): string | undefined
 }
 
 /**
- * R3 — shared dialog shell for Interviews & Offers forms: one submit, a
+ * R3 — shared dialog shell for workspace forms (Interviews & Offers, R4 campaigns): one submit, a
  * pending state, the server's message shown in the dialog (not only a
  * toast), field-level errors handed back to the form; the server action
  * revalidates the page on success. The server action stays the single source of validation.
@@ -40,6 +40,8 @@ export function ActionDialog<T>({
   onSubmit,
   children,
   wide,
+  defaultOpen,
+  submitDisabled,
 }: {
   trigger: ReactElement;
   title: string;
@@ -50,8 +52,12 @@ export function ActionDialog<T>({
   onSubmit: () => Promise<ActionResult<T>>;
   children: (errors: FieldErrors) => ReactNode;
   wide?: boolean;
+  /** Open on first render (deep links such as ?requisitionId=…). */
+  defaultOpen?: boolean;
+  /** Keep the submit button disabled (e.g. until a confirmation is ticked). */
+  submitDisabled?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(defaultOpen));
   const [pending, start] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -68,8 +74,12 @@ export function ActionDialog<T>({
         return;
       }
       if (!r.ok) {
-        setFormError(r.error.message);
-        setErrors((r.error.fields ?? {}) as FieldErrors);
+        const fields = (r.error.fields ?? {}) as FieldErrors;
+        setErrors(fields);
+        // A field problem is shown next to its field; the top alert is for
+        // everything else, so the same sentence never appears twice.
+        const fieldMessages = Object.values(fields).flat();
+        setFormError(fieldMessages.includes(r.error.message) ? null : r.error.message);
         return;
       }
       toast.success(successMessage);
@@ -109,7 +119,7 @@ export function ActionDialog<T>({
             <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
             <Button
               type="submit"
-              disabled={pending}
+              disabled={pending || submitDisabled}
               variant={destructive ? 'destructive' : 'default'}
             >
               {pending && <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />}

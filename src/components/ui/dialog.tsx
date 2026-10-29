@@ -11,7 +11,16 @@ function Dialog({ ...props }: DialogPrimitive.Root.Props) {
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
-  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
+  // With `render={<Button/>}` the rendered element keeps its own
+  // data-slot ("button"). Adding "dialog-trigger" there merged differently
+  // on the server and in the browser (hydration attribute warning), and
+  // nothing selects on it — so it is only set on a plain trigger.
+  return (
+    <DialogPrimitive.Trigger
+      {...(props.render ? {} : { 'data-slot': 'dialog-trigger' })}
+      {...props}
+    />
+  );
 }
 
 function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {

@@ -1,166 +1,137 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { format, formatDistanceToNow } from 'date-fns';
-import { Archive, ArrowRight, MoreHorizontal } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useMemo, useState, useTransition } from 'react';
-import { toast } from 'sonner';
+import { useMemo } from 'react';
 import { DataTable } from '@/components/data-table/data-table';
-import { PromptDialog } from '@/components/prompt-dialog';
-import { Badge } from '@/components/ui/badge';
-import { Button, buttonVariants } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { statusTone } from '@/lib/ui/status-tone';
-import { archiveCampaignAction } from '@/modules/campaigns/actions';
+import { StatusChip } from '@/components/status-chip';
+import { Timestamp } from '@/components/timestamp';
+import { buttonVariants } from '@/components/ui/button';
+import { CAMPAIGN_STATUS_LABEL, CAMPAIGN_TONE } from '@/modules/campaigns/labels';
 import type { CampaignListRow } from '@/modules/campaigns/service';
 
-export function CampaignsTable({ campaigns }: { campaigns: CampaignListRow[] }) {
-  const [archiveTarget, setArchiveTarget] = useState<CampaignListRow | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
-  const router = useRouter();
-
-  const confirmArchive = (reason: string) => {
-    if (!archiveTarget) return;
-    const target = archiveTarget;
-    setBusyId(target.id);
-    startTransition(async () => {
-      const r = await archiveCampaignAction({ campaignId: target.id, reason });
-      setBusyId(null);
-      if (r.ok) {
-        toast.success(`${target.name} archived`);
-        setArchiveTarget(null);
-        router.refresh();
-      } else {
-        toast.error(r.error.message);
-      }
-    });
-  };
-
+/**
+ * R4 — campaigns list. Lifecycle actions live in the campaign workspace,
+ * where the current state and its consequences are visible.
+ */
+export function CampaignsTable({
+  campaigns,
+  archivedView,
+}: {
+  campaigns: CampaignListRow[];
+  archivedView: boolean;
+}) {
   const columns = useMemo<ColumnDef<CampaignListRow>[]>(
     () => [
       {
         header: 'Campaign',
         accessorKey: 'name',
-        cell: ({ row }) => (
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">{row.original.name}</span>
-            <span className="text-xs text-muted-foreground">
-              {row.original.requisitionTitle ?? 'Standalone'}
-            </span>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const c = row.original;
+          return (
+            <div className="flex min-w-0 flex-col">
+              <Link
+                href={`/campaigns/${c.id}`}
+                className="truncate text-sm font-medium hover:underline"
+              >
+                {c.name}
+              </Link>
+              <span className="truncate text-xs text-muted-foreground">
+                {c.requisitionTitle
+                  ? `${c.requisitionTitle}${c.employerName ? ` · ${c.employerName}` : ''}`
+                  : 'Talent pool'}
+              </span>
+            </div>
+          );
+        },
       },
       {
         header: 'Status',
         accessorKey: 'status',
-        size: 130,
+        size: 120,
         cell: ({ row }) => (
-          <Badge variant={statusTone(row.original.status)} className="rounded-full">
-            {row.original.status}
-          </Badge>
+          <StatusChip
+            label={CAMPAIGN_STATUS_LABEL[row.original.status]}
+            tone={CAMPAIGN_TONE[row.original.status]}
+          />
+        ),
+      },
+      {
+        header: 'Ads',
+        id: 'ads',
+        size: 90,
+        cell: ({ row }) => (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {row.original.activeAdCount} / {row.original.adCount} running
+          </span>
+        ),
+      },
+      {
+        header: 'Prospects',
+        id: 'prospects',
+        size: 120,
+        cell: ({ row }) => (
+          <span className="text-xs tabular-nums">
+            {row.original.prospectCount}
+            <span className="text-muted-foreground">
+              {' '}
+              · {row.original.convertedCount} converted
+            </span>
+          </span>
         ),
       },
       {
         header: 'Started',
         accessorKey: 'startedAt',
-        size: 140,
+        size: 160,
         cell: ({ row }) =>
           row.original.startedAt ? (
-            <time
-              dateTime={row.original.startedAt.toISOString()}
-              className="text-xs text-muted-foreground"
-              title={format(row.original.startedAt, 'd MMM yyyy · HH:mm')}
-            >
-              {formatDistanceToNow(row.original.startedAt, { addSuffix: true })}
-            </time>
+            <Timestamp date={row.original.startedAt} absoluteOnly className="text-xs" />
           ) : (
-            <span className="text-xs text-muted-foreground">—</span>
+            <span className="text-xs text-muted-foreground">Not started</span>
           ),
       },
       {
         header: 'Created',
         accessorKey: 'createdAt',
-        size: 130,
+        size: 180,
         cell: ({ row }) => (
-          <time
-            dateTime={row.original.createdAt.toISOString()}
-            className="text-xs text-muted-foreground"
-            title={format(row.original.createdAt, 'd MMM yyyy · HH:mm')}
-          >
-            {formatDistanceToNow(row.original.createdAt, { addSuffix: true })}
-          </time>
+          <div className="flex flex-col text-xs">
+            <Timestamp date={row.original.createdAt} absoluteOnly className="text-xs" />
+            {row.original.createdByName && (
+              <span className="text-muted-foreground">by {row.original.createdByName}</span>
+            )}
+          </div>
         ),
       },
       {
         header: '',
-        id: 'actions',
-        size: 130,
-        cell: ({ row }) => {
-          const c = row.original;
-          const isBusy = busyId === c.id;
-          return (
-            <div className="flex items-center justify-end gap-1.5">
-              <Link
-                href={`/campaigns/${c.id}`}
-                className={buttonVariants({ variant: 'outline', size: 'sm' })}
-              >
-                Open <ArrowRight className="ml-1.5 size-3.5" />
-              </Link>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button variant="ghost" size="icon-sm" aria-label="Actions" disabled={isBusy} />
-                  }
-                >
-                  <MoreHorizontal className="size-4" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem render={<Link href={`/campaigns/${c.id}`} />}>
-                    Open detail
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onClick={() => setArchiveTarget(c)}>
-                    <Archive className="mr-2 size-4" /> Archive
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          );
-        },
+        id: 'open',
+        size: 90,
+        cell: ({ row }) => (
+          <Link
+            href={`/campaigns/${row.original.id}`}
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
+          >
+            Open <ArrowRight className="ml-1.5 size-3.5" />
+          </Link>
+        ),
       },
     ],
-    [busyId],
+    [],
   );
 
   return (
-    <>
-      <DataTable
-        columns={columns}
-        data={campaigns}
-        emptyTitle="No campaigns yet"
-        emptyDescription="Run a campaign when the existing talent pool can't fill a requisition. Advertisements live under each campaign."
-      />
-      <PromptDialog
-        open={archiveTarget !== null}
-        onCancel={() => setArchiveTarget(null)}
-        onConfirm={confirmArchive}
-        title={`Archive "${archiveTarget?.name ?? ''}"?`}
-        description="Archived campaigns are hidden from the list. Ads and prospects remain in the DB but stop appearing under this campaign."
-        label="Reason (audited)"
-        placeholder="e.g. Filled requisition, campaign ended"
-        confirmLabel="Archive"
-        confirmVariant="destructive"
-        pending={busyId === archiveTarget?.id}
-      />
-    </>
+    <DataTable
+      columns={columns}
+      data={campaigns}
+      emptyTitle={archivedView ? 'No archived campaigns' : 'No campaigns here'}
+      emptyDescription={
+        archivedView
+          ? 'Archived campaigns appear here and can be restored from the campaign page.'
+          : 'Start a campaign when the existing talent pool cannot fill a job, or to grow the pool.'
+      }
+    />
   );
 }

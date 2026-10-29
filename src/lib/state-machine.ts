@@ -116,3 +116,33 @@ export const LEAD_TRANSITIONS = {
 
 /** Offers that block a new offer on the same application. */
 export const OPEN_OFFER_STATUSES = ['DRAFT', 'SENT', 'NEGOTIATING'] as const;
+
+// ─── R4 — campaigns, advertisements, prospects ───────────────────────────────
+
+/** A campaign is drafted, runs (and may be paused / resumed), then ends.
+ *  COMPLETED and CANCELLED are final (start a new campaign rather than
+ *  reopening one). Pausing suspends running ads; resuming does not restart
+ *  them — each ad is reactivated explicitly. */
+export const CAMPAIGN_TRANSITIONS = {
+  DRAFT: ['ACTIVE', 'CANCELLED'],
+  ACTIVE: ['PAUSED', 'COMPLETED', 'CANCELLED'],
+  PAUSED: ['ACTIVE', 'COMPLETED', 'CANCELLED'],
+} as const satisfies TransitionMap<'DRAFT' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED'>;
+
+export const ADVERTISEMENT_TRANSITIONS = {
+  DRAFT: ['ACTIVE', 'CLOSED'],
+  ACTIVE: ['PAUSED', 'EXPIRED', 'CLOSED'],
+  PAUSED: ['ACTIVE', 'CLOSED'],
+  EXPIRED: ['CLOSED'],
+} as const satisfies TransitionMap<'DRAFT' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'CLOSED'>;
+
+/** CONVERTED_TO_CANDIDATE is reached only through the conversion hand-off,
+ *  and only after screening; it is final. NOT_SUITABLE can be reopened. */
+export const PROSPECT_TRANSITIONS = {
+  NEW: ['SCREENED', 'RETAINED_IN_POOL', 'NOT_SUITABLE'],
+  SCREENED: ['RETAINED_IN_POOL', 'NOT_SUITABLE', 'CONVERTED_TO_CANDIDATE'],
+  RETAINED_IN_POOL: ['SCREENED', 'NOT_SUITABLE', 'CONVERTED_TO_CANDIDATE'],
+  NOT_SUITABLE: ['SCREENED'],
+} as const satisfies TransitionMap<
+  'NEW' | 'SCREENED' | 'CONVERTED_TO_CANDIDATE' | 'RETAINED_IN_POOL' | 'NOT_SUITABLE'
+>;

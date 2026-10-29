@@ -20,7 +20,8 @@ export const recruitmentCampaigns = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     jobRequisitionId: uuid('job_requisition_id').references(() => jobRequisitions.id),
     name: varchar('name', { length: 200 }).notNull(),
-    status: text('status', { enum: ['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED'] })
+    // PAUSED added in R4 (text column, no migration needed).
+    status: text('status', { enum: ['DRAFT', 'ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED'] })
       .notNull()
       .default('DRAFT'),
     startedAt: timestamp('started_at', { withTimezone: true }),
@@ -49,7 +50,8 @@ export const advertisements = pgTable(
     /** User-picked follow-up date. Fires a "Reminder: follow up on advert" task on that day. */
     reminderOn: date('reminder_on'),
     status: text('status', {
-      enum: ['DRAFT', 'ACTIVE', 'EXPIRED', 'CLOSED'],
+      // PAUSED added in R4: suspended while its campaign is paused.
+      enum: ['DRAFT', 'ACTIVE', 'PAUSED', 'EXPIRED', 'CLOSED'],
     })
       .notNull()
       .default('DRAFT'),

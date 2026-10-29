@@ -69,7 +69,7 @@ export default async function ProspectsPage({
         />
       </FadeUp>
       <FadeUp delay={0.08}>
-        <ProspectsTable prospects={prospects} />
+        <ProspectsTable prospects={prospects} nowIso={new Date().toISOString()} />
       </FadeUp>
     </div>
   );

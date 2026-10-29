@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactElement, useState } from 'react';
+import { ActionDialog, fieldError } from '@/components/action-dialog';
 import { FormField } from '@/components/form-field';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -15,7 +16,6 @@ import type {
   RequisitionApplicationOption,
   RequisitionOfferRow,
 } from '@/modules/requisitions/workspace';
-import { ActionDialog, fieldError } from './action-dialog';
 
 const PERIOD_LABEL: Record<string, string> = {
   ANNUAL: 'per year',

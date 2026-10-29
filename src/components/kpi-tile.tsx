@@ -30,14 +30,15 @@ export function KpiTile({
   return (
     <div
       data-testid={`kpi-${label}`}
-      className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm ring-1 ring-border/60"
+      className="flex items-center gap-2.5 rounded-xl border bg-card px-3 py-3 shadow-sm ring-1 ring-border/60 sm:gap-3 sm:px-4"
     >
       <span className={cn('grid size-9 shrink-0 place-items-center rounded-full', KPI_TONES[tone])}>
         <Icon className="size-4" aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        {/* Wraps the number under a long label on narrow tiles instead of overlapping it. */}
+        <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+          <p className="min-w-0 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             {label}
           </p>
           <p className="text-xl font-semibold leading-none tabular-nums text-foreground">{value}</p>
