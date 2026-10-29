@@ -113,3 +113,6 @@ export const LEAD_TRANSITIONS = {
 } as const satisfies TransitionMap<
   'NEW' | 'CONTACTED' | 'AWAITING_PAYMENT' | 'CONVERTED' | 'LOST' | 'REJECTED'
 >;
+
+/** Offers that block a new offer on the same application. */
+export const OPEN_OFFER_STATUSES = ['DRAFT', 'SENT', 'NEGOTIATING'] as const;

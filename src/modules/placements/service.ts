@@ -4,6 +4,7 @@ import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import { invoices } from '@/lib/db/schema/billing';
+import { offers } from '@/lib/db/schema/interviews_offers';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import {
   employers,
@@ -23,6 +24,8 @@ import {
   ArchivePlacementSchema,
   type CreatePlacementInput,
   CreatePlacementSchema,
+  type PlacementOfferException,
+  PlacementOfferExceptionSchema,
   type RestoreAvailabilityInput,
   RestoreAvailabilitySchema,
   type UnarchivePlacementInput,
@@ -183,7 +186,10 @@ export async function listPlacementsForRequisition(
  * Idempotent: if the application is already ACCEPTED with a placement,
  * returns the existing placement rather than double-creating.
  */
-export async function markApplicationPlaced(applicationId: string): Promise<Placement> {
+export async function markApplicationPlaced(
+  applicationId: string,
+  offerException?: PlacementOfferException,
+): Promise<Placement> {
   const session = await requireInternalStaff();
   return db.transaction(async (tx) => {
     const [app] = await tx
@@ -258,6 +264,11 @@ export async function markApplicationPlaced(applicationId: string): Promise<Plac
           forPersonId: app.personId,
           excludePlacementId: existing.id,
         });
+        const basis = await assertAcceptedOfferOrException(tx, {
+          personId: app.personId,
+          requisitionId: app.jobRequisitionId,
+          offerException,
+        });
         const [confirmed] = await tx
           .update(placements)
           .set({ status: 'CONFIRMED', updatedAt: sql`NOW()` })
@@ -271,8 +282,9 @@ export async function markApplicationPlaced(applicationId: string): Promise<Plac
           action: 'STATUS_CHANGED',
           before: { status: 'PROPOSED' },
           after: { status: 'CONFIRMED' },
-          context: { via: 'pipeline_mark_placed', applicationId },
+          context: { via: 'pipeline_mark_placed', applicationId, ...basisContext(basis) },
         });
+        await auditOfferException(tx, session.user.id, confirmed.id, basis, applicationId);
         await flipAvailabilityToPlaced(tx, session.user.id, confirmed.personId, confirmed.id);
         await recomputeRequisitionFillCount(tx, session.user.id, confirmed.jobRequisitionId);
         return confirmed;
@@ -283,6 +295,11 @@ export async function markApplicationPlaced(applicationId: string): Promise<Plac
     await assertSeatAvailable(tx, {
       requisitionId: app.jobRequisitionId,
       forPersonId: app.personId,
+    });
+    const basis = await assertAcceptedOfferOrException(tx, {
+      personId: app.personId,
+      requisitionId: app.jobRequisitionId,
+      offerException,
     });
     const [created] = await tx
       .insert(placements)
@@ -307,8 +324,9 @@ export async function markApplicationPlaced(applicationId: string): Promise<Plac
         jobRequisitionId: created.jobRequisitionId,
         status: created.status,
       },
-      context: { via: 'pipeline_mark_placed', applicationId },
+      context: { via: 'pipeline_mark_placed', applicationId, ...basisContext(basis) },
     });
+    await auditOfferException(tx, session.user.id, created.id, basis, applicationId);
 
     // Flip the application status alongside the placement so the two
     // tables agree.
@@ -350,11 +368,17 @@ export async function createPlacement(input: CreatePlacementInput): Promise<Plac
     // R0 — direct creation used to accept any employer/requisition pair,
     // duplicates, and overfills. The guard locks the requisition row so
     // concurrent confirmations cannot both pass.
+    let basis: PlacementBasis | null = null;
     if (d.status === 'CONFIRMED' || d.status === 'STARTED' || d.status === 'COMPLETED') {
       await assertSeatAvailable(tx, {
         requisitionId: d.jobRequisitionId,
         forPersonId: d.personId,
         employerId: d.employerId,
+      });
+      basis = await assertAcceptedOfferOrException(tx, {
+        personId: d.personId,
+        requisitionId: d.jobRequisitionId,
+        offerException: input.offerException,
       });
     } else {
       // Even a PROPOSED placement must belong to the requisition's employer.
@@ -399,7 +423,17 @@ export async function createPlacement(input: CreatePlacementInput): Promise<Plac
         jobRequisitionId: created.jobRequisitionId,
         status: created.status,
       },
+      context: basis ? basisContext(basis) : undefined,
     });
+    if (basis) {
+      await auditOfferException(
+        tx,
+        session.user.id,
+        created.id,
+        basis,
+        created.jobApplicationId ?? null,
+      );
+    }
 
     // If we're creating directly at CONFIRMED (or later), trigger availability flip.
     if (created.status === 'CONFIRMED' || created.status === 'STARTED') {
@@ -462,6 +496,83 @@ async function countSeatsFilled(
       ),
     );
   return row?.filled ?? 0;
+}
+
+/** Why a seat-taking placement was allowed. */
+type PlacementBasis =
+  | { kind: 'accepted_offer'; offerId: string }
+  | { kind: 'offer_exception'; reason: string };
+
+/**
+ * R3 — a candidate takes a seat on the standard path only when an offer
+ * on this requisition has been recorded as ACCEPTED in the CRM. Without
+ * one (e.g. a hire agreed through external recruitment) the caller must
+ * pass an explicit, confirmed exception with a reason; it is audited.
+ * Runs after the seat guard, so capacity and duplicate checks are never
+ * skipped and a reason is only asked for when a seat is actually free.
+ */
+async function assertAcceptedOfferOrException(
+  tx: Parameters<typeof recordAudit>[0],
+  opts: { personId: string; requisitionId: string; offerException?: PlacementOfferException },
+): Promise<PlacementBasis> {
+  const [accepted] = await tx
+    .select({ id: offers.id })
+    .from(offers)
+    .innerJoin(jobApplications, eq(jobApplications.id, offers.jobApplicationId))
+    .where(
+      and(
+        eq(offers.status, 'ACCEPTED'),
+        eq(jobApplications.personId, opts.personId),
+        eq(jobApplications.jobRequisitionId, opts.requisitionId),
+      ),
+    )
+    .limit(1);
+  if (accepted) return { kind: 'accepted_offer', offerId: accepted.id };
+
+  if (opts.offerException === undefined) {
+    throw new BusinessRuleError(
+      'PLACEMENT_OFFER_REQUIRED',
+      'No offer has been accepted for this candidate in the CRM. Confirm the exception and give a reason to place them anyway.',
+    );
+  }
+  const parsed = PlacementOfferExceptionSchema.safeParse(opts.offerException);
+  if (!parsed.success) {
+    const fields: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      const key = String(issue.path[0] ?? 'reason');
+      fields[key] ??= issue.message;
+    }
+    throw new ValidationError(
+      Object.values(fields)[0] ?? 'Confirm the exception and give a reason',
+      fields,
+    );
+  }
+  return { kind: 'offer_exception', reason: parsed.data.reason };
+}
+
+function basisContext(basis: PlacementBasis): Record<string, unknown> {
+  return basis.kind === 'accepted_offer'
+    ? { basis: 'accepted_offer', offerId: basis.offerId }
+    : { basis: 'offer_exception', exceptionReason: basis.reason };
+}
+
+/** A dedicated, searchable audit row for every no-accepted-offer placement. */
+async function auditOfferException(
+  tx: Parameters<typeof recordAudit>[0],
+  actorUserId: string,
+  placementId: string,
+  basis: PlacementBasis,
+  applicationId: string | null,
+) {
+  if (basis.kind !== 'offer_exception') return;
+  await recordAudit(tx, {
+    actorUserId,
+    entityType: 'placement',
+    entityId: placementId,
+    action: 'PLACED_WITHOUT_ACCEPTED_OFFER',
+    after: { reason: basis.reason, confirmed: true },
+    context: { applicationId },
+  });
 }
 
 /**
@@ -608,11 +719,17 @@ export async function updatePlacementStatus(input: UpdatePlacementStatusInput): 
 
     // R0 — confirming a seat must pass the same duplicate/overfill guard
     // as every other confirmation path.
+    let basis: PlacementBasis | null = null;
     if (before.status === 'PROPOSED' && parsed.status === 'CONFIRMED') {
       await assertSeatAvailable(tx, {
         requisitionId: before.jobRequisitionId,
         forPersonId: before.personId,
         excludePlacementId: before.id,
+      });
+      basis = await assertAcceptedOfferOrException(tx, {
+        personId: before.personId,
+        requisitionId: before.jobRequisitionId,
+        offerException: input.offerException,
       });
     }
 
@@ -634,7 +751,17 @@ export async function updatePlacementStatus(input: UpdatePlacementStatusInput): 
       action: 'STATUS_CHANGED',
       before: { status: before.status },
       after: { status: after.status },
+      context: basis ? basisContext(basis) : undefined,
     });
+    if (basis) {
+      await auditOfferException(
+        tx,
+        session.user.id,
+        after.id,
+        basis,
+        after.jobApplicationId ?? null,
+      );
+    }
 
     // PROPOSED → CONFIRMED: flip candidate availability (still manual to restore on completion)
     if (before.status === 'PROPOSED' && parsed.status === 'CONFIRMED') {

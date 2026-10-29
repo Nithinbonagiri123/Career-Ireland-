@@ -39,6 +39,9 @@ import { createPlacement, markApplicationPlaced, updatePlacementStatus } from '.
 
 const STAMP = `VITEST_SEATS_${Date.now()}`;
 
+/** These R0 tests place without a CRM offer, so they use the audited exception. */
+const EXTERNAL_HIRE = { confirmed: true, reason: 'Hired via external recruitment' } as const;
+
 let adminId: string;
 let employerId: string;
 let otherEmployerId: string;
@@ -137,7 +140,7 @@ describe('seat guards', () => {
     const app1 = await seedApplication(p1, req.id, 'OFFER');
     const app2 = await seedApplication(p2, req.id, 'OFFER');
 
-    await markApplicationPlaced(app1);
+    await markApplicationPlaced(app1, EXTERNAL_HIRE);
     await expect(markApplicationPlaced(app2)).rejects.toMatchObject({
       code: 'REQUISITION_OVERFILLED',
     });
@@ -151,7 +154,7 @@ describe('seat guards', () => {
     const req = await seedRequisition(3);
     const p = await seedPerson(3);
     const app = await seedApplication(p, req.id, 'OFFER');
-    await markApplicationPlaced(app);
+    await markApplicationPlaced(app, EXTERNAL_HIRE);
 
     await expect(
       createPlacement({
@@ -194,6 +197,7 @@ describe('seat guards', () => {
       employerId,
       jobRequisitionId: req.id,
       status: 'CONFIRMED',
+      offerException: EXTERNAL_HIRE,
     });
     expect(created.status).toBe('CONFIRMED');
 
@@ -210,6 +214,7 @@ describe('seat guards', () => {
       employerId,
       jobRequisitionId: req.id,
       status: 'CONFIRMED',
+      offerException: EXTERNAL_HIRE,
     });
     await db
       .update(jobRequisitions)
@@ -232,6 +237,7 @@ describe('seat guards', () => {
         employerId,
         jobRequisitionId: req.id,
         status: 'CONFIRMED',
+        offerException: EXTERNAL_HIRE,
       });
     }
     await expect(
@@ -254,6 +260,7 @@ describe('seat guards', () => {
       employerId,
       jobRequisitionId: req.id,
       status: 'CONFIRMED',
+      offerException: EXTERNAL_HIRE,
     });
     const [filled] = await db.select().from(jobRequisitions).where(eq(jobRequisitions.id, req.id));
     expect(filled?.status).toBe('FILLED');

@@ -8,6 +8,10 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { CvPicker } from '@/components/cv-picker';
 import { EmptyState } from '@/components/empty-state';
+import {
+  PLACEMENT_OFFER_REQUIRED,
+  PlacementExceptionDialog,
+} from '@/components/placement-exception-dialog';
 import { SectionHeader } from '@/components/section-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -320,12 +324,7 @@ export function ApplicationsPanel({
                       Recruitment rule. External-board hires stay
                       ACCEPTED without a placement record. */}
                   {r.status === 'ACCEPTED' && r.jobRequisitionId && (
-                    <RowAction
-                      label="Record placement"
-                      variant="default"
-                      run={() => markApplicationPlacedAction(r.id)}
-                      done="Placement recorded — candidate is now Placed"
-                    />
+                    <RecordPlacementButton applicationId={r.id} />
                   )}
                   <StatusMenu row={r} />
                 </div>
@@ -388,37 +387,44 @@ function StatusMenu({ row }: { row: CandidateApplicationRow }) {
   );
 }
 
-function RowAction({
-  label,
-  run,
-  done,
-  variant,
-}: {
-  label: string;
-  run: () => Promise<{ ok: true; data: unknown } | { ok: false; error: { message: string } }>;
-  done: string;
-  variant: 'default' | 'outline';
-}) {
+const PLACEMENT_DONE = 'Placement recorded — candidate is now Placed';
+
+/** Places through R0's guarded action. Without an offer accepted in the
+ *  CRM the server refuses, and the audited exception dialog opens. */
+function RecordPlacementButton({ applicationId }: { applicationId: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [exceptionOpen, setExceptionOpen] = useState(false);
   return (
-    <Button
-      type="button"
-      size="sm"
-      variant={variant}
-      disabled={pending}
-      className="h-7 px-2.5 text-[11px]"
-      onClick={() =>
-        startTransition(async () => {
-          const r = await run();
-          if (r.ok) {
-            toast.success(done);
-            router.refresh();
-          } else toast.error(r.error.message);
-        })
-      }
-    >
-      {pending ? '…' : label}
-    </Button>
+    <>
+      <Button
+        type="button"
+        size="sm"
+        variant="default"
+        disabled={pending}
+        className="h-7 px-2.5 text-[11px]"
+        onClick={() =>
+          startTransition(async () => {
+            const r = await markApplicationPlacedAction(applicationId);
+            if (r.ok) {
+              toast.success(PLACEMENT_DONE);
+              router.refresh();
+            } else if (r.error.code === PLACEMENT_OFFER_REQUIRED) {
+              setExceptionOpen(true);
+            } else toast.error(r.error.message);
+          })
+        }
+      >
+        {pending ? '…' : 'Record placement'}
+      </Button>
+      <PlacementExceptionDialog
+        open={exceptionOpen}
+        onOpenChange={setExceptionOpen}
+        personName="this candidate"
+        successMessage={PLACEMENT_DONE}
+        onSubmit={(exception) => markApplicationPlacedAction(applicationId, exception)}
+        onPlaced={() => router.refresh()}
+      />
+    </>
   );
 }

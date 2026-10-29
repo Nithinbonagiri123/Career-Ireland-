@@ -26,6 +26,10 @@ import { toast } from 'sonner';
 
 import { Note } from '@/components/note';
 import { PIPELINE_STAGES, PipelineChip, type PipelineStage } from '@/components/pipeline-chip';
+import {
+  PLACEMENT_OFFER_REQUIRED,
+  PlacementExceptionDialog,
+} from '@/components/placement-exception-dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { toastResult } from '@/lib/toast-result';
 import { cn } from '@/lib/utils';
@@ -70,6 +74,7 @@ export function PipelineWall({
 }) {
   const [, startTransition] = useTransition();
   const [busyPersonId, setBusyPersonId] = useState<string | null>(null);
+  const [exceptionFor, setExceptionFor] = useState<PipelineEntry | null>(null);
   const router = useRouter();
 
   const totals = useMemo(
@@ -113,8 +118,14 @@ export function PipelineWall({
           // Atomically: mark application ACCEPTED + create a CONFIRMED
           // placement + flip candidate availability to PLACED + recompute
           // requisition fill count. One click, everything consistent.
+          // No offer accepted in the CRM → ask for the audited exception
+          // instead of failing (external recruitment hires).
           const r = await markApplicationPlacedAction(entry.entryId);
-          if (toastResult(r, { success: `${entry.personName} placed` })) router.refresh();
+          if (!r.ok && r.error.code === PLACEMENT_OFFER_REQUIRED) {
+            setExceptionFor(entry);
+          } else if (toastResult(r, { success: `${entry.personName} placed` })) {
+            router.refresh();
+          }
         }
       } finally {
         setBusyPersonId(null);
@@ -191,6 +202,19 @@ export function PipelineWall({
           busyPersonId={busyPersonId}
         />
       ))}
+
+      <PlacementExceptionDialog
+        open={exceptionFor !== null}
+        onOpenChange={(open) => {
+          if (!open) setExceptionFor(null);
+        }}
+        personName={exceptionFor?.personName ?? ''}
+        successMessage={`${exceptionFor?.personName ?? 'Candidate'} placed`}
+        onSubmit={(exception) =>
+          markApplicationPlacedAction(exceptionFor?.entryId ?? '', exception)
+        }
+        onPlaced={() => router.refresh()}
+      />
     </div>
   );
 }
@@ -520,7 +544,7 @@ const ADVANCE_LABEL: Record<PipelineStageKey, string | null> = {
   shortlist: 'Promote to Applied',
   apply: 'Move to Interview',
   interview: 'Move to Offer',
-  offer: 'Accept offer',
+  offer: 'Mark placed',
   placed: null,
 };
 

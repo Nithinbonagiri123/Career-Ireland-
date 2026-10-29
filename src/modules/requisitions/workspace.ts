@@ -56,6 +56,10 @@ function describe(entityType: string, action: string, before: unknown, after: un
   const a = (after ?? {}) as Record<string, unknown>;
   const from = typeof b.status === 'string' ? b.status : null;
   const to = typeof a.status === 'string' ? a.status : null;
+  if (entityType === 'placement' && action === 'PLACED_WITHOUT_ACCEPTED_OFFER') {
+    const reason = typeof a.reason === 'string' ? a.reason : '';
+    return `Placed without an accepted offer${reason ? ` — reason: ${reason}` : ''}`;
+  }
   if (from && to && from !== to) {
     return `${label} ${verb}: ${from.replace(/_/g, ' ')} → ${to.replace(/_/g, ' ')}`;
   }
@@ -121,10 +125,11 @@ export async function fetchRequisitionActivity(
   };
 }
 
-/* ─── Interviews & offers (read-only) ──────────────────────────────── */
+/* ─── Interviews & offers ──────────────────────────────────────────── */
 
 export type RequisitionInterviewRow = {
   id: string;
+  applicationId: string;
   personId: string;
   personName: string;
   scheduledAt: Date;
@@ -132,13 +137,17 @@ export type RequisitionInterviewRow = {
   mode: string;
   round: number;
   location: string | null;
+  interviewerNames: string | null;
+  notes: string | null;
   status: string;
-  outcome: string | null;
+  outcome: string;
   scheduledByName: string | null;
+  updatedAt: Date;
 };
 
 export type RequisitionOfferRow = {
   id: string;
+  applicationId: string;
   personId: string;
   personName: string;
   amount: string;
@@ -149,16 +158,32 @@ export type RequisitionOfferRow = {
   sentAt: Date | null;
   respondedAt: Date | null;
   status: string;
+  terms: string | null;
+  notes: string | null;
+  createdByName: string | null;
   createdAt: Date;
+  updatedAt: Date;
+};
+
+/** One application on this job, as the Interviews & Offers forms need it. */
+export type RequisitionApplicationOption = {
+  applicationId: string;
+  personId: string;
+  personName: string;
+  status: string;
+  /** Seat-holding placement status for this person on this job, if any. */
+  placementStatus: string | null;
 };
 
 /**
- * Interviews and offers recorded against this requisition's applications.
- * Read-only by design (R2): nothing here schedules, edits or sends.
+ * Interviews, offers and the job's applications for the R3 Interviews &
+ * Offers tab. Reads are open to internal staff (same as the workspace);
+ * writes are gated separately by `recruitment.interviews`.
  */
 export async function listInterviewsAndOffersForRequisition(requisitionId: string): Promise<{
   interviews: RequisitionInterviewRow[];
   offers: RequisitionOfferRow[];
+  applications: RequisitionApplicationOption[];
 }> {
   await requireInternalStaff();
   await assertRequisitionExists(requisitionId);
@@ -166,6 +191,7 @@ export async function listInterviewsAndOffersForRequisition(requisitionId: strin
   const interviewRows = await db
     .select({
       id: interviews.id,
+      applicationId: interviews.jobApplicationId,
       personId: persons.id,
       firstName: persons.firstName,
       lastName: persons.lastName,
@@ -174,9 +200,12 @@ export async function listInterviewsAndOffersForRequisition(requisitionId: strin
       mode: interviews.mode,
       round: interviews.round,
       location: interviews.location,
+      interviewerNames: interviews.interviewerNames,
+      notes: interviews.notes,
       status: interviews.status,
       outcome: interviews.outcome,
       scheduledByName: users.fullName,
+      updatedAt: interviews.updatedAt,
     })
     .from(interviews)
     .innerJoin(jobApplications, eq(jobApplications.id, interviews.jobApplicationId))
@@ -188,6 +217,7 @@ export async function listInterviewsAndOffersForRequisition(requisitionId: strin
   const offerRows = await db
     .select({
       id: offers.id,
+      applicationId: offers.jobApplicationId,
       personId: persons.id,
       firstName: persons.firstName,
       lastName: persons.lastName,
@@ -199,22 +229,53 @@ export async function listInterviewsAndOffersForRequisition(requisitionId: strin
       sentAt: offers.sentAt,
       respondedAt: offers.respondedAt,
       status: offers.status,
+      terms: offers.terms,
+      notes: offers.notes,
+      createdByName: users.fullName,
       createdAt: offers.createdAt,
+      updatedAt: offers.updatedAt,
     })
     .from(offers)
     .innerJoin(jobApplications, eq(jobApplications.id, offers.jobApplicationId))
     .innerJoin(persons, eq(persons.id, jobApplications.personId))
+    .leftJoin(users, eq(users.id, offers.createdByUserId))
     .where(eq(jobApplications.jobRequisitionId, requisitionId))
     .orderBy(desc(offers.createdAt));
 
+  const appRows = await db.execute<{
+    application_id: string;
+    person_id: string;
+    person_name: string;
+    status: string;
+    placement_status: string | null;
+  }>(sql`
+    SELECT a.id AS application_id, p.id AS person_id,
+           p.first_name || ' ' || p.last_name AS person_name, a.status,
+           (SELECT pl.status FROM placements pl
+             WHERE pl.job_requisition_id = a.job_requisition_id AND pl.person_id = a.person_id
+               AND pl.archived_at IS NULL
+             ORDER BY pl.created_at DESC LIMIT 1) AS placement_status
+    FROM job_applications a JOIN persons p ON p.id = a.person_id
+    WHERE a.job_requisition_id = ${requisitionId}
+    ORDER BY p.first_name, p.last_name
+  `);
+
+  const name = (r: { firstName: string; lastName: string }) => `${r.firstName} ${r.lastName}`;
   return {
     interviews: interviewRows.map(({ firstName, lastName, ...r }) => ({
       ...r,
-      personName: `${firstName} ${lastName}`,
+      personName: name({ firstName, lastName }),
     })),
     offers: offerRows.map(({ firstName, lastName, ...r }) => ({
       ...r,
-      personName: `${firstName} ${lastName}`,
+      personName: name({ firstName, lastName }),
+    })),
+    applications: appRows.map((r) => ({
+      applicationId: r.application_id,
+      personId: r.person_id,
+      personName: r.person_name,
+      status: r.status,
+      placementStatus: r.placement_status,
     })),
   };
 }

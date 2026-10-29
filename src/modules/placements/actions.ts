@@ -5,6 +5,7 @@ import { toActionResult } from '@/lib/result';
 import type {
   ArchivePlacementInput,
   CreatePlacementInput,
+  PlacementOfferException,
   RestoreAvailabilityInput,
   UnarchivePlacementInput,
   UpdatePlacementStatusInput,
@@ -30,8 +31,11 @@ export async function createPlacementAction(input: CreatePlacementInput) {
   return r;
 }
 
-export async function markApplicationPlacedAction(applicationId: string) {
-  const r = await toActionResult(() => markApplicationPlaced(applicationId));
+export async function markApplicationPlacedAction(
+  applicationId: string,
+  offerException?: PlacementOfferException,
+) {
+  const r = await toActionResult(() => markApplicationPlaced(applicationId, offerException));
   if (r.ok) {
     rev();
     revalidatePath('/interviews');

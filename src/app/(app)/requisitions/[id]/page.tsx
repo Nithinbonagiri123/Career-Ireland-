@@ -26,7 +26,7 @@ import { RecordHeaderActions } from '@/components/record-header-actions';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { checkPermission, requireInternalStaff } from '@/lib/auth/session';
 import { statusTone } from '@/lib/ui/status-tone';
 import { fetchTasksForRequisition } from '@/modules/activities/service';
 import {
@@ -116,12 +116,17 @@ export default async function RequisitionDetail({
   // the generic tasks table filtered by jobRequisitionId.
   // Phase 2 blueprint §6.1 — ads for this requisition shown inline.
   const activityPageNumber = Math.max(1, Number.parseInt(activityPage ?? '1', 10) || 1);
-  const [workLogTasks, requisitionCampaigns, interviewsAndOffers, activity] = await Promise.all([
-    fetchTasksForRequisition(id),
-    fetchCampaignsForRequisition(id),
-    listInterviewsAndOffersForRequisition(id),
-    fetchRequisitionActivity(id, { page: activityPageNumber }),
-  ]);
+  const [workLogTasks, requisitionCampaigns, interviewsAndOffers, activity, canManageInterviews] =
+    await Promise.all([
+      fetchTasksForRequisition(id),
+      fetchCampaignsForRequisition(id),
+      listInterviewsAndOffersForRequisition(id),
+      fetchRequisitionActivity(id, { page: activityPageNumber }),
+      // R3 — writes on Interviews & Offers need recruitment.interviews;
+      // the server actions check it again.
+      checkPermission('recruitment', 'interviews', 'edit'),
+    ]);
+  const activeCurrencies = currencies.filter((c) => c.isActive).map((c) => c.code);
   // R2 — seats are derived from placements by the R0 capacity rule.
   const seatModel = buildSeatModel(requisition.positionsRequired, requisitionPlacements);
   const isOpen = requisition.status !== 'CLOSED' && requisition.status !== 'CANCELLED';
@@ -259,6 +264,10 @@ export default async function RequisitionDetail({
       <InterviewsOffersSection
         interviews={interviewsAndOffers.interviews}
         offers={interviewsAndOffers.offers}
+        applications={interviewsAndOffers.applications}
+        currencies={activeCurrencies}
+        canManage={canManageInterviews}
+        nowIso={new Date().toISOString()}
       />
     </FadeUp>
   );

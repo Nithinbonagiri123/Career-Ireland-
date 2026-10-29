@@ -7,6 +7,10 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import {
+  PLACEMENT_OFFER_REQUIRED,
+  PlacementExceptionDialog,
+} from '@/components/placement-exception-dialog';
 import { PromptDialog } from '@/components/prompt-dialog';
 import { Timestamp } from '@/components/timestamp';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +35,7 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
   const [busy, setBusy] = useState<string | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<PlacementListRow | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<PlacementListRow | null>(null);
+  const [exceptionTarget, setExceptionTarget] = useState<PlacementListRow | null>(null);
   const [, startTransition] = useTransition();
   const router = useRouter();
 
@@ -42,6 +47,9 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
       if (r.ok) {
         toast.success(`Placement moved to ${next.replace(/_/g, ' ')}`);
         router.refresh();
+      } else if (r.error.code === PLACEMENT_OFFER_REQUIRED) {
+        // No offer accepted in the CRM — confirming needs the audited exception.
+        setExceptionTarget(p);
       } else toast.error(r.error.message);
     });
   };
@@ -277,6 +285,22 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
         confirmLabel="Archive"
         confirmVariant="destructive"
         pending={busy === archiveTarget?.id}
+      />
+      <PlacementExceptionDialog
+        open={exceptionTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setExceptionTarget(null);
+        }}
+        personName={exceptionTarget?.personName ?? ''}
+        successMessage="Placement moved to CONFIRMED"
+        onSubmit={(exception) =>
+          updatePlacementStatusAction({
+            placementId: exceptionTarget?.id ?? '',
+            status: 'CONFIRMED',
+            offerException: exception,
+          })
+        }
+        onPlaced={() => router.refresh()}
       />
     </>
   );

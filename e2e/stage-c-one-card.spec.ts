@@ -213,10 +213,19 @@ test('one-card journey: lead → quote → single-click payment → activation �
     await advance(/move to interview/i, /moved to interview/i);
     await advance(/record offer|move to offer/i, /moved to offer/i);
     await advance(/mark accepted|move to accepted/i, /moved to accepted/i);
+    // R3 — the status ladder records no CRM offer, so placing goes through
+    // the audited exception (reason + confirmation).
+    const exception = page.getByRole('dialog');
     await expect(async () => {
       await internalRow.getByRole('button', { name: 'Record placement' }).click();
-      await expect(page.getByText(/Placement recorded/)).toBeVisible({ timeout: 5_000 });
+      await expect(exception.getByText(/without an accepted offer/i)).toBeVisible({
+        timeout: 5_000,
+      });
     }).toPass({ timeout: 20_000 });
+    await exception.locator('#pe-reason').fill('Hired through the employer’s own process');
+    await exception.getByRole('checkbox').click();
+    await exception.getByRole('button', { name: 'Place without offer' }).click();
+    await expect(page.getByText(/Placement recorded/).first()).toBeVisible({ timeout: 15_000 });
 
     // DB truth: the placement is CONFIRMED (the PROPOSED row created at
     // ACCEPTED was confirmed, not duplicated) and availability flipped.

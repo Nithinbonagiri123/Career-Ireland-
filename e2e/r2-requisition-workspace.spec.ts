@@ -151,7 +151,7 @@ test('R2 workspace: seats, KPIs, tabs, close dialog, edit + activity, add candid
     // ── Every tab opens from a bookmarked URL.
     for (const [tab, marker] of [
       ['overview', /Work log|Required skills|Skills/i],
-      ['interviews', /Read-only record/],
+      ['interviews', /Times shown in Irish time/],
       ['checklists', /Work Permit Checklists/],
       ['billing', /Billing for this job/],
       ['activity', /Every recorded change/],
@@ -159,11 +159,11 @@ test('R2 workspace: seats, KPIs, tabs, close dialog, edit + activity, add candid
       await page.goto(`/requisitions/${ids.openId}?tab=${tab}`);
       await expect(page.getByText(marker).first()).toBeVisible({ timeout: 15_000 });
     }
-    // Interviews & offers offers no write controls.
+    // Interviews & offers (functional since R3) shows both panels.
     await page.goto(`/requisitions/${ids.openId}?tab=interviews`);
     const io = page.getByTestId('interviews-offers');
     await expect(io).toBeVisible();
-    await expect(io.getByRole('button')).toHaveCount(0);
+    await expect(io.getByText('Offers', { exact: true })).toBeVisible();
 
     // ── R1 employer link target (?tab=pipeline) lands on Pipeline.
     await page.goto(`/requisitions/${ids.openId}?tab=pipeline`);

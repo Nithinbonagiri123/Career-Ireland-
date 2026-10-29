@@ -186,6 +186,17 @@ test('lead → candidate → requisition → pipeline → placement → fee invo
     const advanceBtn = card.getByRole('button', { name: step.label });
     await expect(advanceBtn.first()).toBeVisible({ timeout: 10_000 });
     await advanceBtn.first().click();
+    if (step.snap === '09-placed') {
+      // R3 — no offer was accepted in the CRM on this journey, so placing
+      // is the audited external-hire exception: reason + confirmation.
+      const exception = page.getByRole('dialog');
+      await expect(exception.getByText(/without an accepted offer/i)).toBeVisible({
+        timeout: 12_000,
+      });
+      await exception.locator('#pe-reason').fill('Offer agreed directly with the employer');
+      await exception.getByRole('checkbox').click();
+      await exception.getByRole('button', { name: 'Place without offer' }).click();
+    }
     await expect(page.getByText(step.expect).first()).toBeVisible({ timeout: 12_000 });
     // Let the pipeline data re-fetch before scanning for the next stage.
     await page.waitForTimeout(1500);
