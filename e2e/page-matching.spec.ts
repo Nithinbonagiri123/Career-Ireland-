@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+// R5 — /matching is the global matching workspace (it used to be a job picker).
 test.describe('/matching', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/matching');
@@ -9,23 +10,14 @@ test.describe('/matching', () => {
     await expect(page.getByRole('heading', { name: /matching/i, level: 1 })).toBeVisible();
   });
 
-  test('description tells staff to pick a requisition', async ({ page }) => {
-    await expect(page.getByText(/pick a requisition|choose a requisition/i)).toBeVisible();
+  test('filters and status chips render', async ({ page }) => {
+    await expect(page.getByRole('form', { name: 'Filters' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Match status' })).toBeVisible();
   });
 
-  test('requisition list renders (from the seed)', async ({ page }) => {
-    // Minimal seed inserts one requisition.
-    await expect(page.locator('a[href^="/requisitions/"]').first()).toBeVisible();
-  });
-
-  test('picking a requisition navigates into its detail', async ({ page }) => {
-    const firstReq = page.locator('a[href^="/requisitions/"]').first();
-    await firstReq.click();
-    await expect(page).toHaveURL(/\/requisitions\/[^/]+/);
-  });
-
-  test('list items show employer + fill count', async ({ page }) => {
-    const firstReq = page.locator('a[href^="/requisitions/"]').first();
-    await expect(firstReq).toContainText(/of|filled|·/);
+  test('match list or empty state renders', async ({ page }) => {
+    const list = page.getByTestId('match-rows');
+    const empty = page.getByText(/no matches here/i);
+    await expect(list.or(empty).first()).toBeVisible();
   });
 });

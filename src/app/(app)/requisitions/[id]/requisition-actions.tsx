@@ -16,9 +16,18 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { runAssistedMatchingAction } from '@/modules/matching/actions';
+import { matchingRunSummary } from '@/modules/matching/labels';
+import { DEFAULT_MIN_SCORE } from '@/modules/matching/schemas';
 import { updateRequisitionStatusAction } from '@/modules/requisitions/actions';
 
-export function RunMatchingButton({ requisitionId }: { requisitionId: string }) {
+export function RunMatchingButton({
+  requisitionId,
+  criteriaWarning,
+}: {
+  requisitionId: string;
+  /** R5 — set when this job's criteria cannot reach the default minimum score. */
+  criteriaWarning?: string | null;
+}) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   return (
@@ -26,11 +35,25 @@ export function RunMatchingButton({ requisitionId }: { requisitionId: string }) 
       size="sm"
       variant="outline"
       disabled={pending}
+      title={
+        criteriaWarning ??
+        `Adds new candidates scoring at least ${DEFAULT_MIN_SCORE} of 100; existing matches are refreshed`
+      }
       onClick={() =>
         startTransition(async () => {
           const r = await runAssistedMatchingAction(requisitionId);
           if (r.ok) {
-            toast.success(`Matching complete — ${r.data.upserted} candidates scored`);
+            toast.success(matchingRunSummary(r.data));
+            // Suggest, never apply, a lower minimum for jobs that cannot reach it.
+            if (criteriaWarning) {
+              toast.warning(criteriaWarning, {
+                duration: 12_000,
+                action: {
+                  label: 'Lower it on Matching',
+                  onClick: () => router.push(`/matching?job=${requisitionId}`),
+                },
+              });
+            }
             router.refresh();
           } else toast.error(r.error.message);
         })

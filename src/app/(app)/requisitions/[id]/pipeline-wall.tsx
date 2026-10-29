@@ -68,9 +68,13 @@ import type { RequisitionListRow } from '@/modules/requisitions/service';
 export function PipelineWall({
   requisition,
   data,
+  canMatch = true,
 }: {
   requisition: RequisitionListRow;
   data: PipelineData;
+  /** R5 — shortlist / dismiss on matched + reviewed cards needs recruitment.matching
+   *  and an open job (the server re-checks both). */
+  canMatch?: boolean;
 }) {
   const [, startTransition] = useTransition();
   const [busyPersonId, setBusyPersonId] = useState<string | null>(null);
@@ -200,6 +204,7 @@ export function PipelineWall({
           onAdvance={advance}
           onDismiss={dismiss}
           busyPersonId={busyPersonId}
+          canMatch={canMatch}
         />
       ))}
 
@@ -228,6 +233,7 @@ function PipelineBand({
   onAdvance,
   onDismiss,
   busyPersonId,
+  canMatch,
 }: {
   stage: PipelineStageKey;
   entries: PipelineEntry[];
@@ -235,6 +241,7 @@ function PipelineBand({
   onAdvance: (stage: PipelineStageKey, entry: PipelineEntry) => void;
   onDismiss: (stage: PipelineStageKey, entry: PipelineEntry) => void;
   busyPersonId: string | null;
+  canMatch: boolean;
 }) {
   const tone = BAND_TONE[stage];
 
@@ -288,6 +295,7 @@ function PipelineBand({
               onAdvance={() => onAdvance(stage, entry)}
               onDismiss={() => onDismiss(stage, entry)}
               disabled={busyPersonId === entry.personId}
+              canMatch={canMatch}
             />
           ))}
         </div>
@@ -304,6 +312,7 @@ function PipelineCard({
   onAdvance,
   onDismiss,
   disabled,
+  canMatch,
 }: {
   stage: PipelineStageKey;
   entry: PipelineEntry;
@@ -311,15 +320,17 @@ function PipelineCard({
   onAdvance: () => void;
   onDismiss: () => void;
   disabled: boolean;
+  canMatch: boolean;
 }) {
   const initials = getInitials(entry.personName);
   const scoreLabel =
     entry.matchScore !== null && entry.matchScore >= 0 ? Math.round(entry.matchScore) : null;
-  const advanceLabel = ADVANCE_LABEL[stage];
+  const matchStage = stage === 'source' || stage === 'review';
+  const advanceLabel = matchStage && !canMatch ? null : ADVANCE_LABEL[stage];
   // Source + Review surface a "Dismiss match" button; Offer surfaces a
   // "Decline offer" button that calls the same onDismiss handler (the
   // handler branches on stage).
-  const canDismiss = stage === 'source' || stage === 'review' || stage === 'offer';
+  const canDismiss = (matchStage && canMatch) || stage === 'offer';
   const dismissLabel =
     stage === 'offer' ? 'Decline offer' : stage === 'source' || stage === 'review' ? 'Dismiss' : '';
 

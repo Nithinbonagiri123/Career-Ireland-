@@ -49,13 +49,31 @@ const ENTITY_LABEL: Record<string, string> = {
   invoice: 'Invoice',
 };
 
-function describe(entityType: string, action: string, before: unknown, after: unknown): string {
+function describe(
+  entityType: string,
+  action: string,
+  before: unknown,
+  after: unknown,
+  context?: unknown,
+): string {
   const label = ENTITY_LABEL[entityType] ?? entityType.replace(/_/g, ' ');
   const verb = action.replace(/_/g, ' ').toLowerCase();
   const b = (before ?? {}) as Record<string, unknown>;
   const a = (after ?? {}) as Record<string, unknown>;
   const from = typeof b.status === 'string' ? b.status : null;
   const to = typeof a.status === 'string' ? a.status : null;
+  if (entityType === 'shortlist_entry' && action === 'REMOVED') {
+    const who = typeof b.personName === 'string' ? `${b.personName} ` : '';
+    const c = (context ?? {}) as Record<string, unknown>;
+    const reason = typeof c.reason === 'string' ? ` — reason: ${c.reason}` : '';
+    return `${who}removed from shortlist${reason}`;
+  }
+  if (entityType === 'shortlist_entry' && action === 'PRESENTED_TO_EMPLOYER') {
+    return 'Shortlisted candidate presented to employer';
+  }
+  if (entityType === 'shortlist_entry' && action === 'EMPLOYER_FEEDBACK') {
+    return `Employer feedback recorded${typeof a.employerFeedback === 'string' ? `: ${a.employerFeedback}` : ''}`;
+  }
   if (entityType === 'placement' && action === 'PLACED_WITHOUT_ACCEPTED_OFFER') {
     const reason = typeof a.reason === 'string' ? a.reason : '';
     return `Placed without an accepted offer${reason ? ` — reason: ${reason}` : ''}`;
@@ -92,8 +110,9 @@ export async function fetchRequisitionActivity(
     action: string;
     before: unknown;
     after: unknown;
+    context: unknown;
   }>(sql`
-    SELECT a.id, a.occurred_at, u.full_name AS actor_name, a.entity_type, a.action, a.before, a.after
+    SELECT a.id, a.occurred_at, u.full_name AS actor_name, a.entity_type, a.action, a.before, a.after, a.context
     FROM audit_events a
     LEFT JOIN users u ON u.id = a.actor_user_id
     WHERE
@@ -102,6 +121,8 @@ export async function fetchRequisitionActivity(
       OR (a.entity_type = 'placement' AND a.entity_id IN (SELECT id::text FROM placements WHERE job_requisition_id = ${rid}))
       OR (a.entity_type = 'candidate_match' AND a.entity_id IN (SELECT id::text FROM candidate_matches WHERE job_requisition_id = ${rid}))
       OR (a.entity_type = 'shortlist_entry' AND a.entity_id IN (SELECT id::text FROM shortlist_entries WHERE job_requisition_id = ${rid}))
+      -- R5: removed entries no longer have a row; their audit snapshot names the job.
+      OR (a.entity_type = 'shortlist_entry' AND (a.before->>'jobRequisitionId' = ${rid}::text OR a.after->>'jobRequisitionId' = ${rid}::text))
       OR (a.entity_type = 'work_permit_checklist' AND a.entity_id IN (SELECT id::text FROM work_permit_checklists WHERE job_requisition_id = ${rid}))
       OR (a.entity_type = 'task' AND a.entity_id IN (SELECT id::text FROM tasks WHERE job_requisition_id = ${rid}))
       OR (a.entity_type = 'communication_log' AND a.entity_id IN (SELECT id::text FROM communication_logs WHERE job_requisition_id = ${rid}))
@@ -120,7 +141,7 @@ export async function fetchRequisitionActivity(
       actorName: r.actor_name,
       entityType: r.entity_type,
       action: r.action,
-      summary: describe(r.entity_type, r.action, r.before, r.after),
+      summary: describe(r.entity_type, r.action, r.before, r.after, r.context),
     })),
   };
 }

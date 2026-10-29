@@ -36,6 +36,8 @@ import {
 import { fetchRequisitionBillingHistory } from '@/modules/billing/read';
 import { fetchCampaignsForRequisition } from '@/modules/campaigns/service';
 import { fetchCurrencies } from '@/modules/currencies/service';
+import { criteriaWarning } from '@/modules/matching/criteria';
+import { DEFAULT_MIN_SCORE } from '@/modules/matching/schemas';
 import { fetchOccupations } from '@/modules/occupations/service';
 import { fetchRequisitionPipeline } from '@/modules/pipeline/service';
 import { listPlacementsForRequisition } from '@/modules/placements/service';
@@ -116,16 +118,25 @@ export default async function RequisitionDetail({
   // the generic tasks table filtered by jobRequisitionId.
   // Phase 2 blueprint §6.1 — ads for this requisition shown inline.
   const activityPageNumber = Math.max(1, Number.parseInt(activityPage ?? '1', 10) || 1);
-  const [workLogTasks, requisitionCampaigns, interviewsAndOffers, activity, canManageInterviews] =
-    await Promise.all([
-      fetchTasksForRequisition(id),
-      fetchCampaignsForRequisition(id),
-      listInterviewsAndOffersForRequisition(id),
-      fetchRequisitionActivity(id, { page: activityPageNumber }),
-      // R3 — writes on Interviews & Offers need recruitment.interviews;
-      // the server actions check it again.
-      checkPermission('recruitment', 'interviews', 'edit'),
-    ]);
+  const [
+    workLogTasks,
+    requisitionCampaigns,
+    interviewsAndOffers,
+    activity,
+    canManageInterviews,
+    canMatch,
+  ] = await Promise.all([
+    fetchTasksForRequisition(id),
+    fetchCampaignsForRequisition(id),
+    listInterviewsAndOffersForRequisition(id),
+    fetchRequisitionActivity(id, { page: activityPageNumber }),
+    // R3 — writes on Interviews & Offers need recruitment.interviews;
+    // the server actions check it again.
+    checkPermission('recruitment', 'interviews', 'edit'),
+    // R5 — matching / shortlisting needs recruitment.matching (edit); the
+    // server actions check it again and refuse closed / cancelled jobs.
+    checkPermission('recruitment', 'matching', 'edit'),
+  ]);
   const activeCurrencies = currencies.filter((c) => c.isActive).map((c) => c.code);
   // R2 — seats are derived from placements by the R0 capacity rule.
   const seatModel = buildSeatModel(requisition.positionsRequired, requisitionPlacements);
@@ -249,7 +260,7 @@ export default async function RequisitionDetail({
 
   const pipelineTab = (
     <FadeUp>
-      <PipelineWall requisition={requisition} data={pipelineData} />
+      <PipelineWall requisition={requisition} data={pipelineData} canMatch={canMatch && isOpen} />
     </FadeUp>
   );
 
@@ -430,7 +441,11 @@ export default async function RequisitionDetail({
           </div>
 
           <RecordHeaderActions
-            primary={<AddCandidateDialog requisitionId={id} requisitionTitle={requisition.title} />}
+            primary={
+              canMatch && isOpen ? (
+                <AddCandidateDialog requisitionId={id} requisitionTitle={requisition.title} />
+              ) : undefined
+            }
             secondary={[
               <AssignToMeButton
                 key="assign"
@@ -472,12 +487,34 @@ export default async function RequisitionDetail({
               />,
             ]}
             overflow={[
-              <AddOutsourcedCandidateDialog
-                key="outsourced"
-                requisitionId={id}
-                requisitionTitle={requisition.title}
-              />,
-              <RunMatchingButton key="matching" requisitionId={id} />,
+              canMatch && isOpen && (
+                <AddOutsourcedCandidateDialog
+                  key="outsourced"
+                  requisitionId={id}
+                  requisitionTitle={requisition.title}
+                />
+              ),
+              canMatch && isOpen && (
+                <RunMatchingButton
+                  key="matching"
+                  requisitionId={id}
+                  criteriaWarning={
+                    criteriaWarning(
+                      {
+                        hasOccupation: Boolean(requisition.occupationId),
+                        hasLocation: Boolean(requisition.location?.trim()),
+                        requiredSkills: requisitionSkillRows.filter((r) => r.isRequired).length,
+                        preferredSkills: requisitionSkillRows.filter((r) => !r.isRequired).length,
+                        requiredQualifications: requisitionQualRows.filter((r) => r.isRequired)
+                          .length,
+                        preferredQualifications: requisitionQualRows.filter((r) => !r.isRequired)
+                          .length,
+                      },
+                      DEFAULT_MIN_SCORE,
+                    )?.message ?? null
+                  }
+                />
+              ),
               <Link
                 key="advertisement"
                 href={`/campaigns?requisitionId=${id}`}

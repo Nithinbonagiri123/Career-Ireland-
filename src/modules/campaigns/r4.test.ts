@@ -226,7 +226,20 @@ afterAll(async () => {
   await db.delete(candidateMatches).where(inArray(candidateMatches.jobRequisitionId, jobIds));
   if (personIds.length) {
     await db.delete(candidateProfiles).where(inArray(candidateProfiles.personId, personIds));
-    await db.delete(persons).where(inArray(persons.id, personIds));
+    // Matching runs in other test files score every candidate, so this
+    // file's people can gain matches on other jobs; clear those first and
+    // retry if one lands in between.
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await db.delete(shortlistEntries).where(inArray(shortlistEntries.personId, personIds));
+      await db.delete(candidateMatches).where(inArray(candidateMatches.personId, personIds));
+      try {
+        await db.delete(persons).where(inArray(persons.id, personIds));
+        break;
+      } catch (e) {
+        if (attempt === 5) throw e;
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    }
   }
   await db.delete(jobRequisitions).where(inArray(jobRequisitions.id, jobIds));
   await db.delete(employers).where(inArray(employers.id, [ids.employer, ids.otherEmployer]));
