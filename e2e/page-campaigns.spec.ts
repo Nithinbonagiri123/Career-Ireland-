@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { seedCampaign } from './helpers/fixtures';
 
 test.describe('/campaigns', () => {
   test.beforeEach(async ({ page }) => {
@@ -43,13 +44,15 @@ test.describe('/campaigns', () => {
   });
 
   test('following a campaign row opens the detail page', async ({ page }) => {
-    const firstRow = page.locator('a[href^="/campaigns/"]').first();
-    if (await firstRow.isVisible().catch(() => false)) {
-      await firstRow.click();
-      await expect(page).toHaveURL(/\/campaigns\/[^/]+/);
-      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    } else {
-      test.skip(true, 'no campaigns');
+    // R6 — its own campaign instead of skipping when none exist.
+    const campaign = await seedCampaign();
+    try {
+      await page.goto('/campaigns');
+      await page.getByRole('link', { name: campaign.name }).first().click();
+      await expect(page).toHaveURL(new RegExp(`/campaigns/${campaign.campaignId}`));
+      await expect(page.getByRole('heading', { level: 1 })).toContainText(campaign.name);
+    } finally {
+      await campaign.cleanup();
     }
   });
 });

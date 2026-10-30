@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { eq } from 'drizzle-orm';
+import { withIsolatedUser } from './helpers/isolated-user';
 
 /**
  * Ad-hoc QA sweep — captures the states the standard visual-qa spec
@@ -94,37 +95,21 @@ test('revenue: empty range', async ({ page }) => {
   await shoot(page, 'supp__revenue-empty');
 });
 
-test('hr: Today card in Working state', async ({ page }) => {
-  await page.goto('/hr', { waitUntil: 'networkidle' });
-
-  // Session 19 added a ClockWidget to the global top bar — scope to
-  // <main> so we only assert on the dedicated ClockPanel.
-  const panel = page.locator('main');
-
-  // Reset to a clean Off state first, whatever the DB has.
-  const endBreak = panel.getByRole('button', { name: /^end break$/i });
-  if (await endBreak.isVisible().catch(() => false)) {
-    await endBreak.click();
-    await page.waitForTimeout(500);
-  }
-  const clockOut = panel.getByRole('button', { name: /^clock out$/i });
-  if (await clockOut.isVisible().catch(() => false)) {
-    await clockOut.click();
-    await page.waitForTimeout(500);
-  }
-
-  // Now clock in and screenshot the Working state.
-  await panel.getByRole('button', { name: /^clock in$/i }).click();
-  await expect(panel.getByText(/^working$/i)).toBeVisible({ timeout: 10_000 });
-  await shoot(page, 'supp__hr-working');
-
-  // Also capture the On-break state.
-  await panel.getByRole('button', { name: /^start break$/i }).click();
-  await expect(panel.getByText(/^on break$/i)).toBeVisible({ timeout: 10_000 });
-  await shoot(page, 'supp__hr-on-break');
-
-  // Clean up so subsequent tests don't inherit a live session.
-  await panel.getByRole('button', { name: /^end break$/i }).click();
-  await expect(panel.getByText(/^working$/i)).toBeVisible({ timeout: 10_000 });
-  await panel.getByRole('button', { name: /^clock out$/i }).click();
+test('hr: Today card in Working state', async ({ browser }) => {
+  test.setTimeout(120_000);
+  // R6 — a fresh throwaway user, so the once-per-day clock-in rule never
+  // trips on an earlier run's session (rule unchanged).
+  await withIsolatedUser(browser, async (page) => {
+    await page.goto('/hr', { waitUntil: 'networkidle' });
+    const panel = page.locator('main');
+    await panel.getByRole('button', { name: /^clock in$/i }).click();
+    await expect(panel.getByText(/^working$/i)).toBeVisible({ timeout: 10_000 });
+    await shoot(page, 'supp__hr-working');
+    await panel.getByRole('button', { name: /^start break$/i }).click();
+    await expect(panel.getByText(/^on break$/i)).toBeVisible({ timeout: 10_000 });
+    await shoot(page, 'supp__hr-on-break');
+    await panel.getByRole('button', { name: /^end break$/i }).click();
+    await expect(panel.getByText(/^working$/i)).toBeVisible({ timeout: 10_000 });
+    await panel.getByRole('button', { name: /^clock out$/i }).click();
+  });
 });

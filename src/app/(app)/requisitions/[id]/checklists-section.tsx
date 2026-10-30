@@ -33,8 +33,11 @@ export function ChecklistsSection({
   requisitionId,
   existing,
   candidatePool,
+  canEdit = true,
 }: {
   requisitionId: string;
+  /** R6 — recruitment.requisitions edit; hides "New checklist" when false. */
+  canEdit?: boolean;
   existing: WorkPermitChecklistRow[];
   /** Candidates already engaged with this requisition (shortlist + apps). */
   candidatePool: Array<{ personId: string; personName: string }>;
@@ -79,18 +82,20 @@ export function ChecklistsSection({
             tracks the documents you've collected.
           </p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => setDialogOpen(true)}
-          disabled={availableCandidates.length === 0}
-          title={
-            availableCandidates.length === 0
-              ? 'Add applicants or shortlist candidates first — every one already has a checklist.'
-              : undefined
-          }
-        >
-          <Plus className="mr-1.5 size-4" /> New checklist
-        </Button>
+        {canEdit && (
+          <Button
+            size="sm"
+            onClick={() => setDialogOpen(true)}
+            disabled={availableCandidates.length === 0}
+            title={
+              availableCandidates.length === 0
+                ? 'Add applicants or shortlist candidates first — every one already has a checklist.'
+                : undefined
+            }
+          >
+            <Plus className="mr-1.5 size-4" /> New checklist
+          </Button>
+        )}
       </div>
 
       {existing.length === 0 ? (

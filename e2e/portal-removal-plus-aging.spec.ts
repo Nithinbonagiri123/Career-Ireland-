@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
+import { seedCandidate } from './helpers/fixtures';
 
 const SHOTS = path.join(process.cwd(), 'screenshots');
 if (!fs.existsSync(SHOTS)) fs.mkdirSync(SHOTS, { recursive: true });
@@ -39,19 +40,18 @@ test('02 · /portal paths no longer resolve (route deleted)', async ({ page }) =
 });
 
 test('03 · Candidate profile has no "Invite to portal" button', async ({ page }) => {
-  await page.goto('/leads', { waitUntil: 'networkidle' });
-  const firstPerson = page.locator('a[href^="/candidates/"]').first();
-  test.skip((await firstPerson.count()) === 0, 'no leads');
-  await firstPerson.click();
-  await page.waitForURL(/\/candidates\/[0-9a-f-]+/i);
-  // Candidate detail is a heavy page — many Promise.all fetches +
-  // Turbopack cold compile of /candidates/[id] can push the initial
-  // paint past the 5s default. Bump the h1 assertion so this test
-  // reads what it's trying to read: 'no invite-to-portal button',
-  // not 'h1 appeared fast enough'.
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole('button', { name: /invite to portal/i })).toHaveCount(0);
-  await shot(page, 'e2e__cleanup-03-candidate-header');
+  // R6 — its own candidate instead of skipping when /leads lists none.
+  const candidate = await seedCandidate();
+  try {
+    await page.goto(`/candidates/${candidate.personId}`, { waitUntil: 'networkidle' });
+    await page.waitForURL(/\/(candidates|clients)\/[0-9a-f-]+/i);
+    // Candidate detail is a heavy page (many fetches + cold compile).
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: /invite to portal/i })).toHaveCount(0);
+    await shot(page, 'e2e__cleanup-03-candidate-header');
+  } finally {
+    await candidate.cleanup();
+  }
 });
 
 test('04 · Employer profile has no "Invite to portal" button', async ({ page }) => {

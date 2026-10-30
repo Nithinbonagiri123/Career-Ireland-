@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { hasFinanceAuthority } from '@/lib/auth/finance-policy-rules';
+import { requireRecruitment } from '@/lib/auth/recruitment-guards';
 import { requireInternalStaff } from '@/lib/auth/session';
 import type { DateRange } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
@@ -65,6 +66,8 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
     );
   }
   const data = parsed.data;
+  // R6 — Recruitment leads need recruitment.leads; other businesses keep the existing rule.
+  if (data.targetBusiness === 'RECRUITMENT') await requireRecruitment('leads', 'create');
 
   return db.transaction(async (tx) => {
     let personId: string | null = null;
@@ -176,6 +179,7 @@ export async function updateLeadStatus(input: UpdateLeadStatusInput): Promise<Le
   return db.transaction(async (tx) => {
     const before = await getLead(parsed.leadId);
     if (!before) throw new BusinessRuleError('LEAD_NOT_FOUND', 'Lead not found');
+    if (before.targetBusiness === 'RECRUITMENT') await requireRecruitment('leads', 'edit');
     if (before.status === 'CONVERTED') {
       throw new BusinessRuleError(
         'LEAD_ALREADY_CONVERTED',
@@ -208,6 +212,7 @@ export async function archiveLead(input: ArchiveLeadInput): Promise<Lead> {
   return db.transaction(async (tx) => {
     const before = await getLead(parsed.leadId);
     if (!before) throw new BusinessRuleError('LEAD_NOT_FOUND', 'Lead not found');
+    if (before.targetBusiness === 'RECRUITMENT') await requireRecruitment('leads', 'edit');
     if (before.archivedAt) {
       throw new BusinessRuleError('ALREADY_ARCHIVED', 'Lead is already archived');
     }
@@ -237,6 +242,7 @@ export async function unarchiveLead(input: UnarchiveLeadInput): Promise<Lead> {
   return db.transaction(async (tx) => {
     const before = await getLead(parsed.leadId);
     if (!before) throw new BusinessRuleError('LEAD_NOT_FOUND', 'Lead not found');
+    if (before.targetBusiness === 'RECRUITMENT') await requireRecruitment('leads', 'edit');
     if (!before.archivedAt) {
       throw new BusinessRuleError('NOT_ARCHIVED', 'Lead is not archived');
     }
@@ -297,6 +303,7 @@ export async function acceptLead(input: AcceptLeadInput): Promise<{
       .for('update')
       .limit(1);
     if (!lead) throw new BusinessRuleError('LEAD_NOT_FOUND', 'Lead not found');
+    if (lead.targetBusiness === 'RECRUITMENT') await requireRecruitment('leads', 'edit');
     if (lead.acceptedAt) {
       throw new BusinessRuleError(
         'LEAD_ALREADY_ACCEPTED',

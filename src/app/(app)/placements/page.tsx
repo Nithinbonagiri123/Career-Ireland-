@@ -3,7 +3,7 @@ import { CsvExportButton } from '@/components/csv-export-button';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { requirePermission } from '@/lib/auth/session';
+import { checkPermission, requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchPlacements } from '@/modules/placements/service';
 import { PlacementsTable } from './placements-table';
@@ -37,7 +37,10 @@ export default async function PlacementsPage({
         />
       </FadeUp>
       <FadeUp delay={0.05}>
-        <PlacementsTable placements={placements} />
+        <PlacementsTable
+          placements={placements}
+          canEdit={await checkPermission('recruitment', 'placements', 'edit')}
+        />
       </FadeUp>
     </div>
   );

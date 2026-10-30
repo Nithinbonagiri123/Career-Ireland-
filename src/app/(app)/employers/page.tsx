@@ -7,7 +7,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ScopeFilter } from '@/components/scope-filter';
 import { Button } from '@/components/ui/button';
-import { requireInternalStaff, requirePermission } from '@/lib/auth/session';
+import { checkPermission, requireInternalStaff, requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { parseAssignmentScope } from '@/lib/scope';
 import { fetchEmployers } from '@/modules/employers/service';
@@ -25,6 +25,11 @@ export default async function EmployersPage({
 }) {
   await requirePermission('recruitment', 'employers', 'view');
   const session = await requireInternalStaff();
+  // R6 — controls follow recruitment.employers (server actions re-check).
+  const [canCreateEmployer, canEditEmployer] = await Promise.all([
+    checkPermission('recruitment', 'employers', 'create'),
+    checkPermission('recruitment', 'employers', 'edit'),
+  ]);
   const { assigned, created, from, to } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const createdRange = parseDateRangeParams({ created, from, to });
@@ -65,14 +70,16 @@ export default async function EmployersPage({
               <DateRangeFilter />
               <ScopeFilter current={scope} />
               <CsvExportButton href="/api/export/employers" />
-              <EmployerDialog
-                appVatRegistered={settings.vatRegistered}
-                trigger={
-                  <Button size="sm">
-                    <Plus className="mr-1.5 size-4" /> New employer
-                  </Button>
-                }
-              />
+              {canCreateEmployer && (
+                <EmployerDialog
+                  appVatRegistered={settings.vatRegistered}
+                  trigger={
+                    <Button size="sm">
+                      <Plus className="mr-1.5 size-4" /> New employer
+                    </Button>
+                  }
+                />
+              )}
             </div>
           }
         />
@@ -95,6 +102,7 @@ export default async function EmployersPage({
           employers={employers}
           appVatRegistered={settings.vatRegistered}
           owners={owners}
+          canEdit={canEditEmployer}
         />
       </FadeUp>
     </div>

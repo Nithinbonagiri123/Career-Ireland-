@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
+import { seedCandidate, seedOpenJob } from './helpers/fixtures';
 
 const SHOTS = path.join(process.cwd(), 'screenshots');
 if (!fs.existsSync(SHOTS)) fs.mkdirSync(SHOTS, { recursive: true });
@@ -20,26 +21,41 @@ async function shot(page: Page, name: string) {
  */
 
 test('01 · Requisition page shows Checklists tab', async ({ page }) => {
-  await page.goto('/requisitions', { waitUntil: 'networkidle' });
-  const firstOpen = page.getByRole('link', { name: /^open$/i }).first();
-  test.skip((await firstOpen.count()) === 0, 'no requisitions seeded');
-  await firstOpen.click();
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /^checklists/i })).toBeVisible();
-  await page.getByRole('tab', { name: /^checklists/i }).click();
-  await expect(page.getByText(/work permit checklists/i).first()).toBeVisible();
-  await shot(page, 'e2e__checklists-01-tab');
+  // R6 — its own job instead of skipping when none is listed.
+  const job = await seedOpenJob();
+  try {
+    await page.goto(`/requisitions/${job.jobId}`, { waitUntil: 'networkidle' });
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^checklists/i })).toBeVisible();
+    await page.getByRole('tab', { name: /^checklists/i }).click();
+    await expect(page.getByText(/work permit checklists/i).first()).toBeVisible();
+    await shot(page, 'e2e__checklists-01-tab');
+  } finally {
+    await job.cleanup();
+  }
 });
 
 test('02 · Candidate profile skills autosuggest input renders', async ({ page }) => {
-  await page.goto('/candidates', { waitUntil: 'networkidle' });
-  const firstCandidate = page.locator('table a').first();
-  test.skip((await firstCandidate.count()) === 0, 'no candidates seeded');
-  await firstCandidate.click();
-  await page.waitForURL(/\/candidates\/[0-9a-f-]+/i);
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-  // "Add skill" opens the dialog with the autosuggest input.
-  await page.getByRole('button', { name: /add skill/i }).click();
-  await expect(page.getByPlaceholder(/type to search — or paste from the cv/i)).toBeVisible();
-  await shot(page, 'e2e__checklists-02-skills-autosuggest');
+  // R6 — its own candidate instead of skipping when the list is empty.
+  const candidate = await seedCandidate();
+  try {
+    await page.goto(`/candidates/${candidate.personId}`, { waitUntil: 'networkidle' });
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15_000 });
+    // The Skills row's "+ Add" link leads to the Profile tab, whose
+    // "Add skill" opens the dialog with the autosuggest input.
+    await page
+      .getByText('Skills', { exact: true })
+      .locator('..')
+      .getByRole('link', { name: /add/i })
+      .first()
+      .click();
+    await page
+      .getByRole('button', { name: /add skill/i })
+      .first()
+      .click({ timeout: 15_000 });
+    await expect(page.getByPlaceholder(/type to search — or paste from the cv/i)).toBeVisible();
+    await shot(page, 'e2e__checklists-02-skills-autosuggest');
+  } finally {
+    await candidate.cleanup();
+  }
 });

@@ -8,7 +8,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ScopeFilter } from '@/components/scope-filter';
 import { Button } from '@/components/ui/button';
-import { requireInternalStaff, requirePermission } from '@/lib/auth/session';
+import { checkPermission, requireInternalStaff, requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
 import { occupations } from '@/lib/db/schema/occupations';
@@ -36,6 +36,11 @@ export default async function RequisitionsPage({
 }) {
   await requirePermission('recruitment', 'requisitions', 'view');
   const session = await requireInternalStaff();
+  // R6 — controls follow recruitment.requisitions (server actions re-check).
+  const [canCreateJob, canEditJob] = await Promise.all([
+    checkPermission('recruitment', 'requisitions', 'create'),
+    checkPermission('recruitment', 'requisitions', 'edit'),
+  ]);
   const { assigned, created, from, to, view } = await searchParams;
   const scope = parseAssignmentScope(assigned);
   const createdRange = parseDateRangeParams({ created, from, to });
@@ -93,16 +98,18 @@ export default async function RequisitionsPage({
               <DateRangeFilter />
               <ScopeFilter current={scope} />
               <CsvExportButton href="/api/export/requisitions" />
-              <RequisitionDialog
-                employers={employers}
-                currencies={currencies}
-                occupations={occupationList}
-                trigger={
-                  <Button size="sm" disabled={employers.length === 0}>
-                    <Plus className="mr-1.5 size-4" /> New requisition
-                  </Button>
-                }
-              />
+              {canCreateJob && (
+                <RequisitionDialog
+                  employers={employers}
+                  currencies={currencies}
+                  occupations={occupationList}
+                  trigger={
+                    <Button size="sm" disabled={employers.length === 0}>
+                      <Plus className="mr-1.5 size-4" /> New requisition
+                    </Button>
+                  }
+                />
+              )}
             </div>
           }
         />
@@ -124,7 +131,7 @@ export default async function RequisitionsPage({
         {cardView ? (
           <RequisitionsCardGrid requisitions={requisitionCards} />
         ) : (
-          <RequisitionsTable requisitions={requisitions} owners={owners} />
+          <RequisitionsTable requisitions={requisitions} owners={owners} canEdit={canEditJob} />
         )}
       </FadeUp>
     </div>

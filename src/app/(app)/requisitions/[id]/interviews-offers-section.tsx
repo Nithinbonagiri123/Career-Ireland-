@@ -144,6 +144,7 @@ export function InterviewsOffersSection({
   applications,
   currencies,
   canManage,
+  canPlace: mayPlace = true,
   nowIso,
 }: {
   interviews: RequisitionInterviewRow[];
@@ -151,6 +152,8 @@ export function InterviewsOffersSection({
   applications: RequisitionApplicationOption[];
   currencies: string[];
   canManage: boolean;
+  /** R6 — "Place candidate" needs recruitment.placements (create). */
+  canPlace?: boolean;
   nowIso: string;
 }) {
   const now = new Date(nowIso).getTime();
@@ -419,7 +422,8 @@ export function InterviewsOffersSection({
                   (o.status === 'SENT' || o.status === 'NEGOTIATING') &&
                   Boolean(o.expiresOn && o.expiresOn < today);
                 const placed = app?.placementStatus && SEAT_HOLDING.includes(app.placementStatus);
-                const canPlace = o.status === 'ACCEPTED' && app?.status === 'OFFER' && !placed;
+                const canPlace =
+                  mayPlace && o.status === 'ACCEPTED' && app?.status === 'OFFER' && !placed;
                 return (
                   <li key={o.id} data-offer-status={o.status} className="px-3 py-2.5">
                     <details className="group">

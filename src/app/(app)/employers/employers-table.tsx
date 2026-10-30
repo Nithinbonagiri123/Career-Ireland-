@@ -21,8 +21,11 @@ export function EmployersTable({
   employers,
   appVatRegistered = true,
   owners = [],
+  canEdit = true,
 }: {
   employers: Employer[];
+  /** R6 — recruitment.employers edit; hides edit / archive when false. */
+  canEdit?: boolean;
   appVatRegistered?: boolean;
   /** Lookup list for rendering owner avatars inline. Keep this small —
    *  just staff users; a per-row id-only field is useless on screen. */
@@ -118,25 +121,29 @@ export function EmployersTable({
       size: 240,
       cell: ({ row }) => (
         <div className="flex items-center justify-end gap-2">
-          <EmployerDialog
-            initial={row.original}
-            appVatRegistered={appVatRegistered}
-            trigger={
-              <Button variant="ghost" size="icon" aria-label={`Edit ${row.original.legalName}`}>
-                <Pencil className="size-3.5" />
+          {canEdit && (
+            <>
+              <EmployerDialog
+                initial={row.original}
+                appVatRegistered={appVatRegistered}
+                trigger={
+                  <Button variant="ghost" size="icon" aria-label={`Edit ${row.original.legalName}`}>
+                    <Pencil className="size-3.5" />
+                  </Button>
+                }
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Archive ${row.original.legalName}`}
+                disabled={busyId === row.original.id}
+                onClick={() => setArchiveTarget(row.original)}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <Archive className="size-3.5" />
               </Button>
-            }
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={`Archive ${row.original.legalName}`}
-            disabled={busyId === row.original.id}
-            onClick={() => setArchiveTarget(row.original)}
-            className="text-muted-foreground hover:text-destructive"
-          >
-            <Archive className="size-3.5" />
-          </Button>
+            </>
+          )}
           <Link
             href={`/employers/${row.original.id}`}
             className={buttonVariants({ variant: 'outline', size: 'sm' })}

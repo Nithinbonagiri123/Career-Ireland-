@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, or, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
+import { createOrEdit, requireRecruitment } from '@/lib/auth/recruitment-guards';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
@@ -173,7 +174,7 @@ export async function fetchEmployerContacts(employerId: string): Promise<Employe
 }
 
 export async function upsertEmployer(input: UpsertEmployerInput): Promise<Employer> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('employers', createOrEdit(input));
   const parsed = UpsertEmployerSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -268,7 +269,7 @@ export async function upsertEmployer(input: UpsertEmployerInput): Promise<Employ
  *     invoices have nowhere to go)
  */
 export async function markEmployerOnboardingComplete(employerId: string): Promise<Employer> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('employers', 'edit');
   return db.transaction(async (tx) => {
     const [emp] = await tx.select().from(employers).where(eq(employers.id, employerId)).limit(1);
     if (!emp) throw new BusinessRuleError('EMPLOYER_NOT_FOUND', 'Employer not found');
@@ -408,7 +409,7 @@ export async function fetchEmployerActivity(
 }
 
 export async function deleteEmployerContact(contactId: string): Promise<void> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('employers', 'edit');
   await db.transaction(async (tx) => {
     const [before] = await tx
       .select()
@@ -435,7 +436,7 @@ export async function deleteEmployerContact(contactId: string): Promise<void> {
 }
 
 export async function upsertEmployerContact(input: UpsertContactInput): Promise<EmployerContact> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('employers', 'edit');
   const parsed = UpsertContactSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -516,7 +517,7 @@ export async function upsertEmployerContact(input: UpsertContactInput): Promise<
 
 /** Soft-archive an employer. List queries filter archived rows out; the record itself is untouched. */
 export async function archiveEmployer(input: ArchiveEmployerInput): Promise<Employer> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('employers', 'edit');
   const parsed = ArchiveEmployerSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx
@@ -549,7 +550,7 @@ export async function archiveEmployer(input: ArchiveEmployerInput): Promise<Empl
 
 /** Restore a previously archived employer back to the active list. */
 export async function unarchiveEmployer(input: UnarchiveEmployerInput): Promise<Employer> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('employers', 'edit');
   const parsed = UnarchiveEmployerSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx

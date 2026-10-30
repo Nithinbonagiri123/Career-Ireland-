@@ -1,5 +1,6 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
+import { requireRecruitment } from '@/lib/auth/recruitment-guards';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { persons } from '@/lib/db/schema/persons';
@@ -77,7 +78,7 @@ export async function fetchChecklist(input: {
 export async function upsertChecklist(
   input: UpsertWorkPermitChecklistInput,
 ): Promise<WorkPermitChecklist> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('requisitions', 'edit');
   const parsed = UpsertWorkPermitChecklistSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -166,7 +167,7 @@ export async function upsertChecklist(
 }
 
 export async function deleteChecklist(id: string): Promise<void> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('requisitions', 'edit');
   await db.transaction(async (tx) => {
     const [before] = await tx
       .select()

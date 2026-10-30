@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
+import { requireRecruitment } from '@/lib/auth/recruitment-guards';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
@@ -190,7 +191,7 @@ export async function markApplicationPlaced(
   applicationId: string,
   offerException?: PlacementOfferException,
 ): Promise<Placement> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('placements', 'create');
   return db.transaction(async (tx) => {
     const [app] = await tx
       .select({
@@ -354,7 +355,7 @@ export async function markApplicationPlaced(
 }
 
 export async function createPlacement(input: CreatePlacementInput): Promise<Placement> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('placements', 'create');
   const parsed = CreatePlacementSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -703,7 +704,7 @@ export async function recomputeRequisitionFillCount(
 }
 
 export async function updatePlacementStatus(input: UpdatePlacementStatusInput): Promise<Placement> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('placements', 'edit');
   const parsed = UpdatePlacementStatusSchema.parse(input);
 
   return db.transaction(async (tx) => {
@@ -780,7 +781,7 @@ export async function updatePlacementStatus(input: UpdatePlacementStatusInput): 
  * when a candidate is available again — never automatic).
  */
 export async function restoreCandidateAvailability(input: RestoreAvailabilityInput) {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('placements', 'edit');
   const parsed = RestoreAvailabilitySchema.parse(input);
 
   return db.transaction(async (tx) => {
@@ -820,7 +821,7 @@ async function findPlacement(tx: Parameters<typeof recordAudit>[0], id: string) 
 
 /** Soft-archive a placement. Hidden from lists. Requisition fill counts are NOT recomputed on archive. */
 export async function archivePlacement(input: ArchivePlacementInput): Promise<Placement> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('placements', 'edit');
   const parsed = ArchivePlacementSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await findPlacement(tx, parsed.placementId);
@@ -852,7 +853,7 @@ export async function archivePlacement(input: ArchivePlacementInput): Promise<Pl
 }
 
 export async function unarchivePlacement(input: UnarchivePlacementInput): Promise<Placement> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('placements', 'edit');
   const parsed = UnarchivePlacementSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await findPlacement(tx, parsed.placementId);

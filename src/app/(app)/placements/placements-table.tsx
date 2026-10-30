@@ -31,7 +31,14 @@ import {
 } from '@/modules/placements/actions';
 import type { PlacementListRow } from '@/modules/placements/service';
 
-export function PlacementsTable({ placements }: { placements: PlacementListRow[] }) {
+export function PlacementsTable({
+  placements,
+  canEdit = true,
+}: {
+  placements: PlacementListRow[];
+  /** R6 — recruitment.placements edit; status / restore / archive hidden when false. */
+  canEdit?: boolean;
+}) {
   const [busy, setBusy] = useState<string | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<PlacementListRow | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<PlacementListRow | null>(null);
@@ -190,36 +197,40 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
               <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Placement status</DropdownMenuLabel>
-              <DropdownMenuItem
-                disabled={p.status !== 'PROPOSED'}
-                onClick={() => setStatus(p, 'CONFIRMED')}
-              >
-                Confirm (flips availability to PLACED)
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={p.status !== 'CONFIRMED'}
-                onClick={() => setStatus(p, 'STARTED')}
-              >
-                Mark started
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={p.status !== 'STARTED'}
-                onClick={() => setStatus(p, 'COMPLETED')}
-              >
-                Mark completed
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={p.status !== 'CONFIRMED' && p.status !== 'STARTED'}
-                onClick={() => setStatus(p, 'TERMINATED_EARLY')}
-              >
-                Terminate early
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={!isTerminal} onClick={() => setRestoreTarget(p)}>
-                Restore candidate to AVAILABLE…
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
+              {canEdit && (
+                <>
+                  <DropdownMenuLabel>Placement status</DropdownMenuLabel>
+                  <DropdownMenuItem
+                    disabled={p.status !== 'PROPOSED'}
+                    onClick={() => setStatus(p, 'CONFIRMED')}
+                  >
+                    Confirm (flips availability to PLACED)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={p.status !== 'CONFIRMED'}
+                    onClick={() => setStatus(p, 'STARTED')}
+                  >
+                    Mark started
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={p.status !== 'STARTED'}
+                    onClick={() => setStatus(p, 'COMPLETED')}
+                  >
+                    Mark completed
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={p.status !== 'CONFIRMED' && p.status !== 'STARTED'}
+                    onClick={() => setStatus(p, 'TERMINATED_EARLY')}
+                  >
+                    Terminate early
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem disabled={!isTerminal} onClick={() => setRestoreTarget(p)}>
+                    Restore candidate to AVAILABLE…
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem
                 render={
                   <Link
@@ -239,9 +250,11 @@ export function PlacementsTable({ placements }: { placements: PlacementListRow[]
                 }
               />
               <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={() => setArchiveTarget(p)}>
-                <Archive className="mr-2 size-4" /> Archive placement…
-              </DropdownMenuItem>
+              {canEdit && (
+                <DropdownMenuItem variant="destructive" onClick={() => setArchiveTarget(p)}>
+                  <Archive className="mr-2 size-4" /> Archive placement…
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         );

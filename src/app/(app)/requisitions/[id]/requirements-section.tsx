@@ -165,9 +165,12 @@ export function RequisitionSkillsSection({
   requisitionId,
   rows,
   allSkills,
+  canEdit = true,
 }: {
   requisitionId: string;
   rows: RequisitionSkillRow[];
+  /** R6 — recruitment.requisitions edit; read-only list when false. */
+  canEdit?: boolean;
   allSkills: Skill[];
 }) {
   const [, startTransition] = useTransition();
@@ -194,11 +197,13 @@ export function RequisitionSkillsSection({
         title="Required skills"
         count={rows.length}
         action={
-          <AttachSkillDialog
-            requisitionId={requisitionId}
-            allSkills={allSkills}
-            existing={existing}
-          />
+          canEdit ? (
+            <AttachSkillDialog
+              requisitionId={requisitionId}
+              allSkills={allSkills}
+              existing={existing}
+            />
+          ) : null
         }
       >
         Structured skill requirements — used by matching to score candidates.
@@ -224,14 +229,16 @@ export function RequisitionSkillsSection({
                 )}
                 <span className="font-medium">{r.skillName}</span>
                 <span className="text-muted-foreground">· w{r.weight}</span>
-                <button
-                  type="button"
-                  onClick={() => detach(r.skillId)}
-                  className="ml-1 rounded-full p-0.5 hover:bg-muted"
-                  aria-label={`Remove ${r.skillName}`}
-                >
-                  <X className="size-3" />
-                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => detach(r.skillId)}
+                    className="ml-1 rounded-full p-0.5 hover:bg-muted"
+                    aria-label={`Remove ${r.skillName}`}
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -355,9 +362,12 @@ export function RequisitionQualificationsSection({
   requisitionId,
   rows,
   allQualifications,
+  canEdit = true,
 }: {
   requisitionId: string;
   rows: RequisitionQualificationRow[];
+  /** R6 — recruitment.requisitions edit; read-only list when false. */
+  canEdit?: boolean;
   allQualifications: Qualification[];
 }) {
   const [, startTransition] = useTransition();
@@ -384,11 +394,13 @@ export function RequisitionQualificationsSection({
         title="Required qualifications"
         count={rows.length}
         action={
-          <AttachQualDialog
-            requisitionId={requisitionId}
-            allQuals={allQualifications}
-            existing={existing}
-          />
+          canEdit ? (
+            <AttachQualDialog
+              requisitionId={requisitionId}
+              allQuals={allQualifications}
+              existing={existing}
+            />
+          ) : null
         }
       >
         Certifications or diplomas the candidate must have.
@@ -413,14 +425,16 @@ export function RequisitionQualificationsSection({
                   <StarOff className="size-3 text-muted-foreground" />
                 )}
                 <span className="font-medium">{r.qualificationName}</span>
-                <button
-                  type="button"
-                  onClick={() => detach(r.qualificationId)}
-                  className="ml-1 rounded-full p-0.5 hover:bg-muted"
-                  aria-label={`Remove ${r.qualificationName}`}
-                >
-                  <X className="size-3" />
-                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => detach(r.qualificationId)}
+                    className="ml-1 rounded-full p-0.5 hover:bg-muted"
+                    aria-label={`Remove ${r.qualificationName}`}
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
               </li>
             ))}
           </ul>

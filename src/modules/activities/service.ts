@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
+import { requireLinkedRecordWrite, requireRecruitment } from '@/lib/auth/recruitment-guards';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
@@ -158,7 +159,7 @@ const STANDARD_REQUISITION_MILESTONES = [
 ] as const;
 
 export async function seedRequisitionWorkLog(requisitionId: string): Promise<Task[]> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('requisitions', 'edit');
   return db.transaction(async (tx) => {
     const existing = await tx
       .select({ title: tasks.title })
@@ -212,6 +213,11 @@ export async function createCommunication(
     );
   }
   const d = parsed.data;
+  // R6 — a communication on a job or employer needs that Recruitment permission.
+  await requireLinkedRecordWrite({
+    jobRequisitionId: blankToUndef(d.jobRequisitionId),
+    employerId: blankToUndef(d.employerId),
+  });
   return db.transaction(async (tx) => {
     const [created] = await tx
       .insert(communicationLogs)
@@ -287,6 +293,12 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
     );
   }
   const d = parsed.data;
+  // R6 — a task on a job, campaign advertisement or employer needs that permission.
+  await requireLinkedRecordWrite({
+    jobRequisitionId: blankToUndef(d.jobRequisitionId),
+    advertisementId: blankToUndef((d as { advertisementId?: string }).advertisementId),
+    employerId: blankToUndef(d.employerId),
+  });
   return db.transaction(async (tx) => {
     const [created] = await tx
       .insert(tasks)
@@ -325,6 +337,7 @@ export async function updateTaskStatus(input: UpdateTaskStatusInput): Promise<Ta
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(tasks).where(eq(tasks.id, parsed.taskId)).limit(1);
     if (!before) throw new BusinessRuleError('TASK_NOT_FOUND', 'Task not found');
+    await requireLinkedRecordWrite(before);
     if (before.status === parsed.status) return before;
     const [after] = await tx
       .update(tasks)
@@ -356,6 +369,7 @@ export async function updateTask(input: UpdateTaskInput): Promise<Task> {
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(tasks).where(eq(tasks.id, parsed.taskId)).limit(1);
     if (!before) throw new BusinessRuleError('TASK_NOT_FOUND', 'Task not found');
+    await requireLinkedRecordWrite(before);
     if (before.archivedAt) {
       throw new BusinessRuleError('ARCHIVED', 'Archived tasks cannot be edited');
     }
@@ -400,6 +414,7 @@ export async function archiveTask(input: ArchiveTaskInput): Promise<Task> {
   return db.transaction(async (tx) => {
     const [before] = await tx.select().from(tasks).where(eq(tasks.id, parsed.taskId)).limit(1);
     if (!before) throw new BusinessRuleError('TASK_NOT_FOUND', 'Task not found');
+    await requireLinkedRecordWrite(before);
     if (before.archivedAt) {
       throw new BusinessRuleError('ALREADY_ARCHIVED', 'Task is already archived');
     }
@@ -440,6 +455,7 @@ export async function updateCommunication(
       .where(eq(communicationLogs.id, parsed.communicationId))
       .limit(1);
     if (!before) throw new BusinessRuleError('COMM_NOT_FOUND', 'Communication not found');
+    await requireLinkedRecordWrite(before);
     if (before.archivedAt) {
       throw new BusinessRuleError('ARCHIVED', 'Archived communications cannot be edited');
     }
@@ -505,6 +521,7 @@ export async function archiveCommunication(
       .where(eq(communicationLogs.id, parsed.communicationId))
       .limit(1);
     if (!before) throw new BusinessRuleError('COMM_NOT_FOUND', 'Communication not found');
+    await requireLinkedRecordWrite(before);
     if (before.archivedAt) {
       throw new BusinessRuleError('ALREADY_ARCHIVED', 'Communication is already archived');
     }

@@ -26,8 +26,11 @@ import type { RequisitionListRow } from '@/modules/requisitions/service';
 export function RequisitionsTable({
   requisitions,
   owners = [],
+  canEdit = true,
 }: {
   requisitions: RequisitionListRow[];
+  /** R6 — recruitment.requisitions edit; hides archive when false. */
+  canEdit?: boolean;
   owners?: Array<{ id: string; fullName: string }>;
 }) {
   const ownerMap = useMemo(() => new Map(owners.map((o) => [o.id, o])), [owners]);
@@ -144,10 +147,14 @@ export function RequisitionsTable({
                   <DropdownMenuItem render={<Link href={`/requisitions/${r.id}`} />}>
                     Open detail
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onClick={() => setArchiveTarget(r)}>
-                    <Archive className="mr-2 size-4" /> Archive
-                  </DropdownMenuItem>
+                  {canEdit && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem variant="destructive" onClick={() => setArchiveTarget(r)}>
+                        <Archive className="mr-2 size-4" /> Archive
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -155,7 +162,7 @@ export function RequisitionsTable({
         },
       },
     ],
-    [busyId, ownerMap],
+    [busyId, ownerMap, canEdit],
   );
 
   return (

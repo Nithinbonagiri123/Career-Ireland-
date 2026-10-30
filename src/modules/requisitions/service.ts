@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
+import { createOrEdit, requireRecruitment } from '@/lib/auth/recruitment-guards';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
 import { db } from '@/lib/db/client';
@@ -193,7 +194,7 @@ export async function fetchRequisition(id: string): Promise<RequisitionListRow |
 }
 
 export async function upsertRequisition(input: UpsertRequisitionInput): Promise<JobRequisition> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('requisitions', createOrEdit(input));
   const parsed = UpsertRequisitionSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -320,7 +321,7 @@ export async function upsertRequisition(input: UpsertRequisitionInput): Promise<
 }
 
 export async function updateRequisitionStatus(input: UpdateStatusInput): Promise<JobRequisition> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('requisitions', 'edit');
   const parsed = UpdateStatusSchema.parse(input);
   return db.transaction(async (tx) => {
     const [before] = await tx
@@ -367,7 +368,7 @@ export async function listRequisitionSkills(requisitionId: string): Promise<Requ
 export async function attachRequisitionSkill(
   input: AttachRequisitionSkillInput,
 ): Promise<RequisitionSkill> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('requisitions', 'edit');
   const parsed = AttachRequisitionSkillSchema.parse(input);
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -425,7 +426,7 @@ export async function attachRequisitionSkill(
 }
 
 export async function detachRequisitionSkill(input: DetachRequisitionSkillInput): Promise<void> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('requisitions', 'edit');
   const parsed = DetachRequisitionSkillSchema.parse(input);
   await db.transaction(async (tx) => {
     await tx
@@ -466,7 +467,7 @@ export async function listRequisitionQualifications(
 export async function attachRequisitionQualification(
   input: AttachRequisitionQualificationInput,
 ): Promise<RequisitionQualification> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('requisitions', 'edit');
   const parsed = AttachRequisitionQualificationSchema.parse(input);
   return db.transaction(async (tx) => {
     const [existing] = await tx
@@ -518,7 +519,7 @@ export async function attachRequisitionQualification(
 export async function detachRequisitionQualification(
   input: DetachRequisitionQualificationInput,
 ): Promise<void> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('requisitions', 'edit');
   const parsed = DetachRequisitionQualificationSchema.parse(input);
   await db.transaction(async (tx) => {
     await tx
@@ -548,7 +549,7 @@ async function findRequisition(tx: Parameters<typeof recordAudit>[0], id: string
 
 /** Soft-archive a requisition. Hidden from lists, matching feeds, and dashboards. */
 export async function archiveRequisition(input: ArchiveRequisitionInput): Promise<JobRequisition> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('requisitions', 'edit');
   const parsed = ArchiveRequisitionSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await findRequisition(tx, parsed.requisitionId);
@@ -582,7 +583,7 @@ export async function archiveRequisition(input: ArchiveRequisitionInput): Promis
 export async function unarchiveRequisition(
   input: UnarchiveRequisitionInput,
 ): Promise<JobRequisition> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('requisitions', 'edit');
   const parsed = UnarchiveRequisitionSchema.parse(input);
   return db.transaction(async (tx) => {
     const before = await findRequisition(tx, parsed.requisitionId);

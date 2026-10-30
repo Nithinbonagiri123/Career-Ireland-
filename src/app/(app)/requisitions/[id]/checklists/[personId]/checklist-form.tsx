@@ -45,8 +45,11 @@ export function ChecklistForm({
   personEmail,
   personPhone,
   initial,
+  canEdit = true,
 }: {
   requisitionId: string;
+  /** R6 — recruitment.requisitions edit; save / delete hidden when false. */
+  canEdit?: boolean;
   personId: string;
   personName: string;
   personEmail: string;
@@ -193,18 +196,24 @@ export function ChecklistForm({
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between">
-        {initial ? (
-          <Button variant="destructive" onClick={remove} disabled={pending}>
-            <Trash2 className="mr-1.5 size-4" /> Delete
+      {canEdit ? (
+        <div className="flex items-center justify-between">
+          {initial ? (
+            <Button variant="destructive" onClick={remove} disabled={pending}>
+              <Trash2 className="mr-1.5 size-4" /> Delete
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button onClick={save} disabled={pending}>
+            <Save className="mr-1.5 size-4" /> Save checklist
           </Button>
-        ) : (
-          <span />
-        )}
-        <Button onClick={save} disabled={pending}>
-          <Save className="mr-1.5 size-4" /> Save checklist
-        </Button>
-      </div>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground" data-testid="checklist-read-only">
+          View only — your role cannot change work permit checklists.
+        </p>
+      )}
     </div>
   );
 }

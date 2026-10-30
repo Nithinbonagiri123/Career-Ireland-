@@ -125,6 +125,8 @@ export default async function RequisitionDetail({
     activity,
     canManageInterviews,
     canMatch,
+    canEditJob,
+    canPlace,
   ] = await Promise.all([
     fetchTasksForRequisition(id),
     fetchCampaignsForRequisition(id),
@@ -136,6 +138,10 @@ export default async function RequisitionDetail({
     // R5 — matching / shortlisting needs recruitment.matching (edit); the
     // server actions check it again and refuse closed / cancelled jobs.
     checkPermission('recruitment', 'matching', 'edit'),
+    // R6 — job edits / pipeline moves / work log / checklists need
+    // recruitment.requisitions; placing needs recruitment.placements.
+    checkPermission('recruitment', 'requisitions', 'edit'),
+    checkPermission('recruitment', 'placements', 'create'),
   ]);
   const activeCurrencies = currencies.filter((c) => c.isActive).map((c) => c.code);
   // R2 — seats are derived from placements by the R0 capacity rule.
@@ -210,6 +216,7 @@ export default async function RequisitionDetail({
             requisitionId={id}
             rows={requisitionSkillRows}
             allSkills={allSkills}
+            canEdit={canEditJob}
           />
         </FadeUp>
         <FadeUp delay={0.04}>
@@ -217,6 +224,7 @@ export default async function RequisitionDetail({
             requisitionId={id}
             rows={requisitionQualRows}
             allQualifications={allQualifications}
+            canEdit={canEditJob}
           />
         </FadeUp>
       </div>
@@ -245,7 +253,7 @@ export default async function RequisitionDetail({
       {/* Phase 2 blueprint §1.3 — Work Log: operator-facing checklist
           of standard recruitment milestones, backed by the tasks table. */}
       <FadeUp delay={0.052}>
-        <WorkLogSection requisitionId={id} tasks={workLogTasks} />
+        <WorkLogSection requisitionId={id} tasks={workLogTasks} canEdit={canEditJob} />
       </FadeUp>
       {/* Phase 2 blueprint §6.1 — ad campaigns tied to this requisition. */}
       <FadeUp delay={0.058}>
@@ -260,7 +268,13 @@ export default async function RequisitionDetail({
 
   const pipelineTab = (
     <FadeUp>
-      <PipelineWall requisition={requisition} data={pipelineData} canMatch={canMatch && isOpen} />
+      <PipelineWall
+        requisition={requisition}
+        data={pipelineData}
+        canMatch={canMatch && isOpen}
+        canMoveApplications={canEditJob}
+        canPlace={canPlace}
+      />
     </FadeUp>
   );
 
@@ -278,6 +292,7 @@ export default async function RequisitionDetail({
         applications={interviewsAndOffers.applications}
         currencies={activeCurrencies}
         canManage={canManageInterviews}
+        canPlace={canPlace}
         nowIso={new Date().toISOString()}
       />
     </FadeUp>
@@ -294,6 +309,7 @@ export default async function RequisitionDetail({
             requisitionId={id}
             existing={checklists}
             candidatePool={candidatePool}
+            canEdit={canEditJob}
           />
         </CardContent>
       </Card>
@@ -469,22 +485,24 @@ export default async function RequisitionDetail({
                 }))}
                 canReassign={session.user.isOwner}
               />,
-              <RequisitionDialog
-                key="edit"
-                initialEmployer={{
-                  id: requisition.employerId,
-                  legalName: requisition.employerName,
-                }}
-                occupations={occupationList}
-                currencies={currencies}
-                initial={requisition}
-                defaultOpen={edit === '1'}
-                trigger={
-                  <Button size="sm" variant="outline">
-                    <Pencil className="mr-1.5 size-4" /> Edit
-                  </Button>
-                }
-              />,
+              canEditJob && (
+                <RequisitionDialog
+                  key="edit"
+                  initialEmployer={{
+                    id: requisition.employerId,
+                    legalName: requisition.employerName,
+                  }}
+                  occupations={occupationList}
+                  currencies={currencies}
+                  initial={requisition}
+                  defaultOpen={edit === '1'}
+                  trigger={
+                    <Button size="sm" variant="outline">
+                      <Pencil className="mr-1.5 size-4" /> Edit
+                    </Button>
+                  }
+                />
+              ),
             ]}
             overflow={[
               canMatch && isOpen && (
@@ -522,13 +540,15 @@ export default async function RequisitionDetail({
               >
                 <Megaphone className="mr-1.5 size-4" aria-hidden /> Start advertisement
               </Link>,
-              <SetRequisitionReminderDialog
-                key="reminder"
-                requisitionId={id}
-                requisitionTitle={requisition.title}
-                currentUserId={session.user.id}
-              />,
-              isOpen && <CloseRequisitionButton key="close" requisitionId={id} />,
+              canEditJob && (
+                <SetRequisitionReminderDialog
+                  key="reminder"
+                  requisitionId={id}
+                  requisitionTitle={requisition.title}
+                  currentUserId={session.user.id}
+                />
+              ),
+              isOpen && canEditJob && <CloseRequisitionButton key="close" requisitionId={id} />,
             ]}
           />
         </div>
@@ -572,7 +592,7 @@ export default async function RequisitionDetail({
 
       {/* R2 — ?close=1 opens the close dialog on its own; it no longer
           depends on a next-action card being present. */}
-      {close === '1' && isOpen && (
+      {close === '1' && isOpen && canEditJob && (
         <CloseRequisitionButton requisitionId={id} defaultOpen hideTrigger />
       )}
 

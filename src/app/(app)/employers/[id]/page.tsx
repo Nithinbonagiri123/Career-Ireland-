@@ -32,7 +32,7 @@ import { RecordHeaderActions } from '@/components/record-header-actions';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { checkPermission, requireInternalStaff } from '@/lib/auth/session';
 import { formatCurrency } from '@/lib/currency';
 import { db } from '@/lib/db/client';
 import { invoices } from '@/lib/db/schema/billing';
@@ -82,6 +82,12 @@ export default async function EmployerDetail({
   }>;
 }) {
   const session = await requireInternalStaff();
+  // R6 — controls follow recruitment.employers / requisitions (actions re-check).
+  const [canEditEmployer, canCreateJob, canEditJob] = await Promise.all([
+    checkPermission('recruitment', 'employers', 'edit'),
+    checkPermission('recruitment', 'requisitions', 'create'),
+    checkPermission('recruitment', 'requisitions', 'edit'),
+  ]);
   const { id } = await params;
   const { raisePlacement, raiseRequisition, newRequisition } = await searchParams;
   const employer = await fetchEmployer(id);
@@ -358,17 +364,19 @@ export default async function EmployerDetail({
             Job requirements{' '}
             <span className="ml-1 text-xs text-muted-foreground">({requisitions.length})</span>
           </CardTitle>
-          <RequisitionDialog
-            employers={employersAll}
-            currencies={currencies}
-            occupations={occupationList}
-            defaultEmployerId={employer.id}
-            trigger={
-              <Button size="sm" variant="outline">
-                <Plus className="mr-1.5 size-4" /> New requisition
-              </Button>
-            }
-          />
+          {canCreateJob && (
+            <RequisitionDialog
+              employers={employersAll}
+              currencies={currencies}
+              occupations={occupationList}
+              defaultEmployerId={employer.id}
+              trigger={
+                <Button size="sm" variant="outline">
+                  <Plus className="mr-1.5 size-4" /> New requisition
+                </Button>
+              }
+            />
+          )}
         </CardHeader>
         <CardContent>
           {requisitions.length === 0 ? (
@@ -438,17 +446,19 @@ export default async function EmployerDetail({
                           {step.label}
                         </Link>
                       )}
-                      <RequisitionDialog
-                        employers={employersAll}
-                        currencies={currencies}
-                        occupations={occupationList}
-                        initial={r}
-                        trigger={
-                          <Button variant="ghost" size="icon" aria-label={`Edit ${r.title}`}>
-                            <Pencil className="size-3.5" />
-                          </Button>
-                        }
-                      />
+                      {canEditJob && (
+                        <RequisitionDialog
+                          employers={employersAll}
+                          currencies={currencies}
+                          occupations={occupationList}
+                          initial={r}
+                          trigger={
+                            <Button variant="ghost" size="icon" aria-label={`Edit ${r.title}`}>
+                              <Pencil className="size-3.5" />
+                            </Button>
+                          }
+                        />
+                      )}
                       <Link
                         href={`/requisitions/${r.id}`}
                         className={buttonVariants({ variant: 'outline', size: 'sm' })}
@@ -471,14 +481,16 @@ export default async function EmployerDetail({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Contacts</CardTitle>
-          <ContactDialog
-            employerId={employer.id}
-            trigger={
-              <Button size="sm" variant="outline">
-                <Plus className="mr-1.5 size-4" /> Add contact
-              </Button>
-            }
-          />
+          {canEditEmployer && (
+            <ContactDialog
+              employerId={employer.id}
+              trigger={
+                <Button size="sm" variant="outline">
+                  <Plus className="mr-1.5 size-4" /> Add contact
+                </Button>
+              }
+            />
+          )}
         </CardHeader>
         <CardContent>
           {contacts.length === 0 ? (
@@ -505,20 +517,24 @@ export default async function EmployerDetail({
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <ContactDialog
-                      employerId={employer.id}
-                      initial={c}
-                      trigger={
-                        <Button variant="ghost" size="icon" aria-label={`Edit ${c.fullName}`}>
-                          <Pencil className="size-3.5" />
-                        </Button>
-                      }
-                    />
-                    <DeleteContactButton
-                      contactId={c.id}
-                      employerId={employer.id}
-                      contactName={c.fullName}
-                    />
+                    {canEditEmployer && (
+                      <ContactDialog
+                        employerId={employer.id}
+                        initial={c}
+                        trigger={
+                          <Button variant="ghost" size="icon" aria-label={`Edit ${c.fullName}`}>
+                            <Pencil className="size-3.5" />
+                          </Button>
+                        }
+                      />
+                    )}
+                    {canEditEmployer && (
+                      <DeleteContactButton
+                        contactId={c.id}
+                        employerId={employer.id}
+                        contactName={c.fullName}
+                      />
+                    )}
                   </div>
                 </li>
               ))}
@@ -796,18 +812,20 @@ export default async function EmployerDetail({
 
           <RecordHeaderActions
             primary={
-              <RequisitionDialog
-                employers={employersAll}
-                currencies={currencies}
-                occupations={occupationList}
-                defaultEmployerId={employer.id}
-                defaultOpen={newRequisition === '1'}
-                trigger={
-                  <Button size="sm">
-                    <Plus className="mr-1.5 size-4" /> New requisition
-                  </Button>
-                }
-              />
+              canCreateJob ? (
+                <RequisitionDialog
+                  employers={employersAll}
+                  currencies={currencies}
+                  occupations={occupationList}
+                  defaultEmployerId={employer.id}
+                  defaultOpen={newRequisition === '1'}
+                  trigger={
+                    <Button size="sm">
+                      <Plus className="mr-1.5 size-4" /> New requisition
+                    </Button>
+                  }
+                />
+              ) : undefined
             }
             secondary={[
               <AssignToMeButton
@@ -818,16 +836,18 @@ export default async function EmployerDetail({
                 currentAssignedUserId={employer.assignedUserId}
                 canReassign={session.user.isOwner}
               />,
-              <EmployerDialog
-                key="edit"
-                initial={employer}
-                appVatRegistered={appSettings.vatRegistered}
-                trigger={
-                  <Button size="sm" variant="outline">
-                    <Pencil className="mr-1.5 size-4" /> Edit
-                  </Button>
-                }
-              />,
+              canEditEmployer && (
+                <EmployerDialog
+                  key="edit"
+                  initial={employer}
+                  appVatRegistered={appSettings.vatRegistered}
+                  trigger={
+                    <Button size="sm" variant="outline">
+                      <Pencil className="mr-1.5 size-4" /> Edit
+                    </Button>
+                  }
+                />
+              ),
               firstRaisablePlacement && !raisePlacement && (
                 <Link
                   key="raise-fee"
@@ -945,7 +965,9 @@ export default async function EmployerDetail({
               )}
               {canCompleteOnboarding && <span>All requirements met — mark it done.</span>}
             </div>
-            {canCompleteOnboarding && <CompleteOnboardingButton employerId={employer.id} />}
+            {canCompleteOnboarding && canEditEmployer && (
+              <CompleteOnboardingButton employerId={employer.id} />
+            )}
           </div>
         </FadeUp>
       )}

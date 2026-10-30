@@ -1,5 +1,6 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
+import { requireRecruitment } from '@/lib/auth/recruitment-guards';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { documentInstances } from '@/lib/db/schema/documents';
@@ -180,7 +181,7 @@ export async function listShortlistPromotionCandidates(
 }
 
 export async function createApplication(input: CreateApplicationInput): Promise<JobApplication> {
-  const session = await requireInternalStaff();
+  const session = await requireRecruitment('requisitions', 'edit');
   const parsed = CreateApplicationSchema.safeParse(input);
   if (!parsed.success) {
     throw new ValidationError(
@@ -350,6 +351,9 @@ export async function updateApplicationStatus(
       .where(eq(jobApplications.id, parsed.applicationId))
       .limit(1);
     if (!before) throw new BusinessRuleError('APPLICATION_NOT_FOUND', 'Application not found');
+    // R6 — moving an application on one of our jobs needs recruitment.requisitions;
+    // external (job-board) applications keep the existing rule.
+    if (before.jobRequisitionId) await requireRecruitment('requisitions', 'edit');
     if (before.status === parsed.status) return before;
 
     assertTransition('application', before.status, parsed.status, APPLICATION_TRANSITIONS);

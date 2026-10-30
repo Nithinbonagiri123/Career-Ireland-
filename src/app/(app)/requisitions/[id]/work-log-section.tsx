@@ -27,9 +27,12 @@ import type { TaskRow } from '@/modules/activities/service';
 export function WorkLogSection({
   requisitionId,
   tasks,
+  canEdit = true,
 }: {
   requisitionId: string;
   tasks: TaskRow[];
+  /** R6 — recruitment.requisitions edit; read-only milestones when false. */
+  canEdit?: boolean;
 }) {
   const [optimistic, setOptimistic] = useOptimistic(tasks, (state, update: TaskRow) => {
     return state.map((t) => (t.id === update.id ? update : t));
@@ -86,14 +89,16 @@ export function WorkLogSection({
               Standard recruitment milestones. Tick them off as the work gets done.
             </p>
           </div>
-          <Button size="sm" variant="outline" onClick={onSeed} disabled={seeding}>
-            {seeding ? (
-              <Loader2 className="mr-1.5 size-4 animate-spin" />
-            ) : (
-              <Sparkles className="mr-1.5 size-4" />
-            )}
-            Add standard checklist
-          </Button>
+          {canEdit && (
+            <Button size="sm" variant="outline" onClick={onSeed} disabled={seeding}>
+              {seeding ? (
+                <Loader2 className="mr-1.5 size-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-1.5 size-4" />
+              )}
+              Add standard checklist
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-3 rounded-md border border-dashed border-border/70 px-4 py-6 text-xs text-muted-foreground">
@@ -122,14 +127,16 @@ export function WorkLogSection({
               {doneCount} of {total} milestones complete.
             </p>
           </div>
-          <Button size="sm" variant="ghost" onClick={onSeed} disabled={seeding}>
-            {seeding ? (
-              <Loader2 className="mr-1.5 size-4 animate-spin" />
-            ) : (
-              <Sparkles className="mr-1.5 size-4" />
-            )}
-            Add missing standards
-          </Button>
+          {canEdit && (
+            <Button size="sm" variant="ghost" onClick={onSeed} disabled={seeding}>
+              {seeding ? (
+                <Loader2 className="mr-1.5 size-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-1.5 size-4" />
+              )}
+              Add missing standards
+            </Button>
+          )}
         </div>
         <div
           className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
@@ -155,7 +162,7 @@ export function WorkLogSection({
                 <button
                   type="button"
                   onClick={() => toggleTask(task)}
-                  disabled={isPending}
+                  disabled={isPending || !canEdit}
                   aria-label={isDone ? `Mark ${task.title} as open` : `Mark ${task.title} as done`}
                   className={cn(
                     'mt-0.5 shrink-0 transition-colors',

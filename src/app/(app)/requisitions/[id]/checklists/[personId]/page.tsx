@@ -5,7 +5,7 @@ import { notFound } from 'next/navigation';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { buttonVariants } from '@/components/ui/button';
-import { requireInternalStaff } from '@/lib/auth/session';
+import { checkPermission, requireInternalStaff } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import { persons } from '@/lib/db/schema/persons';
 import { fetchRequisition } from '@/modules/requisitions/service';
@@ -80,6 +80,7 @@ export default async function ChecklistDetailPage({
           personEmail={p.email ?? ''}
           personPhone={p.phone ?? ''}
           initial={checklist}
+          canEdit={await checkPermission('recruitment', 'requisitions', 'edit')}
         />
       </FadeUp>
     </div>
