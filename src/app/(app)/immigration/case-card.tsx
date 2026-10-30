@@ -1,125 +1,117 @@
 'use client';
 
 import { format, formatDistanceToNowStrict } from 'date-fns';
-import { Building2, CalendarDays, Filter, Grid3x3, PlaneTakeoff } from 'lucide-react';
+import {
+  ArrowRight,
+  Building2,
+  CalendarClock,
+  FileText,
+  Hash,
+  User2,
+  UserRound,
+} from 'lucide-react';
 import Link from 'next/link';
-import { EmptyState } from '@/components/empty-state';
-import { OwnerAvatar } from '@/components/owner-avatar';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import { statusTone } from '@/lib/ui/status-tone';
-import { cn } from '@/lib/utils';
+import { useEffect, useState } from 'react';
+import {
+  CARD_ACTION,
+  CARD_ACTION_TINT,
+  EntityCard,
+  EntityCardGrid,
+  initialsOf,
+} from '@/components/ds/entity-card';
+import { DsStatusPill } from '@/components/ds/status-pill';
 import { CASE_STAGE_LABEL, CASE_TYPE_LABEL } from '@/modules/immigration/labels';
 import type { CaseListRow } from '@/modules/immigration/service';
+import { CASE_STATUS_TONE } from './case-filters';
 
 /**
- * Owner-forward case card for the immigration Global Cases / My Cases views.
- *
- * The spec (§11) says owner must always be visible and immediately obvious —
- * so the row structure is: candidate name up top, owner badge in the same
- * eyeline. Sponsor + application type get the smaller supporting rail.
+ * Stage 6G case card (shared EntityCard). Owner stays visible on every card
+ * (workflow spec §11); missing details are left out rather than shown as
+ * placeholders.
  */
 export function CaseCard({ case: c }: { case: CaseListRow }) {
-  const created = formatDistanceToNowStrict(c.createdAt, { addSuffix: true });
-  const createdAbsolute = format(c.createdAt, 'd MMM yyyy · HH:mm');
+  const tone = CASE_STATUS_TONE[c.status];
+  const opened = new Date(c.createdAt);
   return (
-    <Link href={`/immigration/${c.id}`} className="block outline-none">
-      <Card className="h-full transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring">
-        <CardContent className="flex h-full flex-col gap-3 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 space-y-1">
-              <h3 className="truncate text-sm font-semibold leading-tight">{c.beneficiaryName}</h3>
-              <p className="truncate text-xs text-muted-foreground">
-                {CASE_TYPE_LABEL[c.caseType]}
-                {c.applicationTypeName && <span className="ml-1">· {c.applicationTypeName}</span>}
-              </p>
-            </div>
-            <Badge variant={statusTone(c.status)} className="shrink-0 rounded-full text-[10px]">
-              {CASE_STAGE_LABEL[c.status]}
-            </Badge>
-          </div>
-
-          <div className="mt-auto space-y-1.5 text-xs">
-            <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground">Owner:</span>
-              <OwnerAvatar
-                user={
-                  c.assignedUserId && c.ownerName
-                    ? { id: c.assignedUserId, fullName: c.ownerName }
-                    : null
-                }
-                size="sm"
-                showName
-              />
-            </div>
-            {c.sponsorName && (
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Building2 className="size-3.5 shrink-0" />
-                <span className="truncate">Sponsor: {c.sponsorName}</span>
-              </div>
-            )}
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <CalendarDays className="size-3.5 shrink-0" />
-              <time dateTime={c.createdAt.toISOString()} title={createdAbsolute}>
-                Opened {created}
-              </time>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
+    <EntityCard
+      testId="immigration-case-card"
+      ariaLabel={`Case for ${c.beneficiaryName}`}
+      avatar={{ initials: initialsOf(c.beneficiaryName), tone }}
+      status={<DsStatusPill tone={tone}>{CASE_STAGE_LABEL[c.status]}</DsStatusPill>}
+      timestamp={
+        <time dateTime={opened.toISOString()} title={format(opened, 'd MMM yyyy · HH:mm')}>
+          <RelativeTime date={opened} />
+        </time>
+      }
+      title={c.beneficiaryName}
+      titleHref={`/immigration/${c.id}`}
+      subtitle={
+        c.applicationTypeName
+          ? `${CASE_TYPE_LABEL[c.caseType]} · ${c.applicationTypeName}`
+          : CASE_TYPE_LABEL[c.caseType]
+      }
+      meta={[
+        {
+          key: 'owner',
+          icon: UserRound,
+          content: c.ownerName ? (
+            <>
+              Owner <span className="font-medium text-foreground">{c.ownerName}</span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">Unassigned</span>
+          ),
+        },
+        {
+          key: 'sponsor',
+          icon: Building2,
+          content: c.sponsorName ? `Sponsor: ${c.sponsorName}` : null,
+        },
+        {
+          key: 'reference',
+          icon: Hash,
+          content: c.authorityReference ? `Ref ${c.authorityReference}` : null,
+        },
+        {
+          key: 'expires',
+          icon: CalendarClock,
+          content: c.expiresOn ? `Expires ${format(new Date(c.expiresOn), 'd MMM yyyy')}` : null,
+        },
+      ]}
+      actions={
+        <>
+          <Link href={`/immigration/${c.id}`} className={CARD_ACTION}>
+            <FileText className="size-3.5" aria-hidden /> View case
+          </Link>
+          <Link href={`/candidates/${c.beneficiaryPersonId}`} className={CARD_ACTION_TINT}>
+            <User2 className="size-3.5" aria-hidden /> Profile
+            <ArrowRight className="size-3.5" aria-hidden />
+          </Link>
+        </>
+      }
+    />
   );
+}
+
+/**
+ * "13 days ago" computed after mount so server and browser render the same
+ * text first (avoids a hydration mismatch when the clocks straddle a unit).
+ */
+function RelativeTime({ date }: { date: Date }) {
+  const ms = date.getTime();
+  const [label, setLabel] = useState(() => format(ms, 'd MMM yyyy'));
+  useEffect(() => {
+    setLabel(formatDistanceToNowStrict(ms, { addSuffix: true }));
+  }, [ms]);
+  return <>{label}</>;
 }
 
 export function CasesCardGrid({ cases }: { cases: CaseListRow[] }) {
-  if (cases.length === 0) {
-    return (
-      <EmptyState
-        icon={PlaneTakeoff}
-        title="No immigration cases yet"
-        description={
-          'Employment Permits, Visas, and Visa Extensions all live here. Click "Open case" above to record the first one.'
-        }
-      />
-    );
-  }
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <EntityCardGrid>
       {cases.map((c) => (
         <CaseCard key={c.id} case={c} />
       ))}
-    </div>
-  );
-}
-
-export function CasesViewToggle({ current }: { current: 'grid' | 'table' }) {
-  const isGrid = current === 'grid';
-  return (
-    <div className="inline-flex overflow-hidden rounded-md border">
-      <Link
-        href="?view=grid"
-        aria-pressed={isGrid}
-        className={cn(
-          'flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-colors',
-          isGrid
-            ? 'bg-foreground text-background'
-            : 'bg-transparent text-muted-foreground hover:bg-muted',
-        )}
-      >
-        <Grid3x3 className="size-3" /> Cards
-      </Link>
-      <Link
-        href="?view=table"
-        aria-pressed={!isGrid}
-        className={cn(
-          'flex items-center gap-1 border-l px-2.5 py-1 text-xs font-medium transition-colors',
-          !isGrid
-            ? 'bg-foreground text-background'
-            : 'bg-transparent text-muted-foreground hover:bg-muted',
-        )}
-      >
-        <Filter className="size-3" /> Table
-      </Link>
-    </div>
+    </EntityCardGrid>
   );
 }

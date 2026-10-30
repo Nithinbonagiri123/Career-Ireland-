@@ -1,13 +1,19 @@
-import { format, formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import {
+  BellRing,
   Briefcase,
   Building2,
   CalendarClock,
+  CalendarPlus,
   Coins,
+  FileBadge,
   Fingerprint,
   PlaneTakeoff,
+  Receipt,
+  ShieldCheck,
   Trophy,
   User,
+  UserRound,
 } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -15,17 +21,21 @@ import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
 import { FinancialSummaryCard } from '@/components/billing/financial-summary-card';
 import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
+import { FOCUS_RING } from '@/components/ds/segmented';
+import { DsEnumPill } from '@/components/ds/status-pill';
+import {
+  DetailRows,
+  NextActionBanner,
+  SectionCard,
+  WorkspaceHeader,
+} from '@/components/ds/workspace';
 import { FadeUp } from '@/components/motion/motion-primitives';
-import { NextActionCard } from '@/components/next-action-card';
-import { OwnerAvatar } from '@/components/owner-avatar';
-import { PageHeader } from '@/components/page-header';
 import { ReassignButton } from '@/components/reassign-button';
 import { RecordHeaderActions } from '@/components/record-header-actions';
 import { RelatedWorkPanel } from '@/components/related-work-panel';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { buttonVariants } from '@/components/ui/button';
 import { requireInternalStaff } from '@/lib/auth/session';
-import { statusTone } from '@/lib/ui/status-tone';
+import { cn } from '@/lib/utils';
 import { fetchTasksForImmigrationCase } from '@/modules/activities/service';
 import {
   fetchImmigrationCaseBillingHistory,
@@ -43,11 +53,19 @@ import {
 import { fetchPersonDetail } from '@/modules/persons/detail';
 import { fetchStaffUserOptions } from '@/modules/users/service';
 import { ArchiveCaseButton } from './archive-button';
+import { caseBillingHref } from './billing-links';
 import { CaseDocumentsSection } from './case-documents-section';
 import { CasePhaseHero } from './case-phase-hero';
 import { CloseCaseButton, RecordDecisionButtons, SetReminderDialog } from './case-quick-actions';
 import { CaseTabs } from './case-tabs';
 import { CaseTasksSection } from './tasks-section';
+
+/** Date-only columns (YYYY-MM-DD) → "4 Nov 2026". */
+function day(value: string | null) {
+  return value ? format(new Date(`${value}T00:00:00Z`), 'd MMM yyyy') : null;
+}
+
+const LINK = cn('rounded-sm underline-offset-2 hover:text-foreground hover:underline', FOCUS_RING);
 
 export const dynamic = 'force-dynamic';
 
@@ -106,132 +124,68 @@ export default async function ImmigrationCaseDetail({
     },
   });
 
-  const metaStrip = (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
-      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-        Owner:{' '}
-        <OwnerAvatar
-          user={currentOwner ? { id: currentOwner.id, fullName: currentOwner.fullName } : null}
-          size="sm"
-          showName
-        />
-      </span>
-      <Badge variant={statusTone(c.status)} className="rounded-full">
-        {CASE_STAGE_LABEL[c.status]}
-      </Badge>
-      <Link
-        href={`/clients/${c.beneficiaryPersonId}`}
-        className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <User className="size-3" aria-hidden />
-        {c.beneficiaryName}
-      </Link>
-      {c.sponsorName &&
-        (c.sponsorEmployerId ? (
-          <Link
-            href={`/employers/${c.sponsorEmployerId}`}
-            className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <Building2 className="size-3" aria-hidden />
-            {c.sponsorName}
-          </Link>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-muted-foreground">
-            <Building2 className="size-3" aria-hidden />
-            {c.sponsorName}
-          </span>
-        ))}
-      {c.authorityReference && (
-        <span className="inline-flex items-center gap-1 text-muted-foreground">
-          <Fingerprint className="size-3" aria-hidden />
-          ref {c.authorityReference}
-        </span>
-      )}
-      {c.relatedJobRequisitionId && (
-        <Link
-          href={`/requisitions/${c.relatedJobRequisitionId}`}
-          className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <Briefcase className="size-3" aria-hidden />
-          Requisition
-        </Link>
-      )}
-      {c.relatedPlacementId && (
-        <Link
-          href="/placements"
-          className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <Trophy className="size-3" aria-hidden />
-          Placement
-        </Link>
-      )}
-      {c.serviceEngagementId && (
-        <Link
-          href={`/engagements/${c.serviceEngagementId}`}
-          className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <Coins className="size-3" aria-hidden />
-          CS engagement
-        </Link>
-      )}
-    </div>
+  // "Open case" self-links point at this page — no button rather than a
+  // link that goes nowhere. Next-action rules return null for CLOSED.
+  const selfHref = `/immigration/${id}`;
+  const banner = nextAction
+    ? {
+        ...nextAction,
+        primary: nextAction.primary.href === selfHref ? undefined : nextAction.primary,
+      }
+    : c.status === 'CLOSED'
+      ? {
+          label: 'Next step',
+          dueHint: null,
+          sentence: 'This case is closed. No further action is needed.',
+          tone: 'muted' as const,
+          primary: undefined,
+        }
+      : null;
+
+  const ownerChip = currentOwner ? (
+    <>
+      Owner <span className="font-medium text-foreground">{currentOwner.fullName}</span>
+    </>
+  ) : (
+    'Unassigned'
   );
 
+  const detailRows = [
+    { label: 'Case type', value: humanType },
+    ...(c.authorityReference
+      ? [{ label: 'Authority reference', value: c.authorityReference }]
+      : []),
+    { label: 'Submitted', value: day(c.submittedAt) ?? 'Not recorded' },
+    { label: 'Decision', value: day(c.decisionAt) ?? 'Not recorded' },
+    ...(c.expiresOn ? [{ label: 'Permit expires', value: day(c.expiresOn) }] : []),
+    { label: 'Reminder', value: day(c.reminderOn) ?? 'No reminder set' },
+    {
+      label: 'Opened',
+      value: (
+        <time dateTime={c.createdAt.toISOString()} className="tabular-nums">
+          {format(c.createdAt, 'd MMM yyyy · HH:mm')}
+        </time>
+      ),
+    },
+  ];
+
   const overviewTab = (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-      <FadeUp delay={0.05} className="lg:col-span-1 lg:sticky lg:top-4 lg:h-fit">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Case details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Status</span>
-              <Badge variant={statusTone(c.status)} className="rounded-full text-[10px]">
-                {CASE_STAGE_LABEL[c.status]}
-              </Badge>
+    <div className="grid items-start gap-5 lg:grid-cols-3">
+      <FadeUp delay={0.05} className="min-w-0 lg:col-span-1">
+        <SectionCard icon={FileBadge} title="Case details" testId="case-details">
+          <DetailRows rows={detailRows} />
+          {c.notes && (
+            <div className="mt-4 border-t border-border/60 pt-3">
+              <p className="text-xs font-medium text-muted-foreground">Notes</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-foreground [overflow-wrap:anywhere]">
+                {c.notes}
+              </p>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Type</span>
-              <span>{humanType}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Submitted</span>
-              <span>{c.submittedAt ?? '—'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Decision</span>
-              <span>{c.decisionAt ?? '—'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Expires</span>
-              <span>{c.expiresOn ?? '—'}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Reminder</span>
-              <span>{c.reminderOn ?? '—'}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Opened</span>
-              <time dateTime={c.createdAt.toISOString()} className="tabular-nums">
-                {formatDistanceToNow(c.createdAt, { addSuffix: true })} ·{' '}
-                {format(c.createdAt, 'dd MMM yyyy · HH:mm')}
-              </time>
-            </div>
-            {c.notes && (
-              <div className="border-t pt-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Notes</p>
-                <p className="mt-1 whitespace-pre-wrap text-xs">{c.notes}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          )}
+        </SectionCard>
       </FadeUp>
 
-      <div className="space-y-6 lg:col-span-2">
-        {/* Phase 1 blueprint §3.1 — hero phase card. The one clear
-            "what's happening right now" story at the top of the main
-            content area. Everything else below is secondary context. */}
+      <div className="min-w-0 space-y-5 lg:col-span-2">
         <FadeUp delay={0.06}>
           <CasePhaseHero
             beneficiaryName={c.beneficiaryName}
@@ -252,106 +206,107 @@ export default async function ImmigrationCaseDetail({
             }}
           />
         </FadeUp>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <FadeUp delay={0.08} className="min-w-0">
+            <SectionCard
+              icon={User}
+              title="Beneficiary"
+              className="h-full"
+              action={
+                <Link
+                  href={`/clients/${c.beneficiaryPersonId}`}
+                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                  aria-label={`Open candidate profile for ${c.beneficiaryName}`}
+                >
+                  Open profile
+                </Link>
+              }
+            >
+              <p className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">
+                {c.beneficiaryName}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">The person this case is for.</p>
+            </SectionCard>
+          </FadeUp>
+          <FadeUp delay={0.1} className="min-w-0">
+            <SectionCard
+              icon={Building2}
+              title="Sponsor"
+              className="h-full"
+              action={
+                c.sponsorEmployerId ? (
+                  <Link
+                    href={`/employers/${c.sponsorEmployerId}`}
+                    className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                    aria-label={`Open employer ${c.sponsorName ?? ''}`.trim()}
+                  >
+                    Open employer
+                  </Link>
+                ) : undefined
+              }
+            >
+              {c.sponsorName ? (
+                <p className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">
+                  {c.sponsorName}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No sponsor linked. Cases can also run independently of a placement.
+                </p>
+              )}
+            </SectionCard>
+          </FadeUp>
+        </div>
         {beneficiaryDetail && (
-          <FadeUp delay={0.08}>
+          <FadeUp delay={0.12}>
             <RelatedWorkPanel
               personId={c.beneficiaryPersonId}
               timeline={beneficiaryDetail.timeline}
             />
           </FadeUp>
         )}
-        <FadeUp delay={0.1}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <User className="size-4" /> Beneficiary
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p className="font-medium">{c.beneficiaryName}</p>
-              <Link
-                href={`/clients/${c.beneficiaryPersonId}`}
-                className="text-xs text-muted-foreground underline underline-offset-2"
-              >
-                Open candidate profile
-              </Link>
-            </CardContent>
-          </Card>
-        </FadeUp>
-        <FadeUp delay={0.12}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CalendarClock className="size-4" /> Sponsor
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {c.sponsorName ? (
-                <>
-                  <p className="font-medium">{c.sponsorName}</p>
-                  {c.sponsorEmployerId && (
-                    <Link
-                      href={`/employers/${c.sponsorEmployerId}`}
-                      className="text-xs text-muted-foreground underline underline-offset-2"
-                    >
-                      Open employer
-                    </Link>
-                  )}
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  No sponsor linked. Cases can also run independently of a placement.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </FadeUp>
-        {/* Billing for THIS case — the section is ALWAYS visible now so
-            operators can raise an invoice from within the case without
-            hunting for the /candidates page. The invoice carries the
-            immigration_case_id back-link so it re-appears here on next
-            load. */}
-        <FadeUp delay={0.16}>
-          <Card>
-            <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
-              <div className="min-w-0 flex-1 basis-64">
-                <CardTitle className="text-[15px] font-semibold">Billing for this case</CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Every invoice and receipt tied to this case via
-                  <span className="mx-1 font-mono">immigration_case_id</span>. Raise a new one here;
-                  the back-link is written automatically.
-                </p>
-              </div>
-              <GenerateInvoiceDialog
-                payerMode="PERSON"
-                payerId={c.beneficiaryPersonId}
-                payerLabel={c.beneficiaryName}
-                services={invoiceableServices}
-                triggerLabel="Raise invoice for this case"
-                triggerVariant="outline"
-                contextLinks={{ immigrationCaseId: id }}
-              />
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {caseBilling.invoices.length > 0 && (
-                <FinancialSummaryCard invoices={caseBilling.invoices} />
-              )}
-              {caseBilling.invoices.length > 0 || caseBilling.receipts.length > 0 ? (
-                <BillingSection
-                  profileHref={`/clients/${c.beneficiaryPersonId}`}
-                  invoices={caseBilling.invoices}
-                  receipts={caseBilling.receipts}
-                  canVerify={false}
-                />
-              ) : (
-                <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-                  Nothing invoiced yet against this case. Use "Raise invoice for this case" above.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </FadeUp>
       </div>
+
+      {/* Billing for THIS case — always visible so staff can raise an
+          invoice from the case; invoices raised here carry the case link. */}
+      <FadeUp delay={0.14} className="min-w-0 lg:col-span-3">
+        <SectionCard
+          icon={Receipt}
+          title="Billing for this case"
+          description="Every invoice and receipt linked to this case. Invoices raised here are linked to the case automatically."
+          testId="case-billing"
+          action={
+            <GenerateInvoiceDialog
+              payerMode="PERSON"
+              payerId={c.beneficiaryPersonId}
+              payerLabel={c.beneficiaryName}
+              services={invoiceableServices}
+              triggerLabel="Raise invoice for this case"
+              triggerVariant="outline"
+              contextLinks={{ immigrationCaseId: id }}
+            />
+          }
+          bodyClassName="space-y-4"
+        >
+          {caseBilling.invoices.length > 0 && (
+            <FinancialSummaryCard invoices={caseBilling.invoices} />
+          )}
+          {caseBilling.invoices.length > 0 || caseBilling.receipts.length > 0 ? (
+            <BillingSection
+              profileHref={`/candidates/${c.beneficiaryPersonId}`}
+              invoiceHref={(invoice) => caseBillingHref('invoices', invoice)}
+              receiptHref={(receipt) => caseBillingHref('receipts', receipt)}
+              invoices={caseBilling.invoices}
+              receipts={caseBilling.receipts}
+              canVerify={false}
+            />
+          ) : (
+            <p className="rounded-xl border border-dashed border-border/70 px-3 py-6 text-center text-xs text-muted-foreground">
+              Nothing invoiced against this case yet. Use “Raise invoice for this case” above.
+            </p>
+          )}
+        </SectionCard>
+      </FadeUp>
     </div>
   );
 
@@ -375,23 +330,90 @@ export default async function ImmigrationCaseDetail({
   );
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
-        <PageHeader
-          icon={PlaneTakeoff}
-          title={`${humanType} · ${c.beneficiaryName}`}
+        <WorkspaceHeader
           breadcrumbs={[
             { label: 'Immigration', href: '/immigration' },
             { label: c.beneficiaryName },
           ]}
-          meta={metaStrip}
-          action={
-            // Phase 2 blueprint §1.2 — primary / secondary / overflow.
-            //
-            // Primary — null here; the NextActionCard carries the "do
-            //           this next" story for immigration cases.
-            // Secondary — Assign/Reassign + state-exclusive next verb.
-            // Overflow — Archive case.
+          avatar={{ icon: PlaneTakeoff, tone: 'blue' }}
+          title={c.beneficiaryName}
+          status={<DsEnumPill status={c.status} label={CASE_STAGE_LABEL[c.status]} />}
+          meta={[
+            { key: 'type', icon: FileBadge, content: `${humanType} case` },
+            {
+              key: 'sponsor',
+              icon: Building2,
+              content: c.sponsorName ? (
+                c.sponsorEmployerId ? (
+                  <Link href={`/employers/${c.sponsorEmployerId}`} className={LINK}>
+                    {c.sponsorName}
+                  </Link>
+                ) : (
+                  c.sponsorName
+                )
+              ) : null,
+            },
+            {
+              key: 'ref',
+              icon: Fingerprint,
+              content: c.authorityReference ? `Ref ${c.authorityReference}` : null,
+            },
+            {
+              key: 'requisition',
+              icon: Briefcase,
+              content: c.relatedJobRequisitionId ? (
+                <Link href={`/requisitions/${c.relatedJobRequisitionId}`} className={LINK}>
+                  Requisition
+                </Link>
+              ) : null,
+            },
+            {
+              key: 'placement',
+              icon: Trophy,
+              content: c.relatedPlacementId ? (
+                <Link href="/placements" className={LINK}>
+                  Placement
+                </Link>
+              ) : null,
+            },
+            {
+              key: 'engagement',
+              icon: Coins,
+              content: c.serviceEngagementId ? (
+                <Link href={`/engagements/${c.serviceEngagementId}`} className={LINK}>
+                  Candidate Services engagement
+                </Link>
+              ) : null,
+            },
+          ]}
+          chips={[
+            { key: 'owner', icon: UserRound, content: ownerChip },
+            {
+              key: 'opened',
+              icon: CalendarPlus,
+              content: (
+                <time dateTime={c.createdAt.toISOString()}>
+                  Opened {format(c.createdAt, 'd MMM yyyy · HH:mm')}
+                </time>
+              ),
+            },
+            {
+              key: 'reminder',
+              icon: BellRing,
+              content: c.reminderOn ? `Reminder ${day(c.reminderOn)}` : null,
+            },
+            {
+              key: 'expires',
+              icon: c.status === 'APPROVED' ? ShieldCheck : CalendarClock,
+              content: c.expiresOn ? `Permit expires ${day(c.expiresOn)}` : null,
+            },
+          ]}
+          actions={
+            // Primary — none; the Next step banner carries "do this next".
+            // Secondary — assign / reassign + the state's next verb.
+            // Overflow — archive.
             <RecordHeaderActions
               secondary={[
                 <AssignToMeButton
@@ -434,28 +456,30 @@ export default async function ImmigrationCaseDetail({
         />
       </FadeUp>
 
-      {nextAction && (
+      {banner && (
         <FadeUp delay={0.02}>
-          <NextActionCard
-            label={nextAction.label}
-            dueHint={nextAction.dueHint}
-            sentence={nextAction.sentence}
-            tone={nextAction.tone}
-            primary={nextAction.primary}
-            className="-mt-2 mb-6"
+          <NextActionBanner
+            label={banner.label}
+            dueHint={banner.dueHint}
+            sentence={banner.sentence}
+            tone={banner.tone}
+            primary={banner.primary}
+            className="mt-6"
           />
         </FadeUp>
       )}
 
-      <CaseTabs
-        overview={overviewTab}
-        documents={documentsTab}
-        tasks={tasksTab}
-        counts={{
-          documents: attachedDocs.length,
-          tasks: caseTasks.length,
-        }}
-      />
+      <div className="mt-6">
+        <CaseTabs
+          overview={overviewTab}
+          documents={documentsTab}
+          tasks={tasksTab}
+          counts={{
+            documents: attachedDocs.length,
+            tasks: caseTasks.length,
+          }}
+        />
+      </div>
     </div>
   );
 }

@@ -1,13 +1,26 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { type ReactNode, useRef } from 'react';
+import { useActiveTabInView } from '@/components/ds/use-active-tab-in-view';
+import { DS_TAB_COUNT, DS_TAB_TRIGGER, DS_TABS_LIST } from '@/components/ds/workspace';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 /**
- * Client boundary for the immigration case detail page. Same pattern
- * as the candidate + requisition tabs — server component fetches
- * everything, each tab receives a ReactNode.
+ * Immigration case workspace tabs — the Stage 6G underlined strip, with
+ * `?tab=` kept in sync so links such as the Next step "Open documents"
+ * land on the right tab and browser history works.
  */
+
+const TAB_ORDER = ['overview', 'documents', 'tasks'] as const;
+type CaseTab = (typeof TAB_ORDER)[number];
+
+const TAB_LABEL: Record<CaseTab, string> = {
+  overview: 'Overview',
+  documents: 'Documents',
+  tasks: 'Tasks',
+};
+
 export function CaseTabs({
   overview,
   documents,
@@ -17,31 +30,49 @@ export function CaseTabs({
   overview: ReactNode;
   documents: ReactNode;
   tasks: ReactNode;
-  counts: {
-    documents: number;
-    tasks: number;
-  };
+  counts: { documents: number; tasks: number };
 }) {
+  const router = useRouter();
+  const params = useSearchParams();
+  const raw = params.get('tab') ?? 'overview';
+  const current = (TAB_ORDER as readonly string[]).includes(raw) ? raw : 'overview';
+  const stripRef = useRef<HTMLDivElement>(null);
+  useActiveTabInView(stripRef, current);
+
+  function onChange(next: string) {
+    const sp = new URLSearchParams(params.toString());
+    if (next === 'overview') sp.delete('tab');
+    else sp.set('tab', next);
+    const qs = sp.toString();
+    router.replace(qs ? `?${qs}` : '?', { scroll: false });
+  }
+
+  const count: Partial<Record<CaseTab, number>> = {
+    documents: counts.documents,
+    tasks: counts.tasks,
+  };
+
   return (
-    <Tabs defaultValue="overview">
-      <TabsList>
-        <TabsTrigger value="overview">Overview</TabsTrigger>
-        <TabsTrigger value="documents">
-          Documents
-          <span className="ml-1 rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">
-            {counts.documents}
-          </span>
-        </TabsTrigger>
-        <TabsTrigger value="tasks">
-          Tasks
-          <span className="ml-1 rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">
-            {counts.tasks}
-          </span>
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value="overview">{overview}</TabsContent>
-      <TabsContent value="documents">{documents}</TabsContent>
-      <TabsContent value="tasks">{tasks}</TabsContent>
+    <Tabs value={current} onValueChange={onChange}>
+      <div ref={stripRef}>
+        <TabsList className={DS_TABS_LIST}>
+          {TAB_ORDER.map((v) => (
+            <TabsTrigger key={v} value={v} className={DS_TAB_TRIGGER}>
+              {TAB_LABEL[v]}
+              {typeof count[v] === 'number' && <span className={DS_TAB_COUNT}>{count[v]}</span>}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </div>
+      <TabsContent value="overview" className="mt-5">
+        {overview}
+      </TabsContent>
+      <TabsContent value="documents" className="mt-5">
+        {documents}
+      </TabsContent>
+      <TabsContent value="tasks" className="mt-5">
+        {tasks}
+      </TabsContent>
     </Tabs>
   );
 }

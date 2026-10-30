@@ -1,54 +1,72 @@
-import { PlaneTakeoff, Plus } from 'lucide-react';
-import { CaseScopeTabs } from '@/components/case-scope-tabs';
+import { CalendarClock, CheckCircle2, Globe, PlaneTakeoff, Plus, Send } from 'lucide-react';
+import Link from 'next/link';
 import { CsvExportButton } from '@/components/csv-export-button';
-import { EmptyMineNudge } from '@/components/empty-mine-nudge';
-import { ListSummaryStrip, type SummaryChip } from '@/components/list-summary-strip';
+import { FilterToolbar, StatusTabs, ViewToggle } from '@/components/ds/list-controls';
+import { Pagination, paginate } from '@/components/ds/pagination';
+import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
+import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { requireInternalStaff, requirePermission } from '@/lib/auth/session';
 import { parseAssignmentScope } from '@/lib/scope';
 import { fetchEmployers } from '@/modules/employers/service';
 import { fetchApplicationTypes } from '@/modules/immigration/application-types';
-import { CASE_STAGE_LABEL } from '@/modules/immigration/labels';
+import { CASE_TYPE_LABEL } from '@/modules/immigration/labels';
 import { resolveRaiseCasePrefill } from '@/modules/immigration/raise-prefill';
 import { fetchCases } from '@/modules/immigration/service';
 import { fetchPersons } from '@/modules/persons/service';
-import { CasesCardGrid, CasesViewToggle } from './case-card';
+import { CasesCardGrid } from './case-card';
 import { CaseDialog, type CaseDialogPrefill } from './case-dialog';
+import {
+  CASE_SORTS,
+  type CaseListParams,
+  filterCases,
+  matchesStage,
+  STAGE_TABS,
+  sortCases,
+  stageOf,
+} from './case-filters';
+import { CaseScopeTray } from './case-scope-tray';
 import { CasesTable } from './cases-table';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ImmigrationPage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    assigned?: string;
-    view?: string;
-    raisePerson?: string;
-    raisePlacement?: string;
-    raiseRequisition?: string;
-  }>;
-}) {
+const PER_OPTIONS = [12, 24, 48];
+
+type SP = CaseListParams & {
+  assigned?: string;
+  view?: string;
+  page?: string;
+  per?: string;
+  raisePerson?: string;
+  raisePlacement?: string;
+  raiseRequisition?: string;
+};
+
+/**
+ * Stage 6G — Immigration cases list (same pattern as the Recruitment and
+ * Candidate Services lists): header with primary actions, KPI tiles, scope /
+ * view row, filter bar, stage tabs with counts + sort, cards or table, and
+ * pagination. Every filter is a URL param; cards and table render the same
+ * filtered, sorted page.
+ */
+export default async function ImmigrationPage({ searchParams }: { searchParams: Promise<SP> }) {
   await requirePermission('immigration', 'cases', 'view');
   const session = await requireInternalStaff();
-  const { assigned, view, raisePerson, raisePlacement, raiseRequisition } = await searchParams;
-  const scope = parseAssignmentScope(assigned);
+  const sp = await searchParams;
+  const scope = parseAssignmentScope(sp.assigned);
 
   // Deep-link support: /immigration?raisePlacement=X (or raisePerson /
-  // raiseRequisition) pre-fills the Open-case dialog and pops it on
-  // mount. Lets a placements table row or pipeline card jump straight
-  // into raising a case for that specific candidate + sponsor + related
-  // placement, without the operator having to re-pick the beneficiary.
+  // raiseRequisition) pre-fills the Open-case dialog and pops it on mount.
   const raisePrefill: CaseDialogPrefill | undefined = await resolveRaiseCasePrefill({
-    personId: raisePerson,
-    placementId: raisePlacement,
-    requisitionId: raiseRequisition,
+    personId: sp.raisePerson,
+    placementId: sp.raisePlacement,
+    requisitionId: sp.raiseRequisition,
   });
-  // Cards are the default because the spec (§11) wants owner + candidate name
-  // at a glance across the whole list — the table is the drill-down view.
-  const cardView = view !== 'table';
+  // Cards are the default (spec §11: owner + candidate at a glance); the
+  // table is the drill-down view.
+  const cardView = sp.view !== 'table';
   const [cases, persons, employers, applicationTypes] = await Promise.all([
     fetchCases(scope),
     fetchPersons(),
@@ -56,30 +74,55 @@ export default async function ImmigrationPage({
     fetchApplicationTypes(),
   ]);
 
-  // Rollups for the summary strip — grouped by stage buckets that match the
-  // spec's user-facing lifecycle (New Candidate → Doc Collection → In
-  // Progress → Approved/Rejected).
-  const stageCounts = cases.reduce<Record<string, number>>((acc, c) => {
-    const label = CASE_STAGE_LABEL[c.status];
-    acc[label] = (acc[label] ?? 0) + 1;
-    return acc;
-  }, {});
+  // ── KPI tiles over the current scope.
+  const today = new Date().toISOString().slice(0, 10);
+  const in60 = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const inProgress = cases.filter(
+    (c) => c.status === 'SUBMITTED' || c.status === 'UNDER_AUTHORITY_REVIEW',
+  ).length;
+  const approved = cases.filter((c) => c.status === 'APPROVED').length;
+  const expiringSoon = cases.filter(
+    (c) => c.expiresOn && c.expiresOn >= today && c.expiresOn <= in60,
+  ).length;
   const mineCount = cases.filter((c) => c.assignedUserId === session.user.id).length;
-  const summaryChips: SummaryChip[] = [
-    { label: 'mine', value: mineCount, tone: 'info' },
-    { label: 'new', value: stageCounts['New Candidate'] ?? 0 },
-    { label: 'documents', value: stageCounts['Document Collection'] ?? 0 },
-    { label: 'in progress', value: stageCounts['Application In Progress'] ?? 0, tone: 'warning' },
-    { label: 'approved', value: stageCounts.Approved ?? 0, tone: 'success' },
-    { label: 'rejected', value: stageCounts.Rejected ?? 0, tone: 'destructive' },
-  ];
-  // Session 35 — `mine` is the default; only non-default scopes earn a chip.
-  const activeFilters =
-    scope === 'all'
-      ? [{ label: 'scope: All Cases' }]
-      : scope === 'unassigned'
-        ? [{ label: 'scope: Unassigned' }]
-        : [];
+
+  // ── Filters → stage tab → sort → page (one pipeline for both views).
+  const filtered = filterCases(cases, sp);
+  const stage = stageOf(sp.stage);
+  const staged = filtered.filter((c) => matchesStage(c, stage.key));
+  const pageData = paginate(sortCases(staged, sp.sort), sp.page, sp.per, PER_OPTIONS);
+
+  // Filter options come from the cases in scope so every choice can match.
+  const appTypeOptions = Array.from(
+    new Map(
+      cases
+        .filter((c) => c.applicationTypeId && c.applicationTypeName)
+        .map((c) => [c.applicationTypeId as string, c.applicationTypeName as string]),
+    ),
+  )
+    .sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([value, label]) => ({ value, label }));
+  const sponsorOptions = Array.from(
+    new Map(
+      cases
+        .filter((c) => c.sponsorEmployerId && c.sponsorName)
+        .map((c) => [c.sponsorEmployerId as string, c.sponsorName as string]),
+    ),
+  )
+    .sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([value, label]) => ({ value, label }));
+  const ownerOptions = Array.from(
+    new Map(
+      cases
+        .filter((c) => c.assignedUserId && c.ownerName)
+        .map((c) => [c.assignedUserId as string, c.ownerName as string]),
+    ),
+  ).map(([value, label]) => ({ value, label }));
+
+  const emptyMine = scope === 'mine' && cases.length === 0;
+  // Page links keep the list params but never the one-shot "raise case"
+  // deep-link params (they would re-open the dialog on every page change).
+  const { raisePerson: _rp, raisePlacement: _rpl, raiseRequisition: _rr, ...listParams } = sp;
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
@@ -90,9 +133,7 @@ export default async function ImmigrationPage({
           title="Immigration cases"
           description="Employment Permits, Visas, and Visa Extensions. Independent of placements — can run for any employer / person combination."
           action={
-            <div className="flex flex-wrap items-center gap-2">
-              <CaseScopeTabs current={scope} />
-              <CasesViewToggle current={cardView ? 'grid' : 'table'} />
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <CsvExportButton href="/api/export/immigration" />
               <CaseDialog
                 persons={persons}
@@ -101,7 +142,7 @@ export default async function ImmigrationPage({
                 prefill={raisePrefill}
                 defaultOpen={Boolean(raisePrefill)}
                 trigger={
-                  <Button size="sm">
+                  <Button>
                     <Plus className="mr-1.5 size-4" /> Open case
                   </Button>
                 }
@@ -110,21 +151,173 @@ export default async function ImmigrationPage({
           }
         />
       </FadeUp>
-      <FadeUp delay={0.05}>
-        <ListSummaryStrip
-          total={cases.length}
-          totalLabel="cases"
-          chips={summaryChips}
-          filters={activeFilters}
-        />
+
+      <FadeUp delay={0.03}>
+        <StatTileGrid>
+          <StatTile
+            icon={PlaneTakeoff}
+            tone="blue"
+            label="Cases"
+            value={cases.length}
+            hint={scope === 'mine' ? 'Assigned to you' : `${mineCount} assigned to you`}
+          />
+          <StatTile
+            icon={Send}
+            tone="violet"
+            label="Application in progress"
+            value={inProgress}
+            hint="Submitted or under review"
+          />
+          <StatTile
+            icon={CheckCircle2}
+            tone="green"
+            label="Approved"
+            value={approved}
+            hint="Decision received"
+          />
+          <StatTile
+            icon={CalendarClock}
+            tone="amber"
+            label="Expiring in 60 days"
+            value={expiringSoon}
+            hint="Renewals to plan"
+          />
+        </StatTileGrid>
       </FadeUp>
-      {scope === 'mine' && cases.length === 0 && (
-        <FadeUp delay={0.06}>
-          <EmptyMineNudge resourceLabel="cases" seeAllHref="/immigration?assigned=all" />
-        </FadeUp>
-      )}
-      <FadeUp delay={0.08}>
-        {cardView ? <CasesCardGrid cases={cases} /> : <CasesTable cases={cases} />}
+
+      <FadeUp delay={0.05}>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+          <CaseScopeTray current={scope} />
+          <ViewToggle current={cardView ? 'cards' : 'table'} defaultView="cards" />
+        </div>
+        <div className="mt-3">
+          <FilterToolbar
+            searchPlaceholder="Search name, sponsor, ref…"
+            selects={[
+              {
+                param: 'type',
+                label: 'Case type',
+                multiple: true,
+                options: [
+                  { value: '', label: 'All case types' },
+                  ...Object.entries(CASE_TYPE_LABEL).map(([value, label]) => ({ value, label })),
+                ],
+              },
+              {
+                param: 'apptype',
+                label: 'Application type',
+                multiple: true,
+                options: [{ value: '', label: 'All types' }, ...appTypeOptions],
+              },
+              {
+                param: 'sponsor',
+                label: 'Sponsor',
+                multiple: true,
+                secondary: true,
+                options: [
+                  { value: '', label: 'All sponsors' },
+                  { value: 'none', label: 'No sponsor' },
+                  ...sponsorOptions,
+                ],
+              },
+              {
+                param: 'owner',
+                label: 'Owner',
+                secondary: true,
+                options: [
+                  { value: '', label: 'All owners' },
+                  { value: 'none', label: 'Unassigned' },
+                  ...ownerOptions,
+                ],
+              },
+              {
+                param: 'expiring',
+                label: 'Expiry',
+                secondary: true,
+                options: [
+                  { value: '', label: 'Any expiry' },
+                  { value: '60', label: 'Expiring in 60 days' },
+                  { value: 'expired', label: 'Already expired' },
+                ],
+              },
+            ]}
+          />
+        </div>
+      </FadeUp>
+
+      <FadeUp delay={0.07}>
+        <div className="mt-4">
+          <StatusTabs
+            ariaLabel="Case stage"
+            param="stage"
+            tabs={STAGE_TABS.map((t) => ({
+              key: t.key,
+              label: t.label,
+              tone: 'tone' in t ? t.tone : undefined,
+              count: filtered.filter((c) => matchesStage(c, t.key)).length,
+            }))}
+            sort={CASE_SORTS}
+          />
+        </div>
+      </FadeUp>
+
+      <FadeUp delay={0.09}>
+        <div className="mt-4">
+          {pageData.total === 0 ? (
+            // One boxed message (was the "mine" nudge plus a second empty state).
+            <div
+              data-testid="immigration-empty"
+              className="rounded-2xl border border-border/60 bg-card shadow-sm"
+            >
+              <EmptyState
+                icon={PlaneTakeoff}
+                title={
+                  cases.length === 0 ? 'No immigration cases yet' : 'No cases match these filters'
+                }
+                description={
+                  emptyMine
+                    ? 'Nothing is assigned to you yet. Switch to Global Cases to see everyone’s work, or click "Open case" to record one.'
+                    : cases.length === 0
+                      ? 'Employment Permits, Visas, and Visa Extensions all live here. Click "Open case" above to record the first one.'
+                      : 'Clear the filters or pick another stage tab.'
+                }
+                action={
+                  emptyMine ? (
+                    <Link
+                      href="/immigration?assigned=all"
+                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                    >
+                      <Globe className="mr-1.5 size-3.5" aria-hidden /> See Global Cases
+                    </Link>
+                  ) : undefined
+                }
+              />
+            </div>
+          ) : cardView ? (
+            <CasesCardGrid cases={pageData.items} />
+          ) : (
+            <>
+              {/* Phones get cards in table view too: the table needs more width. */}
+              <div className="hidden md:block">
+                <CasesTable cases={pageData.items} />
+              </div>
+              <div className="md:hidden">
+                <CasesCardGrid cases={pageData.items} />
+              </div>
+            </>
+          )}
+          <Pagination
+            basePath="/immigration"
+            params={listParams}
+            page={pageData.page}
+            pages={pageData.pages}
+            per={pageData.per}
+            total={pageData.total}
+            start={pageData.start}
+            noun="cases"
+            perOptions={PER_OPTIONS}
+          />
+        </div>
       </FadeUp>
     </div>
   );

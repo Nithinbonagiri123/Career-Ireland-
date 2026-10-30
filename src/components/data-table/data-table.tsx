@@ -257,12 +257,16 @@ export function DataTable<TData, TValue>({
     return (
       <div className="space-y-3">
         {toolbar}
-        <EmptyState
-          icon={emptyIcon}
-          title={emptyTitle}
-          description={emptyDescription}
-          action={emptyAction}
-        />
+        {/* Stage 6G: the empty state has no box of its own, so give it the
+            same white card a populated table sits in. */}
+        <div className="rounded-2xl border border-border/60 bg-card shadow-sm">
+          <EmptyState
+            icon={emptyIcon}
+            title={emptyTitle}
+            description={emptyDescription}
+            action={emptyAction}
+          />
+        </div>
       </div>
     );
   }

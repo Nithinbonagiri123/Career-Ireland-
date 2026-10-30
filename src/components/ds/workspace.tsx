@@ -148,45 +148,49 @@ export function NextActionBanner({
   const urgent = tone === 'urgent';
   const muted = tone === 'muted';
   return (
+    // Sized to its own width (container query), so it stacks in narrow
+    // columns and tablets instead of squeezing the sentence.
     <section
       aria-label="Next step"
       data-testid={testId}
       className={cn(
-        'flex flex-col gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3 shadow-sm sm:flex-row sm:items-center',
+        '@container rounded-2xl border border-border/60 bg-card px-4 py-3 shadow-sm',
         className,
       )}
     >
-      <span
-        className={cn(
-          'inline-flex w-fit shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 ring-inset',
-          urgent
-            ? 'bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/30'
-            : muted
-              ? 'bg-muted text-muted-foreground ring-border'
-              : 'bg-sky-50 text-primary ring-sky-200 dark:bg-sky-500/15 dark:text-sky-200 dark:ring-sky-500/30',
-        )}
-      >
-        <ClipboardList className="size-3.5" aria-hidden />
-        {sentenceCase(label)}
-      </span>
-      <div className="min-w-0 flex-1 text-sm text-foreground">
-        {sentence}
-        {dueHint && <span className="ml-2 text-xs text-muted-foreground">· {dueHint}</span>}
-      </div>
-      {action ? (
-        <div className="w-fit shrink-0">{action}</div>
-      ) : primary ? (
-        <Link
-          href={primary.href}
+      <div className="flex flex-col gap-3 @2xl:flex-row @2xl:items-center">
+        <span
           className={cn(
-            buttonVariants({ variant: urgent ? 'default' : 'outline', size: 'sm' }),
-            'w-fit shrink-0',
+            'inline-flex w-fit shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 ring-inset',
+            urgent
+              ? 'bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/30'
+              : muted
+                ? 'bg-muted text-muted-foreground ring-border'
+                : 'bg-sky-50 text-primary ring-sky-200 dark:bg-sky-500/15 dark:text-sky-200 dark:ring-sky-500/30',
           )}
         >
-          {primary.label}
-          <ArrowRight className="ml-1 size-3.5" aria-hidden />
-        </Link>
-      ) : null}
+          <ClipboardList className="size-3.5" aria-hidden />
+          {sentenceCase(label)}
+        </span>
+        <div className="min-w-0 flex-1 text-sm text-foreground">
+          {sentence}
+          {dueHint && <span className="ml-2 text-xs text-muted-foreground">· {dueHint}</span>}
+        </div>
+        {action ? (
+          <div className="w-fit shrink-0">{action}</div>
+        ) : primary ? (
+          <Link
+            href={primary.href}
+            className={cn(
+              buttonVariants({ variant: urgent ? 'default' : 'outline', size: 'sm' }),
+              'w-fit shrink-0',
+            )}
+          >
+            {primary.label}
+            <ArrowRight className="ml-1 size-3.5" aria-hidden />
+          </Link>
+        ) : null}
+      </div>
     </section>
   );
 }

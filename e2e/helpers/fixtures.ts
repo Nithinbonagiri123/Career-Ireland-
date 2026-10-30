@@ -14,7 +14,24 @@ async function mods() {
   const personsSchema = await import('../../src/lib/db/schema/persons');
   const campaigns = await import('../../src/lib/db/schema/campaigns');
   const io = await import('../../src/lib/db/schema/interviews_offers');
-  return { db, eq, inArray, sql, s: { ...recruitment, ...personsSchema, ...campaigns, ...io } };
+  const immigration = await import('../../src/lib/db/schema/immigration');
+  const activities = await import('../../src/lib/db/schema/activities');
+  const reference = await import('../../src/lib/db/schema/reference');
+  return {
+    db,
+    eq,
+    inArray,
+    sql,
+    s: {
+      ...recruitment,
+      ...personsSchema,
+      ...campaigns,
+      ...io,
+      ...immigration,
+      ...activities,
+      ...reference,
+    },
+  };
 }
 
 const stamp = () => Math.random().toString(36).slice(2, 7);
@@ -362,6 +379,211 @@ export async function seedInterviewOfferScenario() {
             m.sql`, `,
           )}))
           + (SELECT count(*) FROM job_requisitions WHERE id = ${ids.jobId}::uuid)
+          + (SELECT count(*) FROM employers WHERE id = ${ids.employerId}::uuid)
+        )::text AS n`);
+      return Number(r?.n ?? 0);
+    },
+  };
+}
+
+/**
+ * Populated Immigration scenario for the Stage 6G baseline and redesign
+ * specs. One sponsor employer, six beneficiaries (no candidate profiles, so
+ * matching runs in other tests can never attach rows to them) and one case
+ * per stage. The OPEN case also carries three document requirements
+ * (two MISSING, one PROVIDED, using existing document types read-only) and
+ * two tasks (one open, one done). Every name carries a random tag; cleanup
+ * deletes exactly these rows by id, and is safe to call twice.
+ */
+export async function seedImmigrationScenario() {
+  const m = await mods();
+  const tag = stamp();
+  const owner = await e2eAdminId();
+  const isoDate = (days: number) =>
+    new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+
+  const [emp] = await m.db
+    .insert(m.s.employers)
+    .values({
+      assignedUserId: owner,
+      legalName: `Fixture Sponsor ${tag}`,
+      industry: 'Healthcare',
+      city: 'Cork',
+      country: 'Ireland',
+      relationshipStatus: 'ACTIVE',
+    })
+    .returning({ id: m.s.employers.id });
+  if (!emp) throw new Error('fixture failed');
+
+  const stages = [
+    { key: 'open', first: 'Maeve', last: `Brennan${tag}`, status: 'OPEN' },
+    { key: 'docs', first: 'Darragh', last: `Coyle${tag}`, status: 'DOCUMENTS_PENDING' },
+    { key: 'submitted', first: 'Saoirse', last: `Duffy${tag}`, status: 'SUBMITTED' },
+    { key: 'review', first: 'Oisin', last: `Egan${tag}`, status: 'UNDER_AUTHORITY_REVIEW' },
+    { key: 'approved', first: 'Aisling', last: `Farrell${tag}`, status: 'APPROVED' },
+    { key: 'rejected', first: 'Cathal', last: `Geraghty${tag}`, status: 'REJECTED' },
+  ] as const;
+  const personRows = await m.db
+    .insert(m.s.persons)
+    .values(
+      stages.map((p) => ({
+        firstName: p.first,
+        lastName: p.last,
+        email: `imm-${p.key}.${tag}@fixture.example.test`,
+        source: 'DIRECT' as const,
+      })),
+    )
+    .returning({ id: m.s.persons.id });
+  if (personRows.length !== stages.length) throw new Error('fixture failed');
+
+  const caseRows = await m.db
+    .insert(m.s.immigrationCases)
+    .values(
+      stages.map((p, i) => {
+        const submitted = ['SUBMITTED', 'UNDER_AUTHORITY_REVIEW', 'APPROVED', 'REJECTED'].includes(
+          p.status,
+        );
+        const decided = p.status === 'APPROVED' || p.status === 'REJECTED';
+        return {
+          caseType: (i % 3 === 1 ? 'VISA' : 'EMPLOYMENT_PERMIT') as 'VISA' | 'EMPLOYMENT_PERMIT',
+          beneficiaryPersonId: personRows[i]?.id as string,
+          // The OPEN case is sponsored, so the employer panel has a row.
+          sponsorEmployerId: p.key === 'open' || p.key === 'approved' ? emp.id : null,
+          status: p.status,
+          authorityReference: submitted ? `DETE-${tag}-${i}` : null,
+          submittedAt: submitted ? isoDate(-20) : null,
+          decisionAt: decided ? isoDate(-3) : null,
+          expiresOn: p.status === 'APPROVED' ? isoDate(30) : null,
+          assignedUserId: owner,
+          notes: `Fixture case ${tag}`,
+        };
+      }),
+    )
+    .returning({ id: m.s.immigrationCases.id });
+  if (caseRows.length !== stages.length) throw new Error('fixture failed');
+  const caseIds = caseRows.map((r) => r.id);
+  const byStage = Object.fromEntries(stages.map((p, i) => [p.key, caseIds[i] as string])) as Record<
+    (typeof stages)[number]['key'],
+    string
+  >;
+
+  // Requirements on the OPEN case from existing person document types.
+  const docTypes = await m.db
+    .select({ id: m.s.documentTypes.id, name: m.s.documentTypes.name })
+    .from(m.s.documentTypes)
+    .where(
+      m.sql`${m.s.documentTypes.isActive} = true AND ${m.s.documentTypes.appliesTo} IN ('PERSON', 'BOTH')`,
+    )
+    .orderBy(m.s.documentTypes.name)
+    .limit(3);
+  const reqStatuses = ['MISSING', 'PROVIDED', 'MISSING'] as const;
+  const reqRows = docTypes.length
+    ? await m.db
+        .insert(m.s.immigrationCaseDocumentRequirements)
+        .values(
+          docTypes.map((d, i) => ({
+            immigrationCaseId: byStage.open,
+            documentTypeId: d.id,
+            status: reqStatuses[i] ?? 'MISSING',
+            isMandatory: (i === 2 ? 'OPTIONAL' : 'MANDATORY') as 'OPTIONAL' | 'MANDATORY',
+          })),
+        )
+        .returning({ id: m.s.immigrationCaseDocumentRequirements.id })
+    : [];
+
+  const taskTitles = {
+    open: `Chase medical certificate ${tag}`,
+    done: `Book passport photos ${tag}`,
+  };
+  const taskRows = await m.db
+    .insert(m.s.tasks)
+    .values([
+      {
+        title: taskTitles.open,
+        assignedUserId: owner,
+        immigrationCaseId: byStage.open,
+        priority: 'HIGH' as const,
+        status: 'OPEN' as const,
+        dueAt: new Date(Date.now() + 2 * 86_400_000),
+      },
+      {
+        title: taskTitles.done,
+        assignedUserId: owner,
+        immigrationCaseId: byStage.open,
+        priority: 'NORMAL' as const,
+        status: 'DONE' as const,
+        completedAt: new Date(Date.now() - 86_400_000),
+      },
+    ])
+    .returning({ id: m.s.tasks.id });
+
+  const ids = {
+    tag,
+    employerId: emp.id,
+    employerName: `Fixture Sponsor ${tag}`,
+    personIds: personRows.map((r) => r.id),
+    caseIds,
+    requirementIds: reqRows.map((r) => r.id),
+    requirementNames: docTypes.map((d) => d.name),
+    taskIds: taskRows.map((r) => r.id),
+    taskTitles,
+  };
+  const names = Object.fromEntries(stages.map((p) => [p.key, `${p.first} ${p.last}`])) as Record<
+    (typeof stages)[number]['key'],
+    string
+  >;
+  const inList = (list: string[]) =>
+    m.sql.join(
+      list.map((id) => m.sql`${id}::uuid`),
+      m.sql`, `,
+    );
+  let cleaned = false;
+  return {
+    ...ids,
+    /** Case id per stage: open, docs, submitted, review, approved, rejected. */
+    cases: byStage,
+    /** Beneficiary full name per stage. */
+    names,
+    cleanup: async () => {
+      if (cleaned) return;
+      const all = [
+        ids.employerId,
+        ...ids.personIds,
+        ...ids.caseIds,
+        ...ids.taskIds,
+        ...ids.requirementIds,
+      ];
+      await m.db.execute(
+        m.sql`DELETE FROM audit_events WHERE entity_id IN (${m.sql.join(
+          all.map((id) => m.sql`${id}`),
+          m.sql`, `,
+        )})`,
+      );
+      // Tasks the app may have auto-generated for these cases are theirs too.
+      await m.db.delete(m.s.tasks).where(m.inArray(m.s.tasks.immigrationCaseId, ids.caseIds));
+      await m.db
+        .delete(m.s.immigrationCaseDocuments)
+        .where(m.inArray(m.s.immigrationCaseDocuments.immigrationCaseId, ids.caseIds));
+      if (ids.requirementIds.length)
+        await m.db
+          .delete(m.s.immigrationCaseDocumentRequirements)
+          .where(m.inArray(m.s.immigrationCaseDocumentRequirements.id, ids.requirementIds));
+      await m.db
+        .delete(m.s.immigrationCases)
+        .where(m.inArray(m.s.immigrationCases.id, ids.caseIds));
+      await m.db.delete(m.s.persons).where(m.inArray(m.s.persons.id, ids.personIds));
+      await m.db.delete(m.s.employers).where(m.eq(m.s.employers.id, ids.employerId));
+      cleaned = true;
+    },
+    /** Read-only: how many seeded rows still exist (0 after cleanup). */
+    remaining: async () => {
+      const [r] = await m.db.execute<{ n: string }>(m.sql`
+        SELECT (
+          (SELECT count(*) FROM tasks WHERE immigration_case_id IN (${inList(ids.caseIds)}))
+          + (SELECT count(*) FROM immigration_case_document_requirements
+               WHERE immigration_case_id IN (${inList(ids.caseIds)}))
+          + (SELECT count(*) FROM immigration_cases WHERE id IN (${inList(ids.caseIds)}))
+          + (SELECT count(*) FROM persons WHERE id IN (${inList(ids.personIds)}))
           + (SELECT count(*) FROM employers WHERE id = ${ids.employerId}::uuid)
         )::text AS n`);
       return Number(r?.n ?? 0);

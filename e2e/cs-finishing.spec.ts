@@ -112,3 +112,18 @@ test.describe('phones', () => {
     }
   });
 });
+
+test('multi-select keeps both picks when two options are clicked quickly', async ({ page }) => {
+  await page.goto('/candidates?assigned=all', { waitUntil: 'networkidle' });
+  const filters = page.getByRole('region', { name: 'Filters' });
+  await filters.getByRole('button', { name: /^Status/ }).click();
+  // No waiting between the clicks: the second must not drop the first.
+  // Click the visible labels, as a user would (the inputs are visually hidden).
+  const option = (name: string) =>
+    page.locator('label').filter({ has: page.getByRole('checkbox', { name, exact: true }) });
+  await option('Available').click();
+  await option('Placed').click();
+  await expect
+    .poll(() => (params(page.url()).get('status') ?? '').split(',').sort().join(','))
+    .toBe('AVAILABLE,PLACED');
+});

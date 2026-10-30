@@ -1,5 +1,5 @@
 import { AlertTriangle, FileText, HandCoins, Hourglass } from 'lucide-react';
-import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
+import { StatTile } from '@/components/ds/stat-tile';
 import { formatCurrency } from '@/lib/currency';
 import { isInvoiceOverdue } from '@/modules/billing/aging';
 import type { PersonBillingRow } from '@/modules/billing/read';
@@ -52,13 +52,16 @@ export function FinancialSummaryCard({ invoices }: { invoices: PersonBillingRow[
   const rows = Array.from(perCurrency.entries()).sort(([a], [b]) => a.localeCompare(b));
 
   return (
-    <div className="space-y-3">
+    // Sized to its own container, not the window: four tiles across only
+    // when the card is wide (full-width Employer billing); two by two in
+    // narrower columns (Immigration case, Job billing) so amounts never clip.
+    <div className="@container space-y-3">
       {rows.map(([currencyCode, b]) => (
         <div key={currencyCode} className="space-y-2">
           {rows.length > 1 && (
             <p className="text-xs font-medium text-muted-foreground">{currencyCode}</p>
           )}
-          <StatTileGrid>
+          <div className="grid grid-cols-2 gap-3 @4xl:grid-cols-4">
             <StatTile
               icon={FileText}
               tone="blue"
@@ -87,7 +90,7 @@ export function FinancialSummaryCard({ invoices }: { invoices: PersonBillingRow[
                   : `${b.overdueCount} ${b.overdueCount === 1 ? 'invoice' : 'invoices'}`
               }
             />
-          </StatTileGrid>
+          </div>
         </div>
       ))}
     </div>

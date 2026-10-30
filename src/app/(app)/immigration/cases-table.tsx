@@ -1,48 +1,56 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
+import { format } from 'date-fns';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DataTable } from '@/components/data-table/data-table';
+import { FOCUS_RING } from '@/components/ds/segmented';
+import { DsStatusPill } from '@/components/ds/status-pill';
 import { OwnerAvatar } from '@/components/owner-avatar';
-import { Badge } from '@/components/ui/badge';
-import { statusTone } from '@/lib/ui/status-tone';
+import { cn } from '@/lib/utils';
 import { CASE_STAGE_LABEL, CASE_TYPE_LABEL } from '@/modules/immigration/labels';
 import type { CaseListRow } from '@/modules/immigration/service';
+import { CASE_STATUS_TONE } from './case-filters';
 
 const columns: ColumnDef<CaseListRow>[] = [
   {
-    header: 'Type',
-    accessorKey: 'caseType',
-    size: 150,
+    header: 'Beneficiary',
+    accessorKey: 'beneficiaryName',
     cell: ({ row }) => (
-      <div className="flex flex-col">
-        <Badge variant="secondary" className="w-fit rounded-full text-[10px]">
-          {CASE_TYPE_LABEL[row.original.caseType]}
-        </Badge>
-        {row.original.applicationTypeName && (
-          <span className="mt-1 text-[10px] text-muted-foreground">
-            {row.original.applicationTypeName}
-          </span>
+      <div className="flex min-w-0 flex-col">
+        {/* A real link so keyboard users can open the case (the row click
+            stays as a mouse shortcut). */}
+        <Link
+          href={`/immigration/${row.original.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className={cn('w-fit rounded-sm text-sm font-semibold hover:underline', FOCUS_RING)}
+        >
+          {row.original.beneficiaryName}
+        </Link>
+        {row.original.sponsorName && (
+          <span className="text-xs text-muted-foreground">Sponsor: {row.original.sponsorName}</span>
         )}
       </div>
     ),
   },
   {
-    header: 'Beneficiary',
-    accessorKey: 'beneficiaryName',
+    header: 'Type',
+    accessorKey: 'caseType',
+    size: 190,
     cell: ({ row }) => (
       <div className="flex flex-col">
-        <span className="text-sm font-medium">{row.original.beneficiaryName}</span>
-        <span className="text-xs text-muted-foreground">
-          Sponsor: {row.original.sponsorName ?? '—'}
-        </span>
+        <span className="text-sm">{CASE_TYPE_LABEL[row.original.caseType]}</span>
+        {row.original.applicationTypeName && (
+          <span className="text-xs text-muted-foreground">{row.original.applicationTypeName}</span>
+        )}
       </div>
     ),
   },
   {
     header: 'Owner',
     accessorKey: 'ownerName',
-    size: 160,
+    size: 170,
     cell: ({ row }) => (
       <OwnerAvatar
         user={
@@ -59,29 +67,33 @@ const columns: ColumnDef<CaseListRow>[] = [
     header: 'Reference',
     accessorKey: 'authorityReference',
     size: 140,
-    cell: ({ row }) => (
-      <span className="font-mono text-xs text-muted-foreground">
-        {row.original.authorityReference ?? '—'}
-      </span>
-    ),
+    cell: ({ row }) =>
+      row.original.authorityReference ? (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.original.authorityReference}
+        </span>
+      ) : null,
   },
   {
     header: 'Stage',
     accessorKey: 'status',
-    size: 180,
+    size: 200,
     cell: ({ row }) => (
-      <Badge variant={statusTone(row.original.status)} className="rounded-full">
+      <DsStatusPill tone={CASE_STATUS_TONE[row.original.status]}>
         {CASE_STAGE_LABEL[row.original.status]}
-      </Badge>
+      </DsStatusPill>
     ),
   },
   {
     header: 'Expires',
     accessorKey: 'expiresOn',
     size: 120,
-    cell: ({ row }) => (
-      <span className="text-xs text-muted-foreground">{row.original.expiresOn ?? '—'}</span>
-    ),
+    cell: ({ row }) =>
+      row.original.expiresOn ? (
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {format(new Date(row.original.expiresOn), 'd MMM yyyy')}
+        </span>
+      ) : null,
   },
 ];
 
@@ -92,8 +104,8 @@ export function CasesTable({ cases }: { cases: CaseListRow[] }) {
       columns={columns}
       data={cases}
       onRowClick={(row) => router.push(`/immigration/${row.id}`)}
-      emptyTitle="No immigration cases yet"
-      emptyDescription="Employment Permits, Visas, and Visa Extensions all live here. Click 'Open case' above to record the first one."
+      emptyTitle="No immigration cases match"
+      emptyDescription="Clear the filters or pick another stage tab."
     />
   );
 }

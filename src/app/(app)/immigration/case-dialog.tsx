@@ -1,12 +1,12 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import { type ReactElement, useEffect, useMemo } from 'react';
+import { type ReactElement, type ReactNode, useEffect, useMemo } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';
-import { FormSection } from '@/components/form-section';
 import { PersonPicker } from '@/components/person-picker';
 import { PersonPreviewCard } from '@/components/person-preview-card';
 import { SubmitButton } from '@/components/submit-button';
@@ -133,7 +133,7 @@ export function CaseDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-6" noValidate>
-          <FormSection title="Case">
+          <CaseSection title="Case">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField id="ic-type" label="Case type">
                 <Select id="ic-type" {...register('caseType')}>
@@ -237,9 +237,9 @@ export function CaseDialog({
                 ))}
               </Select>
             </FormField>
-          </FormSection>
+          </CaseSection>
 
-          <FormSection
+          <CaseSection
             title="Timeline"
             description="Dates and the authority reference once this case is in motion."
             collapsible
@@ -271,13 +271,13 @@ export function CaseDialog({
                 {...register('authorityReference')}
               />
             </FormField>
-          </FormSection>
+          </CaseSection>
 
-          <FormSection title="Notes" collapsible>
+          <CaseSection title="Notes" collapsible>
             <FormField id="ic-notes" label="Notes">
               <Textarea id="ic-notes" rows={3} {...register('notes')} />
             </FormField>
-          </FormSection>
+          </CaseSection>
 
           <FormErrorAlert error={formError} />
 
@@ -288,5 +288,51 @@ export function CaseDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Stage 6G dialog section: sentence-case heading (the shared FormSection
+ * renders an uppercase eyebrow). Collapsible sections stay native
+ * <details>/<summary>, so keyboard and open/close behaviour are unchanged.
+ */
+function CaseSection({
+  title,
+  description,
+  collapsible = false,
+  children,
+}: {
+  title: string;
+  description?: ReactNode;
+  collapsible?: boolean;
+  children: ReactNode;
+}) {
+  const heading = (
+    <div className="min-w-0">
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+    </div>
+  );
+  if (!collapsible) {
+    return (
+      <section className="space-y-3">
+        {heading}
+        <div className="space-y-3">{children}</div>
+      </section>
+    );
+  }
+  return (
+    <details className="group/section space-y-3 border-t border-border/60 pt-4">
+      <summary className="-mx-1 cursor-pointer list-none rounded-md px-1 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <div className="flex items-start justify-between gap-3">
+          {heading}
+          <ChevronRight
+            className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open/section:rotate-90"
+            aria-hidden
+          />
+        </div>
+      </summary>
+      <div className="space-y-3 pt-1">{children}</div>
+    </details>
   );
 }

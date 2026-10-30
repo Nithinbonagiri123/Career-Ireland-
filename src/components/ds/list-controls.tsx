@@ -325,6 +325,14 @@ function MultiSelectFilter({
   values: string[];
   onChange: (values: string[]) => void;
 }) {
+  // Local copy of the selection so quick successive clicks build on each
+  // other instead of on the URL, which updates a moment later.
+  const [selected, setSelected] = useState(values);
+  const urlKey = values.join(',');
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-sync only when the URL value changes
+  useEffect(() => {
+    setSelected(values);
+  }, [urlKey]);
   const [open, setOpen] = useState(false);
   const [needle, setNeedle] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -338,11 +346,11 @@ function MultiSelectFilter({
     ? choices.filter((o) => o.label.toLowerCase().includes(needle.toLowerCase()))
     : choices;
   const summary =
-    values.length === 0
+    selected.length === 0
       ? allLabel
-      : values.length === 1
-        ? (choices.find((o) => o.value === values[0])?.label ?? values[0])
-        : `${values.length} selected`;
+      : selected.length === 1
+        ? (choices.find((o) => o.value === selected[0])?.label ?? selected[0])
+        : `${selected.length} selected`;
 
   useEffect(() => {
     if (!open) return;
@@ -363,8 +371,11 @@ function MultiSelectFilter({
     };
   }, [open]);
 
-  const toggle = (v: string) =>
-    onChange(values.includes(v) ? values.filter((x) => x !== v) : [...values, v]);
+  const toggle = (v: string) => {
+    const next = selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v];
+    setSelected(next);
+    onChange(next);
+  };
 
   return (
     <div ref={wrapRef} className="relative min-w-0 space-y-1 lg:flex-1">
@@ -383,16 +394,16 @@ function MultiSelectFilter({
         className={cn(
           'flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-xl border border-border/70 bg-background px-3 text-left text-sm text-foreground shadow-xs',
           FOCUS_RING,
-          values.length > 0 && 'border-primary/40 bg-sky-50/60 dark:bg-sky-500/10',
+          selected.length > 0 && 'border-primary/40 bg-sky-50/60 dark:bg-sky-500/10',
         )}
       >
         <span id={`${labelId}-v`} className="truncate">
           {summary}
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
-          {values.length > 1 && (
+          {selected.length > 1 && (
             <span className="rounded-md bg-primary px-1.5 text-xs tabular-nums text-primary-foreground">
-              {values.length}
+              {selected.length}
             </span>
           )}
           <ChevronDown className="size-4 text-muted-foreground" aria-hidden />
@@ -417,7 +428,7 @@ function MultiSelectFilter({
             )}
             <div className="max-h-64 space-y-0.5 overflow-y-auto">
               {shown.map((o) => {
-                const checked = values.includes(o.value);
+                const checked = selected.includes(o.value);
                 return (
                   <label
                     key={o.value}
@@ -449,11 +460,14 @@ function MultiSelectFilter({
               )}
             </div>
           </fieldset>
-          {values.length > 0 && (
+          {selected.length > 0 && (
             <div className="mt-2 flex justify-end border-t border-border/60 pt-2">
               <button
                 type="button"
-                onClick={() => onChange([])}
+                onClick={() => {
+                  setSelected([]);
+                  onChange([]);
+                }}
                 className={cn(
                   'rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground',
                   FOCUS_RING,

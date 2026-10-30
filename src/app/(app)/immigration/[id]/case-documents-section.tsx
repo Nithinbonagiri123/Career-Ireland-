@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Download,
+  FileStack,
   FileText,
   Link2,
   Paperclip,
@@ -18,11 +19,12 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { type DocumentTypeOption, DocumentTypePicker } from '@/components/document-type-picker';
 import { DocumentUploader } from '@/components/document-uploader';
+import { FOCUS_RING } from '@/components/ds/segmented';
+import { DsEnumPill, DsStatusPill, enumLabel } from '@/components/ds/status-pill';
+import { DS_ROW, DS_ROW_LIST, SectionCard } from '@/components/ds/workspace';
 import { EmptyState } from '@/components/empty-state';
 import { MultiDocumentUploader } from '@/components/multi-document-uploader';
-import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -36,7 +38,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
 import type { DocumentType } from '@/lib/db/schema/reference';
-import { statusTone } from '@/lib/ui/status-tone';
+import { cn } from '@/lib/utils';
 import {
   addCaseDocumentRequirementAction,
   attachCaseDocumentAction,
@@ -94,7 +96,7 @@ function AddRequirementDialog({
       <DialogTrigger
         render={
           <Button size="sm" variant="outline">
-            <Plus className="mr-1 size-3.5" /> Add requirement
+            <Plus className="mr-1 size-3.5" aria-hidden /> Add requirement
           </Button>
         }
       />
@@ -150,11 +152,14 @@ function AddRequirementDialog({
 function AttachDocDialog({
   caseId,
   requirementId,
+  requirementName,
   beneficiaryDocuments,
   alreadyAttachedIds,
 }: {
   caseId: string;
   requirementId?: string;
+  /** Names the trigger so each row's button is distinguishable. */
+  requirementName?: string;
   beneficiaryDocuments: DocumentInstance[];
   alreadyAttachedIds: Set<string>;
 }) {
@@ -187,14 +192,24 @@ function AttachDocDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button size="sm" variant="ghost">
-            <Paperclip className="mr-1 size-3.5" /> Attach existing
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label={
+              requirementName ? `Attach existing document for ${requirementName}` : undefined
+            }
+          >
+            <Paperclip className="mr-1 size-3.5" aria-hidden /> Attach existing
           </Button>
         }
       />
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Attach an existing document</DialogTitle>
+          <DialogTitle>
+            {requirementName
+              ? `Attach an existing document for ${requirementName}`
+              : 'Attach an existing document'}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
@@ -207,7 +222,7 @@ function AttachDocDialog({
               <option value="">Select…</option>
               {available.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.originalFilename} (v{d.version}, {d.status.toLowerCase()})
+                  {d.originalFilename} (v{d.version}, {enumLabel(d.status).toLowerCase()})
                 </option>
               ))}
             </Select>
@@ -321,68 +336,66 @@ export function CaseDocumentsSection({
     .filter((t) => t.isActive)
     .map((t) => ({ id: t.id, code: t.code, name: t.name, hasExpiry: t.hasExpiry }));
 
+  const ago = (at: Date | string) => {
+    const d = new Date(at);
+    return (
+      <time dateTime={d.toISOString()} className="tabular-nums">
+        {formatDistanceToNow(d, { addSuffix: true })} · {format(d, 'd MMM yyyy · HH:mm')}
+      </time>
+    );
+  };
+
   return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between space-y-0">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ClipboardCheck className="size-4" /> Case documents
-          </CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Track which documents this case requires and which have been supplied. Passport and
-            other reusable docs can be attached from the beneficiary's profile.
-          </p>
-        </div>
-        <AddRequirementDialog
-          caseId={caseId}
-          documentTypes={documentTypes}
-          existing={existingReqTypeIds}
-        />
-      </CardHeader>
-      <CardContent className="space-y-8">
-        <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Requirements checklist
-            </h3>
-            <Badge variant="secondary" className="rounded-full">
-              {requirements.length}
-            </Badge>
-          </div>
-          {requirements.length === 0 ? (
-            <EmptyState
-              icon={ClipboardCheck}
-              title="No requirements yet"
-              description="Add the documents this case needs — passport, medical, police clearance, etc."
-            />
-          ) : (
-            <ul className="divide-y rounded-lg glass-panel">
-              {requirements.map((req) => (
-                <li key={req.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{req.documentTypeName}</p>
-                    <p className="text-[10px] font-mono text-muted-foreground">
-                      {req.documentTypeCode}
-                      {req.hasExpiry ? ' · expiry tracked' : ''}
-                      {req.isMandatory === 'OPTIONAL' ? ' · optional' : ''}
-                    </p>
-                  </div>
+    <div className="space-y-5">
+      <SectionCard
+        icon={ClipboardCheck}
+        title="Case documents"
+        count={requirements.length}
+        description="Track which documents this case requires and which have been supplied. Passports and other reusable documents can be attached from the beneficiary's profile."
+        action={
+          <AddRequirementDialog
+            caseId={caseId}
+            documentTypes={documentTypes}
+            existing={existingReqTypeIds}
+          />
+        }
+        testId="case-requirements"
+      >
+        {requirements.length === 0 ? (
+          <EmptyState
+            icon={ClipboardCheck}
+            title="No requirements yet"
+            description="Add the documents this case needs — passport, medical, police clearance, etc."
+          />
+        ) : (
+          <ul className={DS_ROW_LIST} aria-label="Requirements checklist">
+            {requirements.map((req) => (
+              <li key={req.id} className={DS_ROW} data-testid={`requirement-${req.id}`}>
+                <div className="min-w-0 basis-full sm:basis-48 sm:flex-1">
+                  <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
+                    <span className="[overflow-wrap:anywhere]">{req.documentTypeName}</span>
+                    <DsEnumPill status={req.status} />
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                    <span className="font-mono">{req.documentTypeCode}</span>
+                    {req.isMandatory === 'OPTIONAL' ? ' · Optional' : ' · Mandatory'}
+                    {req.hasExpiry ? ' · Expiry tracked' : ''}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
                   <Select
                     value={req.status}
                     onChange={(e) =>
                       setStatus(req.id, e.target.value as CaseDocumentRequirementRow['status'])
                     }
-                    className="w-auto px-2 text-xs"
-                    aria-label="Requirement status"
+                    className={cn('h-8 w-auto px-2 text-xs', FOCUS_RING)}
+                    aria-label={`Status for ${req.documentTypeName}`}
                   >
-                    <option value="MISSING">MISSING</option>
-                    <option value="PROVIDED">PROVIDED</option>
-                    <option value="ACCEPTED">ACCEPTED</option>
-                    <option value="REJECTED">REJECTED</option>
+                    <option value="MISSING">Missing</option>
+                    <option value="PROVIDED">Provided</option>
+                    <option value="ACCEPTED">Accepted</option>
+                    <option value="REJECTED">Rejected</option>
                   </Select>
-                  <Badge variant={statusTone(req.status)} className="rounded-full">
-                    {req.status}
-                  </Badge>
                   <DocumentUploader
                     ownerType="PERSON"
                     ownerId={beneficiaryPersonId}
@@ -392,6 +405,7 @@ export function CaseDocumentsSection({
                   <AttachDocDialog
                     caseId={caseId}
                     requirementId={req.id}
+                    requirementName={req.documentTypeName}
                     beneficiaryDocuments={beneficiaryDocuments}
                     alreadyAttachedIds={attachedIds}
                   />
@@ -399,163 +413,160 @@ export function CaseDocumentsSection({
                     size="sm"
                     variant="ghost"
                     onClick={() => removeReq(req.id)}
-                    aria-label="Remove requirement"
+                    aria-label={`Remove requirement ${req.documentTypeName}`}
+                    title="Remove requirement"
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-3.5" aria-hidden />
                   </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionCard>
 
-        <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Reusable from candidate profile
-            </h3>
-            <Badge variant="secondary" className="rounded-full">
-              {reusableDocs.length}
-            </Badge>
-          </div>
-          <p className="mb-3 text-[11px] text-muted-foreground">
+      <SectionCard
+        icon={FileStack}
+        title="Reusable from candidate profile"
+        count={reusableDocs.length}
+        description={
+          <>
             Documents already uploaded on{' '}
             <Link
               href={`/clients/${beneficiaryPersonId}?tab=documents-candidate`}
-              className="underline hover:text-foreground"
+              className={cn(
+                'rounded-sm underline underline-offset-2 hover:text-foreground',
+                FOCUS_RING,
+              )}
             >
               the candidate’s profile
             </Link>{' '}
-            that aren’t yet attached here. One click links them without a re-upload — the same
-            passport can serve multiple cases.
+            that aren’t attached here yet. One click links them without a re-upload — the same
+            passport can serve several cases.
+          </>
+        }
+      >
+        {reusableDocs.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border/70 p-4 text-center text-xs text-muted-foreground">
+            The candidate has no unattached documents. Upload below or from their profile.
           </p>
-          {reusableDocs.length === 0 ? (
-            <p className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-              The candidate has no unattached documents. Upload below or from their profile.
-            </p>
-          ) : (
-            <ul className="divide-y rounded-lg glass-panel">
-              {reusableDocs.slice(0, 12).map((d) => (
-                <li key={d.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <FileText className="size-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm">
-                      {d.displayName ?? d.originalFilename}
-                      <span className="ml-2 text-[10px] text-muted-foreground">v{d.version}</span>
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {d.status.toLowerCase()} · uploaded{' '}
-                      <time
-                        dateTime={new Date(d.createdAt).toISOString()}
-                        title={format(new Date(d.createdAt), 'd MMM yyyy · HH:mm')}
-                      >
-                        {formatDistanceToNow(d.createdAt, { addSuffix: true })}
-                      </time>
-                    </p>
+        ) : (
+          <ul className={DS_ROW_LIST}>
+            {reusableDocs.slice(0, 12).map((d) => {
+              const name = d.displayName ?? d.originalFilename;
+              return (
+                <li key={d.id} className={DS_ROW}>
+                  <div className="flex min-w-0 flex-1 basis-56 items-start gap-3">
+                    <FileText
+                      className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm text-foreground [overflow-wrap:anywhere]">
+                        {name}
+                        <span className="ml-2 text-xs text-muted-foreground">v{d.version}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {enumLabel(d.status)} · uploaded {ago(d.createdAt)}
+                      </p>
+                    </div>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => attachExisting(d.id)}>
-                    <Link2 className="mr-1 size-3.5" /> Attach
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => attachExisting(d.id)}
+                    aria-label={`Attach ${name} to this case`}
+                  >
+                    <Link2 className="mr-1 size-3.5" aria-hidden /> Attach
                   </Button>
                 </li>
-              ))}
-              {reusableDocs.length > 12 && (
-                <li className="px-4 py-2 text-[11px] text-muted-foreground">
-                  Showing 12 of {reusableDocs.length}. Use{' '}
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => {
-                      /* room for a "show all" modal later; keeping the list capped avoids
-                         a runaway tab render when a candidate has hundreds of docs */
-                    }}
-                  >
-                    the candidate’s profile
-                  </button>{' '}
-                  for the full list.
-                </li>
-              )}
-            </ul>
-          )}
-        </div>
+              );
+            })}
+            {reusableDocs.length > 12 && (
+              <li className="px-4 py-2.5 text-xs text-muted-foreground">
+                Showing 12 of {reusableDocs.length}. See{' '}
+                <Link
+                  href={`/clients/${beneficiaryPersonId}?tab=documents-candidate`}
+                  className={cn(
+                    'rounded-sm underline underline-offset-2 hover:text-foreground',
+                    FOCUS_RING,
+                  )}
+                  data-testid="reusable-full-list-link"
+                >
+                  the candidate’s profile
+                </Link>{' '}
+                for the full list.
+              </li>
+            )}
+          </ul>
+        )}
+      </SectionCard>
 
-        <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              <UploadCloud className="size-3.5" /> Bulk upload to this case
-            </h3>
-          </div>
-          <p className="mb-3 text-[11px] text-muted-foreground">
-            Drop multiple files at once. Each file gets its own document type + display name. Files
-            are stored on the candidate’s profile (so they can be reused elsewhere) and auto-linked
-            to this case.
-          </p>
-          <MultiDocumentUploader
-            ownerType="PERSON"
-            ownerId={beneficiaryPersonId}
-            documentTypes={bulkDocumentTypes}
-            onUploaded={(doc) => attachAfterUpload(doc)}
+      <SectionCard
+        icon={UploadCloud}
+        title="Bulk upload to this case"
+        description="Drop several files at once. Each file gets its own document type and display name. Files are stored on the candidate’s profile (so they can be reused) and linked to this case automatically."
+      >
+        <MultiDocumentUploader
+          ownerType="PERSON"
+          ownerId={beneficiaryPersonId}
+          documentTypes={bulkDocumentTypes}
+          onUploaded={(doc) => attachAfterUpload(doc)}
+        />
+      </SectionCard>
+
+      <SectionCard icon={Paperclip} title="Attached documents" count={attachedDocs.length}>
+        {attachedDocs.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="No documents attached yet"
+            description="Upload against a requirement above, or attach an existing document from the beneficiary's profile."
           />
-        </div>
-
-        <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Attached documents
-            </h3>
-            <Badge variant="secondary" className="rounded-full">
-              {attachedDocs.length}
-            </Badge>
-          </div>
-          {attachedDocs.length === 0 ? (
-            <EmptyState
-              icon={FileText}
-              title="No documents attached yet"
-              description="Upload against a requirement above, or attach an existing document from the beneficiary's profile."
-            />
-          ) : (
-            <ul className="divide-y rounded-lg glass-panel">
-              {attachedDocs.map((d) => (
-                <li key={d.documentInstanceId} className="flex items-center gap-3 px-4 py-3">
-                  <FileText className="size-4 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{d.document.originalFilename}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {d.documentType.name} · v{d.document.version} ·{' '}
-                      {d.document.status.toLowerCase()} · attached{' '}
-                      <time dateTime={d.attachedAt.toISOString()} className="tabular-nums">
-                        {formatDistanceToNow(d.attachedAt, { addSuffix: true })} ·{' '}
-                        {format(d.attachedAt, 'dd MMM yyyy · HH:mm')}
-                      </time>
+        ) : (
+          <ul className={DS_ROW_LIST}>
+            {attachedDocs.map((d) => (
+              <li key={d.documentInstanceId} className={DS_ROW}>
+                <div className="flex min-w-0 flex-1 basis-56 items-start gap-3">
+                  <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">
+                      {d.document.originalFilename}
+                    </p>
+                    <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                      {d.documentType.name} · v{d.document.version} · {enumLabel(d.document.status)}{' '}
+                      · attached {ago(d.attachedAt)}
                     </p>
                   </div>
+                </div>
+                <div className="flex items-center gap-2">
                   {d.caseRequirementId && (
-                    <Badge variant="secondary" className="rounded-full">
-                      <CheckCircle2 className="mr-1 size-3" /> Linked
-                    </Badge>
+                    <DsStatusPill tone="green" className="gap-1">
+                      <CheckCircle2 className="size-3" aria-hidden /> Linked
+                    </DsStatusPill>
                   )}
                   <Link
                     href={`/api/documents/${d.documentInstanceId}/download`}
                     prefetch={false}
                     className={buttonVariants({ variant: 'outline', size: 'sm' })}
                   >
-                    <Download className="size-3.5" />
-                    <span className="sr-only">Download</span>
+                    <Download className="size-3.5" aria-hidden />
+                    <span className="sr-only">Download {d.document.originalFilename}</span>
                   </Link>
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => detachDoc(d.documentInstanceId)}
-                    aria-label="Detach document from case"
+                    aria-label={`Detach ${d.document.originalFilename} from case`}
                     title="Detach from case (the file stays on the candidate's profile)"
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-3.5" aria-hidden />
                   </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionCard>
+    </div>
   );
 }

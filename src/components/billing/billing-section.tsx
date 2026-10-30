@@ -30,12 +30,25 @@ export function BillingSection({
   invoices,
   receipts,
   canVerify,
+  invoiceHref,
+  receiptHref,
 }: {
   profileHref: string;
   invoices: PersonBillingRow[];
   receipts: PersonReceiptRow[];
   canVerify: boolean;
+  /**
+   * Optional per-row destination (e.g. a case whose invoices can be paid by
+   * a person or an employer). Return null when no verified page exists and
+   * the row is shown without an Open link. Defaults to `profileHref`.
+   */
+  invoiceHref?: (invoice: PersonBillingRow['invoice']) => string | null;
+  receiptHref?: (receipt: PersonReceiptRow['receipt']) => string | null;
 }) {
+  const hrefForInvoice = (invoice: PersonBillingRow['invoice']) =>
+    invoiceHref ? invoiceHref(invoice) : `${profileHref}/invoices/${invoice.number}`;
+  const hrefForReceipt = (receipt: PersonReceiptRow['receipt']) =>
+    receiptHref ? receiptHref(receipt) : `${profileHref}/receipts/${receipt.number}`;
   return (
     <div className="space-y-8">
       <section>
@@ -139,13 +152,16 @@ export function BillingSection({
                           canVerify={canVerify}
                         />
                       )}
-                      <Link
-                        href={`${profileHref}/invoices/${invoice.number}`}
-                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                      >
-                        Open
-                        <ArrowUpRight className="ml-1 size-3.5" />
-                      </Link>
+                      {hrefForInvoice(invoice) && (
+                        <Link
+                          href={hrefForInvoice(invoice) as string}
+                          aria-label={`Open invoice ${invoice.number}`}
+                          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                        >
+                          Open
+                          <ArrowUpRight className="ml-1 size-3.5" aria-hidden />
+                        </Link>
+                      )}
                     </div>
                   </li>
                 );
@@ -209,13 +225,16 @@ export function BillingSection({
                     </p>
                     <p className="text-[11px] text-muted-foreground">Received</p>
                   </div>
-                  <Link
-                    href={`${profileHref}/receipts/${receipt.number}`}
-                    className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                  >
-                    Open
-                    <ArrowUpRight className="ml-1 size-3.5" />
-                  </Link>
+                  {hrefForReceipt(receipt) && (
+                    <Link
+                      href={hrefForReceipt(receipt) as string}
+                      aria-label={`Open receipt ${receipt.number}`}
+                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                    >
+                      Open
+                      <ArrowUpRight className="ml-1 size-3.5" aria-hidden />
+                    </Link>
+                  )}
                 </div>
               </li>
             ))}
