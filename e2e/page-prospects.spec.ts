@@ -17,11 +17,12 @@ test.describe('/prospects', () => {
     await page.goto('/prospects');
     // The previous layout truncated chip labels — this asserts they are
     // now visible after the .glass-panel wrapping fix.
-    const tabs = page.getByRole('tablist', { name: /filter by status/i });
+    // Stage 6G — status tabs are links with counts ("All 12", "New 3", …).
+    const tabs = page.getByRole('navigation', { name: /filter by status/i });
     await expect(tabs).toBeVisible();
-    await expect(tabs.getByRole('tab', { name: /^all$/i })).toBeVisible();
+    await expect(tabs.getByRole('link', { name: /^all\b/i })).toBeVisible();
     // At least one of the enum labels should be visible + readable.
-    const other = tabs.getByRole('tab').nth(1);
+    const other = tabs.getByRole('link').nth(1);
     await expect(other).toBeVisible();
     expect((await other.textContent())?.trim().length ?? 0).toBeGreaterThan(0);
   });

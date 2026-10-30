@@ -1,5 +1,6 @@
 'use client';
 
+import { format } from 'date-fns';
 import {
   ArrowRight,
   CalendarClock,
@@ -13,11 +14,14 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
+import { SEG_TRAY, segItem } from '@/components/ds/segmented';
+import { DsStatusPill } from '@/components/ds/status-pill';
+import type { DsTone } from '@/components/ds/tones';
 import { EmptyState } from '@/components/empty-state';
 import { Timestamp } from '@/components/timestamp';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { formatCurrency } from '@/lib/currency';
 import { cn } from '@/lib/utils';
 import { formatZoned } from '@/lib/zoned-time';
 import type {
@@ -78,27 +82,19 @@ function offerGroup(status: string): Exclude<OfferView, 'all'> {
   return 'closed';
 }
 
-const TONE_CLASS: Record<string, string> = {
-  info: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
-  warning: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
-  success: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-  destructive: 'bg-rose-500/15 text-rose-700 dark:text-rose-300',
-  secondary: 'bg-muted text-muted-foreground',
+const PILL_TONE: Record<string, DsTone> = {
+  info: 'blue',
+  warning: 'amber',
+  success: 'green',
+  destructive: 'rose',
+  secondary: 'slate',
 };
 
 function StateBadge({ label, tone }: { label: string; tone: string }) {
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-        TONE_CLASS[tone],
-      )}
-    >
-      {label}
-    </span>
-  );
+  return <DsStatusPill tone={PILL_TONE[tone] ?? 'slate'}>{label}</DsStatusPill>;
 }
 
+/** Stage 6G segmented filter (client state, not URL). */
 function FilterChips<T extends string>({
   value,
   onChange,
@@ -111,25 +107,30 @@ function FilterChips<T extends string>({
   label: string;
 }) {
   return (
-    <fieldset className="m-0 flex flex-wrap gap-1.5 border-0 p-0">
+    <fieldset className={cn(SEG_TRAY, 'm-0 shadow-none')}>
       <legend className="sr-only">{label}</legend>
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          aria-pressed={value === o.value}
-          onClick={() => onChange(o.value)}
-          className={cn(
-            'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors',
-            value === o.value
-              ? 'border-foreground bg-foreground text-background'
-              : 'bg-background text-muted-foreground hover:text-foreground',
-          )}
-        >
-          {o.label}
-          <span className="tabular-nums opacity-70">{o.count}</span>
-        </button>
-      ))}
+      {options.map((o) => {
+        const active = value === o.value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(o.value)}
+            className={segItem(active)}
+          >
+            {o.label}
+            <span
+              className={cn(
+                'rounded px-1 text-[11px] tabular-nums',
+                active ? 'bg-white/20' : 'bg-muted text-muted-foreground',
+              )}
+            >
+              {o.count}
+            </span>
+          </button>
+        );
+      })}
     </fieldset>
   );
 }
@@ -191,10 +192,10 @@ export function InterviewsOffersSection({
 
       {/* ── Interviews ─────────────────────────────────────────────── */}
       <Card>
-        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
           <div className="min-w-0">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarClock className="size-4 text-muted-foreground" aria-hidden />
+            <CardTitle className="flex items-center gap-2 text-[15px] font-semibold">
+              <CalendarClock className="size-[18px] text-primary" aria-hidden />
               Interviews
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">Times shown in Irish time.</p>
@@ -203,7 +204,7 @@ export function InterviewsOffersSection({
             <InterviewFormDialog
               applications={applications}
               trigger={
-                <Button size="sm" disabled={!canInterviewSomeone}>
+                <Button size="sm" variant="outline" disabled={!canInterviewSomeone}>
                   <CalendarPlus className="mr-1.5 size-4" aria-hidden /> Schedule interview
                 </Button>
               }
@@ -236,9 +237,12 @@ export function InterviewsOffersSection({
               }
             />
           ) : (
-            <ul className="divide-y rounded-md border" data-testid="interview-rows">
+            <ul
+              className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60"
+              data-testid="interview-rows"
+            >
               {sortedInterviews.map(({ i, s }) => (
-                <li key={i.id} data-interview-state={s.key} className="px-3 py-2.5">
+                <li key={i.id} data-interview-state={s.key} className="px-4 py-3">
                   <details className="group">
                     <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1.5 [&::-webkit-details-marker]:hidden">
                       <div className="min-w-0 flex-1">
@@ -253,13 +257,21 @@ export function InterviewsOffersSection({
                           <span className="text-xs text-muted-foreground">Round {i.round}</span>
                           <StateBadge label={s.label} tone={s.tone} />
                           {i.status === 'COMPLETED' && i.outcome !== 'PENDING' && (
-                            <Badge variant="outline" className="rounded-full text-[10px]">
+                            <DsStatusPill
+                              tone={
+                                i.outcome === 'PASS'
+                                  ? 'green'
+                                  : i.outcome === 'FAIL'
+                                    ? 'rose'
+                                    : 'amber'
+                              }
+                            >
                               {i.outcome === 'PASS'
                                 ? 'Pass'
                                 : i.outcome === 'FAIL'
                                   ? 'Not successful'
                                   : 'On hold'}
-                            </Badge>
+                            </DsStatusPill>
                           )}
                         </p>
                         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
@@ -370,10 +382,10 @@ export function InterviewsOffersSection({
 
       {/* ── Offers ─────────────────────────────────────────────────── */}
       <Card>
-        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
           <div className="min-w-0">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Handshake className="size-4 text-muted-foreground" aria-hidden />
+            <CardTitle className="flex items-center gap-2 text-[15px] font-semibold">
+              <Handshake className="size-[18px] text-primary" aria-hidden />
               Offers
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -385,7 +397,7 @@ export function InterviewsOffersSection({
               applications={applications}
               currencies={currencies}
               trigger={
-                <Button size="sm" disabled={!canOfferSomeone}>
+                <Button size="sm" variant="outline" disabled={!canOfferSomeone}>
                   <Plus className="mr-1.5 size-4" aria-hidden /> Create offer
                 </Button>
               }
@@ -415,7 +427,10 @@ export function InterviewsOffersSection({
               }
             />
           ) : (
-            <ul className="divide-y rounded-md border" data-testid="offer-rows">
+            <ul
+              className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60"
+              data-testid="offer-rows"
+            >
               {visibleOffers.map((o) => {
                 const app = appById.get(o.applicationId);
                 const responseOverdue =
@@ -425,7 +440,7 @@ export function InterviewsOffersSection({
                 const canPlace =
                   mayPlace && o.status === 'ACCEPTED' && app?.status === 'OFFER' && !placed;
                 return (
-                  <li key={o.id} data-offer-status={o.status} className="px-3 py-2.5">
+                  <li key={o.id} data-offer-status={o.status} className="px-4 py-3">
                     <details className="group">
                       <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1.5 [&::-webkit-details-marker]:hidden">
                         <div className="min-w-0 flex-1">
@@ -459,10 +474,17 @@ export function InterviewsOffersSection({
                           </p>
                           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                             <span className="font-medium tabular-nums text-foreground/80">
-                              {o.amount} {o.currencyCode} {o.period.toLowerCase()}
+                              {formatCurrency(o.amount, o.currencyCode, {
+                                maximumFractionDigits: 0,
+                              })}{' '}
+                              {o.period.toLowerCase()}
                             </span>
-                            {o.startDate && <span>start {o.startDate}</span>}
-                            {o.expiresOn && <span>respond by {o.expiresOn}</span>}
+                            {o.startDate && (
+                              <span>Starts {format(new Date(o.startDate), 'd MMM yyyy')}</span>
+                            )}
+                            {o.expiresOn && (
+                              <span>Respond by {format(new Date(o.expiresOn), 'd MMM yyyy')}</span>
+                            )}
                           </p>
                         </div>
                         <ChevronDown

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 6F Phase 1 — runtime-error probe. Walks the five main pages the
@@ -104,7 +105,7 @@ test('stage 6F — runtime error probe across main pages', async ({ page }) => {
     })
     .returning({ id: persons.id });
   if (!p) throw new Error('seed failed');
-  await db.insert(candidateProfiles).values({ personId: p.id });
+  await db.insert(candidateProfiles).values({ assignedUserId: await e2eAdminId(), personId: p.id });
 
   const findings: Finding[] = [];
   try {

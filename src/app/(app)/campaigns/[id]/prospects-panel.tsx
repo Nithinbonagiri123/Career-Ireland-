@@ -3,17 +3,21 @@
 import { CalendarClock, ChevronRight, UserPlus, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { initialsOf } from '@/components/ds/entity-card';
+import { FOCUS_RING, SEG_TRAY, segItem } from '@/components/ds/segmented';
+import { DsStatusPill } from '@/components/ds/status-pill';
+import { DS_SOFT } from '@/components/ds/tones';
+import { SectionCard } from '@/components/ds/workspace';
 import { EmptyState } from '@/components/empty-state';
-import { StatusChip } from '@/components/status-chip';
 import { Timestamp } from '@/components/timestamp';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { formatZoned, toZonedLocal } from '@/lib/zoned-time';
-import { PROSPECT_STATUS_LABEL, PROSPECT_TONE } from '@/modules/campaigns/labels';
+import { PROSPECT_STATUS_LABEL } from '@/modules/campaigns/labels';
 import type { ProspectRow } from '@/modules/campaigns/service';
 import { ProspectActions } from '../../prospects/prospect-actions';
 import { AddProspectDialog, type AdOption } from '../../prospects/prospect-dialogs';
+import { PROSPECT_DS_TONE } from '../campaign-tones';
 
 type Filter = 'todo' | 'ready' | 'converted' | 'closed' | 'followups' | 'all';
 
@@ -73,18 +77,14 @@ export function ProspectsPanel({
   const canAdd = canCreate && campaignOpen && ads.some((a) => a.open);
 
   return (
-    <Card data-testid="campaign-prospects">
-      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Users className="size-4 text-muted-foreground" aria-hidden /> Prospects
-          </CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            People who responded to this campaign’s advertisements. Screen them, keep them in the
-            talent pool, or convert them to candidates.
-          </p>
-        </div>
-        {canAdd && (
+    <SectionCard
+      testId="campaign-prospects"
+      icon={Users}
+      title="Prospects"
+      count={rows.length}
+      description="People who responded to this campaign’s advertisements. Screen them, keep them in the talent pool, or convert them to candidates."
+      action={
+        canAdd ? (
           <AddProspectDialog
             ads={ads}
             trigger={
@@ -93,156 +93,176 @@ export function ProspectsPanel({
               </Button>
             }
           />
-        )}
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {!canEdit && (
-          <p
-            className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground"
-            data-testid="prospects-read-only"
+        ) : undefined
+      }
+      bodyClassName="space-y-4"
+    >
+      {!canEdit && (
+        <p
+          className="rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground"
+          data-testid="prospects-read-only"
+        >
+          View only — your role cannot change prospects.
+        </p>
+      )}
+      {paused && (
+        <p
+          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-500/10 dark:text-amber-200"
+          data-testid="prospects-paused"
+        >
+          The campaign is paused — new prospects can’t be recorded. Existing prospects can still be
+          screened, noted, followed up and converted.
+        </p>
+      )}
+      {canCreate && campaignOpen && !ads.some((a) => a.open) && (
+        <p className="rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+          Add or reactivate an advertisement first — every prospect responds to one.
+        </p>
+      )}
+      <fieldset className={cn(SEG_TRAY, 'm-0')}>
+        <legend className="sr-only">Filter prospects</legend>
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            aria-pressed={filter === f.key}
+            onClick={() => setFilter(f.key)}
+            className={segItem(filter === f.key)}
           >
-            View only — your role cannot change prospects.
-          </p>
-        )}
-        {paused && (
-          <p
-            className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200"
-            data-testid="prospects-paused"
-          >
-            The campaign is paused — new prospects can’t be recorded. Existing prospects can still
-            be screened, noted, followed up and converted.
-          </p>
-        )}
-        {canCreate && campaignOpen && !ads.some((a) => a.open) && (
-          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-            Add or reactivate an advertisement first — every prospect responds to one.
-          </p>
-        )}
-        <fieldset className="flex flex-wrap gap-1.5">
-          <legend className="sr-only">Filter prospects</legend>
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              aria-pressed={filter === f.key}
-              onClick={() => setFilter(f.key)}
+            {f.label}
+            <span
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                filter === f.key
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'bg-card text-muted-foreground hover:text-foreground',
+                'rounded-md px-1.5 text-[11px] tabular-nums',
+                filter === f.key ? 'bg-white/20' : 'bg-muted',
               )}
             >
-              {f.label}
-              <span className="tabular-nums opacity-80">{counts[f.key]}</span>
-            </button>
-          ))}
-        </fieldset>
+              {counts[f.key]}
+            </span>
+          </button>
+        ))}
+      </fieldset>
 
-        {visible.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title={rows.length === 0 ? 'No prospects yet' : 'Nothing here'}
-            description={
-              rows.length === 0
-                ? 'Record people as they respond to an advertisement.'
-                : 'No prospects match this filter.'
-            }
-          />
-        ) : (
-          <ul className="divide-y rounded-md border" data-testid="prospect-rows">
-            {visible.map((p) => {
-              const due = p.followUpDueAt ? new Date(p.followUpDueAt) : null;
-              const overdue = Boolean(due && due.getTime() <= now);
-              return (
-                <li key={p.id} data-prospect-status={p.status}>
-                  <details className="group">
-                    <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 hover:bg-muted/40">
-                      <ChevronRight
-                        className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
-                        aria-hidden
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{p.personName}</span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {p.advertisementCountry}
-                          {p.advertisementPlatform ? ` · ${p.advertisementPlatform}` : ''} ·
-                          recorded <Timestamp date={p.createdAt} absoluteOnly className="text-xs" />
-                        </span>
+      {visible.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title={rows.length === 0 ? 'No prospects yet' : 'Nothing here'}
+          description={
+            rows.length === 0
+              ? 'Record people as they respond to an advertisement.'
+              : 'No prospects match this filter.'
+          }
+        />
+      ) : (
+        <ul
+          className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60"
+          data-testid="prospect-rows"
+        >
+          {visible.map((p) => {
+            const due = p.followUpDueAt ? new Date(p.followUpDueAt) : null;
+            const overdue = Boolean(due && due.getTime() <= now);
+            return (
+              <li key={p.id} data-prospect-status={p.status}>
+                <details className="group">
+                  <summary
+                    className={cn(
+                      'flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-muted/30',
+                      FOCUS_RING,
+                    )}
+                  >
+                    <ChevronRight
+                      className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+                      aria-hidden
+                    />
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold',
+                        DS_SOFT[PROSPECT_DS_TONE[p.status]],
+                      )}
+                    >
+                      {initialsOf(p.personName)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">{p.personName}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {p.advertisementCountry}
+                        {p.advertisementPlatform ? ` · ${p.advertisementPlatform}` : ''} · recorded{' '}
+                        <Timestamp date={p.createdAt} absoluteOnly className="text-xs" />
                       </span>
-                      {due && (
-                        <span
-                          className={cn(
-                            'inline-flex items-center gap-1 text-[11px]',
-                            overdue ? 'font-medium text-status-warning' : 'text-muted-foreground',
-                          )}
-                        >
-                          <CalendarClock className="size-3" aria-hidden />
-                          {overdue ? 'Follow-up due' : 'Follow-up'} {formatZoned(due)}
-                        </span>
-                      )}
-                      <StatusChip
-                        label={PROSPECT_STATUS_LABEL[p.status]}
-                        tone={PROSPECT_TONE[p.status]}
-                      />
-                    </summary>
-                    <div className="space-y-3 border-t bg-muted/20 px-3 py-3 pl-10 text-sm">
-                      <dl className="grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
-                        <div>
-                          <dt className="inline text-muted-foreground">Email: </dt>
-                          <dd className="inline">{p.personEmail ?? '—'}</dd>
-                        </div>
-                        <div>
-                          <dt className="inline text-muted-foreground">Last handled by: </dt>
-                          <dd className="inline">{p.screenedByName ?? '—'}</dd>
-                        </div>
-                        <div>
-                          <dt className="inline text-muted-foreground">Follow-up assigned to: </dt>
-                          <dd className="inline">{p.followUpAssigneeName ?? '—'}</dd>
-                        </div>
-                        <div>
-                          <dt className="inline text-muted-foreground">Updated: </dt>
-                          <dd className="inline">
-                            <Timestamp date={p.updatedAt} absoluteOnly className="text-xs" />
-                          </dd>
-                        </div>
-                      </dl>
-                      {p.notes && (
-                        <p className="whitespace-pre-wrap rounded-md border bg-card px-3 py-2 text-xs">
-                          {p.notes}
-                        </p>
-                      )}
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <ProspectActions
-                          prospect={{
-                            id: p.id,
-                            personId: p.personId,
-                            personName: p.personName,
-                            status: p.status,
-                            hasCandidateProfile: p.hasCandidateProfile,
-                            followUpDueOn: due
-                              ? toZonedLocal(due, 'Europe/Dublin').slice(0, 10)
-                              : null,
-                          }}
-                          canEdit={canEdit}
-                          jobTitle={jobTitle}
-                          assignees={assignees}
-                        />
-                        <Link
-                          href={`/prospects/${p.id}`}
-                          className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                        >
-                          Full history
-                        </Link>
+                    </span>
+                    {due && (
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 text-[11px]',
+                          overdue ? 'font-medium text-status-warning' : 'text-muted-foreground',
+                        )}
+                      >
+                        <CalendarClock className="size-3" aria-hidden />
+                        {overdue ? 'Follow-up due' : 'Follow-up'} {formatZoned(due)}
+                      </span>
+                    )}
+                    <DsStatusPill tone={PROSPECT_DS_TONE[p.status]}>
+                      {PROSPECT_STATUS_LABEL[p.status]}
+                    </DsStatusPill>
+                  </summary>
+                  <div className="space-y-3 border-t border-border/60 bg-muted/20 px-4 py-3 text-sm sm:pl-[4.25rem]">
+                    <dl className="grid gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2">
+                      {(
+                        [
+                          ['Email', p.personEmail],
+                          ['Last handled by', p.screenedByName],
+                          ['Follow-up assigned to', p.followUpAssigneeName],
+                        ] as const
+                      )
+                        .filter(([, v]) => v)
+                        .map(([k, v]) => (
+                          <div key={k}>
+                            <dt className="inline text-muted-foreground">{k}: </dt>
+                            <dd className="inline">{v}</dd>
+                          </div>
+                        ))}
+                      <div>
+                        <dt className="inline text-muted-foreground">Updated: </dt>
+                        <dd className="inline">
+                          <Timestamp date={p.updatedAt} absoluteOnly className="text-xs" />
+                        </dd>
                       </div>
+                    </dl>
+                    {p.notes && (
+                      <p className="whitespace-pre-wrap rounded-lg border border-border/60 bg-card px-3 py-2 text-xs">
+                        {p.notes}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <ProspectActions
+                        prospect={{
+                          id: p.id,
+                          personId: p.personId,
+                          personName: p.personName,
+                          status: p.status,
+                          hasCandidateProfile: p.hasCandidateProfile,
+                          followUpDueOn: due
+                            ? toZonedLocal(due, 'Europe/Dublin').slice(0, 10)
+                            : null,
+                        }}
+                        canEdit={canEdit}
+                        jobTitle={jobTitle}
+                        assignees={assignees}
+                      />
+                      <Link
+                        href={`/prospects/${p.id}`}
+                        className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                      >
+                        Full history
+                      </Link>
                     </div>
-                  </details>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
+                  </div>
+                </details>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </SectionCard>
   );
 }

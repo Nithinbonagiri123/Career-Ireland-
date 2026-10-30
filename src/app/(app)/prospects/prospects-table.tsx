@@ -5,13 +5,14 @@ import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { DataTable } from '@/components/data-table/data-table';
-import { StatusChip } from '@/components/status-chip';
+import { DsStatusPill } from '@/components/ds/status-pill';
 import { Timestamp } from '@/components/timestamp';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formatZoned } from '@/lib/zoned-time';
-import { PROSPECT_STATUS_LABEL, PROSPECT_TONE } from '@/modules/campaigns/labels';
+import { PROSPECT_STATUS_LABEL } from '@/modules/campaigns/labels';
 import type { ProspectRow } from '@/modules/campaigns/service';
+import { PROSPECT_DS_TONE } from '../campaigns/campaign-tones';
 
 /** R4 — cross-campaign prospect list. Actions live on the prospect page. */
 export function ProspectsTable({
@@ -31,13 +32,15 @@ export function ProspectsTable({
           <div className="flex min-w-0 flex-col">
             <Link
               href={`/prospects/${row.original.id}`}
-              className="truncate text-sm font-medium hover:underline"
+              className="truncate text-sm font-semibold text-foreground hover:underline"
             >
               {row.original.personName}
             </Link>
-            <span className="truncate text-xs text-muted-foreground">
-              {row.original.personEmail ?? 'No email'}
-            </span>
+            {row.original.personEmail && (
+              <span className="truncate text-xs text-muted-foreground">
+                {row.original.personEmail}
+              </span>
+            )}
           </div>
         ),
       },
@@ -64,10 +67,9 @@ export function ProspectsTable({
         accessorKey: 'status',
         size: 130,
         cell: ({ row }) => (
-          <StatusChip
-            label={PROSPECT_STATUS_LABEL[row.original.status]}
-            tone={PROSPECT_TONE[row.original.status]}
-          />
+          <DsStatusPill tone={PROSPECT_DS_TONE[row.original.status]}>
+            {PROSPECT_STATUS_LABEL[row.original.status]}
+          </DsStatusPill>
         ),
       },
       {
@@ -82,7 +84,9 @@ export function ProspectsTable({
             <span
               className={cn(
                 'text-xs',
-                overdue ? 'font-medium text-status-warning' : 'text-muted-foreground',
+                overdue
+                  ? 'font-medium text-amber-700 dark:text-amber-300'
+                  : 'text-muted-foreground',
               )}
             >
               {overdue ? 'Due ' : ''}

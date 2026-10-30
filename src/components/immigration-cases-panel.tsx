@@ -47,8 +47,8 @@ export function ImmigrationCasesPanel({ cases }: { cases: CaseListRow[] }) {
     <Card>
       <CardHeader className="flex flex-row items-start justify-between space-y-0">
         <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <PlaneTakeoff className="size-4 text-muted-foreground" />
+          <CardTitle className="flex items-center gap-2 text-[15px] font-semibold">
+            <PlaneTakeoff className="size-[18px] text-primary" aria-hidden />
             Immigration cases
           </CardTitle>
           <p className="mt-1 text-xs text-muted-foreground">

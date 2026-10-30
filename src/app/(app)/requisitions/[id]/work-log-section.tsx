@@ -1,7 +1,7 @@
 'use client';
 
 import { format } from 'date-fns';
-import { CheckCircle2, Circle, ClipboardList, Loader2, Sparkles } from 'lucide-react';
+import { CheckCircle2, Circle, ClipboardList, ListChecks, Loader2, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useOptimistic, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -84,7 +84,9 @@ export function WorkLogSection({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div className="min-w-0 flex-1">
-            <CardTitle className="text-base">Work log</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-[15px] font-semibold">
+              <ListChecks className="size-[18px] text-primary" aria-hidden /> Work log
+            </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
               Standard recruitment milestones. Tick them off as the work gets done.
             </p>
@@ -101,7 +103,7 @@ export function WorkLogSection({
           )}
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3 rounded-md border border-dashed border-border/70 px-4 py-6 text-xs text-muted-foreground">
+          <div className="flex items-center gap-3 rounded-xl bg-muted/50 px-4 py-4 text-xs text-muted-foreground">
             <ClipboardList className="size-5 shrink-0" />
             <div>
               <p className="font-medium text-foreground">No work log yet.</p>
@@ -122,7 +124,9 @@ export function WorkLogSection({
       <CardHeader className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <CardTitle className="text-base">Work log</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-[15px] font-semibold">
+              <ListChecks className="size-[18px] text-primary" aria-hidden /> Work log
+            </CardTitle>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {doneCount} of {total} milestones complete.
             </p>

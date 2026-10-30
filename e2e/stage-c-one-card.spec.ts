@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage C workflow collapse — the single-card journey.
@@ -162,11 +163,12 @@ test('one-card journey: lead → quote → single-click payment → activation �
     //       path is exercised through the UI right after.
     const [emp] = await m.db
       .insert(m.schemas.employers)
-      .values({ legalName: `OneCard Employer ${stamp}` })
+      .values({ assignedUserId: await e2eAdminId(), legalName: `OneCard Employer ${stamp}` })
       .returning({ id: m.schemas.employers.id });
     const [req] = await m.db
       .insert(m.schemas.jobRequisitions)
       .values({
+        assignedUserId: await e2eAdminId(),
         employerId: emp?.id ?? '',
         title: `Care Assistant ${stamp}`,
         status: 'OPEN',

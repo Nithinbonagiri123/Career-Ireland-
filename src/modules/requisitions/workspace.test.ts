@@ -77,7 +77,7 @@ beforeAll(async () => {
     .returning({ id: users.id });
   const [e] = await db
     .insert(employers)
-    .values({ legalName: `R2 WS Ltd ${STAMP}` })
+    .values({ assignedUserId: u?.id, legalName: `R2 WS Ltd ${STAMP}` })
     .returning({ id: employers.id });
   const [p] = await db
     .insert(persons)
@@ -97,6 +97,7 @@ beforeAll(async () => {
     .insert(jobRequisitions)
     .values([
       {
+        assignedUserId: actorId,
         employerId,
         title: `R2 A ${STAMP}`,
         positionsRequired: 1,
@@ -104,6 +105,7 @@ beforeAll(async () => {
         status: 'OPEN',
       },
       {
+        assignedUserId: actorId,
         employerId,
         title: `R2 B ${STAMP}`,
         positionsRequired: 1,

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * R0 — recruitment workflow corrections, browser-level proof:
@@ -29,12 +30,22 @@ test('employer lead detail renders the employer and links to its profile', async
   const stamp = Math.random().toString(36).slice(2, 7);
   const [emp] = await m.db
     .insert(m.schemas.employers)
-    .values({ legalName: `R0 Lead Employer ${stamp}`, city: 'Galway', country: 'Ireland' })
+    .values({
+      assignedUserId: await e2eAdminId(),
+      legalName: `R0 Lead Employer ${stamp}`,
+      city: 'Galway',
+      country: 'Ireland',
+    })
     .returning({ id: m.schemas.employers.id });
   if (!emp) throw new Error('employer seed failed');
   const [lead] = await m.db
     .insert(m.schemas.leads)
-    .values({ targetBusiness: 'RECRUITMENT', employerId: emp.id, status: 'NEW' })
+    .values({
+      assignedUserId: await e2eAdminId(),
+      targetBusiness: 'RECRUITMENT',
+      employerId: emp.id,
+      status: 'NEW',
+    })
     .returning({ id: m.schemas.leads.id });
   if (!lead) throw new Error('lead seed failed');
   try {
@@ -61,7 +72,7 @@ test('requisition deep links: ?tab= is honoured and ?close=1 opens the close dia
     .where(m.eq(m.schemas.users.email, 'e2e-admin@ireland-careers.test'));
   const [emp] = await m.db
     .insert(m.schemas.employers)
-    .values({ legalName: `R0 Tabs Employer ${stamp}` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `R0 Tabs Employer ${stamp}` })
     .returning({ id: m.schemas.employers.id });
   if (!emp || !admin) throw new Error('seed failed');
   const [req] = await m.db

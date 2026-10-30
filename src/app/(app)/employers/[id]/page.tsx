@@ -2,17 +2,30 @@ import { format } from 'date-fns';
 import { asc, desc, eq, inArray } from 'drizzle-orm';
 import {
   ArrowRight,
+  BadgeCheck,
   Briefcase,
   Building2,
+  CalendarPlus,
   CheckCircle2,
+  CircleDashed,
+  Clock,
   Coins,
+  Contact,
+  Factory,
   FileText,
   Globe,
+  History,
+  Inbox,
+  Landmark,
+  Mail,
   MapPin,
   Pencil,
+  Phone,
   PlaneTakeoff,
   Plus,
+  Receipt,
   User,
+  UserRound,
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -22,16 +35,24 @@ import { BillingSection } from '@/components/billing/billing-section';
 import { FinancialSummaryCard } from '@/components/billing/financial-summary-card';
 import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { CampaignsPanel } from '@/components/campaigns-panel';
+import { initialsOf } from '@/components/ds/entity-card';
+import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
+import { DsEnumPill, DsStatusPill, enumLabel } from '@/components/ds/status-pill';
+import { DS_SOFT } from '@/components/ds/tones';
+import {
+  ActivityTimeline,
+  DetailRows,
+  DS_ROW,
+  DS_ROW_LIST,
+  NextActionBanner,
+  SectionCard,
+  WorkspaceHeader,
+} from '@/components/ds/workspace';
 import { EmptyState } from '@/components/empty-state';
 import { ImmigrationCasesPanel } from '@/components/immigration-cases-panel';
-import { KpiTile } from '@/components/kpi-tile';
 import { FadeUp } from '@/components/motion/motion-primitives';
-import { NextActionCard } from '@/components/next-action-card';
-import { OwnerAvatar } from '@/components/owner-avatar';
 import { RecordHeaderActions } from '@/components/record-header-actions';
-import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { checkPermission, requireInternalStaff } from '@/lib/auth/session';
 import { formatCurrency } from '@/lib/currency';
 import { db } from '@/lib/db/client';
@@ -40,7 +61,6 @@ import { leads } from '@/lib/db/schema/leads';
 import { occupations } from '@/lib/db/schema/occupations';
 import { persons } from '@/lib/db/schema/persons';
 import { placements } from '@/lib/db/schema/recruitment';
-import { statusTone } from '@/lib/ui/status-tone';
 import { cn } from '@/lib/utils';
 import { fetchEmployerBillingHistory, fetchInvoiceableServicesFor } from '@/modules/billing/read';
 import { fetchCampaignsForEmployer } from '@/modules/campaigns/service';
@@ -60,7 +80,9 @@ import { fetchRequisitionsForEmployer } from '@/modules/requisitions/service';
 import { fetchAppSettings } from '@/modules/settings/service';
 import { fetchStaffUserOptions } from '@/modules/users/service';
 import { CaseDialog } from '../../immigration/case-dialog';
+import { EMPLOYMENT_LABEL, JOB_STATUS } from '../../requisitions/job-card';
 import { RequisitionDialog } from '../../requisitions/requisition-dialog';
+import { EMPLOYER_STATUS } from '../employer-card';
 import { EmployerDialog } from '../employer-dialog';
 import { CompleteOnboardingButton } from './complete-onboarding-button';
 import { ContactDialog } from './contact-dialog';
@@ -263,93 +285,78 @@ export default async function EmployerDetail({
   // ── Tab contents ───────────────────────────────────────────────────
 
   const overviewTab = (
-    <div className="mt-5 grid gap-5 lg:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Employer details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-            <dt className="text-muted-foreground">Legal name</dt>
-            <dd>{employer.legalName}</dd>
-            {employer.tradingName && (
-              <>
-                <dt className="text-muted-foreground">Trading as</dt>
-                <dd>{employer.tradingName}</dd>
-              </>
-            )}
-            {employer.industry && (
-              <>
-                <dt className="text-muted-foreground">Industry</dt>
-                <dd>{employer.industry}</dd>
-              </>
-            )}
-            {location && (
-              <>
-                <dt className="text-muted-foreground">Location</dt>
-                <dd>{location}</dd>
-              </>
-            )}
-            {employer.addressLine1 && (
-              <>
-                <dt className="text-muted-foreground">Address</dt>
-                <dd>
-                  {[employer.addressLine1, employer.addressLine2, employer.postcode]
-                    .filter(Boolean)
-                    .join(', ')}
-                </dd>
-              </>
-            )}
-            <dt className="text-muted-foreground">Created</dt>
-            <dd>{format(employer.createdAt, 'd MMM yyyy · HH:mm')}</dd>
-          </dl>
-          {employer.notes && (
-            <div className="mt-4 border-t pt-3">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                Notes
-              </p>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
-                {employer.notes}
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+    <div className="grid items-start gap-5 lg:grid-cols-2">
+      <SectionCard
+        icon={Building2}
+        title="Employer details"
+        action={
+          canEditEmployer ? (
+            <EmployerDialog
+              initial={employer}
+              appVatRegistered={appSettings.vatRegistered}
+              trigger={
+                <Button size="sm" variant="outline">
+                  <Pencil className="mr-1.5 size-3.5" /> Edit
+                </Button>
+              }
+            />
+          ) : undefined
+        }
+      >
+        <DetailRows
+          rows={[
+            { label: 'Legal name', value: employer.legalName },
+            ...(employer.tradingName ? [{ label: 'Trading as', value: employer.tradingName }] : []),
+            ...(employer.industry ? [{ label: 'Industry', value: employer.industry }] : []),
+            ...(location ? [{ label: 'Location', value: location }] : []),
+            ...(employer.addressLine1
+              ? [
+                  {
+                    label: 'Address',
+                    value: [employer.addressLine1, employer.addressLine2, employer.postcode]
+                      .filter(Boolean)
+                      .join(', '),
+                  },
+                ]
+              : []),
+            ...(employer.billingEmail
+              ? [{ label: 'Billing email', value: employer.billingEmail, icon: Mail }]
+              : []),
+            { label: 'Created', value: format(employer.createdAt, 'd MMM yyyy · HH:mm') },
+          ]}
+        />
+        {employer.notes && (
+          <div className="mt-4 border-t border-border/60 pt-3">
+            <p className="text-xs font-medium text-muted-foreground">Notes</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/80">{employer.notes}</p>
+          </div>
+        )}
+      </SectionCard>
       <div className="space-y-5">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              Recruitment leads{' '}
-              <span className="ml-1 text-xs text-muted-foreground">({employerLeads.length})</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {employerLeads.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No leads recorded for this employer.</p>
-            ) : (
-              <ul className="divide-y">
-                {employerLeads.map((l) => (
-                  <li key={l.id} className="flex items-center justify-between gap-3 py-2.5">
-                    <div className="min-w-0 text-sm">
-                      <Badge variant={statusTone(l.status)} className="rounded-full">
-                        {l.status.replace(/_/g, ' ')}
-                      </Badge>
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {format(l.createdAt, 'd MMM yyyy · HH:mm')}
-                      </span>
-                    </div>
-                    <Link
-                      href={`/leads/${l.id}`}
-                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                    >
-                      Open
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+        <SectionCard icon={Inbox} title="Recruitment leads" count={employerLeads.length}>
+          {employerLeads.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No leads recorded for this employer.</p>
+          ) : (
+            <ul className="divide-y">
+              {employerLeads.map((l) => (
+                <li key={l.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <div className="min-w-0 text-sm">
+                    <DsEnumPill status={l.status} />
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {format(l.createdAt, 'd MMM yyyy · HH:mm')}
+                    </span>
+                  </div>
+                  <Link
+                    href={`/leads/${l.id}`}
+                    className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                  >
+                    Open
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionCard>
         <ImmigrationCasesPanel cases={employerImmigrationCases} />
         <CampaignsPanel campaigns={employerCampaigns} scope="employer" />
       </div>
@@ -357,583 +364,627 @@ export default async function EmployerDetail({
   );
 
   const requirementsTab = (
-    <div className="mt-5">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">
-            Job requirements{' '}
-            <span className="ml-1 text-xs text-muted-foreground">({requisitions.length})</span>
-          </CardTitle>
-          {canCreateJob && (
-            <RequisitionDialog
-              employers={employersAll}
-              currencies={currencies}
-              occupations={occupationList}
-              defaultEmployerId={employer.id}
-              trigger={
-                <Button size="sm" variant="outline">
-                  <Plus className="mr-1.5 size-4" /> New requisition
-                </Button>
-              }
-            />
-          )}
-        </CardHeader>
-        <CardContent>
-          {requisitions.length === 0 ? (
-            <EmptyState
-              icon={Briefcase}
-              title="No job requirements yet"
-              description="Create the first requisition so candidates can be sourced for this employer."
-            />
-          ) : (
-            <ul className="divide-y">
-              {requisitions.map((r) => {
-                const pct =
-                  r.positionsRequired > 0
-                    ? Math.min(100, Math.round((r.positionsFilled / r.positionsRequired) * 100))
-                    : 0;
-                const remaining = Math.max(r.positionsRequired - r.positionsFilled, 0);
-                const step = requisitionNextStep(r);
-                const owner = r.assignedUserId ? ownerNameById.get(r.assignedUserId) : null;
-                const deadline = r.targetFillDate ? new Date(r.targetFillDate) : null;
-                const overdue =
-                  deadline && deadline.getTime() < Date.now() && r.status !== 'CLOSED';
-                return (
-                  <li key={r.id} className="flex flex-wrap items-center justify-between gap-4 py-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-sm font-medium">{r.title}</p>
-                        <Badge variant={statusTone(r.status)} className="rounded-full">
-                          {r.status.replace(/_/g, ' ')}
-                        </Badge>
-                      </div>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        <span className="tabular-nums">
-                          {r.positionsFilled} of {r.positionsRequired} placed · {remaining}{' '}
-                          remaining
-                        </span>
-                        {' · '}
-                        {r.employmentType.replace(/_/g, ' ')}
-                        {r.location ? ` · ${r.location}` : ''}
-                        {owner ? ` · ${owner}` : ''}
-                        {deadline && (
-                          <span className={cn(overdue && 'font-medium text-destructive')}>
-                            {' · due '}
-                            {format(deadline, 'd MMM yyyy')}
-                          </span>
-                        )}
-                      </p>
-                      <span
-                        className="mt-1.5 block h-1 w-full max-w-[220px] overflow-hidden rounded-full bg-muted"
-                        role="progressbar"
-                        aria-valuenow={pct}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-label={`${pct}% of positions filled`}
-                      >
-                        <span
-                          className="block h-full bg-foreground/70"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {step && (
-                        <Link
-                          href={step.href}
-                          className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-                        >
-                          {step.label}
-                        </Link>
-                      )}
-                      {canEditJob && (
-                        <RequisitionDialog
-                          employers={employersAll}
-                          currencies={currencies}
-                          occupations={occupationList}
-                          initial={r}
-                          trigger={
-                            <Button variant="ghost" size="icon" aria-label={`Edit ${r.title}`}>
-                              <Pencil className="size-3.5" />
-                            </Button>
-                          }
-                        />
-                      )}
+    <SectionCard
+      icon={Briefcase}
+      title="Job requirements"
+      count={requisitions.length}
+      action={
+        canCreateJob ? (
+          <RequisitionDialog
+            employers={employersAll}
+            currencies={currencies}
+            occupations={occupationList}
+            defaultEmployerId={employer.id}
+            trigger={
+              <Button size="sm" variant="outline">
+                <Plus className="mr-1.5 size-4" /> New requisition
+              </Button>
+            }
+          />
+        ) : undefined
+      }
+    >
+      {requisitions.length === 0 ? (
+        <EmptyState
+          icon={Briefcase}
+          title="No job requirements yet"
+          description="Create the first requisition so candidates can be sourced for this employer."
+        />
+      ) : (
+        <ul className={DS_ROW_LIST}>
+          {requisitions.map((r) => {
+            const pct =
+              r.positionsRequired > 0
+                ? Math.min(100, Math.round((r.positionsFilled / r.positionsRequired) * 100))
+                : 0;
+            const remaining = Math.max(r.positionsRequired - r.positionsFilled, 0);
+            const step = requisitionNextStep(r);
+            const owner = r.assignedUserId ? ownerNameById.get(r.assignedUserId) : null;
+            const deadline = r.targetFillDate ? new Date(r.targetFillDate) : null;
+            const overdue = deadline && deadline.getTime() < Date.now() && r.status !== 'CLOSED';
+            return (
+              <li key={r.id} className={DS_ROW}>
+                <div className="flex min-w-0 flex-1 basis-72 items-start gap-3">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'grid size-9 shrink-0 place-items-center rounded-xl',
+                      DS_SOFT[JOB_STATUS[r.status].tone],
+                    )}
+                  >
+                    <Briefcase className="size-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Link
                         href={`/requisitions/${r.id}`}
-                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                        className="truncate text-sm font-semibold text-foreground hover:underline"
                       >
-                        Open <ArrowRight className="ml-1.5 size-3.5" />
+                        {r.title}
                       </Link>
+                      <DsStatusPill tone={JOB_STATUS[r.status].tone}>
+                        {JOB_STATUS[r.status].label}
+                      </DsStatusPill>
                     </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      <span className="tabular-nums">
+                        {r.positionsFilled} of {r.positionsRequired} placed · {remaining} remaining
+                      </span>
+                      {' · '}
+                      {EMPLOYMENT_LABEL[r.employmentType]}
+                      {r.location ? ` · ${r.location}` : ''}
+                      {owner ? ` · ${owner}` : ''}
+                      {deadline && (
+                        <span className={cn(overdue && 'font-medium text-destructive')}>
+                          {' · due '}
+                          {format(deadline, 'd MMM yyyy')}
+                        </span>
+                      )}
+                    </p>
+                    <span
+                      className="mt-2 block h-1.5 w-full max-w-[220px] overflow-hidden rounded-full bg-muted"
+                      role="progressbar"
+                      aria-valuenow={pct}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={`${pct}% of positions filled`}
+                    >
+                      <span
+                        className="block h-full rounded-full bg-primary"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {step && (
+                    <Link
+                      href={step.href}
+                      className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                    >
+                      {step.label}
+                    </Link>
+                  )}
+                  {canEditJob && (
+                    <RequisitionDialog
+                      employers={employersAll}
+                      currencies={currencies}
+                      occupations={occupationList}
+                      initial={r}
+                      trigger={
+                        <Button variant="ghost" size="icon" aria-label={`Edit ${r.title}`}>
+                          <Pencil className="size-3.5" />
+                        </Button>
+                      }
+                    />
+                  )}
+                  <Link
+                    href={`/requisitions/${r.id}`}
+                    className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                  >
+                    Open <ArrowRight className="ml-1.5 size-3.5" />
+                  </Link>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </SectionCard>
   );
 
   const contactsTab = (
-    <div className="mt-5">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Contacts</CardTitle>
-          {canEditEmployer && (
-            <ContactDialog
-              employerId={employer.id}
-              trigger={
-                <Button size="sm" variant="outline">
-                  <Plus className="mr-1.5 size-4" /> Add contact
-                </Button>
-              }
-            />
-          )}
-        </CardHeader>
-        <CardContent>
-          {contacts.length === 0 ? (
-            <EmptyState
-              icon={User}
-              title="No contacts yet"
-              description="Add HR / hiring manager contacts for this employer."
-            />
-          ) : (
-            <ul className="divide-y">
-              {contacts.map((c) => (
-                <li key={c.id} className="flex items-center justify-between py-3">
-                  <div>
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      {c.fullName}
-                      {c.isPrimary && (
-                        <Badge variant="default" className="rounded-full text-[10px]">
-                          Primary
-                        </Badge>
+    <SectionCard
+      icon={Contact}
+      title="Contacts"
+      count={contacts.length}
+      action={
+        canEditEmployer ? (
+          <ContactDialog
+            employerId={employer.id}
+            trigger={
+              <Button size="sm" variant="outline">
+                <Plus className="mr-1.5 size-4" /> Add contact
+              </Button>
+            }
+          />
+        ) : undefined
+      }
+    >
+      {contacts.length === 0 ? (
+        <EmptyState
+          icon={User}
+          title="No contacts yet"
+          description="Add HR / hiring manager contacts for this employer."
+        />
+      ) : (
+        <ul className={DS_ROW_LIST}>
+          {contacts.map((c) => (
+            <li key={c.id} className={DS_ROW}>
+              <div className="flex min-w-0 flex-1 basis-64 items-center gap-3">
+                <span
+                  aria-hidden
+                  className={cn(
+                    'grid size-10 shrink-0 place-items-center rounded-full text-xs font-semibold',
+                    DS_SOFT[c.isPrimary ? 'blue' : 'slate'],
+                  )}
+                >
+                  {initialsOf(c.fullName)}
+                </span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                    {c.fullName}
+                    {c.isPrimary && <DsStatusPill tone="blue">Primary</DsStatusPill>}
+                  </div>
+                  {c.jobTitle && <p className="text-xs text-muted-foreground">{c.jobTitle}</p>}
+                  {(c.email || c.phone) && (
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-foreground/80">
+                      {c.email && (
+                        <span className="inline-flex min-w-0 items-center gap-1">
+                          <Mail className="size-3.5 shrink-0 text-sky-600" aria-hidden />
+                          <span className="truncate">{c.email}</span>
+                        </span>
                       )}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {c.jobTitle ?? '—'} · {c.email ?? c.phone ?? 'no contact'}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {canEditEmployer && (
-                      <ContactDialog
-                        employerId={employer.id}
-                        initial={c}
-                        trigger={
-                          <Button variant="ghost" size="icon" aria-label={`Edit ${c.fullName}`}>
-                            <Pencil className="size-3.5" />
-                          </Button>
-                        }
-                      />
-                    )}
-                    {canEditEmployer && (
-                      <DeleteContactButton
-                        contactId={c.id}
-                        employerId={employer.id}
-                        contactName={c.fullName}
-                      />
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+                      {c.phone && (
+                        <span className="inline-flex items-center gap-1">
+                          <Phone className="size-3.5 shrink-0 text-sky-600" aria-hidden />
+                          {c.phone}
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {canEditEmployer && (
+                <div className="flex items-center gap-1">
+                  <ContactDialog
+                    employerId={employer.id}
+                    initial={c}
+                    trigger={
+                      <Button variant="ghost" size="icon" aria-label={`Edit ${c.fullName}`}>
+                        <Pencil className="size-3.5" />
+                      </Button>
+                    }
+                  />
+                  <DeleteContactButton
+                    contactId={c.id}
+                    employerId={employer.id}
+                    contactName={c.fullName}
+                  />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
   );
 
   const billingTab = (
-    <div className="mt-5 space-y-5">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Billing &amp; VAT settings</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-            <dt className="text-muted-foreground">VAT treatment</dt>
-            <dd>{employer.vatTreatment.replace(/_/g, ' ')}</dd>
-            <dt className="text-muted-foreground">VAT ID</dt>
-            <dd>{employer.vatId ?? '—'}</dd>
-            <dt className="text-muted-foreground">Payment terms</dt>
-            <dd>
-              {employer.paymentTermsDays != null
-                ? `${employer.paymentTermsDays} days`
-                : `App default (${appSettings.defaultPaymentTermsDays} days)`}
-            </dd>
-            <dt className="text-muted-foreground">Invoice email</dt>
-            <dd>{employer.billingEmail ?? '—'}</dd>
-          </dl>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Change these under Edit → Billing &amp; VAT. Invoices copy the treatment and terms at
-            issue time, so historical invoices keep the terms they were issued under.
-          </p>
-        </CardContent>
-      </Card>
+    <div className="space-y-5">
+      <SectionCard
+        icon={Landmark}
+        title="Billing & VAT settings"
+        description="Change these under Edit → Billing & VAT. Invoices copy the treatment and terms at issue time, so historical invoices keep the terms they were issued under."
+        action={
+          canEditEmployer ? (
+            <EmployerDialog
+              initial={employer}
+              appVatRegistered={appSettings.vatRegistered}
+              trigger={
+                <Button size="sm" variant="outline">
+                  <Pencil className="mr-1.5 size-3.5" /> Edit
+                </Button>
+              }
+            />
+          ) : undefined
+        }
+      >
+        <DetailRows
+          rows={[
+            { label: 'VAT treatment', value: enumLabel(employer.vatTreatment) },
+            {
+              label: 'VAT ID',
+              value: employer.vatId ?? <span className="text-muted-foreground">Not recorded</span>,
+            },
+            {
+              label: 'Payment terms',
+              value:
+                employer.paymentTermsDays != null
+                  ? `${employer.paymentTermsDays} days`
+                  : `App default (${appSettings.defaultPaymentTermsDays} days)`,
+            },
+            {
+              label: 'Invoice email',
+              value: employer.billingEmail ?? (
+                <span className="text-muted-foreground">Not recorded</span>
+              ),
+            },
+          ]}
+        />
+      </SectionCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            Placements{' '}
-            <span className="ml-1 text-xs text-muted-foreground">
-              ({employerPlacementRows.length})
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {employerPlacementRows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No placements yet. Confirmed placements and their fee invoices appear here.
-            </p>
-          ) : (
-            <ul className="divide-y">
-              {employerPlacementRows.map((p) => {
-                const inv = latestInvoiceByPlacement.get(p.id);
-                const reqTitle =
-                  requisitions.find((r) => r.id === p.jobRequisitionId)?.title ?? 'Requisition';
-                return (
-                  <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                    <div className="min-w-0 flex-1 text-sm">
-                      <p className="font-medium">
-                        {p.firstName} {p.lastName}
-                      </p>
+      <SectionCard icon={Coins} title="Placements" count={employerPlacementRows.length}>
+        {employerPlacementRows.length === 0 ? (
+          <EmptyState
+            icon={Coins}
+            title="No placements yet"
+            description="Confirmed placements and their fee invoices appear here."
+          />
+        ) : (
+          <ul className={DS_ROW_LIST}>
+            {employerPlacementRows.map((p) => {
+              const inv = latestInvoiceByPlacement.get(p.id);
+              const reqTitle =
+                requisitions.find((r) => r.id === p.jobRequisitionId)?.title ?? 'Requisition';
+              const name = `${p.firstName} ${p.lastName}`;
+              return (
+                <li key={p.id} className={DS_ROW}>
+                  <div className="flex min-w-0 flex-1 basis-64 items-center gap-3">
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold',
+                        DS_SOFT.blue,
+                      )}
+                    >
+                      {initialsOf(name)}
+                    </span>
+                    <div className="min-w-0 text-sm">
+                      <p className="font-semibold">{name}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        {reqTitle} ·{' '}
+                        {reqTitle}
                         {p.startDate
-                          ? `starts ${format(new Date(p.startDate), 'd MMM yyyy')}`
-                          : 'no start date'}{' '}
+                          ? ` · starts ${format(new Date(p.startDate), 'd MMM yyyy')}`
+                          : ''}{' '}
                         · recorded {format(p.createdAt, 'd MMM yyyy · HH:mm')}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={statusTone(p.status)} className="rounded-full">
-                        {p.status.replace(/_/g, ' ')}
-                      </Badge>
-                      {inv ? (
-                        <Link
-                          href={`/employers/${employer.id}/invoices/${inv.number}`}
-                          className="text-xs font-medium text-primary hover:underline"
-                        >
-                          {inv.number} ·{' '}
-                          {Number.parseFloat(inv.outstandingAmount) > 0
-                            ? `${formatCurrency(inv.outstandingAmount, inv.currencyCode)} due`
-                            : 'settled'}
-                        </Link>
-                      ) : p.status === 'CONFIRMED' ||
-                        p.status === 'STARTED' ||
-                        p.status === 'COMPLETED' ? (
-                        <Link
-                          href={`/employers/${employer.id}?raisePlacement=${p.id}&raiseRequisition=${p.jobRequisitionId}`}
-                          className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                        >
-                          <Coins className="mr-1.5 size-3.5" aria-hidden /> Raise fee
-                        </Link>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">not billable yet</span>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <DsEnumPill status={p.status} />
+                    {inv ? (
+                      <Link
+                        href={`/employers/${employer.id}/invoices/${inv.number}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-primary hover:bg-muted"
+                      >
+                        <FileText className="size-3.5" aria-hidden />
+                        <span className="font-mono">{inv.number}</span> ·{' '}
+                        {Number.parseFloat(inv.outstandingAmount) > 0
+                          ? `${formatCurrency(inv.outstandingAmount, inv.currencyCode)} due`
+                          : 'settled'}
+                      </Link>
+                    ) : p.status === 'CONFIRMED' ||
+                      p.status === 'STARTED' ||
+                      p.status === 'COMPLETED' ? (
+                      <Link
+                        href={`/employers/${employer.id}?raisePlacement=${p.id}&raiseRequisition=${p.jobRequisitionId}`}
+                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                      >
+                        <Coins className="mr-1.5 size-3.5" aria-hidden /> Raise fee
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Not billable yet</span>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </SectionCard>
 
       {billingHistory.invoices.length > 0 && (
         <FinancialSummaryCard invoices={billingHistory.invoices} />
       )}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Billing history</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <BillingSection
-            profileHref={`/employers/${id}`}
-            invoices={billingHistory.invoices}
-            receipts={billingHistory.receipts}
-            canVerify={canVerifyPayments}
-          />
-        </CardContent>
-      </Card>
+      <SectionCard icon={Receipt} title="Billing history">
+        <BillingSection
+          profileHref={`/employers/${id}`}
+          invoices={billingHistory.invoices}
+          receipts={billingHistory.receipts}
+          canVerify={canVerifyPayments}
+        />
+      </SectionCard>
     </div>
   );
 
   const documentsTab = (
-    <div className="mt-5">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">
-            Documents{' '}
-            <span className="ml-1 text-xs text-muted-foreground">({employerDocuments.length})</span>
-          </CardTitle>
-          <Link
-            href={`/documents?client=${employer.id}&type=EMPLOYER`}
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          >
-            Open folder <ArrowRight className="ml-1.5 size-3.5" />
-          </Link>
-        </CardHeader>
-        <CardContent>
-          {employerDocuments.length === 0 ? (
-            <EmptyState
-              icon={FileText}
-              title="No documents yet"
-              description="Uploads, invoices and receipts for this employer collect here."
-            />
-          ) : (
-            <ul className="divide-y">
-              {employerDocuments.slice(0, 15).map((d) => (
-                <li key={`${d.kind}-${d.id}`} className="flex items-center justify-between py-2.5">
-                  <div className="min-w-0 flex-1 text-sm">
-                    <p className="truncate font-medium">{d.reference}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {d.typeLabel} · {format(d.createdAt, 'd MMM yyyy · HH:mm')}
-                    </p>
-                  </div>
-                  {d.amount && (
-                    <span className="text-xs tabular-nums text-muted-foreground">
-                      {formatCurrency(d.amount, d.currencyCode ?? 'EUR')}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    <SectionCard
+      icon={FileText}
+      title="Documents"
+      count={employerDocuments.length}
+      action={
+        <Link
+          href={`/documents?client=${employer.id}&type=EMPLOYER`}
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+        >
+          Open folder <ArrowRight className="ml-1.5 size-3.5" />
+        </Link>
+      }
+    >
+      {employerDocuments.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title="No documents yet"
+          description="Uploads, invoices and receipts for this employer collect here."
+        />
+      ) : (
+        <ul className={DS_ROW_LIST}>
+          {employerDocuments.slice(0, 15).map((d) => (
+            <li key={`${d.kind}-${d.id}`} className={DS_ROW}>
+              <div className="flex min-w-0 flex-1 basis-64 items-center gap-3">
+                <span
+                  aria-hidden
+                  className={cn('grid size-9 shrink-0 place-items-center rounded-xl', DS_SOFT.blue)}
+                >
+                  <FileText className="size-4" />
+                </span>
+                <div className="min-w-0 text-sm">
+                  <p className="truncate font-semibold">{d.reference}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {d.typeLabel} · {format(d.createdAt, 'd MMM yyyy · HH:mm')}
+                  </p>
+                </div>
+              </div>
+              {d.amount && (
+                <span className="text-sm font-medium tabular-nums text-foreground">
+                  {formatCurrency(d.amount, d.currencyCode ?? 'EUR')}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
   );
 
   const activityTab = (
-    <div className="mt-5">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Activity</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {activity.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No recorded activity yet.</p>
-          ) : (
-            <ul className="divide-y">
-              {activity.map((a) => (
-                <li key={a.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                  <div className="min-w-0 flex-1">
-                    <p className="capitalize">{a.summary}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {a.actorName ?? 'System'} · {format(a.occurredAt, 'd MMM yyyy · HH:mm')}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    <SectionCard
+      icon={History}
+      title="Activity"
+      description="Every recorded change to this employer, newest first."
+    >
+      {activity.length === 0 ? (
+        <EmptyState
+          icon={History}
+          title="No recorded activity yet"
+          description="Changes to this employer will be listed here with who made them and when."
+        />
+      ) : (
+        <ActivityTimeline
+          items={activity.map((a) => ({
+            id: a.id,
+            title: a.summary.charAt(0).toUpperCase() + a.summary.slice(1),
+            subtitle: a.actorName ?? 'System',
+            at: a.occurredAt,
+          }))}
+        />
+      )}
+    </SectionCard>
   );
 
   // ── Page ───────────────────────────────────────────────────────────
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
-        <nav className="mb-4 text-sm text-muted-foreground">
-          <Link href="/employers" className="hover:text-foreground hover:underline">
-            Employers
-          </Link>
-          <span className="mx-1.5">/</span>
-          <span className="text-foreground">{employer.legalName}</span>
-        </nav>
-
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-4">
-            <span
-              aria-hidden
-              className="grid size-16 shrink-0 place-items-center rounded-2xl bg-sky-100 text-sky-700 ring-1 ring-sky-200/70"
-            >
-              <Building2 className="size-7" />
-            </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-                  {employer.legalName}
-                </h1>
-                <Badge variant={statusTone(employer.relationshipStatus)} className="rounded-full">
-                  {employer.relationshipStatus.replace(/_/g, ' ')}
-                </Badge>
-              </div>
-              {employer.tradingName && (
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  Trading as {employer.tradingName}
-                </p>
-              )}
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5">
-                  Owner:
-                  <OwnerAvatar
-                    user={
-                      assignedOwner
-                        ? { id: assignedOwner.id, fullName: assignedOwner.fullName }
-                        : null
-                    }
-                    size="sm"
-                    showName
-                  />
-                </span>
-                {employer.industry && (
-                  <span className="inline-flex items-center gap-1">
-                    <Briefcase className="size-3" aria-hidden />
-                    {employer.industry}
-                  </span>
-                )}
-                {location && (
-                  <span className="inline-flex items-center gap-1">
-                    <MapPin className="size-3" aria-hidden />
-                    {location}
-                  </span>
-                )}
-                {employer.website && (
-                  <a
-                    href={employer.website}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 underline-offset-2 hover:text-foreground hover:underline"
-                  >
-                    <Globe className="size-3" aria-hidden />
-                    {employer.website.replace(/^https?:\/\//, '')}
-                  </a>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <RecordHeaderActions
-            primary={
-              canCreateJob ? (
-                <RequisitionDialog
-                  employers={employersAll}
-                  currencies={currencies}
-                  occupations={occupationList}
-                  defaultEmployerId={employer.id}
-                  defaultOpen={newRequisition === '1'}
-                  trigger={
-                    <Button size="sm">
-                      <Plus className="mr-1.5 size-4" /> New requisition
-                    </Button>
-                  }
-                />
-              ) : undefined
-            }
-            secondary={[
-              <AssignToMeButton
-                key="assign"
-                entity="employer"
-                id={employer.id}
-                currentUserId={session.user.id}
-                currentAssignedUserId={employer.assignedUserId}
-                canReassign={session.user.isOwner}
-              />,
-              canEditEmployer && (
-                <EmployerDialog
-                  key="edit"
-                  initial={employer}
-                  appVatRegistered={appSettings.vatRegistered}
-                  trigger={
-                    <Button size="sm" variant="outline">
-                      <Pencil className="mr-1.5 size-4" /> Edit
-                    </Button>
-                  }
-                />
-              ),
-              firstRaisablePlacement && !raisePlacement && (
-                <Link
-                  key="raise-fee"
-                  href={`/employers/${employer.id}?raisePlacement=${firstRaisablePlacement.id}`}
-                  className={buttonVariants({ size: 'sm', variant: 'outline' })}
+        <WorkspaceHeader
+          breadcrumbs={[{ label: 'Employers', href: '/employers' }, { label: employer.legalName }]}
+          avatar={{
+            initials: initialsOf(employer.tradingName ?? employer.legalName),
+            tone: EMPLOYER_STATUS[employer.relationshipStatus].tone,
+          }}
+          title={employer.legalName}
+          status={
+            <DsStatusPill tone={EMPLOYER_STATUS[employer.relationshipStatus].tone}>
+              {EMPLOYER_STATUS[employer.relationshipStatus].label}
+            </DsStatusPill>
+          }
+          subtitle={employer.tradingName ? `Trading as ${employer.tradingName}` : undefined}
+          meta={[
+            { key: 'industry', icon: Factory, content: employer.industry || null },
+            { key: 'location', icon: MapPin, content: location || null },
+            {
+              key: 'email',
+              icon: Mail,
+              content: employer.billingEmail || null,
+            },
+            {
+              key: 'website',
+              icon: Globe,
+              content: employer.website ? (
+                <a
+                  href={employer.website}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline-offset-2 hover:text-foreground hover:underline"
                 >
-                  <Coins className="mr-1.5 size-4" aria-hidden /> Raise placement fee
-                </Link>
+                  {employer.website.replace(/^https?:\/\//, '')}
+                </a>
+              ) : null,
+            },
+          ]}
+          chips={[
+            {
+              key: 'owner',
+              icon: UserRound,
+              content: assignedOwner ? (
+                <>
+                  Owner{' '}
+                  <span className="font-medium text-foreground">{assignedOwner.fullName}</span>
+                </>
+              ) : (
+                'Unassigned'
               ),
-            ]}
-            overflow={[
-              <GenerateInvoiceDialog
-                key="generate-invoice"
-                payerMode="EMPLOYER"
-                payerId={employer.id}
-                payerLabel={employer.legalName}
-                services={invoiceableServices}
-                triggerVariant="outline"
-                triggerLabel={raisePlacement ? 'Raise placement fee invoice' : 'Generate invoice'}
-                contextLinks={{
-                  placementId: raisePlacement || undefined,
-                  jobRequisitionId: raiseRequisition || undefined,
-                }}
-                defaultOpen={Boolean(raisePlacement)}
-              />,
-              <CaseDialog
-                key="immigration-case"
-                persons={allPersons}
-                employers={employersAll}
-                applicationTypes={allApplicationTypes}
-                prefill={{ sponsorEmployerId: employer.id }}
-                trigger={
-                  <button
-                    type="button"
-                    className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+            },
+            {
+              key: 'onboarding',
+              icon: onboardingComplete ? BadgeCheck : CircleDashed,
+              content: onboardingComplete ? 'Onboarding complete' : 'Onboarding in progress',
+            },
+            {
+              key: 'terms',
+              icon: Clock,
+              content: employer.paymentTermsDays
+                ? `Payment terms ${employer.paymentTermsDays} days`
+                : null,
+            },
+            {
+              key: 'since',
+              icon: CalendarPlus,
+              content: `Added ${format(employer.createdAt, 'd MMM yyyy · HH:mm')}`,
+            },
+          ]}
+          actions={
+            <RecordHeaderActions
+              primary={
+                canCreateJob ? (
+                  <RequisitionDialog
+                    employers={employersAll}
+                    currencies={currencies}
+                    occupations={occupationList}
+                    defaultEmployerId={employer.id}
+                    defaultOpen={newRequisition === '1'}
+                    trigger={
+                      <Button size="sm">
+                        <Plus className="mr-1.5 size-4" /> New requisition
+                      </Button>
+                    }
+                  />
+                ) : undefined
+              }
+              secondary={[
+                <AssignToMeButton
+                  key="assign"
+                  entity="employer"
+                  id={employer.id}
+                  currentUserId={session.user.id}
+                  currentAssignedUserId={employer.assignedUserId}
+                  canReassign={session.user.isOwner}
+                />,
+                canEditEmployer && (
+                  <EmployerDialog
+                    key="edit"
+                    initial={employer}
+                    appVatRegistered={appSettings.vatRegistered}
+                    trigger={
+                      <Button size="sm" variant="outline">
+                        <Pencil className="mr-1.5 size-4" /> Edit
+                      </Button>
+                    }
+                  />
+                ),
+                firstRaisablePlacement && !raisePlacement && (
+                  <Link
+                    key="raise-fee"
+                    href={`/employers/${employer.id}?raisePlacement=${firstRaisablePlacement.id}`}
+                    className={buttonVariants({ size: 'sm', variant: 'outline' })}
                   >
-                    <PlaneTakeoff className="size-4" /> Start immigration case
-                  </button>
-                }
-              />,
-            ]}
-          />
-        </div>
+                    <Coins className="mr-1.5 size-4" aria-hidden /> Raise placement fee
+                  </Link>
+                ),
+              ]}
+              overflow={[
+                <GenerateInvoiceDialog
+                  key="generate-invoice"
+                  payerMode="EMPLOYER"
+                  payerId={employer.id}
+                  payerLabel={employer.legalName}
+                  services={invoiceableServices}
+                  triggerVariant="outline"
+                  triggerLabel={raisePlacement ? 'Raise placement fee invoice' : 'Generate invoice'}
+                  contextLinks={{
+                    placementId: raisePlacement || undefined,
+                    jobRequisitionId: raiseRequisition || undefined,
+                  }}
+                  defaultOpen={Boolean(raisePlacement)}
+                />,
+                <CaseDialog
+                  key="immigration-case"
+                  persons={allPersons}
+                  employers={employersAll}
+                  applicationTypes={allApplicationTypes}
+                  prefill={{ sponsorEmployerId: employer.id }}
+                  trigger={
+                    <button
+                      type="button"
+                      className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                    >
+                      <PlaneTakeoff className="size-4" /> Start immigration case
+                    </button>
+                  }
+                />,
+              ]}
+            />
+          }
+        />
 
         {/* KPI strip — live demand only, from R0-corrected counters. */}
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <KpiTile
+        <StatTileGrid className="mt-6">
+          <StatTile
+            testId="kpi-Active requirements"
             icon={Briefcase}
             label="Active requirements"
             value={activeReqs.length}
             hint="Jobs currently open"
             tone="blue"
           />
-          <KpiTile
+          <StatTile
+            testId="kpi-Positions required"
             icon={Users}
             label="Positions required"
             value={kpiRequired}
             hint="Across active jobs"
             tone="amber"
           />
-          <KpiTile
+          <StatTile
+            testId="kpi-Confirmed placed"
             icon={CheckCircle2}
             label="Confirmed placed"
             value={kpiFilled}
             hint="Seats filled by placements"
             tone="green"
           />
-          <KpiTile
+          <StatTile
+            testId="kpi-Remaining"
             icon={User}
             label="Remaining"
             value={kpiRemaining}
             hint="Seats still to fill"
             tone="rose"
           />
-        </div>
+        </StatTileGrid>
       </FadeUp>
 
       {nextAction && (
         <FadeUp delay={0.02}>
-          <NextActionCard
+          <NextActionBanner
             label={nextAction.label}
             dueHint={nextAction.dueHint}
             sentence={nextAction.sentence}
             tone={nextAction.tone}
             primary={nextAction.primary}
-            className="mt-5"
+            className="mt-4"
           />
         </FadeUp>
       )}
@@ -942,7 +993,7 @@ export default async function EmployerDetail({
           recommendation clearly separated, each item a direct pointer. */}
       {!onboardingComplete && (
         <FadeUp delay={0.025}>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs dark:border-amber-900/60 dark:bg-amber-950/40">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs shadow-sm dark:border-amber-900/60 dark:bg-amber-950/40">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-amber-900 dark:text-amber-100">
               <span className="font-semibold">Onboarding incomplete:</span>
               {!hasPrimaryContact && (
@@ -972,7 +1023,7 @@ export default async function EmployerDetail({
         </FadeUp>
       )}
 
-      <FadeUp delay={0.05} className="mt-6">
+      <FadeUp delay={0.05} className="mt-5">
         <EmployerWorkspaceTabs
           overview={overviewTab}
           requirements={requirementsTab}

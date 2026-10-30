@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ALL_SCOPES, type AssignmentScope, SCOPE_LABEL } from '@/lib/scope';
 import { cn } from '@/lib/utils';
+import { arrowKeyNav, SEG_TRAY, segItem } from './ds/segmented';
 
 /**
  * URL-persisted filter chips. Writes `?assigned=me|unassigned|all` and lets
@@ -37,7 +38,8 @@ export function ScopeFilter({
     <div
       role="tablist"
       aria-label="Assignment filter"
-      className={cn('inline-flex rounded-md glass-panel p-0.5 text-xs', className)}
+      onKeyDown={(e) => arrowKeyNav(e)}
+      className={cn(SEG_TRAY, className)}
     >
       {ALL_SCOPES.map((s) => {
         const active = s === current;
@@ -48,12 +50,7 @@ export function ScopeFilter({
             role="tab"
             aria-selected={active}
             onClick={() => setScope(s)}
-            className={cn(
-              'rounded px-2.5 py-1 transition-colors',
-              active
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-accent/50',
-            )}
+            className={segItem(active)}
           >
             {SCOPE_LABEL[s]}
           </button>

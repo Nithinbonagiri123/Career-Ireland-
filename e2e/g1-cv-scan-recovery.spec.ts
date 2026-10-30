@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * G1 — CV scan on Next.js 16.4: a scan whose request fails (aborted by
@@ -31,6 +32,7 @@ test('a failed CV scan is shown persistently and the next scan recovers', async 
     .returning({ id: m.schemas.persons.id });
   if (!person) throw new Error('person seed failed');
   await m.db.insert(m.schemas.candidateProfiles).values({
+    assignedUserId: await e2eAdminId(),
     personId: person.id,
     lifecycleStatus: 'ACTIVE',
     availabilityStatus: 'AVAILABLE',

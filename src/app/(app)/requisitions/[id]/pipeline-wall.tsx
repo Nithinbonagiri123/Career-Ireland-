@@ -24,7 +24,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
-import { Note } from '@/components/note';
+import { DS_SOFT, type DsTone } from '@/components/ds/tones';
 import { PIPELINE_STAGES, PipelineChip, type PipelineStage } from '@/components/pipeline-chip';
 import {
   PLACEMENT_OFFER_REQUIRED,
@@ -57,8 +57,8 @@ import type { RequisitionListRow } from '@/modules/requisitions/service';
  *   ┌ Reviewed · 3 ─────────────────────────────────────────────────┐
  *   ...
  *
- * Each band uses its pipeline-{stage} tone via the `Note` component
- * so the wall reads as a stack of sticky notes. Every card carries
+ * Stage 6G — each stage is a white section card; its pipeline tone sits
+ * on the numbered step marker and the count. Every card carries
  * an "Advance to next stage" action inline; drag-and-drop is a
  * future addition, not required for the primary workflow.
  *
@@ -189,7 +189,7 @@ export function PipelineWall({
   return (
     <div className="space-y-4">
       {/* ── Stepper strip ─────────────────────────────────────── */}
-      <div className="glass-panel flex flex-wrap items-center gap-1.5 rounded-2xl p-2">
+      <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-border/60 bg-card p-2 shadow-sm">
         {totals.map(({ stage, count }, i) => (
           <div key={stage} className="flex items-center gap-1.5">
             <PipelineChip stage={stage} count={count} />
@@ -271,29 +271,50 @@ function PipelineBand({
   const label = PIPELINE_STAGES[stage].label;
 
   return (
-    <Note tone={tone} as="section" className="overflow-hidden">
+    // Stage 6G — white section card; the stage colour lives in the step
+    // marker only, so seven stages no longer stack seven colour bands.
+    <section
+      aria-label={`${label} (${entries.length})`}
+      className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm"
+    >
       {/* Session 36 — band header gets a step number + stage icon so
           the funnel is readable at a glance. The old header duplicated
           the stepper strip above; this version uses the extra space
           to show the stage name prominently and the count as support. */}
-      <header className="flex items-center justify-between gap-3 border-b border-black/5 px-4 py-2.5">
-        <div className="flex items-center gap-2.5">
-          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-background/70 font-mono text-[10px] font-semibold tabular-nums text-foreground">
+      <header
+        className={cn(
+          'flex items-center justify-between gap-3 px-4 py-3',
+          entries.length > 0 && 'border-b border-border/60',
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span
+            aria-hidden
+            className={cn(
+              'grid size-7 shrink-0 place-items-center rounded-lg text-[11px] font-semibold tabular-nums',
+              DS_SOFT[tone],
+            )}
+          >
             {stageIndex}
           </span>
-          <Icon className="size-3.5 opacity-80" aria-hidden />
-          <span className="text-sm font-semibold">{label}</span>
+          <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="text-sm font-semibold text-foreground">{label}</span>
+          {entries.length === 0 && (
+            <span className="hidden truncate text-xs text-muted-foreground sm:inline">
+              · {emptyMessage(stage)}
+            </span>
+          )}
         </div>
-        <span className="font-mono text-xs font-medium tabular-nums opacity-70">
+        <span
+          className={cn(
+            'rounded-md px-2 py-0.5 text-xs font-semibold tabular-nums',
+            entries.length > 0 ? DS_SOFT[tone] : 'bg-muted text-muted-foreground',
+          )}
+        >
           {entries.length}
         </span>
       </header>
-      {entries.length === 0 ? (
-        <div className="flex items-center justify-center gap-2 px-4 py-6 text-center text-xs opacity-70">
-          <Icon className="size-3.5 shrink-0 opacity-60" aria-hidden />
-          <span>{emptyMessage(stage)}</span>
-        </div>
-      ) : (
+      {entries.length === 0 ? null : (
         // The band scrolls horizontally when it has more candidates than
         // fit. Right-edge fade mask signals "there's more here" so users
         // don't miss offscreen cards. Mask sits behind the cards, so
@@ -322,7 +343,7 @@ function PipelineBand({
           ))}
         </div>
       )}
-    </Note>
+    </section>
   );
 }
 
@@ -361,7 +382,7 @@ function PipelineCard({
   return (
     <article
       className={cn(
-        'glass-panel group flex w-64 shrink-0 snap-start flex-col gap-2.5 rounded-xl p-3 shadow-sm transition-shadow hover:shadow-md',
+        'group flex w-64 shrink-0 snap-start flex-col gap-2.5 rounded-xl border border-border/70 bg-card p-3 shadow-xs transition-shadow hover:shadow-md',
         disabled && 'pointer-events-none opacity-60',
       )}
     >
@@ -383,13 +404,11 @@ function PipelineCard({
           >
             {entry.personName}
           </Link>
-          {entry.personLocation ? (
-            <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-muted-foreground">
-              <MapPin className="size-2.5 shrink-0" />
+          {entry.personLocation && (
+            <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-muted-foreground">
+              <MapPin className="size-3 shrink-0" aria-hidden />
               <span className="truncate">{entry.personLocation}</span>
             </p>
-          ) : (
-            <p className="mt-0.5 text-[10px] italic text-muted-foreground/60">Location not set</p>
           )}
         </div>
         {scoreLabel !== null && (
@@ -538,13 +557,13 @@ const STAGE_ORDER: PipelineStageKey[] = [
   'placed',
 ];
 
-const BAND_TONE: Record<PipelineStageKey, Parameters<typeof Note>[0]['tone']> = {
+const BAND_TONE: Record<PipelineStageKey, DsTone> = {
   source: 'blue',
-  review: 'yellow',
-  shortlist: 'pink',
-  apply: 'purple',
-  interview: 'purple',
-  offer: 'green',
+  review: 'amber',
+  shortlist: 'rose',
+  apply: 'violet',
+  interview: 'violet',
+  offer: 'teal',
   placed: 'green',
 };
 

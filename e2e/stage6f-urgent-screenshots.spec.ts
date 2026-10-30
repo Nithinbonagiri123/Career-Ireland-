@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 6F (urgent) Phase 6 — before/after visual acceptance.
@@ -76,6 +77,7 @@ test('visual: Leads page + New Lead dialog + Pro-forma composer', async ({ page 
   const [l] = await db
     .insert(leads)
     .values({
+      assignedUserId: await e2eAdminId(),
       personId: p.id,
       targetBusiness: 'CANDIDATE_SERVICES',
       status: 'NEW',

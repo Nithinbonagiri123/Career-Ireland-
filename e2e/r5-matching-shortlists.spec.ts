@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * R5 — Global Matching & Shortlists, end to end:
@@ -34,13 +35,14 @@ type M = Awaited<ReturnType<typeof dbModules>>;
 async function seed(m: M, stamp: string) {
   const [emp] = await m.db
     .insert(m.s.employers)
-    .values({ legalName: `R5 Nursing Homes ${stamp}` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `R5 Nursing Homes ${stamp}` })
     .returning({ id: m.s.employers.id });
   if (!emp) throw new Error('seed failed');
   const [job, closed] = await m.db
     .insert(m.s.jobRequisitions)
     .values([
       {
+        assignedUserId: await e2eAdminId(),
         employerId: emp.id,
         title: `R5 Care Assistant ${stamp}`,
         positionsRequired: 2,
@@ -48,6 +50,7 @@ async function seed(m: M, stamp: string) {
         status: 'OPEN',
       },
       {
+        assignedUserId: await e2eAdminId(),
         employerId: emp.id,
         title: `R5 Closed Role ${stamp}`,
         positionsRequired: 1,
@@ -78,9 +81,21 @@ async function seed(m: M, stamp: string) {
   const [ann, ben, cara] = people;
   if (!ann || !ben || !cara) throw new Error('seed failed');
   await m.db.insert(m.s.candidateProfiles).values([
-    { personId: ann.id, availabilityStatus: 'AVAILABLE' as const },
-    { personId: ben.id, availabilityStatus: 'AVAILABLE' as const },
-    { personId: cara.id, availabilityStatus: 'TEMPORARILY_UNAVAILABLE' as const },
+    {
+      assignedUserId: await e2eAdminId(),
+      personId: ann.id,
+      availabilityStatus: 'AVAILABLE' as const,
+    },
+    {
+      assignedUserId: await e2eAdminId(),
+      personId: ben.id,
+      availabilityStatus: 'AVAILABLE' as const,
+    },
+    {
+      assignedUserId: await e2eAdminId(),
+      personId: cara.id,
+      availabilityStatus: 'TEMPORARILY_UNAVAILABLE' as const,
+    },
   ]);
   await m.db.insert(m.s.candidateSkills).values([
     { personId: ann.id, skillId: skill.id },

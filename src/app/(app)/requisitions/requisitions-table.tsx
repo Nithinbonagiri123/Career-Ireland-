@@ -172,8 +172,6 @@ export function RequisitionsTable({
         data={requisitions}
         emptyTitle="No requisitions yet"
         emptyDescription="Every recruitment engagement starts with a Job Requisition from an Employer."
-        enableGlobalFilter
-        globalFilterPlaceholder="Search requisitions…"
         enableColumnVisibility
       />
       <PromptDialog

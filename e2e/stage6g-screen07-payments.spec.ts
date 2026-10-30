@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 6G Screen 07 — Payments page vs
@@ -142,6 +143,7 @@ test('stage 6G screen 07 — payments page matches the approved layout', async (
     const [lead] = await m.db
       .insert(m.schemas.leads)
       .values({
+        assignedUserId: await e2eAdminId(),
         personId,
         targetBusiness: 'CANDIDATE_SERVICES',
         serviceOfInterestId: svc.id,

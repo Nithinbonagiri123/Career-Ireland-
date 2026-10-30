@@ -17,6 +17,7 @@ import {
   shortlistEntries,
 } from '@/lib/db/schema/recruitment';
 import { type UserRole, users } from '@/lib/db/schema/users';
+import { e2eAdminId } from '@/test/db-fixtures';
 
 /**
  * R4 — campaigns, advertisements and prospects against the real DB.
@@ -122,7 +123,10 @@ beforeAll(async () => {
   session.user.id = admin.id;
   const [emp, other] = await db
     .insert(employers)
-    .values([{ legalName: `${STAMP} Care` }, { legalName: `${STAMP} Other` }])
+    .values([
+      { assignedUserId: await e2eAdminId(), legalName: `${STAMP} Care` },
+      { assignedUserId: await e2eAdminId(), legalName: `${STAMP} Other` },
+    ])
     .returning({ id: employers.id });
   if (!emp || !other) throw new Error('seed failed');
   ids.employer = emp.id;
@@ -131,6 +135,7 @@ beforeAll(async () => {
     .insert(jobRequisitions)
     .values([
       {
+        assignedUserId: await e2eAdminId(),
         employerId: emp.id,
         title: `${STAMP} nurse`,
         positionsRequired: 2,
@@ -138,6 +143,7 @@ beforeAll(async () => {
         status: 'OPEN',
       },
       {
+        assignedUserId: await e2eAdminId(),
         employerId: emp.id,
         title: `${STAMP} closed`,
         positionsRequired: 1,
@@ -145,6 +151,7 @@ beforeAll(async () => {
         status: 'CLOSED',
       },
       {
+        assignedUserId: await e2eAdminId(),
         employerId: other.id,
         title: `${STAMP} other`,
         positionsRequired: 1,
@@ -590,9 +597,12 @@ describe('conversion hand-off', () => {
 
   it('reuses an existing candidate profile — no duplicate candidate', async () => {
     const personId = await seedPerson('reuse');
-    await db
-      .insert(candidateProfiles)
-      .values({ personId, lifecycleStatus: 'ACTIVE', availabilityStatus: 'AVAILABLE' });
+    await db.insert(candidateProfiles).values({
+      assignedUserId: await e2eAdminId(),
+      personId,
+      lifecycleStatus: 'ACTIVE',
+      availabilityStatus: 'AVAILABLE',
+    });
     const id = await newCampaign();
     const ad = await newAd(id);
     const p = await ps.createProspect({ advertisementId: ad.id, personId });

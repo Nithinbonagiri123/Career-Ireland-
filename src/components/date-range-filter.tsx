@@ -5,6 +5,7 @@ import { CalendarClock, X } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { arrowKeyNav, FOCUS_RING, SEG_TRAY, segItem } from './ds/segmented';
 
 /**
  * URL-driven "Created" date-range filter for list pages.
@@ -103,96 +104,70 @@ export function DateRangeFilter({ className }: { className?: string }) {
 
   return (
     <div className={cn('relative', className)} ref={popoverRef}>
-      {/* Mobile scroll box: the tablist is wider than 375px on almost
-         every route (Anytime + 3 presets + "Custom"), so wrap in an
-         overflow-x-auto container with the same right-edge fade mask
-         we use on data tables. Scrolling reveals the trailing "Custom"
-         chip that would otherwise be invisible on iPhone SE. */}
+      {/* Stage 6G segmented tray. It wraps onto a second line on narrow
+         screens instead of scrolling sideways inside the filter row. */}
       <div
-        className={cn(
-          'overflow-x-auto',
-          'supports-[mask-image:linear-gradient(black,black)]:[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent_100%)]',
-          'supports-[mask-image:linear-gradient(black,black)]:sm:[mask-image:none]',
-        )}
+        role="tablist"
+        aria-label="Created date filter"
+        onKeyDown={(e) => arrowKeyNav(e, '[role="tab"], [data-seg-item]')}
+        className={SEG_TRAY}
       >
-        <div
-          role="tablist"
-          aria-label="Created date filter"
-          className="inline-flex items-center gap-0.5 rounded-md glass-panel p-0.5 text-xs"
+        <span className="inline-flex h-8 items-center gap-1.5 px-2 text-[13px] text-muted-foreground">
+          <CalendarClock className="size-3.5" aria-hidden />
+          Created
+        </span>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={isAnytime}
+          onClick={() => setPreset('')}
+          className={segItem(isAnytime)}
         >
-          <span className="inline-flex items-center gap-1 px-2 text-muted-foreground">
-            <CalendarClock className="size-3.5" aria-hidden />
-            Created
-          </span>
+          Anytime
+        </button>
+        {PRESETS.map((p) => {
+          const active = !isCustom && currentPreset === p.value;
+          return (
+            <button
+              key={p.value}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setPreset(p.value)}
+              className={segItem(active)}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+        {/* Stage B Wave 1 — the clear-X is a sibling of the Custom button,
+            never nested inside it (nested buttons break hydration). */}
+        <span className={cn(segItem(isCustom, 'gap-0 px-0'))}>
           <button
             type="button"
-            role="tab"
-            aria-selected={isAnytime}
-            onClick={() => setPreset('')}
-            className={cn(
-              'rounded px-2.5 py-1 transition-colors',
-              isAnytime
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-accent/50',
-            )}
+            data-seg-item
+            onClick={() => setCustomOpen((v) => !v)}
+            aria-expanded={customOpen}
+            aria-haspopup="dialog"
+            className={cn('inline-flex h-8 items-center rounded-lg px-3', FOCUS_RING)}
           >
-            Anytime
+            {customLabel}
           </button>
-          {PRESETS.map((p) => {
-            const active = !isCustom && currentPreset === p.value;
-            return (
-              <button
-                key={p.value}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setPreset(p.value)}
-                className={cn(
-                  'rounded px-2.5 py-1 transition-colors',
-                  active
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-accent/50',
-                )}
-              >
-                {p.label}
-              </button>
-            );
-          })}
-          {/* Stage B Wave 1 — the clear-X used to be a <button> nested
-              inside this toggle <button>. That's invalid HTML: the
-              browser's parser splits the pair apart, so the server-sent
-              DOM never matches React's tree and hydration fails
-              (regenerating the tree and swallowing early clicks on any
-              page with a custom range active). Siblings in a wrapper
-              render identically and hydrate cleanly. */}
-          <span
-            className={cn(
-              'inline-flex items-center rounded transition-colors',
-              isCustom
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-accent/50',
-            )}
-          >
+          {isCustom && (
             <button
               type="button"
-              onClick={() => setCustomOpen((v) => !v)}
-              aria-expanded={customOpen}
-              className="inline-flex items-center gap-1 rounded px-2.5 py-1"
+              data-seg-item
+              aria-label="Clear custom range"
+              onClick={clearCustom}
+              className={cn(
+                'mr-1 inline-grid size-6 place-items-center rounded-md hover:bg-background/20',
+                FOCUS_RING,
+              )}
             >
-              {customLabel}
+              <X className="size-3" />
             </button>
-            {isCustom && (
-              <button
-                type="button"
-                aria-label="Clear custom range"
-                onClick={clearCustom}
-                className="mr-1 inline-flex items-center rounded p-0.5 hover:bg-background/40"
-              >
-                <X className="size-3" />
-              </button>
-            )}
-          </span>
-        </div>
+          )}
+        </span>
       </div>
 
       <AnimatePresence>
@@ -202,7 +177,9 @@ export function DateRangeFilter({ className }: { className?: string }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.12 }}
-            className="absolute right-0 top-full z-30 mt-1 w-72 rounded-lg border bg-popover p-3 shadow-lg ring-1 ring-foreground/10"
+            role="dialog"
+            aria-label="Custom date range"
+            className="absolute left-0 top-full z-30 mt-1.5 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-border/60 bg-popover p-3 shadow-lg sm:left-auto sm:right-0"
           >
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Custom range
@@ -231,7 +208,10 @@ export function DateRangeFilter({ className }: { className?: string }) {
               <button
                 type="button"
                 onClick={() => setCustomOpen(false)}
-                className="rounded-md border px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                className={cn(
+                  'h-8 rounded-lg border border-border/70 px-3 text-xs text-muted-foreground hover:text-foreground',
+                  FOCUS_RING,
+                )}
               >
                 Cancel
               </button>
@@ -239,7 +219,10 @@ export function DateRangeFilter({ className }: { className?: string }) {
                 type="button"
                 onClick={applyCustom}
                 disabled={!from && !to}
-                className="rounded-md bg-primary px-2.5 py-1 text-xs text-primary-foreground disabled:opacity-50"
+                className={cn(
+                  'h-8 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50',
+                  FOCUS_RING,
+                )}
               >
                 Apply
               </button>

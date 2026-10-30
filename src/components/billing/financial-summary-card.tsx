@@ -1,4 +1,5 @@
 import { AlertTriangle, FileText, HandCoins, Hourglass } from 'lucide-react';
+import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
 import { formatCurrency } from '@/lib/currency';
 import { isInvoiceOverdue } from '@/modules/billing/aging';
 import type { PersonBillingRow } from '@/modules/billing/read';
@@ -52,66 +53,43 @@ export function FinancialSummaryCard({ invoices }: { invoices: PersonBillingRow[
 
   return (
     <div className="space-y-3">
-      {rows.map(([currencyCode, b]) => {
-        const overdueTone = b.overdueCount > 0 ? 'text-status-danger' : 'text-muted-foreground';
-        const outstandingTone = b.outstanding > 0 ? 'text-status-warning' : 'text-muted-foreground';
-        return (
-          <div
-            key={currencyCode}
-            className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4"
-          >
-            <Cell
+      {rows.map(([currencyCode, b]) => (
+        <div key={currencyCode} className="space-y-2">
+          {rows.length > 1 && (
+            <p className="text-xs font-medium text-muted-foreground">{currencyCode}</p>
+          )}
+          <StatTileGrid>
+            <StatTile
               icon={FileText}
+              tone="blue"
               label="Invoiced"
               value={formatCurrency(b.invoiced.toFixed(2), currencyCode)}
             />
-            <Cell
+            <StatTile
               icon={HandCoins}
+              tone="green"
               label="Received"
               value={formatCurrency(b.received.toFixed(2), currencyCode)}
-              tone="text-status-success"
             />
-            <Cell
+            <StatTile
               icon={Hourglass}
+              tone={b.outstanding > 0 ? 'amber' : 'slate'}
               label="Outstanding"
               value={formatCurrency(b.outstanding.toFixed(2), currencyCode)}
-              tone={outstandingTone}
             />
-            <Cell
+            <StatTile
               icon={AlertTriangle}
+              tone={b.overdueCount > 0 ? 'rose' : 'slate'}
               label="Overdue"
               value={
                 b.overdueCount === 0
                   ? 'None'
                   : `${b.overdueCount} ${b.overdueCount === 1 ? 'invoice' : 'invoices'}`
               }
-              tone={overdueTone}
             />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Cell({
-  icon: Icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  tone?: string;
-}) {
-  return (
-    <div className="flex items-start gap-2.5 bg-card px-4 py-3">
-      <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 space-y-0.5">
-        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className={`tabular-nums text-sm font-semibold ${tone ?? ''}`.trim()}>{value}</p>
-      </div>
+          </StatTileGrid>
+        </div>
+      ))}
     </div>
   );
 }

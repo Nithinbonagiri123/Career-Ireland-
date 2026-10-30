@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 6G Screen 10 — Direct Payment & Convert dialog (4-step card
@@ -99,6 +100,7 @@ test('stage 6G screen 10 — direct payment dialog + official invoice page match
   const [lead] = await m.db
     .insert(m.schemas.leads)
     .values({
+      assignedUserId: await e2eAdminId(),
       personId,
       targetBusiness: 'CANDIDATE_SERVICES',
       serviceOfInterestId: catalogueIds[0] as string,

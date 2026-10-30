@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 6F Phase 6 — real acceptance walk of the restored Client
@@ -39,7 +40,7 @@ async function seedConvertedCandidate(stamp: string) {
     })
     .returning({ id: persons.id });
   if (!p) throw new Error('seed person failed');
-  await db.insert(candidateProfiles).values({ personId: p.id });
+  await db.insert(candidateProfiles).values({ assignedUserId: await e2eAdminId(), personId: p.id });
 
   return {
     personId: p.id,

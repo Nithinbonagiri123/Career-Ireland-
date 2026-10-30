@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 4.2 — lead-to-candidate conversion walkthrough.
@@ -103,6 +104,7 @@ async function seedCsLeadWithIdentity(): Promise<{
   const [l] = await db
     .insert(leads)
     .values({
+      assignedUserId: await e2eAdminId(),
       targetBusiness: 'CANDIDATE_SERVICES',
       personId: p.id,
       status: 'NEW',

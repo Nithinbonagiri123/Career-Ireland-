@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 6G — visual redesign of the Candidate Workspace to match the
@@ -129,6 +130,7 @@ test('stage 6G — realistic healthcare candidate rendered in the redesigned wor
   const [profile] = await m.db
     .insert(m.schemas.candidateProfiles)
     .values({
+      assignedUserId: await e2eAdminId(),
       personId,
       primaryOccupationId: occ?.id,
       yearsOfExperience: '12',
@@ -215,6 +217,7 @@ test('stage 6G — realistic healthcare candidate rendered in the redesigned wor
     const [lead] = await m.db
       .insert(m.schemas.leads)
       .values({
+        assignedUserId: await e2eAdminId(),
         personId,
         targetBusiness: 'CANDIDATE_SERVICES',
         serviceOfInterestId: svc.id,

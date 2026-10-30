@@ -4,6 +4,7 @@ import { db } from '@/lib/db/client';
 import { persons } from '@/lib/db/schema/persons';
 import { employers } from '@/lib/db/schema/recruitment';
 import type { UserRole } from '@/lib/db/schema/users';
+import { e2eAdminId } from '@/test/db-fixtures';
 
 /**
  * R2 — server-side pickers: same access rule and row filters as the eager
@@ -51,8 +52,12 @@ beforeAll(async () => {
   const emps = await db
     .insert(employers)
     .values([
-      { legalName: `${TAG} Care Homes Ltd`, tradingName: `${TAG} Sunrise` },
-      { legalName: `${TAG} Old Co`, archivedAt: new Date() },
+      {
+        assignedUserId: await e2eAdminId(),
+        legalName: `${TAG} Care Homes Ltd`,
+        tradingName: `${TAG} Sunrise`,
+      },
+      { assignedUserId: await e2eAdminId(), legalName: `${TAG} Old Co`, archivedAt: new Date() },
     ])
     .returning({ id: employers.id });
   employerIds.push(...emps.map((r) => r.id));

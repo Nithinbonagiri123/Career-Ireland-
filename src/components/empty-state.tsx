@@ -12,12 +12,9 @@ export type EmptyStateProps = {
 };
 
 /**
- * Reusable empty state. Icon medallion floats gently and two concentric
- * rings breathe on a slow ~4s cycle so the room isn't dead — but the
- * animation is pure CSS (keyframes in globals.css) so this stays a
- * Server Component. That matters because callers pass `icon={LucideIcon}`
- * from Server Components, and RSC can't serialize a component reference
- * across a Server → Client boundary.
+ * Reusable empty state — Stage 6G (mockup 04 "No applications yet"): a
+ * soft icon circle, a short title and one line of help, centred, with no
+ * box of its own so it sits quietly inside whatever card holds it.
  */
 export function EmptyState({
   icon: Icon = Inbox,
@@ -29,36 +26,20 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        // glass-panel so description text always has a frosted surface
-        // behind it, not raw photo. Dashed border kept as a hint that
-        // this is an intentional placeholder, not real content.
-        'glass-panel flex flex-col items-center justify-center gap-4 rounded-lg border-dashed px-6 py-14 text-center',
+        'flex flex-col items-center justify-center gap-3 px-6 py-8 text-center',
         className,
       )}
     >
-      <div className="relative flex size-14 items-center justify-center">
-        {/* Outer breathing ring. */}
-        <span
-          aria-hidden
-          className="animate-breathe-slow absolute inset-[-14px] rounded-full bg-muted/30"
-        />
-        {/* Middle ring — offset delay so the two aren't in lock-step. */}
-        <span
-          aria-hidden
-          className="animate-breathe-slower absolute inset-[-6px] rounded-full bg-muted/50"
-        />
-        {/* Icon medallion floats up 2 px and back over 5 s. */}
-        <span
-          aria-hidden
-          className="animate-float-slow relative flex size-14 items-center justify-center rounded-full bg-muted/70"
-        >
-          <Icon aria-hidden className="size-6 text-muted-foreground" />
-        </span>
-      </div>
-      <div className="space-y-1.5">
-        <p className="text-sm font-medium text-foreground">{title}</p>
+      <span
+        aria-hidden
+        className="grid size-12 place-items-center rounded-full bg-sky-50 text-sky-600 ring-1 ring-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/20"
+      >
+        <Icon className="size-5" />
+      </span>
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-foreground">{title}</p>
         {description && (
-          <p className="mx-auto max-w-sm text-xs leading-relaxed text-foreground/65">
+          <p className="mx-auto max-w-sm text-xs leading-relaxed text-muted-foreground">
             {description}
           </p>
         )}

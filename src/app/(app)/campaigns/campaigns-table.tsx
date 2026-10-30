@@ -5,11 +5,12 @@ import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo } from 'react';
 import { DataTable } from '@/components/data-table/data-table';
-import { StatusChip } from '@/components/status-chip';
+import { DsStatusPill } from '@/components/ds/status-pill';
 import { Timestamp } from '@/components/timestamp';
 import { buttonVariants } from '@/components/ui/button';
-import { CAMPAIGN_STATUS_LABEL, CAMPAIGN_TONE } from '@/modules/campaigns/labels';
+import { CAMPAIGN_STATUS_LABEL } from '@/modules/campaigns/labels';
 import type { CampaignListRow } from '@/modules/campaigns/service';
+import { CAMPAIGN_DS_TONE } from './campaign-tones';
 
 /**
  * R4 — campaigns list. Lifecycle actions live in the campaign workspace,
@@ -33,7 +34,7 @@ export function CampaignsTable({
             <div className="flex min-w-0 flex-col">
               <Link
                 href={`/campaigns/${c.id}`}
-                className="truncate text-sm font-medium hover:underline"
+                className="truncate text-sm font-semibold text-foreground hover:underline"
               >
                 {c.name}
               </Link>
@@ -51,10 +52,9 @@ export function CampaignsTable({
         accessorKey: 'status',
         size: 120,
         cell: ({ row }) => (
-          <StatusChip
-            label={CAMPAIGN_STATUS_LABEL[row.original.status]}
-            tone={CAMPAIGN_TONE[row.original.status]}
-          />
+          <DsStatusPill tone={CAMPAIGN_DS_TONE[row.original.status]}>
+            {CAMPAIGN_STATUS_LABEL[row.original.status]}
+          </DsStatusPill>
         ),
       },
       {
@@ -63,7 +63,7 @@ export function CampaignsTable({
         size: 90,
         cell: ({ row }) => (
           <span className="text-xs tabular-nums text-muted-foreground">
-            {row.original.activeAdCount} / {row.original.adCount} running
+            {row.original.activeAdCount} of {row.original.adCount} running
           </span>
         ),
       },

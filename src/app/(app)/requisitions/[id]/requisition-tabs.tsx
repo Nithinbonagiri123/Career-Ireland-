@@ -1,9 +1,10 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
+import { useActiveTabInView } from '@/components/ds/use-active-tab-in-view';
+import { DS_TAB_COUNT, DS_TAB_TRIGGER, DS_TABS_LIST } from '@/components/ds/workspace';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { cn } from '@/lib/utils';
 
 /**
  * Client boundary for the job requirement workspace's tab state.
@@ -36,15 +37,6 @@ const LABELS: Record<TabValue, string> = {
   activity: 'Activity',
 };
 
-// Same pill-tab tray as the R1 employer workspace.
-const triggerClass = cn(
-  'relative inline-flex h-11 shrink-0 items-center rounded-lg px-4 text-sm font-medium text-muted-foreground transition-colors',
-  'hover:text-foreground',
-  'data-[selected]:text-primary',
-  'after:absolute after:inset-x-3 after:bottom-0.5 after:h-0.5 after:rounded-full after:bg-transparent data-[selected]:after:bg-primary',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
-);
-
 export function RequisitionTabs({
   panels,
   counts,
@@ -59,6 +51,8 @@ export function RequisitionTabs({
   const active: TabValue = REQUISITION_TAB_VALUES.includes(requested as TabValue)
     ? (requested as TabValue)
     : 'pipeline';
+  const stripRef = useRef<HTMLDivElement>(null);
+  useActiveTabInView(stripRef, active);
   return (
     <Tabs
       value={active}
@@ -73,21 +67,19 @@ export function RequisitionTabs({
       }}
     >
       <div>
-        <TabsList className="h-auto max-w-full gap-1 overflow-x-auto rounded-2xl border-0 bg-card p-1.5 shadow-sm ring-1 ring-border/60 [&>[data-slot=indicator]]:hidden">
-          {REQUISITION_TAB_VALUES.map((v) => (
-            <TabsTrigger key={v} value={v} className={triggerClass}>
-              {LABELS[v]}
-              {typeof counts[v] === 'number' && (
-                <span className="ml-1 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
-                  {counts[v]}
-                </span>
-              )}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div ref={stripRef}>
+          <TabsList className={DS_TABS_LIST}>
+            {REQUISITION_TAB_VALUES.map((v) => (
+              <TabsTrigger key={v} value={v} className={DS_TAB_TRIGGER}>
+                {LABELS[v]}
+                {typeof counts[v] === 'number' && <span className={DS_TAB_COUNT}>{counts[v]}</span>}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
       </div>
       {REQUISITION_TAB_VALUES.map((v) => (
-        <TabsContent key={v} value={v} className="mt-5">
+        <TabsContent key={v} value={v}>
           {panels[v]}
         </TabsContent>
       ))}

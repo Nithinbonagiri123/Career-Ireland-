@@ -22,12 +22,13 @@ export async function e2eAdminId(): Promise<string> {
 export async function seedJob(stamp: string, status: 'OPEN' | 'CLOSED' = 'OPEN') {
   const [emp] = await db
     .insert(employers)
-    .values({ legalName: `${stamp} Ltd` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `${stamp} Ltd` })
     .returning();
   if (!emp) throw new Error('seed failed');
   const [job] = await db
     .insert(jobRequisitions)
     .values({
+      assignedUserId: await e2eAdminId(),
       employerId: emp.id,
       title: `${stamp} job`,
       positionsRequired: 2,

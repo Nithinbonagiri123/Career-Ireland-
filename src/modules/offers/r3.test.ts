@@ -112,7 +112,7 @@ beforeAll(async () => {
     .returning({ id: users.id });
   const [e] = await db
     .insert(employers)
-    .values({ legalName: `R3 Employer ${STAMP}` })
+    .values({ assignedUserId: u?.id, legalName: `R3 Employer ${STAMP}` })
     .returning({ id: employers.id });
   if (!u || !e) throw new Error('seed');
   ids.user = u.id;
@@ -122,6 +122,7 @@ beforeAll(async () => {
     .insert(jobRequisitions)
     .values([
       {
+        assignedUserId: u.id,
         employerId: e.id,
         title: `R3 Open ${STAMP}`,
         positionsRequired: 1,
@@ -129,6 +130,7 @@ beforeAll(async () => {
         status: 'OPEN',
       },
       {
+        assignedUserId: u.id,
         employerId: e.id,
         title: `R3 Closed ${STAMP}`,
         positionsRequired: 1,

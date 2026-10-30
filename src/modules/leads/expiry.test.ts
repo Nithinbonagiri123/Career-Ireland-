@@ -6,6 +6,7 @@ import { persons } from '@/lib/db/schema/persons';
 import { proFormaInvoices, proFormaLineItems, proposalGroups } from '@/lib/db/schema/proformas';
 import { serviceCatalogItems } from '@/lib/db/schema/services';
 import { users } from '@/lib/db/schema/users';
+import { e2eAdminId } from '@/test/db-fixtures';
 import { fetchExpirableLeadIds } from './expiry';
 
 /**
@@ -60,6 +61,7 @@ async function seedLead(
   const [l] = await tx
     .insert(leads)
     .values({
+      assignedUserId: await e2eAdminId(),
       targetBusiness: 'CANDIDATE_SERVICES',
       personId: p.id,
       status: args.status,

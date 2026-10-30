@@ -11,6 +11,7 @@ import {
   placements,
 } from '@/lib/db/schema/recruitment';
 import { users } from '@/lib/db/schema/users';
+import { e2eAdminId } from '@/test/db-fixtures';
 
 /**
  * R3 decision 6 — a candidate takes a seat on the standard path only with
@@ -46,6 +47,7 @@ async function seedReq(positions: number) {
   const [r] = await db
     .insert(jobRequisitions)
     .values({
+      assignedUserId: await e2eAdminId(),
       employerId,
       title: `${STAMP} ${Math.random().toString(36).slice(2, 6)}`,
       positionsRequired: positions,
@@ -113,7 +115,7 @@ beforeAll(async () => {
   session.user.id = adminId;
   const [emp] = await db
     .insert(employers)
-    .values({ legalName: `${STAMP} Ltd` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `${STAMP} Ltd` })
     .returning({ id: employers.id });
   if (!emp) throw new Error('seed failed');
   employerId = emp.id;

@@ -10,8 +10,9 @@ test.describe('/matching', () => {
     await expect(page.getByRole('heading', { name: /matching/i, level: 1 })).toBeVisible();
   });
 
-  test('filters and status chips render', async ({ page }) => {
-    await expect(page.getByRole('form', { name: 'Filters' })).toBeVisible();
+  test('filters and status tabs render', async ({ page }) => {
+    // Stage 6G — the shared filter toolbar is a labelled region (no submit form).
+    await expect(page.getByRole('region', { name: 'Filters' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Match status' })).toBeVisible();
   });
 

@@ -35,6 +35,7 @@ vi.mock('@/lib/auth/session', () => ({
 }));
 
 import { upsertRequisition } from '@/modules/requisitions/service';
+import { e2eAdminId } from '@/test/db-fixtures';
 import { createPlacement, markApplicationPlaced, updatePlacementStatus } from './service';
 
 const STAMP = `VITEST_SEATS_${Date.now()}`;
@@ -104,11 +105,11 @@ beforeAll(async () => {
 
   const [emp] = await db
     .insert(employers)
-    .values({ legalName: `${STAMP} Employer Ltd` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `${STAMP} Employer Ltd` })
     .returning({ id: employers.id });
   const [other] = await db
     .insert(employers)
-    .values({ legalName: `${STAMP} Other Ltd` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `${STAMP} Other Ltd` })
     .returning({ id: employers.id });
   if (!emp || !other) throw new Error('employer seed failed');
   employerId = emp.id;

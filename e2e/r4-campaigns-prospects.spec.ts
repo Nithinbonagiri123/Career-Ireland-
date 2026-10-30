@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * R4 — Campaigns & Prospects, end to end:
@@ -35,12 +36,13 @@ type M = Awaited<ReturnType<typeof dbModules>>;
 async function seed(m: M, stamp: string) {
   const [emp] = await m.db
     .insert(m.s.employers)
-    .values({ legalName: `R4 Care Homes ${stamp}` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `R4 Care Homes ${stamp}` })
     .returning({ id: m.s.employers.id });
   if (!emp) throw new Error('seed failed');
   const [job] = await m.db
     .insert(m.s.jobRequisitions)
     .values({
+      assignedUserId: await e2eAdminId(),
       employerId: emp.id,
       title: `R4 Care Assistant ${stamp}`,
       positionsRequired: 3,

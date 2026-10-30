@@ -1,39 +1,45 @@
+import { format } from 'date-fns';
 import {
   Archive,
   ArchiveRestore,
   Briefcase,
   Building2,
   CalendarClock,
+  CalendarPlus,
   CheckCircle2,
+  FileText,
+  Globe2,
   Megaphone,
   Pause,
   Pencil,
   Play,
   Plus,
-  Sparkles,
   UserCheck,
   Users,
   XCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
+import { DsStatusPill } from '@/components/ds/status-pill';
+import { DS_SOFT } from '@/components/ds/tones';
+import {
+  DetailRows,
+  NextActionBanner,
+  SectionCard,
+  WorkspaceHeader,
+} from '@/components/ds/workspace';
 import { EmptyState } from '@/components/empty-state';
-import { KpiTile } from '@/components/kpi-tile';
 import { FadeUp } from '@/components/motion/motion-primitives';
-import { NextActionCard } from '@/components/next-action-card';
 import { RecordHeaderActions } from '@/components/record-header-actions';
-import { StatusChip } from '@/components/status-chip';
-import { Timestamp } from '@/components/timestamp';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { checkPermission, requirePermission } from '@/lib/auth/session';
+import { cn } from '@/lib/utils';
 import {
   AD_ACCEPTS_PROSPECTS,
   AD_STATUS_LABEL,
-  AD_TONE,
   type AdStatus,
   CAMPAIGN_STATUS_LABEL,
-  CAMPAIGN_TONE,
 } from '@/modules/campaigns/labels';
 import { computeCampaignNextAction } from '@/modules/campaigns/next-action';
 import { fetchCampaignActivity, fetchFollowUpAssignees } from '@/modules/campaigns/prospects';
@@ -44,12 +50,18 @@ import {
 } from '@/modules/campaigns/service';
 import { CampaignFormDialog } from '../campaign-dialog';
 import { ArchiveCampaignDialog, CampaignTransitionDialog } from '../campaign-status-dialogs';
+import { AD_DS_TONE, CAMPAIGN_DS_TONE } from '../campaign-tones';
 import { AdDialog } from './ad-dialog';
 import { CampaignActivitySection } from './campaign-activity-section';
 import { CampaignTabs } from './campaign-tabs';
 import { ProspectsPanel } from './prospects-panel';
 
 export const dynamic = 'force-dynamic';
+
+/** Absolute date + time, e.g. "30 Oct 2026 · 12:58". */
+const stamp = (d: Date) => format(d, 'd MMM yyyy · HH:mm');
+/** "2026-11-01" → "1 Nov 2026" (date-only columns). */
+const formatDay = (d: string) => format(new Date(`${d}T00:00:00`), 'd MMM yyyy');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -132,18 +144,14 @@ export default async function CampaignWorkspace({
   }));
 
   const adsTab = (
-    <Card data-testid="campaign-ads">
-      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Megaphone className="size-4 text-muted-foreground" aria-hidden /> Advertisements
-          </CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            One advertisement per country or job board. Prospects are recorded against the ad they
-            responded to.
-          </p>
-        </div>
-        {canChangeAds && (canCreateCampaign || canEditCampaign) && (
+    <SectionCard
+      testId="campaign-ads"
+      icon={Megaphone}
+      title="Advertisements"
+      count={ads.length}
+      description="One advertisement per country or job board. Prospects are recorded against the ad they responded to."
+      action={
+        canChangeAds && (canCreateCampaign || canEditCampaign) ? (
           <AdDialog
             campaignId={id}
             campaignActive={campaign.status === 'ACTIVE'}
@@ -153,130 +161,125 @@ export default async function CampaignWorkspace({
               </Button>
             }
           />
-        )}
-      </CardHeader>
-      <CardContent>
-        {ads.length === 0 ? (
-          <EmptyState
-            icon={Megaphone}
-            title="No advertisements yet"
-            description={
-              canChangeAds
-                ? 'Add one per country or job board to start collecting prospects.'
-                : 'This campaign has no advertisements.'
-            }
-          />
-        ) : (
-          <ul className="divide-y rounded-md border" data-testid="ad-rows">
-            {ads.map((ad) => (
-              <li key={ad.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">
-                    {ad.country}
-                    {ad.platform ? ` · ${ad.platform}` : ''}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                    {ad.startDate} → {ad.expiryDate} · target {ad.targetApplicants} ·{' '}
-                    {ad.prospectCount} prospect{ad.prospectCount === 1 ? '' : 's'}
-                    {ad.reminderOn ? ` · reminder ${ad.reminderOn}` : ''}
-                  </p>
-                </div>
-                <StatusChip
-                  label={AD_STATUS_LABEL[ad.status as AdStatus]}
-                  tone={AD_TONE[ad.status as AdStatus]}
-                />
-                {canChangeAds && ad.status !== 'CLOSED' && (
-                  <AdDialog
-                    campaignId={id}
-                    campaignActive={campaign.status === 'ACTIVE'}
-                    initial={ad}
-                    trigger={
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        aria-label={`Edit advertisement ${ad.country}`}
-                      >
-                        <Pencil className="mr-1.5 size-3.5" /> Edit
-                      </Button>
-                    }
-                  />
+        ) : undefined
+      }
+    >
+      {ads.length === 0 ? (
+        <EmptyState
+          icon={Megaphone}
+          title="No advertisements yet"
+          description={
+            canChangeAds
+              ? 'Add one per country or job board to start collecting prospects.'
+              : 'This campaign has no advertisements.'
+          }
+        />
+      ) : (
+        <ul
+          className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/60"
+          data-testid="ad-rows"
+        >
+          {ads.map((ad) => (
+            <li
+              key={ad.id}
+              className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 transition-colors hover:bg-muted/30"
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  'grid size-9 shrink-0 place-items-center rounded-lg',
+                  DS_SOFT[AD_DS_TONE[ad.status as AdStatus]],
                 )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
+              >
+                <Globe2 className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                  {ad.country}
+                  {ad.platform && (
+                    <span className="font-normal text-muted-foreground">· {ad.platform}</span>
+                  )}
+                  <DsStatusPill tone={AD_DS_TONE[ad.status as AdStatus]}>
+                    {AD_STATUS_LABEL[ad.status as AdStatus]}
+                  </DsStatusPill>
+                </p>
+                <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                  {formatDay(ad.startDate)} → {formatDay(ad.expiryDate)} · target{' '}
+                  {ad.targetApplicants} · {ad.prospectCount} prospect
+                  {ad.prospectCount === 1 ? '' : 's'}
+                  {ad.reminderOn ? ` · reminder ${formatDay(ad.reminderOn)}` : ''}
+                </p>
+              </div>
+              {canChangeAds && ad.status !== 'CLOSED' && (
+                <AdDialog
+                  campaignId={id}
+                  campaignActive={campaign.status === 'ACTIVE'}
+                  initial={ad}
+                  trigger={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      aria-label={`Edit advertisement ${ad.country}`}
+                    >
+                      <Pencil className="mr-1.5 size-3.5" /> Edit
+                    </Button>
+                  }
+                />
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
   );
 
   const overviewTab = (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">About this campaign</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-xs text-muted-foreground">Job</dt>
-            <dd>
-              {campaign.jobRequisitionId ? (
-                <Link
-                  href={`/requisitions/${campaign.jobRequisitionId}`}
-                  className="hover:underline"
-                >
-                  {campaign.requisitionTitle}
-                </Link>
-              ) : (
-                'Talent pool (no job)'
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Employer</dt>
-            <dd>
-              {campaign.employerId ? (
-                <Link href={`/employers/${campaign.employerId}`} className="hover:underline">
-                  {campaign.employerName}
-                </Link>
-              ) : (
-                '—'
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Created</dt>
-            <dd>
-              <Timestamp date={campaign.createdAt} absoluteOnly />
-              {campaign.createdByName ? ` by ${campaign.createdByName}` : ''}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Started</dt>
-            <dd>
-              {campaign.startedAt ? (
-                <Timestamp date={campaign.startedAt} absoluteOnly />
-              ) : (
-                'Not started'
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Ended</dt>
-            <dd>{campaign.endedAt ? <Timestamp date={campaign.endedAt} absoluteOnly /> : '—'}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Last updated</dt>
-            <dd>
-              <Timestamp date={campaign.updatedAt} absoluteOnly />
-            </dd>
-          </div>
-          <div className="sm:col-span-2">
-            <dt className="text-xs text-muted-foreground">Notes</dt>
-            <dd className="whitespace-pre-wrap">{campaign.notes ?? '—'}</dd>
-          </div>
-        </dl>
-      </CardContent>
-    </Card>
+    <SectionCard icon={FileText} title="About this campaign">
+      <DetailRows
+        rows={[
+          {
+            label: 'Job',
+            value: campaign.jobRequisitionId ? (
+              <Link href={`/requisitions/${campaign.jobRequisitionId}`} className="hover:underline">
+                {campaign.requisitionTitle}
+              </Link>
+            ) : (
+              'Talent pool (no job)'
+            ),
+          },
+          ...(campaign.employerId
+            ? [
+                {
+                  label: 'Employer',
+                  value: (
+                    <Link href={`/employers/${campaign.employerId}`} className="hover:underline">
+                      {campaign.employerName}
+                    </Link>
+                  ),
+                },
+              ]
+            : []),
+          {
+            label: 'Created',
+            value: (
+              <span>
+                {stamp(campaign.createdAt)}
+                {campaign.createdByName ? ` by ${campaign.createdByName}` : ''}
+              </span>
+            ),
+          },
+          ...(campaign.startedAt ? [{ label: 'Started', value: stamp(campaign.startedAt) }] : []),
+          ...(campaign.endedAt ? [{ label: 'Ended', value: stamp(campaign.endedAt) }] : []),
+          { label: 'Last updated', value: stamp(campaign.updatedAt) },
+        ]}
+      />
+      {campaign.notes && (
+        <div className="mt-4 border-t border-border/60 pt-3">
+          <p className="text-xs font-medium text-muted-foreground">Notes</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/80">{campaign.notes}</p>
+        </div>
+      )}
+    </SectionCard>
   );
 
   // One primary lifecycle step per state; Complete sits beside it while running or paused.
@@ -322,194 +325,191 @@ export default async function CampaignWorkspace({
   const running = campaign.status === 'ACTIVE' || campaign.status === 'PAUSED';
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
-        <nav className="mb-4 text-sm text-muted-foreground">
-          <Link href="/campaigns" className="hover:text-foreground hover:underline">
-            Campaigns
-          </Link>
-          <span className="mx-1.5">/</span>
-          <span className="text-foreground">{campaign.name}</span>
-        </nav>
-
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-4">
-            <span
-              aria-hidden
-              className="grid size-16 shrink-0 place-items-center rounded-2xl bg-pink-100 text-pink-700 ring-1 ring-pink-200/70"
-            >
-              <Sparkles className="size-7" />
+        <WorkspaceHeader
+          breadcrumbs={[{ label: 'Campaigns', href: '/campaigns' }, { label: campaign.name }]}
+          avatar={{ icon: Megaphone, tone: CAMPAIGN_DS_TONE[campaign.status] }}
+          title={campaign.name}
+          status={
+            <span className="flex flex-wrap items-center gap-1.5">
+              <DsStatusPill tone={CAMPAIGN_DS_TONE[campaign.status]}>
+                {CAMPAIGN_STATUS_LABEL[campaign.status]}
+              </DsStatusPill>
+              {archived && <DsStatusPill tone="slate">Archived</DsStatusPill>}
             </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground [overflow-wrap:anywhere] sm:text-3xl">
-                  {campaign.name}
-                </h1>
-                <StatusChip
-                  label={CAMPAIGN_STATUS_LABEL[campaign.status]}
-                  tone={CAMPAIGN_TONE[campaign.status]}
-                  className="text-xs"
-                />
-                {archived && <StatusChip label="Archived" tone="bg-muted text-muted-foreground" />}
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-                {campaign.jobRequisitionId ? (
-                  <Link
-                    href={`/requisitions/${campaign.jobRequisitionId}`}
-                    className="inline-flex items-center gap-1 hover:text-foreground hover:underline"
-                    data-testid="campaign-job-link"
-                  >
-                    <Briefcase className="size-3" aria-hidden /> {campaign.requisitionTitle}
-                  </Link>
-                ) : (
-                  <span className="inline-flex items-center gap-1">
-                    <Briefcase className="size-3" aria-hidden /> Talent pool
-                  </span>
-                )}
-                {campaign.employerId && (
-                  <Link
-                    href={`/employers/${campaign.employerId}`}
-                    className="inline-flex items-center gap-1 hover:text-foreground hover:underline"
-                    data-testid="campaign-employer-link"
-                  >
-                    <Building2 className="size-3" aria-hidden /> {campaign.employerName}
-                  </Link>
-                )}
-                <span className="inline-flex items-center gap-1">
-                  <CalendarClock className="size-3" aria-hidden />
-                  {campaign.startedAt ? (
-                    <>
-                      Started{' '}
-                      <Timestamp date={campaign.startedAt} absoluteOnly className="text-xs" />
-                    </>
-                  ) : (
-                    'Not started'
-                  )}
-                </span>
-                {campaign.createdByName && <span>Created by {campaign.createdByName}</span>}
-              </div>
-            </div>
-          </div>
+          }
+          meta={[
+            {
+              key: 'job',
+              icon: Briefcase,
+              content: campaign.jobRequisitionId ? (
+                <Link
+                  href={`/requisitions/${campaign.jobRequisitionId}`}
+                  className="underline-offset-2 hover:text-foreground hover:underline"
+                  data-testid="campaign-job-link"
+                >
+                  {campaign.requisitionTitle}
+                </Link>
+              ) : (
+                'Talent pool'
+              ),
+            },
+            {
+              key: 'employer',
+              icon: Building2,
+              content: campaign.employerId ? (
+                <Link
+                  href={`/employers/${campaign.employerId}`}
+                  className="underline-offset-2 hover:text-foreground hover:underline"
+                  data-testid="campaign-employer-link"
+                >
+                  {campaign.employerName}
+                </Link>
+              ) : null,
+            },
+          ]}
+          chips={[
+            {
+              key: 'started',
+              icon: CalendarClock,
+              content: campaign.startedAt ? `Started ${stamp(campaign.startedAt)}` : 'Not started',
+            },
+            {
+              key: 'ended',
+              icon: CheckCircle2,
+              content: campaign.endedAt ? `Ended ${stamp(campaign.endedAt)}` : null,
+            },
+            {
+              key: 'created',
+              icon: CalendarPlus,
+              content: `Created ${stamp(campaign.createdAt)}${campaign.createdByName ? ` by ${campaign.createdByName}` : ''}`,
+            },
+          ]}
+          actions={
+            <RecordHeaderActions
+              primary={lifecycle ? lifecycle.find(Boolean) : undefined}
+              secondary={[
+                !archived && canEditCampaign && running && (
+                  <CampaignTransitionDialog
+                    key="complete"
+                    campaignId={id}
+                    to="COMPLETED"
+                    trigger={
+                      <Button size="sm" variant="outline">
+                        <CheckCircle2 className="mr-1.5 size-4" /> Complete
+                      </Button>
+                    }
+                  />
+                ),
+                !archived && canEditCampaign && (
+                  <CampaignFormDialog
+                    key="edit"
+                    initial={{
+                      id,
+                      name: campaign.name,
+                      notes: campaign.notes,
+                      jobRequisitionId: campaign.jobRequisitionId,
+                      requisitionTitle: campaign.requisitionTitle,
+                      employerId: campaign.employerId,
+                      employerName: campaign.employerName,
+                      jobLocked: campaign.prospectCount > 0 || ended,
+                    }}
+                    trigger={
+                      <Button size="sm" variant="outline">
+                        <Pencil className="mr-1.5 size-4" /> Edit
+                      </Button>
+                    }
+                  />
+                ),
 
-          <RecordHeaderActions
-            primary={lifecycle ? lifecycle.find(Boolean) : undefined}
-            secondary={[
-              !archived && canEditCampaign && running && (
-                <CampaignTransitionDialog
-                  key="complete"
-                  campaignId={id}
-                  to="COMPLETED"
-                  trigger={
-                    <Button size="sm" variant="outline">
-                      <CheckCircle2 className="mr-1.5 size-4" /> Complete
-                    </Button>
-                  }
-                />
-              ),
-              !archived && canEditCampaign && (
-                <CampaignFormDialog
-                  key="edit"
-                  initial={{
-                    id,
-                    name: campaign.name,
-                    notes: campaign.notes,
-                    jobRequisitionId: campaign.jobRequisitionId,
-                    requisitionTitle: campaign.requisitionTitle,
-                    employerId: campaign.employerId,
-                    employerName: campaign.employerName,
-                    jobLocked: campaign.prospectCount > 0 || ended,
-                  }}
-                  trigger={
-                    <Button size="sm" variant="outline">
-                      <Pencil className="mr-1.5 size-4" /> Edit
-                    </Button>
-                  }
-                />
-              ),
-
-              !archived && canEditCampaign && !ended && (
-                <CampaignTransitionDialog
-                  key="cancel"
-                  campaignId={id}
-                  to="CANCELLED"
-                  trigger={
-                    <Button size="sm" variant="outline">
-                      <XCircle className="mr-1.5 size-4" /> Cancel campaign
-                    </Button>
-                  }
-                />
-              ),
-              canEditCampaign && !running && (
-                <ArchiveCampaignDialog
-                  key="archive"
-                  campaignId={id}
-                  restore={archived}
-                  trigger={
-                    <Button size="sm" variant="outline">
-                      {archived ? (
-                        <ArchiveRestore className="mr-1.5 size-4" />
-                      ) : (
-                        <Archive className="mr-1.5 size-4" />
-                      )}
-                      {archived ? 'Restore' : 'Archive'}
-                    </Button>
-                  }
-                />
-              ),
-            ]}
-          />
-        </div>
+                !archived && canEditCampaign && !ended && (
+                  <CampaignTransitionDialog
+                    key="cancel"
+                    campaignId={id}
+                    to="CANCELLED"
+                    trigger={
+                      <Button size="sm" variant="outline">
+                        <XCircle className="mr-1.5 size-4" /> Cancel campaign
+                      </Button>
+                    }
+                  />
+                ),
+                canEditCampaign && !running && (
+                  <ArchiveCampaignDialog
+                    key="archive"
+                    campaignId={id}
+                    restore={archived}
+                    trigger={
+                      <Button size="sm" variant="outline">
+                        {archived ? (
+                          <ArchiveRestore className="mr-1.5 size-4" />
+                        ) : (
+                          <Archive className="mr-1.5 size-4" />
+                        )}
+                        {archived ? 'Restore' : 'Archive'}
+                      </Button>
+                    }
+                  />
+                ),
+              ]}
+            />
+          }
+        />
 
         {archived && (
           <p
-            className="mt-4 rounded-md border bg-muted px-3 py-2 text-xs text-muted-foreground"
+            className="mt-4 flex items-center gap-2 rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm"
             data-testid="campaign-archived"
           >
-            Archived{' '}
-            <Timestamp date={campaign.archivedAt as Date} absoluteOnly className="text-xs" /> — read
-            only. Restore it to make changes.
+            <Archive className="size-4 shrink-0" aria-hidden />
+            Archived {stamp(campaign.archivedAt as Date)}. Read only; restore it to make changes.
           </p>
         )}
 
-        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="campaign-kpis">
-          <KpiTile
+        <StatTileGrid className="mt-6">
+          <StatTile
+            testId="kpi-Ads"
             icon={Megaphone}
             label="Ads"
             value={ads.length}
             hint={`${ads.filter((a) => a.status === 'ACTIVE').length} running`}
             tone="blue"
           />
-          <KpiTile
+          <StatTile
+            testId="kpi-Prospects"
             icon={Users}
             label="Prospects"
             value={prospects.length}
             hint={`${newProspects} to screen`}
             tone="amber"
           />
-          <KpiTile
+          <StatTile
+            testId="kpi-Ready to convert"
             icon={UserCheck}
             label="Ready to convert"
             value={ready}
             hint="Screened or in talent pool"
-            tone="rose"
+            tone="violet"
           />
-          <KpiTile
+          <StatTile
+            testId="kpi-Converted"
             icon={CheckCircle2}
             label="Converted"
             value={campaign.convertedCount}
             hint="Now candidates"
             tone="green"
           />
-        </div>
+        </StatTileGrid>
       </FadeUp>
 
       {nextAction && (
         <FadeUp delay={0.02}>
-          <NextActionCard {...nextAction} className="mt-5" />
+          <NextActionBanner {...nextAction} className="mt-4" />
         </FadeUp>
       )}
 
-      <FadeUp delay={0.05} className="mt-6">
+      <FadeUp delay={0.05} className="mt-5">
         <CampaignTabs
           panels={{
             prospects: (

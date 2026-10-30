@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 6E Section 7 + Stage 6E+1 Section 4 — Direct Payment & Convert
@@ -64,7 +65,12 @@ async function seedCsLeadWithService(firstName: string) {
 
   const [l] = await db
     .insert(leads)
-    .values({ personId: p.id, targetBusiness: 'CANDIDATE_SERVICES', status: 'NEW' })
+    .values({
+      assignedUserId: await e2eAdminId(),
+      personId: p.id,
+      targetBusiness: 'CANDIDATE_SERVICES',
+      status: 'NEW',
+    })
     .returning({ id: leads.id });
   if (!l) throw new Error('lead insert failed');
 

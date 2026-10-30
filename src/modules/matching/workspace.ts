@@ -57,16 +57,72 @@ export type GlobalMatchRow = {
   updatedAt: Date;
 };
 
-export async function fetchGlobalMatches(
-  input: MatchFilters = {},
-): Promise<{ rows: GlobalMatchRow[]; hiddenUnavailable: number; capped: boolean }> {
-  await requirePermission('recruitment', 'matching', 'view');
-  const f = MatchFiltersSchema.parse(input);
+function personSearch(q: string): SQL {
+  const t = likeTerm(q);
+  return or(
+    ilike(persons.firstName, t),
+    ilike(persons.lastName, t),
+    ilike(persons.email, t),
+    sql`(${persons.firstName} || ' ' || ${persons.lastName}) ILIKE ${t}`,
+  ) as SQL;
+}
+
+const unavailable = sql<boolean>`(${confirmedPlaced} OR ${candidateProfiles.availabilityStatus} IN ('PLACED','TEMPORARILY_UNAVAILABLE'))`;
+
+/** Every match filter except `status` (shared by the list and its counts). */
+function matchBaseConds(f: MatchFilters): SQL[] {
   const conds: SQL[] = [...personLive];
   if ((f.jobs ?? 'open') === 'open') conds.push(OPEN_JOB);
   if (f.requisitionId) conds.push(eq(candidateMatches.jobRequisitionId, f.requisitionId));
   if (f.bucket) conds.push(eq(candidateMatches.scoreBucket, f.bucket));
   if (f.origin) conds.push(eq(candidateMatches.source, f.origin));
+  if (f.q) conds.push(personSearch(f.q));
+  return conds;
+}
+
+export type MatchCounts = {
+  open: number;
+  openStrong: number;
+  shortlisted: number;
+  dismissed: number;
+  all: number;
+};
+
+/**
+ * Stage 6G — counts for the Matching status tabs and KPI tiles, under the
+ * same filters as the list (status aside) and the same availability rule.
+ */
+export async function countGlobalMatches(input: MatchFilters = {}): Promise<MatchCounts> {
+  await requirePermission('recruitment', 'matching', 'view');
+  const f = MatchFiltersSchema.parse(input);
+  const availableOnly = (f.availability ?? 'available') === 'available';
+  const [r] = await db
+    .select({
+      open: sql<number>`COUNT(*) FILTER (WHERE ${candidateMatches.status} IN ('SUGGESTED','REVIEWED'))::int`,
+      openStrong: sql<number>`COUNT(*) FILTER (WHERE ${candidateMatches.status} IN ('SUGGESTED','REVIEWED') AND ${candidateMatches.scoreBucket} = 'HIGH')::int`,
+      shortlisted: sql<number>`COUNT(*) FILTER (WHERE ${candidateMatches.status} = 'SHORTLISTED')::int`,
+      dismissed: sql<number>`COUNT(*) FILTER (WHERE ${candidateMatches.status} = 'DISMISSED')::int`,
+      all: sql<number>`COUNT(*)::int`,
+    })
+    .from(candidateMatches)
+    .innerJoin(persons, eq(persons.id, candidateMatches.personId))
+    .innerJoin(jobRequisitions, eq(jobRequisitions.id, candidateMatches.jobRequisitionId))
+    .leftJoin(candidateProfiles, eq(candidateProfiles.personId, persons.id))
+    .where(
+      and(
+        ...matchBaseConds(f),
+        ...(availableOnly ? [sql`NOT COALESCE(${unavailable}, false)`] : []),
+      ),
+    );
+  return r ?? { open: 0, openStrong: 0, shortlisted: 0, dismissed: 0, all: 0 };
+}
+
+export async function fetchGlobalMatches(
+  input: MatchFilters = {},
+): Promise<{ rows: GlobalMatchRow[]; hiddenUnavailable: number; capped: boolean }> {
+  await requirePermission('recruitment', 'matching', 'view');
+  const f = MatchFiltersSchema.parse(input);
+  const conds: SQL[] = matchBaseConds(f);
   switch (f.status ?? 'open') {
     case 'open':
       conds.push(sql`${candidateMatches.status} IN ('SUGGESTED','REVIEWED')`);
@@ -78,18 +134,6 @@ export async function fetchGlobalMatches(
       conds.push(eq(candidateMatches.status, 'DISMISSED'));
       break;
   }
-  if (f.q) {
-    const t = likeTerm(f.q);
-    conds.push(
-      or(
-        ilike(persons.firstName, t),
-        ilike(persons.lastName, t),
-        ilike(persons.email, t),
-        sql`(${persons.firstName} || ' ' || ${persons.lastName}) ILIKE ${t}`,
-      ) as SQL,
-    );
-  }
-  const unavailable = sql<boolean>`(${confirmedPlaced} OR ${candidateProfiles.availabilityStatus} IN ('PLACED','TEMPORARILY_UNAVAILABLE'))`;
   const availableOnly = (f.availability ?? 'available') === 'available';
 
   const [hidden] = availableOnly
@@ -168,14 +212,50 @@ export type GlobalShortlistRow = {
   updatedAt: Date;
 };
 
+/** Every shortlist filter except `presentation` (shared by the list and its counts). */
+function shortlistBaseConds(f: ShortlistFilters): SQL[] {
+  const conds: SQL[] = [...personLive];
+  if ((f.jobs ?? 'open') === 'open') conds.push(OPEN_JOB);
+  if (f.requisitionId) conds.push(eq(shortlistEntries.jobRequisitionId, f.requisitionId));
+  if (f.q) conds.push(personSearch(f.q));
+  return conds;
+}
+
+export type ShortlistCounts = {
+  all: number;
+  notPresented: number;
+  awaitingFeedback: number;
+  feedback: number;
+  applied: number;
+};
+
+/** Stage 6G — counts for the Shortlists stage tabs and KPI tiles. */
+export async function countGlobalShortlists(
+  input: ShortlistFilters = {},
+): Promise<ShortlistCounts> {
+  await requirePermission('recruitment', 'matching', 'view');
+  const f = ShortlistFiltersSchema.parse(input);
+  const [r] = await db
+    .select({
+      all: sql<number>`COUNT(*)::int`,
+      notPresented: sql<number>`COUNT(*) FILTER (WHERE ${shortlistEntries.presentedToEmployerAt} IS NULL)::int`,
+      awaitingFeedback: sql<number>`COUNT(*) FILTER (WHERE ${shortlistEntries.presentedToEmployerAt} IS NOT NULL AND ${shortlistEntries.employerFeedback} IS NULL)::int`,
+      feedback: sql<number>`COUNT(*) FILTER (WHERE ${shortlistEntries.employerFeedback} IS NOT NULL)::int`,
+      applied: sql<number>`COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM job_applications ja WHERE ja.job_requisition_id = ${shortlistEntries.jobRequisitionId} AND ja.person_id = ${shortlistEntries.personId}))::int`,
+    })
+    .from(shortlistEntries)
+    .innerJoin(persons, eq(persons.id, shortlistEntries.personId))
+    .innerJoin(jobRequisitions, eq(jobRequisitions.id, shortlistEntries.jobRequisitionId))
+    .where(and(...shortlistBaseConds(f)));
+  return r ?? { all: 0, notPresented: 0, awaitingFeedback: 0, feedback: 0, applied: 0 };
+}
+
 export async function fetchGlobalShortlists(
   input: ShortlistFilters = {},
 ): Promise<{ rows: GlobalShortlistRow[]; capped: boolean }> {
   await requirePermission('recruitment', 'matching', 'view');
   const f = ShortlistFiltersSchema.parse(input);
-  const conds: SQL[] = [...personLive];
-  if ((f.jobs ?? 'open') === 'open') conds.push(OPEN_JOB);
-  if (f.requisitionId) conds.push(eq(shortlistEntries.jobRequisitionId, f.requisitionId));
+  const conds: SQL[] = shortlistBaseConds(f);
   switch (f.presentation ?? 'all') {
     case 'not_presented':
       conds.push(isNull(shortlistEntries.presentedToEmployerAt));
@@ -188,17 +268,6 @@ export async function fetchGlobalShortlists(
     case 'feedback':
       conds.push(sql`${shortlistEntries.employerFeedback} IS NOT NULL`);
       break;
-  }
-  if (f.q) {
-    const t = likeTerm(f.q);
-    conds.push(
-      or(
-        ilike(persons.firstName, t),
-        ilike(persons.lastName, t),
-        ilike(persons.email, t),
-        sql`(${persons.firstName} || ' ' || ${persons.lastName}) ILIKE ${t}`,
-      ) as SQL,
-    );
   }
   const rows = await db
     .select({

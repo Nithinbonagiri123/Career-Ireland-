@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * R3 decision 6 — placing a candidate with no offer accepted in the CRM
@@ -27,12 +28,13 @@ test('placing without an accepted offer needs confirmation + reason, and is audi
   const stamp = Math.random().toString(36).slice(2, 7);
   const [emp] = await m.db
     .insert(m.s.employers)
-    .values({ legalName: `R3 Exception Care ${stamp}` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `R3 Exception Care ${stamp}` })
     .returning({ id: m.s.employers.id });
   if (!emp) throw new Error('seed failed');
   const [req] = await m.db
     .insert(m.s.jobRequisitions)
     .values({
+      assignedUserId: await e2eAdminId(),
       employerId: emp.id,
       title: `R3 Exception Job ${stamp}`,
       positionsRequired: 2,

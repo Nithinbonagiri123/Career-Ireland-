@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 6D Wave 6 — navigation + deep-link acceptance.
@@ -35,7 +36,12 @@ async function seedPersonAndLead(firstName: string) {
 
   const [l] = await db
     .insert(leads)
-    .values({ personId: p.id, targetBusiness: 'CANDIDATE_SERVICES', status: 'NEW' })
+    .values({
+      assignedUserId: await e2eAdminId(),
+      personId: p.id,
+      targetBusiness: 'CANDIDATE_SERVICES',
+      status: 'NEW',
+    })
     .returning({ id: leads.id });
 
   return {

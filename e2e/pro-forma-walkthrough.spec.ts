@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 2 pro-forma close-out walkthrough.
@@ -82,7 +83,12 @@ async function openFirstCsLead(page: Page): Promise<string> {
   if (!p) throw new Error('could not seed person');
   const [lead] = await db
     .insert(leads)
-    .values({ personId: p.id, targetBusiness: 'CANDIDATE_SERVICES', status: 'NEW' })
+    .values({
+      assignedUserId: await e2eAdminId(),
+      personId: p.id,
+      targetBusiness: 'CANDIDATE_SERVICES',
+      status: 'NEW',
+    })
     .returning({ id: leads.id });
   if (!lead) throw new Error('could not seed CS lead');
   await page.goto(`/leads/${lead.id}`);

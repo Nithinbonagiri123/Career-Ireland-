@@ -313,9 +313,9 @@ export default async function ImmigrationCaseDetail({
             load. */}
         <FadeUp delay={0.16}>
           <Card>
-            <CardHeader className="flex flex-row items-start justify-between space-y-0">
-              <div>
-                <CardTitle className="text-base">Billing for this case</CardTitle>
+            <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+              <div className="min-w-0 flex-1 basis-64">
+                <CardTitle className="text-[15px] font-semibold">Billing for this case</CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Every invoice and receipt tied to this case via
                   <span className="mx-1 font-mono">immigration_case_id</span>. Raise a new one here;

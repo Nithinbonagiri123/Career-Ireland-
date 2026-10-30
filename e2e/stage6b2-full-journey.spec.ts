@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 6B+2 — End-to-end acceptance test for the unified Client
@@ -58,6 +59,7 @@ async function seedLeadWithKnownService(firstName: string) {
   const [l] = await db
     .insert(leads)
     .values({
+      assignedUserId: await e2eAdminId(),
       personId: p.id,
       targetBusiness: 'CANDIDATE_SERVICES',
       status: 'NEW',
@@ -405,7 +407,9 @@ test('activate before full payment creates no new financial rows (DB invariant)'
       candidateProfiles: 0,
     });
 
-    await db.insert(candidateProfiles).values({ personId: seeded.personId });
+    await db
+      .insert(candidateProfiles)
+      .values({ assignedUserId: await e2eAdminId(), personId: seeded.personId });
 
     const after = await countForPerson(seeded.personId);
     expect(after).toEqual({

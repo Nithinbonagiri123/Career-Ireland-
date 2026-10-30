@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * R1 — Employer Workspace, browser-level proof:
@@ -29,7 +30,12 @@ test('employer workspace: hero, KPIs, tabs, requirement rows', async ({ page }) 
     .where(m.eq(m.schemas.users.email, 'e2e-admin@ireland-careers.test'));
   const [emp] = await m.db
     .insert(m.schemas.employers)
-    .values({ legalName: `R1 Workspace Ltd ${stamp}`, industry: 'Healthcare', city: 'Cork' })
+    .values({
+      assignedUserId: await e2eAdminId(),
+      legalName: `R1 Workspace Ltd ${stamp}`,
+      industry: 'Healthcare',
+      city: 'Cork',
+    })
     .returning({ id: m.schemas.employers.id });
   if (!emp || !admin) throw new Error('seed failed');
   const reqIds: string[] = [];
@@ -93,7 +99,7 @@ test('contacts: add then delete, with the deletion audited', async ({ page }) =>
   const stamp = Math.random().toString(36).slice(2, 7);
   const [emp] = await m.db
     .insert(m.schemas.employers)
-    .values({ legalName: `R1 Contacts Ltd ${stamp}` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `R1 Contacts Ltd ${stamp}` })
     .returning({ id: m.schemas.employers.id });
   if (!emp) throw new Error('seed failed');
   try {

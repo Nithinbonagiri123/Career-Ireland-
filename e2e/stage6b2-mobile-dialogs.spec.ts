@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 6B+2 — mobile dialog screenshots.
@@ -35,7 +36,12 @@ async function seedForMobile(firstName: string, lastName: string) {
   if (!p) throw new Error('person insert failed');
   const [l] = await db
     .insert(leads)
-    .values({ personId: p.id, targetBusiness: 'CANDIDATE_SERVICES', status: 'NEW' })
+    .values({
+      assignedUserId: await e2eAdminId(),
+      personId: p.id,
+      targetBusiness: 'CANDIDATE_SERVICES',
+      status: 'NEW',
+    })
     .returning({ id: leads.id });
   return {
     personId: p.id,
@@ -99,7 +105,12 @@ async function seedWithAcceptedQuoteAndPayment(firstName: string) {
   if (!p) throw new Error('person insert failed');
   const [l] = await db
     .insert(leads)
-    .values({ personId: p.id, targetBusiness: 'CANDIDATE_SERVICES', status: 'AWAITING_PAYMENT' })
+    .values({
+      assignedUserId: await e2eAdminId(),
+      personId: p.id,
+      targetBusiness: 'CANDIDATE_SERVICES',
+      status: 'AWAITING_PAYMENT',
+    })
     .returning({ id: leads.id });
   if (!l) throw new Error('lead insert failed');
 

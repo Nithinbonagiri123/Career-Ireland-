@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Full end-to-end verification walkthrough.
@@ -122,7 +123,7 @@ test('lead → candidate → requisition → pipeline → placement → fee invo
     .where(eq(usersSchema.users.email, 'e2e-admin@ireland-careers.test'));
   const [empRow] = await db
     .insert(rec.employers)
-    .values({ legalName: `Full Flow Employer ${suffix}` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `Full Flow Employer ${suffix}` })
     .returning({ id: rec.employers.id });
   if (!adminRow || !empRow) throw new Error('full-flow seed failed');
   const [reqRow] = await db

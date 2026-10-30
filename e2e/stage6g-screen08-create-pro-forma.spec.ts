@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 6G Screen 08 — dedicated Create Pro Forma page vs
@@ -82,6 +83,7 @@ test('stage 6G screen 08 — create pro forma page matches the approved layout',
   const [lead] = await m.db
     .insert(m.schemas.leads)
     .values({
+      assignedUserId: await e2eAdminId(),
       personId,
       targetBusiness: 'CANDIDATE_SERVICES',
       serviceOfInterestId: catalogueIds[0] as string,

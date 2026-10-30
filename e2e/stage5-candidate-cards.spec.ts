@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 5 — Candidate Cards redesign verification.
@@ -150,6 +151,7 @@ async function seedCandidate(args: {
     const [newCase] = await db
       .insert(immigrationCases)
       .values({
+        assignedUserId: await e2eAdminId(),
         caseType: 'EMPLOYMENT_PERMIT',
         applicationTypeId: typeId,
         beneficiaryPersonId: p.id,

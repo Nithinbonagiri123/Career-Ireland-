@@ -6,6 +6,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { initialsOf } from '@/components/ds/entity-card';
+import { DS_SOFT } from '@/components/ds/tones';
+import { DS_ROW, DS_ROW_LIST, SectionCard } from '@/components/ds/workspace';
 import { EmptyState } from '@/components/empty-state';
 import { Timestamp } from '@/components/timestamp';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -19,6 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import { upsertChecklistAction } from '@/modules/work-permit-checklists/actions';
 import type { WorkPermitChecklistRow } from '@/modules/work-permit-checklists/service';
 
@@ -73,18 +77,16 @@ export function ChecklistsSection({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium">Work permit checklists</p>
-          <p className="text-xs text-muted-foreground">
-            One per candidate — verifies the advert matches the contract they're being offered and
-            tracks the documents you've collected.
-          </p>
-        </div>
-        {canEdit && (
+    <SectionCard
+      icon={ClipboardCheck}
+      title="Work permit checklists"
+      count={existing.length}
+      description="One per candidate — verifies the advert matches the contract they're being offered and tracks the documents you've collected."
+      action={
+        canEdit ? (
           <Button
             size="sm"
+            variant="outline"
             onClick={() => setDialogOpen(true)}
             disabled={availableCandidates.length === 0}
             title={
@@ -95,9 +97,9 @@ export function ChecklistsSection({
           >
             <Plus className="mr-1.5 size-4" /> New checklist
           </Button>
-        )}
-      </div>
-
+        ) : undefined
+      }
+    >
       {existing.length === 0 ? (
         <EmptyState
           icon={ClipboardCheck}
@@ -105,15 +107,26 @@ export function ChecklistsSection({
           description="Create one per candidate the moment a job offer is being finalised. Prints to A4 for the file."
         />
       ) : (
-        <ul className="divide-y rounded-lg glass-panel">
+        <ul className={DS_ROW_LIST}>
           {existing.map((row) => (
-            <li key={row.id} className="flex items-center justify-between px-4 py-3">
-              <div className="min-w-0 space-y-0.5">
-                <p className="truncate text-sm font-medium">{row.personName}</p>
-                <div className="text-[11px] text-muted-foreground">
-                  Updated {formatDistanceToNow(row.updatedAt, { addSuffix: true })}
-                  <span className="mx-1.5 text-muted-foreground/60">·</span>
-                  <Timestamp date={row.updatedAt} absoluteOnly className="inline text-[11px]" />
+            <li key={row.id} className={DS_ROW}>
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <span
+                  aria-hidden
+                  className={cn(
+                    'grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold',
+                    DS_SOFT.blue,
+                  )}
+                >
+                  {initialsOf(row.personName)}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{row.personName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Updated {formatDistanceToNow(row.updatedAt, { addSuffix: true })}
+                    <span className="mx-1.5 text-muted-foreground/60">·</span>
+                    <Timestamp date={row.updatedAt} absoluteOnly className="inline text-xs" />
+                  </p>
                 </div>
               </div>
               <Link
@@ -159,6 +172,6 @@ export function ChecklistsSection({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </SectionCard>
   );
 }

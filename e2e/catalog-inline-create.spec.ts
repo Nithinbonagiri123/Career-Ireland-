@@ -25,7 +25,7 @@ test('requisition: Add required skill dialog shows autosuggest + inline-create',
   await page.goto('/requisitions?view=table');
   // Requires the E2E minimal seed (scripts/seed-e2e-minimal.ts) to
   // have run so at least one requisition exists.
-  const firstOpen = page.getByRole('link', { name: /open/i }).first();
+  const firstOpen = page.getByRole('link', { name: /^open$/i }).first();
   await expect(firstOpen).toBeVisible({ timeout: 10_000 });
   await firstOpen.click();
   await page.waitForURL(/\/requisitions\/[0-9a-f-]+/i);
@@ -59,7 +59,7 @@ test('requisition: Add required qualification dialog shows autosuggest + inline-
   page,
 }) => {
   await page.goto('/requisitions?view=table');
-  const firstOpen = page.getByRole('link', { name: /open/i }).first();
+  const firstOpen = page.getByRole('link', { name: /^open$/i }).first();
   await expect(firstOpen).toBeVisible({ timeout: 10_000 });
   await firstOpen.click();
   await page.waitForURL(/\/requisitions\/[0-9a-f-]+/i);

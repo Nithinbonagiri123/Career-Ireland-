@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage B — FINAL ACCEPTANCE RUN (release-readiness audit, item 7).
@@ -130,7 +131,12 @@ test('Stage B final acceptance: complete candidate journey across Waves 1–4', 
   const personId = person.id;
   const [lead] = await m.db
     .insert(m.schemas.leads)
-    .values({ personId, targetBusiness: 'CANDIDATE_SERVICES', status: 'NEW' })
+    .values({
+      assignedUserId: await e2eAdminId(),
+      personId,
+      targetBusiness: 'CANDIDATE_SERVICES',
+      status: 'NEW',
+    })
     .returning({ id: m.schemas.leads.id });
   if (!lead) throw new Error('lead seed failed');
 

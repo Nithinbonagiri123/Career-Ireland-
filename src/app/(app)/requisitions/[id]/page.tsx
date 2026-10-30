@@ -1,13 +1,19 @@
+import { format } from 'date-fns';
 import {
   Briefcase,
   Building2,
   CalendarClock,
+  CalendarPlus,
   CheckCircle2,
+  Clock,
+  FileText,
   GitBranch,
   MapPin,
   Megaphone,
   Pencil,
+  Receipt,
   User,
+  UserRound,
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -16,18 +22,15 @@ import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
 import { FinancialSummaryCard } from '@/components/billing/financial-summary-card';
 import { CampaignsPanel } from '@/components/campaigns-panel';
+import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
+import { DsStatusPill } from '@/components/ds/status-pill';
+import { NextActionBanner, SectionCard, WorkspaceHeader } from '@/components/ds/workspace';
 import { EmptyState } from '@/components/empty-state';
-import { KpiTile } from '@/components/kpi-tile';
 import { FadeUp } from '@/components/motion/motion-primitives';
-import { NextActionCard } from '@/components/next-action-card';
-import { OwnerAvatar } from '@/components/owner-avatar';
 import { ReassignButton } from '@/components/reassign-button';
 import { RecordHeaderActions } from '@/components/record-header-actions';
-import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { checkPermission, requireInternalStaff } from '@/lib/auth/session';
-import { statusTone } from '@/lib/ui/status-tone';
 import { fetchTasksForRequisition } from '@/modules/activities/service';
 import {
   listApplicationsForRequisition,
@@ -56,6 +59,7 @@ import {
 import { fetchSkills } from '@/modules/skills/service';
 import { fetchStaffUserOptions } from '@/modules/users/service';
 import { listChecklistsForRequisition } from '@/modules/work-permit-checklists/service';
+import { EMPLOYMENT_LABEL, JOB_STATUS } from '../job-card';
 import { RequisitionDialog } from '../requisition-dialog';
 import { AddCandidateDialog } from './add-candidate-dialog';
 import { AddOutsourcedCandidateDialog } from './add-outsourced-dialog';
@@ -230,24 +234,19 @@ export default async function RequisitionDetail({
       </div>
       {requisition.description && (
         <FadeUp delay={0.05}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Description</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                {requisition.description}
-              </p>
-              {requisition.candidateRequirements && (
-                <>
-                  <p className="mt-4 text-sm font-medium">Candidate requirements</p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
-                    {requisition.candidateRequirements}
-                  </p>
-                </>
-              )}
-            </CardContent>
-          </Card>
+          <SectionCard icon={FileText} title="Description">
+            <p className="whitespace-pre-wrap text-sm text-foreground/80">
+              {requisition.description}
+            </p>
+            {requisition.candidateRequirements && (
+              <>
+                <p className="mt-4 text-sm font-medium">Candidate requirements</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/80">
+                  {requisition.candidateRequirements}
+                </p>
+              </>
+            )}
+          </SectionCard>
         </FadeUp>
       )}
       {/* Phase 2 blueprint §1.3 — Work Log: operator-facing checklist
@@ -300,19 +299,12 @@ export default async function RequisitionDetail({
 
   const checklistsTab = (
     <FadeUp>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Work Permit Checklists</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ChecklistsSection
-            requisitionId={id}
-            existing={checklists}
-            candidatePool={candidatePool}
-            canEdit={canEditJob}
-          />
-        </CardContent>
-      </Card>
+      <ChecklistsSection
+        requisitionId={id}
+        existing={checklists}
+        candidatePool={candidatePool}
+        canEdit={canEditJob}
+      />
     </FadeUp>
   );
 
@@ -320,36 +312,32 @@ export default async function RequisitionDetail({
   // invoices.job_requisition_id. Per-placement fees live on Seats.
   const billingTab = (
     <FadeUp>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Billing for this job</CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Invoices and receipts linked to this job. Placement fees are listed per seat on the
-            Seats &amp; placements tab.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {requisitionBilling.invoices.length === 0 && requisitionBilling.receipts.length === 0 ? (
-            <EmptyState
-              icon={Briefcase}
-              title="No invoices for this job yet"
-              description="Invoices raised against this job, including accepted-lead invoices, appear here."
+      <SectionCard
+        icon={Receipt}
+        title="Billing for this job"
+        description="Invoices and receipts linked to this job. Placement fees are listed per seat on the Seats & placements tab."
+        bodyClassName="space-y-4"
+      >
+        {requisitionBilling.invoices.length === 0 && requisitionBilling.receipts.length === 0 ? (
+          <EmptyState
+            icon={Receipt}
+            title="No invoices for this job yet"
+            description="Invoices raised against this job, including accepted-lead invoices, appear here."
+          />
+        ) : (
+          <>
+            {requisitionBilling.invoices.length > 0 && (
+              <FinancialSummaryCard invoices={requisitionBilling.invoices} />
+            )}
+            <BillingSection
+              profileHref={`/employers/${requisition.employerId}`}
+              invoices={requisitionBilling.invoices}
+              receipts={requisitionBilling.receipts}
+              canVerify={false}
             />
-          ) : (
-            <>
-              {requisitionBilling.invoices.length > 0 && (
-                <FinancialSummaryCard invoices={requisitionBilling.invoices} />
-              )}
-              <BillingSection
-                profileHref={`/employers/${requisition.employerId}`}
-                invoices={requisitionBilling.invoices}
-                receipts={requisitionBilling.receipts}
-                canVerify={false}
-              />
-            </>
-          )}
-        </CardContent>
-      </Card>
+          </>
+        )}
+      </SectionCard>
     </FadeUp>
   );
 
@@ -367,59 +355,39 @@ export default async function RequisitionDetail({
   const statusLabel = REQUISITION_STATUS_LABEL[requisition.status] ?? requisition.status;
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
-        <nav className="mb-4 text-sm text-muted-foreground">
-          <Link href="/requisitions" className="hover:text-foreground hover:underline">
-            Requisitions
-          </Link>
-          <span className="mx-1.5">/</span>
-          <span className="text-foreground">{requisition.title}</span>
-        </nav>
-
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-4">
-            <span
-              aria-hidden
-              className="grid size-16 shrink-0 place-items-center rounded-2xl bg-sky-100 text-sky-700 ring-1 ring-sky-200/70"
+        <WorkspaceHeader
+          breadcrumbs={[
+            { label: 'Requisitions', href: '/requisitions' },
+            { label: requisition.title },
+          ]}
+          avatar={{ icon: Briefcase, tone: JOB_STATUS[requisition.status].tone }}
+          title={requisition.title}
+          status={
+            <DsStatusPill tone={JOB_STATUS[requisition.status].tone}>{statusLabel}</DsStatusPill>
+          }
+          subtitle={
+            <Link
+              href={`/employers/${requisition.employerId}`}
+              className="inline-flex items-center gap-1.5 underline-offset-2 hover:text-foreground hover:underline"
+              data-testid="requisition-employer-link"
             >
-              <Briefcase className="size-7" />
-            </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground [overflow-wrap:anywhere] sm:text-3xl">
-                  {requisition.title}
-                </h1>
-                <Badge variant={statusTone(requisition.status)} className="rounded-full">
-                  {statusLabel}
-                </Badge>
-              </div>
-              <Link
-                href={`/employers/${requisition.employerId}`}
-                className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                data-testid="requisition-employer-link"
-              >
-                <Building2 className="size-3.5" aria-hidden />
-                {requisition.employerName}
-              </Link>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5">
-                  Owner:
-                  <OwnerAvatar
-                    user={
-                      currentOwner ? { id: currentOwner.id, fullName: currentOwner.fullName } : null
-                    }
-                    size="sm"
-                    showName
-                  />
-                </span>
+              <Building2 className="size-3.5" aria-hidden />
+              {requisition.employerName}
+            </Link>
+          }
+          meta={[
+            {
+              key: 'seats',
+              icon: Users,
+              content: (
                 <span className="inline-flex items-center gap-2">
-                  <Users className="size-3" aria-hidden />
                   <span className="tabular-nums">
                     {seatModel.filled} of {seatModel.required} placed
                   </span>
                   <span
-                    className="relative h-1.5 w-16 overflow-hidden rounded-full bg-muted"
+                    className="relative h-1.5 w-16 overflow-hidden rounded-full bg-sky-100 ring-1 ring-inset ring-sky-200/70 dark:bg-sky-500/15"
                     role="progressbar"
                     aria-valuenow={fillPct}
                     aria-valuemin={0}
@@ -427,166 +395,188 @@ export default async function RequisitionDetail({
                     aria-label={`${fillPct}% of positions filled`}
                   >
                     <span
-                      className="absolute inset-y-0 left-0 bg-foreground/70"
+                      className="absolute inset-y-0 left-0 rounded-full bg-primary"
                       style={{ width: `${fillPct}%` }}
                     />
                   </span>
                 </span>
-                <span>{requisition.employmentType.replace(/_/g, ' ').toLowerCase()}</span>
-                {requisition.location && (
-                  <span className="inline-flex items-center gap-1">
-                    <MapPin className="size-3" aria-hidden />
-                    {requisition.location}
-                  </span>
-                )}
-                {requisition.targetFillDate && (
-                  <span
-                    className={
-                      overdue
-                        ? 'inline-flex items-center gap-1 font-medium text-destructive'
-                        : 'inline-flex items-center gap-1'
-                    }
-                  >
-                    <CalendarClock className="size-3" aria-hidden />
-                    Target fill {requisition.targetFillDate}
-                    {overdue && ' · overdue'}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <RecordHeaderActions
-            primary={
-              canMatch && isOpen ? (
-                <AddCandidateDialog requisitionId={id} requisitionTitle={requisition.title} />
-              ) : undefined
-            }
-            secondary={[
-              <AssignToMeButton
-                key="assign"
-                entity="requisition"
-                id={id}
-                currentUserId={session.user.id}
-                currentAssignedUserId={requisition.assignedUserId}
-                canReassign={session.user.isOwner}
-              />,
-              <ReassignButton
-                key="reassign"
-                entity="requisition"
-                id={id}
-                subjectLabel={`requisition ${requisition.title}`}
-                currentAssignedUserId={requisition.assignedUserId}
-                currentAssignedName={currentOwner?.fullName ?? null}
-                staffUsers={staffUsers.map((u) => ({
-                  id: u.id,
-                  fullName: u.fullName,
-                  email: u.email,
-                }))}
-                canReassign={session.user.isOwner}
-              />,
-              canEditJob && (
-                <RequisitionDialog
-                  key="edit"
-                  initialEmployer={{
-                    id: requisition.employerId,
-                    legalName: requisition.employerName,
-                  }}
-                  occupations={occupationList}
-                  currencies={currencies}
-                  initial={requisition}
-                  defaultOpen={edit === '1'}
-                  trigger={
-                    <Button size="sm" variant="outline">
-                      <Pencil className="mr-1.5 size-4" /> Edit
-                    </Button>
-                  }
-                />
               ),
-            ]}
-            overflow={[
-              canMatch && isOpen && (
-                <AddOutsourcedCandidateDialog
-                  key="outsourced"
-                  requisitionId={id}
-                  requisitionTitle={requisition.title}
-                />
+            },
+            { key: 'location', icon: MapPin, content: requisition.location || null },
+            {
+              key: 'target',
+              icon: CalendarClock,
+              className: overdue ? 'font-medium text-destructive' : undefined,
+              content: requisition.targetFillDate ? (
+                <>
+                  Fill by {format(new Date(requisition.targetFillDate), 'd MMM yyyy')}
+                  {overdue && ' · overdue'}
+                </>
+              ) : null,
+            },
+          ]}
+          chips={[
+            {
+              key: 'owner',
+              icon: UserRound,
+              content: currentOwner ? (
+                <>
+                  Owner <span className="font-medium text-foreground">{currentOwner.fullName}</span>
+                </>
+              ) : (
+                'Unassigned'
               ),
-              canMatch && isOpen && (
-                <RunMatchingButton
-                  key="matching"
-                  requisitionId={id}
-                  criteriaWarning={
-                    criteriaWarning(
-                      {
-                        hasOccupation: Boolean(requisition.occupationId),
-                        hasLocation: Boolean(requisition.location?.trim()),
-                        requiredSkills: requisitionSkillRows.filter((r) => r.isRequired).length,
-                        preferredSkills: requisitionSkillRows.filter((r) => !r.isRequired).length,
-                        requiredQualifications: requisitionQualRows.filter((r) => r.isRequired)
-                          .length,
-                        preferredQualifications: requisitionQualRows.filter((r) => !r.isRequired)
-                          .length,
-                      },
-                      DEFAULT_MIN_SCORE,
-                    )?.message ?? null
-                  }
-                />
-              ),
-              <Link
-                key="advertisement"
-                href={`/campaigns?requisitionId=${id}`}
-                className={buttonVariants({ size: 'sm', variant: 'outline' })}
-              >
-                <Megaphone className="mr-1.5 size-4" aria-hidden /> Start advertisement
-              </Link>,
-              canEditJob && (
-                <SetRequisitionReminderDialog
-                  key="reminder"
-                  requisitionId={id}
-                  requisitionTitle={requisition.title}
+            },
+            {
+              key: 'type',
+              icon: Clock,
+              content: EMPLOYMENT_LABEL[requisition.employmentType],
+            },
+            {
+              key: 'created',
+              icon: CalendarPlus,
+              content: `Opened ${format(new Date(requisition.createdAt), 'd MMM yyyy · HH:mm')}`,
+            },
+          ]}
+          actions={
+            <RecordHeaderActions
+              primary={
+                canMatch && isOpen ? (
+                  <AddCandidateDialog requisitionId={id} requisitionTitle={requisition.title} />
+                ) : undefined
+              }
+              secondary={[
+                <AssignToMeButton
+                  key="assign"
+                  entity="requisition"
+                  id={id}
                   currentUserId={session.user.id}
-                />
-              ),
-              isOpen && canEditJob && <CloseRequisitionButton key="close" requisitionId={id} />,
-            ]}
-          />
-        </div>
+                  currentAssignedUserId={requisition.assignedUserId}
+                  canReassign={session.user.isOwner}
+                />,
+                <ReassignButton
+                  key="reassign"
+                  entity="requisition"
+                  id={id}
+                  subjectLabel={`requisition ${requisition.title}`}
+                  currentAssignedUserId={requisition.assignedUserId}
+                  currentAssignedName={currentOwner?.fullName ?? null}
+                  staffUsers={staffUsers.map((u) => ({
+                    id: u.id,
+                    fullName: u.fullName,
+                    email: u.email,
+                  }))}
+                  canReassign={session.user.isOwner}
+                />,
+                canEditJob && (
+                  <RequisitionDialog
+                    key="edit"
+                    initialEmployer={{
+                      id: requisition.employerId,
+                      legalName: requisition.employerName,
+                    }}
+                    occupations={occupationList}
+                    currencies={currencies}
+                    initial={requisition}
+                    defaultOpen={edit === '1'}
+                    trigger={
+                      <Button size="sm" variant="outline">
+                        <Pencil className="mr-1.5 size-4" /> Edit
+                      </Button>
+                    }
+                  />
+                ),
+              ]}
+              overflow={[
+                canMatch && isOpen && (
+                  <AddOutsourcedCandidateDialog
+                    key="outsourced"
+                    requisitionId={id}
+                    requisitionTitle={requisition.title}
+                  />
+                ),
+                canMatch && isOpen && (
+                  <RunMatchingButton
+                    key="matching"
+                    requisitionId={id}
+                    criteriaWarning={
+                      criteriaWarning(
+                        {
+                          hasOccupation: Boolean(requisition.occupationId),
+                          hasLocation: Boolean(requisition.location?.trim()),
+                          requiredSkills: requisitionSkillRows.filter((r) => r.isRequired).length,
+                          preferredSkills: requisitionSkillRows.filter((r) => !r.isRequired).length,
+                          requiredQualifications: requisitionQualRows.filter((r) => r.isRequired)
+                            .length,
+                          preferredQualifications: requisitionQualRows.filter((r) => !r.isRequired)
+                            .length,
+                        },
+                        DEFAULT_MIN_SCORE,
+                      )?.message ?? null
+                    }
+                  />
+                ),
+                <Link
+                  key="advertisement"
+                  href={`/campaigns?requisitionId=${id}`}
+                  className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                >
+                  <Megaphone className="mr-1.5 size-4" aria-hidden /> Start advertisement
+                </Link>,
+                canEditJob && (
+                  <SetRequisitionReminderDialog
+                    key="reminder"
+                    requisitionId={id}
+                    requisitionTitle={requisition.title}
+                    currentUserId={session.user.id}
+                  />
+                ),
+                isOpen && canEditJob && <CloseRequisitionButton key="close" requisitionId={id} />,
+              ]}
+            />
+          }
+        />
 
         {/* KPI strip — derived from placements by the R0 capacity rule. */}
-        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="requisition-kpis">
-          <KpiTile
-            icon={Users}
-            label="Positions"
-            value={seatModel.required}
-            hint="Required on this job"
-            tone="amber"
-          />
-          <KpiTile
-            icon={CheckCircle2}
-            label="Confirmed placed"
-            value={seatModel.filled}
-            hint="Seats held by placements"
-            tone="green"
-          />
-          <KpiTile
-            icon={User}
-            label="Remaining"
-            value={seatModel.remaining}
-            hint={
-              seatModel.overfilledBy > 0
-                ? `Over capacity by ${seatModel.overfilledBy}`
-                : 'Seats still to fill'
-            }
-            tone="rose"
-          />
-          <KpiTile
-            icon={GitBranch}
-            label="In pipeline"
-            value={inPipeline}
-            hint={`${atInterviewOrOffer} at interview or offer`}
-            tone="blue"
-          />
+        <div className="mt-6" data-testid="requisition-kpis">
+          <StatTileGrid>
+            <StatTile
+              testId="kpi-Positions"
+              icon={Users}
+              label="Positions"
+              value={seatModel.required}
+              hint="Required on this job"
+              tone="amber"
+            />
+            <StatTile
+              testId="kpi-Confirmed placed"
+              icon={CheckCircle2}
+              label="Confirmed placed"
+              value={seatModel.filled}
+              hint="Seats held by placements"
+              tone="green"
+            />
+            <StatTile
+              testId="kpi-Remaining"
+              icon={User}
+              label="Remaining"
+              value={seatModel.remaining}
+              hint={
+                seatModel.overfilledBy > 0
+                  ? `Over capacity by ${seatModel.overfilledBy}`
+                  : 'Seats still to fill'
+              }
+              tone="rose"
+            />
+            <StatTile
+              testId="kpi-In pipeline"
+              icon={GitBranch}
+              label="In pipeline"
+              value={inPipeline}
+              hint={`${atInterviewOrOffer} at interview or offer`}
+              tone="blue"
+            />
+          </StatTileGrid>
         </div>
       </FadeUp>
 
@@ -598,18 +588,18 @@ export default async function RequisitionDetail({
 
       {nextAction && (
         <FadeUp delay={0.02}>
-          <NextActionCard
+          <NextActionBanner
             label={nextAction.label}
             dueHint={nextAction.dueHint}
             sentence={nextAction.sentence}
             tone={nextAction.tone}
             primary={nextAction.primary}
-            className="mt-5"
+            className="mt-4"
           />
         </FadeUp>
       )}
 
-      <FadeUp delay={0.05} className="mt-6">
+      <FadeUp delay={0.05} className="mt-5">
         <RequisitionTabs
           panels={{
             pipeline: pipelineTab,

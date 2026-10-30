@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * R2 — Job Requirements workspace, browser-level proof:
@@ -28,13 +29,14 @@ type M = Awaited<ReturnType<typeof dbModules>>;
 async function seed(m: M, stamp: string) {
   const [emp] = await m.db
     .insert(m.s.employers)
-    .values({ legalName: `R2 Care Group ${stamp}` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `R2 Care Group ${stamp}` })
     .returning({ id: m.s.employers.id });
   if (!emp) throw new Error('employer seed failed');
   const [open, closed] = await m.db
     .insert(m.s.jobRequisitions)
     .values([
       {
+        assignedUserId: await e2eAdminId(),
         employerId: emp.id,
         title: `R2 Healthcare Assistants ${stamp}`,
         positionsRequired: 2,
@@ -43,6 +45,7 @@ async function seed(m: M, stamp: string) {
         location: 'Cork',
       },
       {
+        assignedUserId: await e2eAdminId(),
         employerId: emp.id,
         title: `R2 Closed Role ${stamp}`,
         positionsRequired: 1,
@@ -152,7 +155,7 @@ test('R2 workspace: seats, KPIs, tabs, close dialog, edit + activity, add candid
     for (const [tab, marker] of [
       ['overview', /Work log|Required skills|Skills/i],
       ['interviews', /Times shown in Irish time/],
-      ['checklists', /Work Permit Checklists/],
+      ['checklists', /Work permit checklists/i],
       ['billing', /Billing for this job/],
       ['activity', /Every recorded change/],
     ] as const) {

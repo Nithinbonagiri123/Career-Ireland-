@@ -11,6 +11,7 @@ import {
   employerContacts,
   employers,
   jobRequisitions,
+  placements,
 } from '@/lib/db/schema/recruitment';
 import { users } from '@/lib/db/schema/users';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
@@ -47,6 +48,60 @@ export async function fetchEmployers(
     .from(employers)
     .where(and(...whereConds))
     .orderBy(desc(employers.createdAt));
+}
+
+export type EmployerListStats = {
+  openJobs: number;
+  seatsToFill: number;
+  contacts: number;
+  placements: number;
+};
+
+/**
+ * Stage 6G employer cards — per-employer counts for the list page, in three
+ * grouped reads (no per-row queries). Archived jobs / placements are ignored.
+ */
+export async function fetchEmployerListStats(): Promise<Map<string, EmployerListStats>> {
+  await requireInternalStaff();
+  const [jobs, contacts, placed] = await Promise.all([
+    db
+      .select({
+        employerId: jobRequisitions.employerId,
+        openJobs: sql<number>`count(*)::int`,
+        seatsToFill: sql<number>`coalesce(sum(greatest(${jobRequisitions.positionsRequired} - ${jobRequisitions.positionsFilled}, 0)), 0)::int`,
+      })
+      .from(jobRequisitions)
+      .where(
+        and(
+          isNull(jobRequisitions.archivedAt),
+          inArray(jobRequisitions.status, ['OPEN', 'IN_PROGRESS', 'PARTIALLY_FILLED']),
+        ),
+      )
+      .groupBy(jobRequisitions.employerId),
+    db
+      .select({ employerId: employerContacts.employerId, n: sql<number>`count(*)::int` })
+      .from(employerContacts)
+      .groupBy(employerContacts.employerId),
+    db
+      .select({ employerId: placements.employerId, n: sql<number>`count(*)::int` })
+      .from(placements)
+      .where(isNull(placements.archivedAt))
+      .groupBy(placements.employerId),
+  ]);
+  const out = new Map<string, EmployerListStats>();
+  const get = (id: string) => {
+    let s = out.get(id);
+    if (!s) {
+      s = { openJobs: 0, seatsToFill: 0, contacts: 0, placements: 0 };
+      out.set(id, s);
+    }
+    return s;
+  };
+  for (const r of jobs)
+    Object.assign(get(r.employerId), { openJobs: r.openJobs, seatsToFill: r.seatsToFill });
+  for (const r of contacts) get(r.employerId).contacts = r.n;
+  for (const r of placed) get(r.employerId).placements = r.n;
+  return out;
 }
 
 export async function fetchEmployer(id: string): Promise<Employer | null> {

@@ -14,6 +14,7 @@ import {
 } from '@/lib/db/schema/recruitment';
 import { type UserRole, users } from '@/lib/db/schema/users';
 import { workPermitChecklists } from '@/lib/db/schema/work_permit_checklists';
+import { e2eAdminId } from '@/test/db-fixtures';
 
 /**
  * R6 — Recruitment writes are enforced on the server with the existing
@@ -95,12 +96,13 @@ beforeAll(async () => {
   session.user.id = admin.id;
   const [e] = await db
     .insert(employers)
-    .values({ legalName: `${STAMP} Ltd` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `${STAMP} Ltd` })
     .returning();
   ids.employer = e?.id ?? '';
   const [j] = await db
     .insert(jobRequisitions)
     .values({
+      assignedUserId: await e2eAdminId(),
       employerId: ids.employer,
       title: `${STAMP} job`,
       positionsRequired: 2,
@@ -141,8 +143,18 @@ beforeAll(async () => {
   const [rl, cl] = await db
     .insert(leads)
     .values([
-      { targetBusiness: 'RECRUITMENT', employerId: ids.employer, status: 'NEW' },
-      { targetBusiness: 'CANDIDATE_SERVICES', personId: ids.person, status: 'NEW' },
+      {
+        assignedUserId: await e2eAdminId(),
+        targetBusiness: 'RECRUITMENT',
+        employerId: ids.employer,
+        status: 'NEW',
+      },
+      {
+        assignedUserId: await e2eAdminId(),
+        targetBusiness: 'CANDIDATE_SERVICES',
+        personId: ids.person,
+        status: 'NEW',
+      },
     ])
     .returning();
   ids.recLead = rl?.id ?? '';

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage B Wave 2 — CV extraction correctness, certification entry,
@@ -60,6 +61,7 @@ async function seedPerson(m: Awaited<ReturnType<typeof dbModules>>, stamp: strin
   // The candidate Overview grid (Certifications card etc.) renders for
   // activated candidates — give the fixture a profile.
   await m.db.insert(m.schemas.candidateProfiles).values({
+    assignedUserId: await e2eAdminId(),
     personId: person.id,
     lifecycleStatus: 'ACTIVE',
     availabilityStatus: 'AVAILABLE',

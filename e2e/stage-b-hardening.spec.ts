@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Release-readiness hardening — WARN-1 permission proof.
@@ -41,9 +42,12 @@ test('expiry edits: ADMIN allowed, ungranted STAFF refused by the server', async
     .returning({ id: m.schemas.persons.id });
   if (!person) throw new Error('person seed failed');
   const personId = person.id;
-  await m.db
-    .insert(m.schemas.candidateProfiles)
-    .values({ personId, lifecycleStatus: 'ACTIVE', availabilityStatus: 'AVAILABLE' });
+  await m.db.insert(m.schemas.candidateProfiles).values({
+    assignedUserId: await e2eAdminId(),
+    personId,
+    lifecycleStatus: 'ACTIVE',
+    availabilityStatus: 'AVAILABLE',
+  });
   const [docType] = await m.db
     .select({ id: m.schemas.documentTypes.id })
     .from(m.schemas.documentTypes)

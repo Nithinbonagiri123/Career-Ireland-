@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 6F (urgent) Phase 5 — end-to-end acceptance for the
@@ -120,6 +121,7 @@ async function seedAcceptedProForma(opts?: {
   const [lead] = await m.db
     .insert(m.schemas.leads)
     .values({
+      assignedUserId: await e2eAdminId(),
       personId,
       targetBusiness: 'CANDIDATE_SERVICES',
       serviceOfInterestId: svc.id,

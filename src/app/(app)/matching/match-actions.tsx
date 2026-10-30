@@ -3,6 +3,7 @@
 import { Loader2, Sparkles, UserMinus, UserPlus } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { SectionCard } from '@/components/ds/workspace';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -81,79 +82,90 @@ export function RunMatchingPanel({
       ? criteriaWarning(job.criteria, min)
       : null;
   return (
-    <section
-      aria-label="Run matching"
-      className="mb-4 flex flex-col gap-3 rounded-2xl border bg-card p-3 shadow-sm ring-1 ring-border/60 lg:flex-row lg:flex-wrap lg:items-end"
-      data-testid="run-matching"
+    <SectionCard
+      icon={Sparkles}
+      title="Run matching"
+      description="Score candidates for one open job. New candidates above the minimum score are added to its matches."
+      testId="run-matching"
+      bodyClassName="space-y-3"
     >
-      <div className="min-w-0 flex-1 space-y-1">
-        <Label htmlFor="rm-job" className="text-xs text-muted-foreground">
-          Run matching for an open job
-        </Label>
-        <Select id="rm-job" value={jobId} onChange={(e) => setJobId(e.target.value)}>
-          <option value="">Choose a job…</option>
-          {jobs.map((j) => (
-            <option key={j.id} value={j.id}>
-              {j.title} — {j.employerName}
-            </option>
-          ))}
-        </Select>
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_10rem] lg:grid-cols-[minmax(0,1fr)_10rem_auto_auto] lg:items-end">
+        <div className="min-w-0 space-y-1">
+          <Label htmlFor="rm-job" className="text-xs font-medium text-foreground/70">
+            Open job
+          </Label>
+          <Select
+            id="rm-job"
+            value={jobId}
+            onChange={(e) => setJobId(e.target.value)}
+            className="h-10 rounded-xl"
+          >
+            <option value="">Choose a job…</option>
+            {jobs.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.title} — {j.employerName}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="rm-min" className="text-xs font-medium text-foreground/70">
+            Minimum score (0–100)
+          </Label>
+          <Input
+            id="rm-min"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={100}
+            step={1}
+            value={minScore}
+            onChange={(e) => setMinScore(e.target.value)}
+            aria-describedby="rm-min-hint"
+            className="h-10 rounded-xl"
+          />
+        </div>
+        <div className="flex h-10 items-center gap-2">
+          <Checkbox
+            id="rm-include"
+            checked={includeUnavailable}
+            onCheckedChange={(v) => setIncludeUnavailable(v === true)}
+          />
+          <Label htmlFor="rm-include" className="text-sm font-normal">
+            Include placed / unavailable candidates
+          </Label>
+        </div>
+        <Button
+          className="h-10"
+          disabled={pending || !jobId}
+          onClick={() =>
+            start(async () => {
+              setError(null);
+              const r = await runAssistedMatchingAction({
+                requisitionId: jobId,
+                includeUnavailable,
+                // Empty / non-numeric is sent as NaN so the server explains the rule.
+                minScore: minScore.trim() === '' ? Number.NaN : Number(minScore),
+              });
+              if (!r.ok) {
+                setError(r.error.message);
+                return;
+              }
+              toast.success(matchingRunSummary(r.data));
+            })
+          }
+        >
+          {pending ? (
+            <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden />
+          ) : (
+            <Sparkles className="mr-1.5 size-4" aria-hidden />
+          )}
+          {pending ? 'Scoring…' : 'Run matching'}
+        </Button>
       </div>
-      <div className="space-y-1 lg:w-36">
-        <Label htmlFor="rm-min" className="text-xs text-muted-foreground">
-          Minimum score (0–100)
-        </Label>
-        <Input
-          id="rm-min"
-          type="number"
-          inputMode="numeric"
-          min={0}
-          max={100}
-          step={1}
-          value={minScore}
-          onChange={(e) => setMinScore(e.target.value)}
-          aria-describedby="rm-min-hint"
-        />
-      </div>
-      <div className="flex items-center gap-2 lg:pb-2">
-        <Checkbox
-          id="rm-include"
-          checked={includeUnavailable}
-          onCheckedChange={(v) => setIncludeUnavailable(v === true)}
-        />
-        <Label htmlFor="rm-include" className="text-sm font-normal">
-          Include placed / unavailable candidates
-        </Label>
-      </div>
-      <Button
-        disabled={pending || !jobId}
-        onClick={() =>
-          start(async () => {
-            setError(null);
-            const r = await runAssistedMatchingAction({
-              requisitionId: jobId,
-              includeUnavailable,
-              // Empty / non-numeric is sent as NaN so the server explains the rule.
-              minScore: minScore.trim() === '' ? Number.NaN : Number(minScore),
-            });
-            if (!r.ok) {
-              setError(r.error.message);
-              return;
-            }
-            toast.success(matchingRunSummary(r.data));
-          })
-        }
-      >
-        {pending ? (
-          <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden />
-        ) : (
-          <Sparkles className="mr-1.5 size-4" aria-hidden />
-        )}
-        {pending ? 'Scoring…' : 'Run matching'}
-      </Button>
       {warning && (
         <div
-          className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 sm:flex-row sm:items-center sm:justify-between lg:order-last lg:basis-full dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+          className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
           role="status"
           data-testid="criteria-warning"
         >
@@ -169,15 +181,15 @@ export function RunMatchingPanel({
           </Button>
         </div>
       )}
-      <p id="rm-min-hint" className="text-[11px] text-muted-foreground lg:basis-full lg:order-last">
-        Only new candidates scoring at least the minimum are added. Existing matches (including ones
-        added by hand) are refreshed, never removed. Weak matches stay visible below.
-      </p>
       {error && (
-        <p className="text-xs text-destructive lg:basis-full" role="alert">
+        <p className="text-xs text-destructive" role="alert">
           {error}
         </p>
       )}
-    </section>
+      <p id="rm-min-hint" className="text-xs text-muted-foreground">
+        Only new candidates scoring at least the minimum are added. Existing matches (including ones
+        added by hand) are refreshed, never removed. Weak matches stay visible below.
+      </p>
+    </SectionCard>
   );
 }

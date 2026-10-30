@@ -1,11 +1,13 @@
 import { format } from 'date-fns';
 import { ArrowUpRight, FileText, Receipt as ReceiptIcon } from 'lucide-react';
 import Link from 'next/link';
+import { DsEnumPill, DsStatusPill } from '@/components/ds/status-pill';
+import { DS_SOFT } from '@/components/ds/tones';
+import { DS_ROW_LIST } from '@/components/ds/workspace';
 import { EmptyState } from '@/components/empty-state';
-import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/currency';
-import { statusTone } from '@/lib/ui/status-tone';
+import { cn } from '@/lib/utils';
 import { isInvoiceOverdue, OVERDUE_THRESHOLD_DAYS } from '@/modules/billing/aging';
 import type { PersonBillingRow, PersonReceiptRow } from '@/modules/billing/read';
 import { RecordInvoicePaymentDialog } from './record-invoice-payment-dialog';
@@ -37,8 +39,9 @@ export function BillingSection({
   return (
     <div className="space-y-8">
       <section>
-        <div className="mb-3 flex items-baseline justify-between">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <FileText className="size-4 text-primary" aria-hidden />
             Invoices
           </h3>
           <span className="text-xs text-muted-foreground">
@@ -53,7 +56,7 @@ export function BillingSection({
             description="Invoices issued to this payer will appear here."
           />
         ) : (
-          <ul className="divide-y rounded-lg glass-panel">
+          <ul className={DS_ROW_LIST}>
             {invoices.map(
               ({ invoice, serviceName, paidAmount, outstandingAmount, creditedAmount }) => {
                 const overdue = isInvoiceOverdue(invoice);
@@ -67,52 +70,59 @@ export function BillingSection({
                     key={invoice.id}
                     className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-mono text-sm font-medium">{invoice.number}</p>
-                        <Badge variant={statusTone(invoice.status)}>
-                          {invoice.status.replace(/_/g, ' ')}
-                        </Badge>
-                        {overdue && (
-                          <Badge
-                            variant="danger"
-                            title={`Unpaid for ${OVERDUE_THRESHOLD_DAYS}+ days since issued`}
-                          >
-                            OVERDUE
-                          </Badge>
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span
+                        aria-hidden
+                        className={cn(
+                          'mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl',
+                          DS_SOFT[overdue ? 'rose' : 'blue'],
+                        )}
+                      >
+                        <FileText className="size-4" />
+                      </span>
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-mono text-sm font-semibold">{invoice.number}</p>
+                          <DsEnumPill status={invoice.status} />
+                          {overdue && (
+                            <span title={`Unpaid for ${OVERDUE_THRESHOLD_DAYS}+ days since issued`}>
+                              <DsStatusPill tone="rose">Overdue</DsStatusPill>
+                            </span>
+                          )}
+                        </div>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {invoice.qty} × {serviceName}
+                          <span className="mx-1.5 text-muted-foreground/60">·</span>
+                          {format(invoice.issuedAt, 'dd MMM yyyy · HH:mm')}
+                        </p>
+                        {(paidFloat > 0 || creditedFloat > 0) && invoice.status !== 'VOIDED' && (
+                          <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+                            <span className="tabular-nums font-medium text-emerald-700 dark:text-emerald-300">
+                              {formatCurrency(paidAmount, invoice.currencyCode)} paid
+                            </span>
+                            {creditedFloat > 0 && (
+                              <span className="tabular-nums text-muted-foreground">
+                                {formatCurrency(creditedAmount, invoice.currencyCode)} credited
+                              </span>
+                            )}
+                            {outstandingFloat > 0 ? (
+                              <span className="tabular-nums font-medium text-amber-700 dark:text-amber-300">
+                                {formatCurrency(outstandingAmount, invoice.currencyCode)}{' '}
+                                outstanding
+                              </span>
+                            ) : (
+                              <span className="tabular-nums text-muted-foreground">Settled</span>
+                            )}
+                          </p>
                         )}
                       </div>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {invoice.qty} × {serviceName}
-                        <span className="mx-1.5 text-muted-foreground/60">·</span>
-                        {format(invoice.issuedAt, 'dd MMM yyyy · HH:mm')}
-                      </p>
-                      {(paidFloat > 0 || creditedFloat > 0) && invoice.status !== 'VOIDED' && (
-                        <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px]">
-                          <span className="tabular-nums text-status-success">
-                            {formatCurrency(paidAmount, invoice.currencyCode)} paid
-                          </span>
-                          {creditedFloat > 0 && (
-                            <span className="tabular-nums text-muted-foreground">
-                              {formatCurrency(creditedAmount, invoice.currencyCode)} credited
-                            </span>
-                          )}
-                          {outstandingFloat > 0 ? (
-                            <span className="tabular-nums font-medium text-status-warning">
-                              {formatCurrency(outstandingAmount, invoice.currencyCode)} outstanding
-                            </span>
-                          ) : (
-                            <span className="tabular-nums text-muted-foreground">Settled</span>
-                          )}
-                        </p>
-                      )}
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
+                    <div className="flex flex-wrap items-center gap-3 sm:flex-nowrap sm:justify-end">
+                      <div className="mr-auto text-left sm:mr-0 sm:text-right">
                         <p className="tabular-nums text-sm font-semibold">
                           {formatCurrency(invoice.totalAmount, invoice.currencyCode)}
                         </p>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        <p className="text-[11px] text-muted-foreground">
                           {Number.parseFloat(invoice.taxAmount) > 0 ? 'Total (incl. VAT)' : 'Total'}
                         </p>
                       </div>
@@ -146,8 +156,9 @@ export function BillingSection({
       </section>
 
       <section>
-        <div className="mb-3 flex items-baseline justify-between">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <ReceiptIcon className="size-4 text-primary" aria-hidden />
             Receipts
           </h3>
           <span className="text-xs text-muted-foreground">
@@ -162,32 +173,41 @@ export function BillingSection({
             description="A receipt is auto-issued when a payment against an invoice is marked verified."
           />
         ) : (
-          <ul className="divide-y rounded-lg glass-panel">
+          <ul className={DS_ROW_LIST}>
             {receipts.map(({ receipt, invoiceNumber }) => (
               <li
                 key={receipt.id}
                 className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="min-w-0 space-y-1">
-                  <p className="font-mono text-sm font-medium">{receipt.number}</p>
-                  <p className="truncate text-sm text-muted-foreground">
-                    {invoiceNumber ? (
-                      <>
-                        Applied to <span className="font-mono">{invoiceNumber}</span>
-                        <span className="mx-1.5 text-muted-foreground/60">·</span>
-                      </>
-                    ) : null}
-                    {format(receipt.receivedAt, 'dd MMM yyyy · HH:mm')}
-                  </p>
+                <div className="flex min-w-0 items-start gap-3">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl',
+                      DS_SOFT.green,
+                    )}
+                  >
+                    <ReceiptIcon className="size-4" />
+                  </span>
+                  <div className="min-w-0 space-y-1">
+                    <p className="font-mono text-sm font-semibold">{receipt.number}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {invoiceNumber ? (
+                        <>
+                          Applied to <span className="font-mono">{invoiceNumber}</span>
+                          <span className="mx-1.5 text-muted-foreground/60">·</span>
+                        </>
+                      ) : null}
+                      {format(receipt.receivedAt, 'dd MMM yyyy · HH:mm')}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <p className="tabular-nums text-sm font-semibold text-status-success">
+                  <div className="mr-auto text-left sm:mr-0 sm:text-right">
+                    <p className="tabular-nums text-sm font-semibold text-emerald-700 dark:text-emerald-300">
                       {formatCurrency(receipt.amount, receipt.currencyCode)}
                     </p>
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Received
-                    </p>
+                    <p className="text-[11px] text-muted-foreground">Received</p>
                   </div>
                   <Link
                     href={`${profileHref}/receipts/${receipt.number}`}

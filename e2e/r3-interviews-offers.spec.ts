@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * R3 — Interviews & Offers, end to end in the requisition workspace:
@@ -29,12 +30,13 @@ async function seed(m: M, stamp: string) {
     .where(m.eq(m.s.users.email, 'e2e-admin@ireland-careers.test'));
   const [emp] = await m.db
     .insert(m.s.employers)
-    .values({ legalName: `R3 Clinic ${stamp}` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `R3 Clinic ${stamp}` })
     .returning({ id: m.s.employers.id });
   if (!emp || !admin) throw new Error('seed failed');
   const [req] = await m.db
     .insert(m.s.jobRequisitions)
     .values({
+      assignedUserId: await e2eAdminId(),
       employerId: emp.id,
       title: `R3 Staff Nurse ${stamp}`,
       positionsRequired: 1,

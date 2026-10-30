@@ -14,6 +14,7 @@ import {
 } from '@/lib/db/schema/recruitment';
 import { skills } from '@/lib/db/schema/reference';
 import { type UserRole, users } from '@/lib/db/schema/users';
+import { e2eAdminId } from '@/test/db-fixtures';
 
 /**
  * R5 — matching & shortlists against the real DB, permissions from the
@@ -100,6 +101,7 @@ async function seedCandidate(
   if (!p) throw new Error('seed failed');
   ids.persons.push(p.id);
   await db.insert(candidateProfiles).values({
+    assignedUserId: await e2eAdminId(),
     personId: p.id,
     lifecycleStatus: 'ACTIVE',
     availabilityStatus: opts.availability ?? 'AVAILABLE',
@@ -129,13 +131,14 @@ beforeAll(async () => {
   session.user.id = admin.id;
   const [emp] = await db
     .insert(employers)
-    .values({ legalName: `${STAMP} Care` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `${STAMP} Care` })
     .returning();
   ids.employer = emp?.id ?? '';
   const jobs = await db
     .insert(jobRequisitions)
     .values([
       {
+        assignedUserId: await e2eAdminId(),
         employerId: ids.employer,
         title: `${STAMP} HCA`,
         positionsRequired: 2,
@@ -143,6 +146,7 @@ beforeAll(async () => {
         status: 'OPEN',
       },
       {
+        assignedUserId: await e2eAdminId(),
         employerId: ids.employer,
         title: `${STAMP} closed`,
         positionsRequired: 1,

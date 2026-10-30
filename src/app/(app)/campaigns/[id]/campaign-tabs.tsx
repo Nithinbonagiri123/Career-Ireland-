@@ -2,10 +2,10 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { DS_TAB_COUNT, DS_TAB_TRIGGER, DS_TABS_LIST } from '@/components/ds/workspace';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { cn } from '@/lib/utils';
 
-/** R4 — campaign workspace tabs, same tray and `?tab=` behaviour as the R1/R2 workspaces.
+/** R4 — campaign workspace tabs, Stage 6G underlined tabs, same `?tab=` behaviour as the R1/R2 workspaces.
  *  No `?tab=` means Prospects (old /campaigns/<id> links land on the work). */
 export const CAMPAIGN_TAB_VALUES = ['prospects', 'ads', 'overview', 'activity'] as const;
 type TabValue = (typeof CAMPAIGN_TAB_VALUES)[number];
@@ -16,14 +16,6 @@ const LABELS: Record<TabValue, string> = {
   overview: 'Overview',
   activity: 'Activity',
 };
-
-const triggerClass = cn(
-  'relative inline-flex h-11 shrink-0 items-center rounded-lg px-4 text-sm font-medium text-muted-foreground transition-colors',
-  'hover:text-foreground',
-  'data-[selected]:text-primary',
-  'after:absolute after:inset-x-3 after:bottom-0.5 after:h-0.5 after:rounded-full after:bg-transparent data-[selected]:after:bg-primary',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
-);
 
 export function CampaignTabs({
   panels,
@@ -51,20 +43,16 @@ export function CampaignTabs({
         router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
       }}
     >
-      <TabsList className="h-auto max-w-full gap-1 overflow-x-auto rounded-2xl border-0 bg-card p-1.5 shadow-sm ring-1 ring-border/60 [&>[data-slot=indicator]]:hidden">
+      <TabsList className={DS_TABS_LIST}>
         {CAMPAIGN_TAB_VALUES.map((v) => (
-          <TabsTrigger key={v} value={v} className={triggerClass}>
+          <TabsTrigger key={v} value={v} className={DS_TAB_TRIGGER}>
             {LABELS[v]}
-            {typeof counts[v] === 'number' && (
-              <span className="ml-1.5 rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground">
-                {counts[v]}
-              </span>
-            )}
+            {typeof counts[v] === 'number' && <span className={DS_TAB_COUNT}>{counts[v]}</span>}
           </TabsTrigger>
         ))}
       </TabsList>
       {CAMPAIGN_TAB_VALUES.map((v) => (
-        <TabsContent key={v} value={v} className="mt-4">
+        <TabsContent key={v} value={v}>
           {panels[v]}
         </TabsContent>
       ))}

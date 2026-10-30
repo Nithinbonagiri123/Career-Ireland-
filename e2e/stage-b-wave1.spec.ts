@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage B Wave 1 — client-remediation regressions.
@@ -154,6 +155,7 @@ test('P0 regression: part-paid accepted quote is counted once in the workspace b
   const [lead] = await m.db
     .insert(m.schemas.leads)
     .values({
+      assignedUserId: await e2eAdminId(),
       personId,
       targetBusiness: 'CANDIDATE_SERVICES',
       serviceOfInterestId: svc.id,
@@ -262,6 +264,7 @@ test('invoice generation warns on same payer + service and requires an audited o
   const [lead] = await m.db
     .insert(m.schemas.leads)
     .values({
+      assignedUserId: await e2eAdminId(),
       personId,
       targetBusiness: 'IMMIGRATION',
       serviceOfInterestId: svc.id,

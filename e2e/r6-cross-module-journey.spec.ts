@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * R6 — one person through every Recruitment module, using the real screens:
@@ -46,12 +47,13 @@ test('Campaign prospect → Candidate → Shortlist → Interview → Offer → 
 
   const [emp] = await m.db
     .insert(m.s.employers)
-    .values({ legalName: `Journey Care ${stamp}` })
+    .values({ assignedUserId: await e2eAdminId(), legalName: `Journey Care ${stamp}` })
     .returning({ id: m.s.employers.id });
   if (!emp) throw new Error('seed failed');
   const [job] = await m.db
     .insert(m.s.jobRequisitions)
     .values({
+      assignedUserId: await e2eAdminId(),
       employerId: emp.id,
       title: `Journey HCA ${stamp}`,
       positionsRequired: 1,

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eAdminId } from './helpers/owner';
 
 /**
  * Stage 6E+1 Section 6 — seeded Candidate Card spacing verification.
@@ -140,7 +141,9 @@ async function seedDiverseCandidates(stamp: string): Promise<Seeded> {
       .returning({ id: persons.id });
     if (!p) throw new Error('seed person insert failed');
     personIds.push(p.id);
-    await db.insert(candidateProfiles).values({ personId: p.id });
+    await db
+      .insert(candidateProfiles)
+      .values({ assignedUserId: await e2eAdminId(), personId: p.id });
   }
 
   return {

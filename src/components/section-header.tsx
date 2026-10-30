@@ -1,7 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import type * as React from 'react';
 
-import { Badge } from '@/components/ui/badge';
 import { CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
@@ -47,20 +46,24 @@ export function SectionHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <CardHeader className={cn('flex-row items-center justify-between space-y-0', className)}>
-      <div className="min-w-0">
-        <CardTitle className="flex items-center gap-2 text-base">
-          {Icon && <Icon className="size-4" />}
+    // Stage 6G (mockup 04 section cards): CardHeader is a grid, so `flex`
+    // is required for the action to sit on the title row.
+    <CardHeader
+      className={cn('flex flex-wrap items-start justify-between gap-2 space-y-0', className)}
+    >
+      <div className="min-w-0 flex-1">
+        <CardTitle className="flex items-center gap-2 text-[15px] font-semibold">
+          {Icon && <Icon className="size-[18px] shrink-0 text-primary" aria-hidden />}
           <span className="truncate">{title}</span>
           {typeof count === 'number' && (
-            <Badge variant="secondary" className="ml-1 rounded-full">
-              {count}
-            </Badge>
+            <span className="text-sm font-normal tabular-nums text-muted-foreground">
+              ({count})
+            </span>
           )}
         </CardTitle>
         {children && <p className="mt-1 text-xs text-muted-foreground">{children}</p>}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div>}
     </CardHeader>
   );
 }
