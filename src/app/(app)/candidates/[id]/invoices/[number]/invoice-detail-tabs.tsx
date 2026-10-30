@@ -4,7 +4,9 @@ import { format } from 'date-fns';
 import { CheckCircle2, ExternalLink, FileText, Receipt, UserRound } from 'lucide-react';
 import Link from 'next/link';
 import { type ReactNode, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { arrowKeyNav } from '@/components/ds/segmented';
+import { DsStatusPill } from '@/components/ds/status-pill';
+import { DS_SOFT } from '@/components/ds/tones';
 import { formatCurrency } from '@/lib/currency';
 import { cn } from '@/lib/utils';
 import type { InvoicePaymentTrailRow } from '@/modules/billing/read';
@@ -57,7 +59,8 @@ export function InvoiceDetailTabs({
       <div
         role="tablist"
         aria-label="Invoice sections"
-        className="mx-auto flex max-w-3xl gap-1 rounded-xl border bg-card p-1 shadow-sm print:hidden"
+        onKeyDown={(e) => arrowKeyNav(e)}
+        className="flex gap-0 overflow-x-auto rounded-2xl border border-border/60 bg-card px-2 shadow-sm print:hidden"
       >
         {tabs.map((t) => (
           <button
@@ -67,10 +70,12 @@ export function InvoiceDetailTabs({
             aria-selected={tab === t.value}
             onClick={() => setTab(t.value)}
             className={cn(
-              'flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors',
+              'relative h-12 shrink-0 px-3.5 text-sm font-medium transition-colors sm:px-4',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+              "after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:content-['']",
               tab === t.value
-                ? 'bg-sky-50 text-sky-800 ring-1 ring-inset ring-sky-200'
-                : 'text-muted-foreground hover:text-foreground',
+                ? 'font-semibold text-foreground after:bg-primary'
+                : 'text-muted-foreground after:bg-transparent hover:text-foreground',
             )}
           >
             {t.label}
@@ -83,8 +88,8 @@ export function InvoiceDetailTabs({
       <div className={cn(tab !== 'overview' && 'hidden print:block')}>
         {children}
         {paymentReceivedNote && (
-          <div className="mx-auto mt-4 max-w-3xl px-6 pb-8 print:hidden">
-            <div className="flex items-start gap-2.5 rounded-xl border border-status-success/30 bg-status-success-soft/60 px-4 py-3">
+          <div className="mt-4 pb-8 print:hidden">
+            <div className="flex items-start gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900/60 dark:bg-emerald-950/40">
               <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-status-success" aria-hidden />
               <div className="text-xs text-foreground/90">
                 <p className="font-semibold text-foreground">Payment received</p>
@@ -96,8 +101,8 @@ export function InvoiceDetailTabs({
       </div>
 
       {tab === 'payments' && (
-        <div className="mx-auto mt-4 max-w-3xl px-6 pb-8 print:hidden">
-          <div className="rounded-xl border bg-card p-4 shadow-sm">
+        <div className="mt-4 pb-8 print:hidden">
+          <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
             {payments.length === 0 ? (
               <p className="py-6 text-center text-xs text-muted-foreground">
                 No payments recorded against this invoice&apos;s service yet.
@@ -111,19 +116,19 @@ export function InvoiceDetailTabs({
                   >
                     <span
                       aria-hidden
-                      className="grid size-8 shrink-0 place-items-center rounded-lg bg-status-success-soft text-status-success"
+                      className={cn(
+                        'grid size-9 shrink-0 place-items-center rounded-xl',
+                        DS_SOFT.green,
+                      )}
                     >
                       <Receipt className="size-4" />
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold tabular-nums text-foreground">
                         {formatCurrency(p.amount, p.currencyCode)}
-                        <Badge
-                          variant="secondary"
-                          className="ml-2 rounded-full border-transparent bg-status-success-soft text-[10px] text-status-success"
-                        >
+                        <DsStatusPill tone="green" className="ml-2 align-middle">
                           {PAYMENT_LABEL[p.status]}
-                        </Badge>
+                        </DsStatusPill>
                       </p>
                       <p className="mt-0.5 text-[11px] text-muted-foreground">
                         {p.method.replace(/_/g, ' ')}
@@ -146,14 +151,17 @@ export function InvoiceDetailTabs({
       )}
 
       {tab === 'related' && (
-        <div className="mx-auto mt-4 max-w-3xl px-6 pb-8 print:hidden">
-          <div className="rounded-xl border bg-card p-4 shadow-sm">
+        <div className="mt-4 pb-8 print:hidden">
+          <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
             <ul className="divide-y">
               {related.map((r) => (
                 <li key={r.key} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
                   <span
                     aria-hidden
-                    className="grid size-8 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700"
+                    className={cn(
+                      'grid size-9 shrink-0 place-items-center rounded-xl',
+                      DS_SOFT.blue,
+                    )}
                   >
                     {r.label.toLowerCase().includes('candidate') ? (
                       <UserRound className="size-4" />

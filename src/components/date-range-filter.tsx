@@ -28,14 +28,35 @@ const PRESETS: Array<{ value: Preset; label: string }> = [
   { value: '90d', label: '90 days' },
 ];
 
-export function DateRangeFilter({ className }: { className?: string }) {
+export function DateRangeFilter({
+  className,
+  aliases,
+  defaultPreset,
+}: {
+  className?: string;
+  /**
+   * Older param names that mean the same as `from` / `to` on this page
+   * (e.g. Leads' `createdFrom` / `createdTo`). They are read when the
+   * canonical params are absent and cleared whenever the range changes.
+   */
+  aliases?: { from: string; to: string };
+  /**
+   * The range the page applies when the URL has no date (e.g. Payments
+   * shows this month). It is shown as selected, and "Anytime" then writes
+   * an explicit `created=all` so the page can lift the restriction.
+   */
+  defaultPreset?: Preset;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const currentPreset = params?.get('created') ?? '';
-  const currentFrom = params?.get('from') ?? '';
-  const currentTo = params?.get('to') ?? '';
+  const rawPreset = params?.get('created') ?? '';
+  const currentFrom = params?.get('from') ?? (aliases ? (params?.get(aliases.from) ?? '') : '');
+  const currentTo = params?.get('to') ?? (aliases ? (params?.get(aliases.to) ?? '') : '');
   const isCustom = !!(currentFrom || currentTo);
+  // `created=all` is an explicit "Anytime" (only meaningful with a default).
+  const currentPreset =
+    rawPreset === 'all' ? '' : rawPreset || (!isCustom && defaultPreset ? defaultPreset : '');
   const isAnytime = !currentPreset && !isCustom;
 
   const [customOpen, setCustomOpen] = useState(false);
@@ -68,11 +89,21 @@ export function DateRangeFilter({ className }: { className?: string }) {
     };
   }, [customOpen]);
 
+  const dropAliases = (usp: URLSearchParams) => {
+    if (!aliases) return;
+    usp.delete(aliases.from);
+    usp.delete(aliases.to);
+  };
+
   const setPreset = (preset: '' | Preset) => {
     const usp = new URLSearchParams(params?.toString() ?? '');
     usp.delete('from');
     usp.delete('to');
-    if (preset === '') usp.delete('created');
+    dropAliases(usp);
+    if (preset === '') {
+      if (defaultPreset) usp.set('created', 'all');
+      else usp.delete('created');
+    } else if (preset === defaultPreset) usp.delete('created');
     else usp.set('created', preset);
     const qs = usp.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname);
@@ -81,6 +112,7 @@ export function DateRangeFilter({ className }: { className?: string }) {
   const applyCustom = () => {
     const usp = new URLSearchParams(params?.toString() ?? '');
     usp.delete('created');
+    dropAliases(usp);
     if (from) usp.set('from', from);
     else usp.delete('from');
     if (to) usp.set('to', to);
@@ -96,6 +128,7 @@ export function DateRangeFilter({ className }: { className?: string }) {
     const usp = new URLSearchParams(params?.toString() ?? '');
     usp.delete('from');
     usp.delete('to');
+    dropAliases(usp);
     const qs = usp.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname);
   };

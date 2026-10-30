@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
+import { arrowKeyNav, SEG_TRAY, segItem } from '@/components/ds/segmented';
 import { Field, TintedFormSection as FormSection } from '@/components/form-section';
 import { type OccupationOption, OccupationPicker } from '@/components/occupation-picker';
 import { PhoneCountryPicker } from '@/components/phone-country-picker';
@@ -42,6 +43,7 @@ import {
   IRISH_IMMIGRATION_STATUSES,
   WORK_ELIGIBILITY_OPTIONS,
 } from '@/lib/iso-countries';
+import { cn } from '@/lib/utils';
 import { generateInvoiceAction } from '@/modules/billing/generate-actions';
 import type { InvoiceableService } from '@/modules/billing/read';
 import { createLeadAction } from '@/modules/leads/actions';
@@ -453,13 +455,14 @@ export function CreateLeadDialog({
         {/* Target-business picker — always visible at the top. Sets the
             downstream lead + invoice flow. */}
         <div className="mb-5 space-y-2">
-          <Label className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+          <Label className="text-sm font-semibold text-foreground">
             For which part of the business?
           </Label>
           <div
             role="tablist"
             aria-label="Target business"
-            className="grid grid-cols-3 gap-1.5 rounded-xl bg-muted/50 p-1.5"
+            onKeyDown={(e) => arrowKeyNav(e)}
+            className={cn(SEG_TRAY, 'grid w-full grid-cols-1 sm:grid-cols-3')}
           >
             {(
               [
@@ -476,11 +479,7 @@ export function CreateLeadDialog({
                   role="tab"
                   aria-selected={active}
                   onClick={() => setTargetBusiness(key)}
-                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                    active
-                      ? 'bg-foreground text-background shadow-sm'
-                      : 'bg-transparent text-muted-foreground hover:bg-background/60 hover:text-foreground'
-                  }`}
+                  className={segItem(active, 'h-9 justify-center')}
                 >
                   {label}
                 </button>
@@ -500,9 +499,7 @@ export function CreateLeadDialog({
           <div className="space-y-5">
             {/* ── Employer + Lead (recruitment) ─────────────────────── */}
             <section className="space-y-3">
-              <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                Employer
-              </h3>
+              <h3 className="text-sm font-semibold text-foreground">Employer</h3>
               <p className="text-[11px] text-muted-foreground">
                 Minimal fields to raise the lead. The full employer profile (contacts, website,
                 industry, …) can be filled in from <span className="font-mono">/employers</span>{' '}
@@ -905,7 +902,7 @@ export function CreateLeadDialog({
               <section className="space-y-3 rounded-md border bg-muted/20 p-4">
                 <div className="flex items-center gap-2">
                   <FileText className="size-4 text-muted-foreground" aria-hidden />
-                  <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  <h3 className="text-sm font-semibold text-foreground">
                     First invoice (optional)
                   </h3>
                 </div>

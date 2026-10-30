@@ -22,6 +22,7 @@ export function EntityCard({
   stats,
   actions,
   testId,
+  ariaLabel,
 }: {
   avatar: { initials?: string; icon?: LucideIcon; tone?: DsTone };
   status?: ReactNode;
@@ -36,6 +37,8 @@ export function EntityCard({
   stats?: Array<{ value: ReactNode; label: string }>;
   actions?: ReactNode;
   testId?: string;
+  /** Accessible name for the card (e.g. "Candidate Jane Doe"). */
+  ariaLabel?: string;
 }) {
   const Icon = avatar.icon;
   const rows = meta.filter(
@@ -44,6 +47,7 @@ export function EntityCard({
   return (
     <article
       data-testid={testId}
+      aria-label={ariaLabel}
       className="flex h-full min-w-0 flex-col rounded-2xl border border-border/60 bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
     >
       <div className="flex items-start gap-3">

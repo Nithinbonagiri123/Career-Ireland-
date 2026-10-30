@@ -16,6 +16,7 @@ export function StatTile({
   tone = 'blue',
   trend,
   testId,
+  className,
 }: {
   icon: LucideIcon;
   label: string;
@@ -25,11 +26,16 @@ export function StatTile({
   /** Optional small chip beside the number (e.g. "12 this month"). */
   trend?: ReactNode;
   testId?: string;
+  /** Grid placement (e.g. a column span) from the page's layout. */
+  className?: string;
 }) {
   return (
     <div
       data-testid={testId}
-      className="flex min-w-0 flex-col items-start gap-2.5 rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm sm:flex-row sm:items-center sm:gap-3.5 sm:px-4"
+      className={cn(
+        'flex min-w-0 flex-col items-start gap-2.5 rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm sm:flex-row sm:items-center sm:gap-3.5 sm:px-4',
+        className,
+      )}
     >
       <span
         aria-hidden

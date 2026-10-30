@@ -1,14 +1,15 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
+import { useActiveTabInView } from '@/components/ds/use-active-tab-in-view';
+import { DS_TAB_TRIGGER, DS_TABS_LIST } from '@/components/ds/workspace';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { cn } from '@/lib/utils';
 
 /**
- * Stage 6G — Client Workspace tabs matching the approved mockup: a
- * white rounded tray of plain text labels (no icons); the active tab
- * is blue with a blue underline bar. Legacy `?tab=billing` /
+ * Stage 6G — Client Workspace tabs on the shared underlined strip
+ * (DS_TABS_LIST / DS_TAB_TRIGGER); on phones the strip scrolls and keeps
+ * the selected tab in view. Legacy `?tab=billing` /
  * `?tab=documents` still scroll to the Service Billing anchor at the
  * top of the page rather than silently landing on an unrelated tab.
  */
@@ -64,36 +65,31 @@ export function ClientWorkspaceTabs({
     router.replace(qs ? `?${qs}` : '?', { scroll: false });
   }
 
-  const triggerClass = cn(
-    'relative inline-flex h-11 shrink-0 items-center rounded-lg px-4 text-sm font-medium text-muted-foreground transition-colors',
-    'hover:text-foreground',
-    'data-[selected]:text-primary',
-    // Blue underline bar under the active label, per the mockup.
-    'after:absolute after:inset-x-3 after:bottom-0.5 after:h-0.5 after:rounded-full after:bg-transparent data-[selected]:after:bg-primary',
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
-  );
+  const stripRef = useRef<HTMLDivElement>(null);
+  useActiveTabInView(stripRef, current);
 
   return (
     <Tabs value={current} onValueChange={(v) => onChange(v)}>
-      {/* White rounded tray of plain-text tabs matching the mockup;
-          the default TabsList underline indicator is hidden in favour
-          of the per-trigger underline bar. */}
-      <TabsList className="h-auto gap-1 rounded-2xl border-0 bg-card p-1.5 shadow-sm ring-1 ring-border/60 [&>[data-slot=indicator]]:hidden">
-        {(
-          [
-            'overview',
-            'profile',
-            'documents-candidate',
-            'services-billing',
-            'applications',
-            'activity',
-          ] as const
-        ).map((v) => (
-          <TabsTrigger key={v} value={v} className={triggerClass}>
-            {TAB_META[v]?.label ?? v}
-          </TabsTrigger>
-        ))}
-      </TabsList>
+      {/* Stage 6G — the shared underlined tab strip (as in Recruitment).
+          No counts here: specs match the tab names exactly. */}
+      <div ref={stripRef}>
+        <TabsList className={DS_TABS_LIST}>
+          {(
+            [
+              'overview',
+              'profile',
+              'documents-candidate',
+              'services-billing',
+              'applications',
+              'activity',
+            ] as const
+          ).map((v) => (
+            <TabsTrigger key={v} value={v} className={DS_TAB_TRIGGER}>
+              {TAB_META[v]?.label ?? v}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </div>
       <TabsContent value="overview">{overview}</TabsContent>
       <TabsContent value="profile">{profile}</TabsContent>
       <TabsContent value="documents-candidate">{documentsCandidate}</TabsContent>

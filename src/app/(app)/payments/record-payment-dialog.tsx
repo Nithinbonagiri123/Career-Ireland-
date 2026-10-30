@@ -79,7 +79,11 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger
         render={
-          <Button size="sm" disabled={openEngagements.length === 0}>
+          <Button
+            variant="outline"
+            className="w-full justify-center"
+            disabled={openEngagements.length === 0}
+          >
             <Plus className="mr-1.5 size-4" /> Record payment
           </Button>
         }

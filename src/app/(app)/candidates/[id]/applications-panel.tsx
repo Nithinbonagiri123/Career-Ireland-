@@ -7,13 +7,13 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { CvPicker } from '@/components/cv-picker';
+import { DsEnumPill, DsStatusPill } from '@/components/ds/status-pill';
 import { EmptyState } from '@/components/empty-state';
 import {
   PLACEMENT_OFFER_REQUIRED,
   PlacementExceptionDialog,
 } from '@/components/placement-exception-dialog';
 import { SectionHeader } from '@/components/section-header';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -34,7 +34,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import type { DocumentInstance } from '@/lib/db/schema/documents';
-import { statusTone } from '@/lib/ui/status-tone';
 import {
   createExternalApplicationAction,
   updateApplicationStatusAction,
@@ -285,10 +284,10 @@ export function ApplicationsPanel({
                         {r.externalJobTitle ?? r.displayCompany ?? 'External application'}
                       </span>
                     )}
-                    <Badge variant="outline" className="rounded-full text-[10px]">
-                      <Globe className="mr-0.5 size-2.5" />
+                    <DsStatusPill tone="slate" className="gap-1">
+                      <Globe className="size-2.5" aria-hidden />
                       {SOURCE_LABEL[r.source]}
-                    </Badge>
+                    </DsStatusPill>
                   </div>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
                     {r.displayCompany ?? '—'}
@@ -312,9 +311,7 @@ export function ApplicationsPanel({
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <Badge variant={statusTone(r.status)} className="rounded-full">
-                    {r.status.replace(/_/g, ' ')}
-                  </Badge>
+                  <DsEnumPill status={r.status} />
                   {/* Stage C workflow collapse — advance the case right
                       here: only the legal next hops for this status, the
                       same transitions the Recruitment pipeline enforces

@@ -26,7 +26,7 @@ export default async function ReceiptPrintPage({
   const relatedInvoiceVoided = data.invoice?.status === 'VOIDED';
 
   return (
-    <div className="min-h-screen bg-muted/40 print:bg-white">
+    <div className="min-h-screen bg-background print:bg-white">
       <div className="mx-auto flex max-w-3xl items-center justify-between px-6 pt-6 print:hidden">
         <Link
           href={`/candidates/${id}`}
@@ -43,7 +43,7 @@ export default async function ReceiptPrintPage({
           flags the orphan case where the underlying invoice was voided
           after the receipt was issued. */}
       <div className="mx-auto mt-3 max-w-3xl px-6 print:hidden">
-        <div className="rounded-md border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs shadow-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
           <strong className="font-semibold">Need to correct this payment?</strong>{' '}
           {relatedInvoiceVoided
             ? "The invoice tied to this receipt has been voided. Issue a refund to the payer if the money was returned, then raise a fresh invoice from the candidate's Billing tab."

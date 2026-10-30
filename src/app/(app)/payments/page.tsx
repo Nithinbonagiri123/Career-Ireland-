@@ -2,6 +2,7 @@ import { Wallet } from 'lucide-react';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
+import { PageHeader } from '@/components/page-header';
 import { requireAnyPermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchEngagements, fetchPaymentsWorkspace } from '@/modules/commerce/service';
@@ -10,6 +11,11 @@ import { RecordPaymentDialog } from './record-payment-dialog';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Stage 6G — Payments (approved mockup 07): page header with export, the
+ * created-date range, then the workspace (tiles, URL-driven filters,
+ * Transactions table/cards with pagination, and the right rail).
+ */
 export default async function PaymentsPage({
   searchParams,
 }: {
@@ -23,9 +29,9 @@ export default async function PaymentsPage({
   ]);
   const { created, from, to } = await searchParams;
   // Default the Payments view to the current calendar month when the
-  // URL has no filter — finance workflow is calendar-month shaped, so
-  // "Anytime" was the wrong default here even though it's correct for
-  // other list pages (Candidates, Leads, etc.).
+  // URL has no filter — finance workflow is calendar-month shaped. The
+  // date control shows that default as "This month"; choosing "Anytime"
+  // writes `created=all`, which parses to no restriction.
   const effectiveCreated = created ?? (from || to ? undefined : 'month');
   const createdRange = parseDateRangeParams({ created: effectiveCreated, from, to });
   const [data, engagements] = await Promise.all([
@@ -34,35 +40,22 @@ export default async function PaymentsPage({
   ]);
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8 md:px-10">
-      {/* Stage 6G Screen 07 — hero: icon card + title + subtitle on the
-          left, the range filter + export on the right. */}
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-4">
-            <span
-              aria-hidden
-              className="grid size-14 shrink-0 place-items-center rounded-2xl bg-card text-sky-700 shadow-sm ring-1 ring-border/60"
-            >
-              <Wallet className="size-6" />
-            </span>
-            <div className="min-w-0">
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-                Payments
-              </h1>
-              <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-                Track payments, manage invoices and receipts, and monitor financial activity for
-                your candidates and services.
-              </p>
-            </div>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <DateRangeFilter />
-            <CsvExportButton href="/api/export/payments" />
-          </div>
+        <PageHeader
+          icon={Wallet}
+          iconTone="blue"
+          title="Payments"
+          description="Track payments, manage invoices and receipts, and monitor financial activity for your candidates and services."
+          action={<CsvExportButton href="/api/export/payments" />}
+        />
+      </FadeUp>
+      <FadeUp delay={0.03}>
+        <div className="mb-4 flex min-w-0 max-w-full flex-wrap items-center gap-2">
+          <DateRangeFilter className="min-w-0 max-w-full" defaultPreset="month" />
         </div>
       </FadeUp>
-      <FadeUp delay={0.05} className="mt-6">
+      <FadeUp delay={0.05}>
         <PaymentsWorkspaceView
           data={data}
           role={session.user.role}

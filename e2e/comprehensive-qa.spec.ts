@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { isLocalNextDevServer, unexpectedBrowserErrors } from './helpers/known-dev-errors';
 
 /**
  * End-to-end QA sweep across every internal route. Adds coverage the
@@ -60,7 +61,7 @@ const ALL_ROUTES: string[] = [
 ];
 
 for (const path of ALL_ROUTES) {
-  test(`route: ${path} renders cleanly`, async ({ page }) => {
+  test(`route: ${path} renders cleanly`, async ({ page }, testInfo) => {
     const consoleErrors: string[] = [];
     const pageErrors: Error[] = [];
     page.on('console', (msg) => {
@@ -75,8 +76,15 @@ for (const path of ALL_ROUTES) {
     // an <h1> after client hydration — a short wait is enough.
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
 
+    // One approved, narrowly scoped exception for a documented React
+    // development-only timing error — see e2e/helpers/known-dev-errors.ts.
+    const isDevServer = await isLocalNextDevServer(page);
     expect(
-      pageErrors.map((e) => e.message),
+      unexpectedBrowserErrors(
+        pageErrors.map((e) => e.message),
+        isDevServer,
+        testInfo,
+      ),
       `unhandled page errors on ${path}`,
     ).toEqual([]);
 
@@ -84,7 +92,11 @@ for (const path of ALL_ROUTES) {
     // hydration mismatch is a real regression signal (attribute merge
     // order, non-deterministic props, SSR/CSR divergence) and must
     // fail the sweep.
-    const meaningful = consoleErrors.filter((e) => !/favicon|extension|net::ERR_/i.test(e));
+    const meaningful = unexpectedBrowserErrors(
+      consoleErrors.filter((e) => !/favicon|extension|net::ERR_/i.test(e)),
+      isDevServer,
+      testInfo,
+    );
     expect(meaningful, `console errors on ${path}`).toEqual([]);
   });
 }

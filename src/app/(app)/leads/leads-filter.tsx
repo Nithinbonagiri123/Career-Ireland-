@@ -60,6 +60,12 @@ function parseList(value: string | null): string[] {
     .filter(Boolean);
 }
 
+/** "AWAITING_PAYMENT" → "Awaiting payment". */
+function sentence(v: string): string {
+  const t = v.toLowerCase().replaceAll('_', ' ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 function joinList(arr: string[]): string | null {
   return arr.length > 0 ? arr.join(',') : null;
 }
@@ -83,8 +89,9 @@ export function LeadsFilterControl({
       source: parseList(params.get('source')),
       country: parseList(params.get('country')),
       profession: parseList(params.get('profession')),
-      createdFrom: params.get('createdFrom') ?? '',
-      createdTo: params.get('createdTo') ?? '',
+      // Canonical `from` / `to`, falling back to the legacy aliases.
+      createdFrom: params.get('from') ?? params.get('createdFrom') ?? '',
+      createdTo: params.get('to') ?? params.get('createdTo') ?? '',
     }),
     [params],
   );
@@ -120,9 +127,19 @@ export function LeadsFilterControl({
     if (patch.source !== undefined) set('source', joinList(patch.source));
     if (patch.country !== undefined) set('country', joinList(patch.country));
     if (patch.profession !== undefined) set('profession', joinList(patch.profession));
-    if (patch.createdFrom !== undefined) set('createdFrom', patch.createdFrom || null);
-    if (patch.createdTo !== undefined) set('createdTo', patch.createdTo || null);
-    router.replace(`?${next.toString()}`);
+    // Exact dates write the canonical `from` / `to` (shared with the
+    // Created control) and drop the preset and the legacy aliases, so only
+    // one date range is ever in force.
+    if (patch.createdFrom !== undefined || patch.createdTo !== undefined) {
+      const nextFrom = patch.createdFrom ?? current.createdFrom;
+      const nextTo = patch.createdTo ?? current.createdTo;
+      for (const k of ['created', 'createdFrom', 'createdTo']) next.delete(k);
+      set('from', nextFrom || null);
+      set('to', nextTo || null);
+    }
+    // Any filter change starts again from page 1.
+    next.delete('page');
+    router.replace(`?${next.toString()}`, { scroll: false });
   }
 
   function toggleInArray<T extends string>(arr: T[], value: T): T[] {
@@ -138,12 +155,16 @@ export function LeadsFilterControl({
       'source',
       'country',
       'profession',
+      'created',
+      'from',
+      'to',
       'createdFrom',
       'createdTo',
     ]) {
       next.delete(k);
     }
-    router.replace(`?${next.toString()}`);
+    next.delete('page');
+    router.replace(`?${next.toString()}`, { scroll: false });
     setOpen(false);
   }
 
@@ -151,22 +172,20 @@ export function LeadsFilterControl({
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
         render={
-          <Button variant="outline" size="sm" className="h-8">
-            <Filter className="mr-1.5 size-3.5" />
+          <Button variant="outline" className="h-10 rounded-xl border-border/70 px-3.5">
+            <Filter className="mr-1.5 size-4" />
             Filter
             {activeCount > 0 && (
-              <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground tabular-nums">
+              <span className="ml-1.5 rounded-md bg-primary px-1.5 text-xs font-semibold text-primary-foreground tabular-nums">
                 {activeCount}
               </span>
             )}
           </Button>
         }
       />
-      <DropdownMenuContent align="end" className="w-80 p-3">
+      <DropdownMenuContent align="end" className="w-80 max-w-[calc(100vw-2rem)] rounded-xl p-3">
         <div className="flex items-center justify-between">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Filters
-          </div>
+          <div className="text-sm font-semibold text-foreground">More filters</div>
           {activeCount > 0 && (
             <Button
               variant="ghost"
@@ -264,7 +283,7 @@ export function LeadsFilterControl({
                     checked={checked}
                     onChange={() => applyPatch({ status: toggleInArray(current.status, s) })}
                   />
-                  {s.toLowerCase().replaceAll('_', ' ')}
+                  {sentence(s)}
                 </label>
               );
             })}
@@ -289,7 +308,7 @@ export function LeadsFilterControl({
                     checked={checked}
                     onChange={() => applyPatch({ source: toggleInArray(current.source, s) })}
                   />
-                  {s.toLowerCase().replaceAll('_', ' ')}
+                  {sentence(s)}
                 </label>
               );
             })}

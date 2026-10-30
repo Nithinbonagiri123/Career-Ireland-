@@ -20,7 +20,9 @@ import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { ProFormaComposer } from '@/app/(app)/leads/[id]/pro-formas/pro-forma-composer';
 import { DirectPaymentDialog } from '@/app/(app)/leads/direct-payment-dialog';
-import { Badge } from '@/components/ui/badge';
+import { DsStatusPill } from '@/components/ds/status-pill';
+import { DS_SOFT, type DsTone } from '@/components/ds/tones';
+import { EmptyState } from '@/components/empty-state';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
   Dialog,
@@ -90,14 +92,17 @@ export type ServiceHistoryRow = {
 };
 
 const CARD_ICONS = [FileText, Briefcase, Users, MessageSquare, ChartNoAxesColumn, Send];
-const CARD_TONES = [
-  'bg-sky-100 text-sky-700',
-  'bg-amber-100 text-amber-700',
-  'bg-violet-100 text-violet-700',
-  'bg-emerald-100 text-emerald-700',
-  'bg-rose-100 text-rose-700',
-  'bg-teal-100 text-teal-700',
-];
+const CARD_TONES = (['blue', 'amber', 'violet', 'green', 'rose', 'teal'] as const).map(
+  (t) => DS_SOFT[t],
+);
+
+/** Pill tone for the payment / service status labels used in this tab. */
+function statusTone(label: string, opts?: { complimentary?: boolean; settled?: boolean }): DsTone {
+  if (opts?.complimentary || label === 'Complimentary' || label === 'No payment due') return 'blue';
+  if (opts?.settled || label === 'Paid') return 'green';
+  if (label === 'Draft quote') return 'slate';
+  return 'amber';
+}
 
 function servicePrice(
   s: InvoiceableService,
@@ -224,16 +229,18 @@ export function ServicesBillingTab({
   return (
     <div className="space-y-5">
       {/* ── Header card ─────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border bg-card p-4 shadow-sm ring-1 ring-border/60 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
         <div className="flex min-w-0 items-start gap-3">
           <span
             aria-hidden
-            className="grid size-9 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700"
+            className={cn('grid size-10 shrink-0 place-items-center rounded-xl', DS_SOFT.blue)}
           >
             <CreditCard className="size-4.5" />
           </span>
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-foreground">Services &amp; Billing</h2>
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+              Services &amp; Billing
+            </h2>
             <p className="mt-0.5 max-w-2xl text-xs text-muted-foreground">
               Manage services for this candidate, create pro forma, process direct payments, and
               track billing status.
@@ -261,17 +268,17 @@ export function ServicesBillingTab({
 
       {/* ── Available services | Active services ────────────────── */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <section className="rounded-xl border bg-card p-4 shadow-sm ring-1 ring-border/60 sm:p-5">
+        <section className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3">
               <span
                 aria-hidden
-                className="grid size-8 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700"
+                className={cn('grid size-9 shrink-0 place-items-center rounded-xl', DS_SOFT.blue)}
               >
                 <Users className="size-4" />
               </span>
               <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-foreground">Available services</h3>
+                <h3 className="text-[15px] font-semibold text-foreground">Available services</h3>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Select services to add to this candidate.
                 </p>
@@ -317,13 +324,15 @@ export function ServicesBillingTab({
                   key={s.id}
                   className={cn(
                     'flex flex-col rounded-xl border p-3.5 transition-colors',
-                    isSelected ? 'border-sky-400 bg-sky-50/60' : 'border-border/70 bg-background',
+                    isSelected
+                      ? 'border-primary/40 bg-sky-50 ring-1 ring-primary/20 dark:bg-sky-500/10'
+                      : 'border-border/70 bg-background',
                   )}
                 >
                   <div className="flex items-start gap-2.5">
                     <span
                       aria-hidden
-                      className={cn('grid size-9 shrink-0 place-items-center rounded-lg', tone)}
+                      className={cn('grid size-9 shrink-0 place-items-center rounded-xl', tone)}
                     >
                       <Icon className="size-4" />
                     </span>
@@ -342,7 +351,7 @@ export function ServicesBillingTab({
                       checked={isSelected}
                       onChange={() => toggle(s.id)}
                       aria-label={`Select ${s.name}`}
-                      className="mt-0.5 size-4 shrink-0 accent-sky-600"
+                      className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]"
                     />
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-2 pt-1">
@@ -365,11 +374,14 @@ export function ServicesBillingTab({
             })}
 
             {/* Other / custom service card */}
-            <div className="flex flex-col rounded-xl border border-dashed border-border/80 bg-muted/20 p-3.5">
+            <div className="flex flex-col rounded-xl border border-dashed border-border/80 bg-muted/30 p-3.5">
               <div className="flex items-start gap-2.5">
                 <span
                   aria-hidden
-                  className="grid size-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-600"
+                  className={cn(
+                    'grid size-9 shrink-0 place-items-center rounded-xl',
+                    DS_SOFT.slate,
+                  )}
                 >
                   <MoreHorizontal className="size-4" />
                 </span>
@@ -396,23 +408,23 @@ export function ServicesBillingTab({
 
         {/* ── Right column ─────────────────────────────────────── */}
         <div className="space-y-5">
-          <section className="rounded-xl border bg-card p-4 shadow-sm ring-1 ring-border/60 sm:p-5">
+          <section className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
             <div className="flex items-start justify-between gap-2">
               <div className="flex min-w-0 items-start gap-3">
                 <span
                   aria-hidden
-                  className="grid size-8 shrink-0 place-items-center rounded-lg bg-teal-100 text-teal-700"
+                  className={cn('grid size-9 shrink-0 place-items-center rounded-xl', DS_SOFT.teal)}
                 >
                   <FileText className="size-4" />
                 </span>
-                <h3 className="text-sm font-semibold text-foreground">
+                <h3 className="text-[15px] font-semibold text-foreground">
                   Active services for this candidate{' '}
                   <span className="font-normal text-muted-foreground">({active.length})</span>
                 </h3>
               </div>
               <a
                 href="#billing-detail"
-                className="shrink-0 rounded-lg border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'shrink-0')}
               >
                 View all
               </a>
@@ -420,64 +432,56 @@ export function ServicesBillingTab({
 
             <div className="mt-4 space-y-3">
               {active.length === 0 ? (
-                <p className="py-6 text-center text-xs text-muted-foreground">
-                  No services on file yet. Select services on the left and create a pro forma.
-                </p>
+                <EmptyState
+                  icon={FileText}
+                  title="No services on file yet"
+                  description="Select services on the left and create a pro forma."
+                  className="py-6"
+                />
               ) : (
                 active.map((a) => (
                   <a
                     key={a.engagementId}
                     href="#billing-detail"
-                    className="block rounded-xl border bg-background p-3 transition-colors hover:border-sky-300 hover:bg-sky-50/40"
+                    className="block rounded-xl border border-border/70 bg-background p-3.5 transition-colors hover:border-primary/30 hover:bg-sky-50/50 dark:hover:bg-sky-500/10"
                   >
                     <div className="flex items-start gap-2.5">
                       <span
                         aria-hidden
-                        className="grid size-8 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700"
+                        className={cn(
+                          'grid size-9 shrink-0 place-items-center rounded-xl',
+                          DS_SOFT.blue,
+                        )}
                       >
                         <FileText className="size-4" />
                       </span>
                       <div className="min-w-0 flex-1 space-y-1.5">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <p className="truncate text-xs font-semibold text-foreground">
+                          <p className="truncate text-sm font-semibold text-foreground">
                             {a.serviceName}
                           </p>
-                          <Badge
-                            variant="secondary"
-                            className={cn(
-                              'shrink-0 rounded-full border-transparent text-[10px]',
-                              a.complimentary
-                                ? 'bg-status-info-soft text-status-info'
-                                : a.settled
-                                  ? 'bg-status-success-soft text-status-success'
-                                  : 'bg-amber-100 text-amber-800',
-                            )}
-                          >
+                          <DsStatusPill className="shrink-0" tone={statusTone(a.statusLabel, a)}>
                             {a.complimentary ? 'Complimentary' : a.statusLabel}
-                          </Badge>
+                          </DsStatusPill>
                         </div>
                         {a.pfLine && (
                           <p className="truncate text-[10px] text-muted-foreground">{a.pfLine}</p>
                         )}
-                        <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                        <div className="grid grid-cols-3 gap-1.5 text-[11px]">
                           <div>
-                            <p className="uppercase tracking-wider text-muted-foreground">
-                              Total amount
-                            </p>
+                            <p className="text-muted-foreground">Total amount</p>
                             <p className="mt-0.5 font-semibold tabular-nums text-foreground">
                               {formatCurrency(a.agreed, a.currencyCode)}
                             </p>
                           </div>
                           <div>
-                            <p className="uppercase tracking-wider text-muted-foreground">Paid</p>
-                            <p className="mt-0.5 font-semibold tabular-nums text-status-success">
+                            <p className="text-muted-foreground">Paid</p>
+                            <p className="mt-0.5 font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
                               {formatCurrency(a.paid, a.currencyCode)}
                             </p>
                           </div>
                           <div>
-                            <p className="uppercase tracking-wider text-muted-foreground">
-                              Balance
-                            </p>
+                            <p className="text-muted-foreground">Balance</p>
                             <p className="mt-0.5 font-semibold tabular-nums text-foreground">
                               {formatCurrency(a.balance, a.currencyCode)}
                             </p>
@@ -488,32 +492,22 @@ export function ServicesBillingTab({
                             <div
                               className={cn(
                                 'h-full rounded-full',
-                                a.settled ? 'bg-status-success' : 'bg-sky-500',
+                                a.settled ? 'bg-emerald-500' : 'bg-primary',
                               )}
                               style={{ width: `${a.pct}%` }}
                             />
                           </div>
-                          <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
                             {a.pct}%
                           </span>
-                          <Badge
-                            variant="secondary"
-                            className={cn(
-                              'shrink-0 rounded-full border-transparent text-[10px]',
-                              a.complimentary
-                                ? 'bg-status-info-soft text-status-info'
-                                : a.settled
-                                  ? 'bg-status-success-soft text-status-success'
-                                  : 'bg-amber-100 text-amber-800',
-                            )}
-                          >
+                          <DsStatusPill className="shrink-0" tone={statusTone('', a)}>
                             {/* Stage C1 — same shared three-state derivation
                                 as Service history, so the two surfaces can
                                 never disagree. */}
                             {a.complimentary
                               ? 'No payment due'
                               : derivePaymentState(a.agreed, a.paid)}
-                          </Badge>
+                          </DsStatusPill>
                         </div>
                       </div>
                     </div>
@@ -524,16 +518,16 @@ export function ServicesBillingTab({
           </section>
 
           {/* Create-new-service action card */}
-          <section className="rounded-xl border bg-sky-50/50 p-4 shadow-sm ring-1 ring-sky-200/60 sm:p-5">
+          <section className="rounded-2xl border border-sky-200/70 bg-sky-50/60 p-4 shadow-sm sm:p-5 dark:border-sky-500/20 dark:bg-sky-500/10">
             <div className="flex items-start gap-3">
               <span
                 aria-hidden
-                className="grid size-8 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700"
+                className={cn('grid size-9 shrink-0 place-items-center rounded-xl', DS_SOFT.blue)}
               >
                 <Pencil className="size-4" />
               </span>
               <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-foreground">
+                <h3 className="text-[15px] font-semibold text-foreground">
                   Create new service for this candidate
                 </h3>
                 <p className="mt-0.5 text-xs text-muted-foreground">
@@ -574,16 +568,16 @@ export function ServicesBillingTab({
       </div>
 
       {/* ── Service history ──────────────────────────────────────── */}
-      <section className="rounded-xl border bg-card p-4 shadow-sm ring-1 ring-border/60 sm:p-5">
+      <section className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <span
               aria-hidden
-              className="grid size-8 shrink-0 place-items-center rounded-lg bg-violet-100 text-violet-700"
+              className={cn('grid size-9 shrink-0 place-items-center rounded-xl', DS_SOFT.violet)}
             >
               <History className="size-4" />
             </span>
-            <h3 className="text-sm font-semibold text-foreground">
+            <h3 className="text-[15px] font-semibold text-foreground">
               Service history{' '}
               <span className="font-normal text-muted-foreground">(all services)</span>
             </h3>
@@ -627,29 +621,31 @@ export function ServicesBillingTab({
         </div>
 
         {visibleHistory.length === 0 ? (
-          <p className="py-8 text-center text-xs text-muted-foreground">
-            No billing history for this candidate yet.
-          </p>
+          <EmptyState
+            icon={History}
+            title="No billing history for this candidate yet"
+            className="py-6"
+          />
         ) : (
-          <div className="mt-3 overflow-x-auto">
+          <div className="mt-4 overflow-x-auto rounded-xl border border-border/60">
             <table className="w-full min-w-[720px] text-xs">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="py-2 pr-3 font-medium">Date</th>
-                  <th className="py-2 pr-3 font-medium">Service</th>
-                  <th className="py-2 pr-3 font-medium">Type</th>
-                  <th className="py-2 pr-3 font-medium">Pro Forma / Invoice</th>
-                  <th className="py-2 pr-3 text-right font-medium">Amount</th>
-                  <th className="py-2 pr-3 text-right font-medium">Paid</th>
-                  <th className="py-2 pr-3 text-right font-medium">Balance</th>
-                  <th className="py-2 pr-3 font-medium">Status</th>
-                  <th className="py-2 font-medium">Actions</th>
+              <thead className="bg-muted/40">
+                <tr className="border-b border-border/60 text-left text-muted-foreground">
+                  <th className="py-2.5 pl-4 pr-3 font-medium">Date</th>
+                  <th className="py-2.5 pr-3 font-medium">Service</th>
+                  <th className="py-2.5 pr-3 font-medium">Type</th>
+                  <th className="py-2.5 pr-3 font-medium">Pro Forma / Invoice</th>
+                  <th className="py-2.5 pr-3 text-right font-medium">Amount</th>
+                  <th className="py-2.5 pr-3 text-right font-medium">Paid</th>
+                  <th className="py-2.5 pr-3 text-right font-medium">Balance</th>
+                  <th className="py-2.5 pr-3 font-medium">Status</th>
+                  <th className="py-2.5 pr-4 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {visibleHistory.map((h) => (
-                  <tr key={h.key} className="border-b last:border-b-0">
-                    <td className="py-2.5 pr-3 text-muted-foreground">
+                  <tr key={h.key} className="border-b border-border/60 last:border-b-0">
+                    <td className="py-3 pl-4 pr-3 text-muted-foreground">
                       {h.dateIso ? (
                         <time dateTime={h.dateIso} className="tabular-nums">
                           {format(new Date(h.dateIso), 'dd MMM yyyy · HH:mm')}
@@ -658,13 +654,13 @@ export function ServicesBillingTab({
                         '—'
                       )}
                     </td>
-                    <td className="py-2.5 pr-3 font-medium text-foreground">{h.service}</td>
-                    <td className="py-2.5 pr-3 text-muted-foreground">{h.type}</td>
-                    <td className="py-2.5 pr-3">
+                    <td className="py-3 pr-3 font-medium text-foreground">{h.service}</td>
+                    <td className="py-3 pr-3 text-muted-foreground">{h.type}</td>
+                    <td className="py-3 pr-3">
                       {h.refLabel && h.refHref ? (
                         <Link
                           href={h.refHref}
-                          className="font-medium text-sky-700 underline-offset-2 hover:underline"
+                          className="font-medium text-primary underline-offset-2 hover:underline"
                         >
                           {h.refLabel}
                         </Link>
@@ -672,33 +668,19 @@ export function ServicesBillingTab({
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="py-2.5 pr-3 text-right tabular-nums text-foreground">
+                    <td className="py-3 pr-3 text-right tabular-nums text-foreground">
                       {formatCurrency(h.amount, h.currencyCode)}
                     </td>
-                    <td className="py-2.5 pr-3 text-right tabular-nums text-status-success">
+                    <td className="py-3 pr-3 text-right tabular-nums text-emerald-700 dark:text-emerald-300">
                       {formatCurrency(h.paid, h.currencyCode)}
                     </td>
-                    <td className="py-2.5 pr-3 text-right tabular-nums text-foreground">
+                    <td className="py-3 pr-3 text-right tabular-nums text-foreground">
                       {formatCurrency(h.balance, h.currencyCode)}
                     </td>
-                    <td className="py-2.5 pr-3">
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          'rounded-full border-transparent text-[10px]',
-                          h.status === 'Paid'
-                            ? 'bg-status-success-soft text-status-success'
-                            : h.status === 'Complimentary'
-                              ? 'bg-status-info-soft text-status-info'
-                              : h.status === 'Draft quote'
-                                ? 'bg-muted text-muted-foreground'
-                                : 'bg-amber-100 text-amber-800',
-                        )}
-                      >
-                        {h.status}
-                      </Badge>
+                    <td className="py-3 pr-3">
+                      <DsStatusPill tone={statusTone(h.status)}>{h.status}</DsStatusPill>
                     </td>
-                    <td className="py-2.5">
+                    <td className="py-3 pr-4">
                       <div className="flex items-center gap-1.5">
                         {h.refHref && (
                           <Link

@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import { type ReactElement, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { CatalogAutosuggest, type Selection } from '@/components/catalog-autosuggest';
+import { DsStatusPill } from '@/components/ds/status-pill';
 import { EmptyState } from '@/components/empty-state';
 import { SectionHeader } from '@/components/section-header';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -282,11 +282,7 @@ export function SkillsSection({
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 truncate font-medium">
                     {r.skillName}
-                    {r.isCustom && (
-                      <Badge variant="outline" className="text-[9px]">
-                        CUSTOM
-                      </Badge>
-                    )}
+                    {r.isCustom && <DsStatusPill tone="slate">Custom</DsStatusPill>}
                   </p>
                   <p className="truncate text-[11px] text-muted-foreground">
                     {PROF_LABEL[r.proficiency]}
@@ -556,11 +552,7 @@ export function QualificationsSection({
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 truncate font-medium">
                     {r.qualificationName}
-                    {r.isCustom && (
-                      <Badge variant="outline" className="text-[9px]">
-                        CUSTOM
-                      </Badge>
-                    )}
+                    {r.isCustom && <DsStatusPill tone="slate">Custom</DsStatusPill>}
                   </p>
                   <p className="truncate text-[11px] text-muted-foreground">
                     {r.institution ? `${r.institution}` : 'Institution not set'}

@@ -5,8 +5,9 @@ import { MoreHorizontal, Pencil, StickyNote, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { DS_SOFT } from '@/components/ds/tones';
 import { PromptDialog } from '@/components/prompt-dialog';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
@@ -22,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 import {
   archiveCommunicationAction,
   createCommunicationAction,
@@ -135,20 +137,20 @@ export function CandidateNotesCard({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
+        <CardTitle className="flex items-center gap-2 text-[15px] font-semibold">
           <span
             aria-hidden
-            className="grid size-6 place-items-center rounded-md bg-amber-100 text-amber-700"
+            className={cn('grid size-8 place-items-center rounded-lg', DS_SOFT.amber)}
           >
-            <StickyNote className="size-3.5" />
+            <StickyNote className="size-4" />
           </span>
           Notes
         </CardTitle>
         <button
           type="button"
           onClick={() => setAddOpen(true)}
-          className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] text-foreground transition-colors hover:bg-muted"
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}
         >
           + Add note
         </button>

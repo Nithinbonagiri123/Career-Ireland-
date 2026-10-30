@@ -7,24 +7,17 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import { DsStatusPill } from '@/components/ds/status-pill';
 import { OwnerAvatar } from '@/components/owner-avatar';
 import { PromptDialog } from '@/components/prompt-dialog';
 import { Timestamp } from '@/components/timestamp';
-import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { StatusDot } from '@/components/ui/status-dot';
-import { statusTone } from '@/lib/ui/status-tone';
 import type { CandidateListRow } from '@/modules/candidates/repository';
 import { archivePersonAction } from '@/modules/persons/actions';
 import { CandidatesBulkActionBar } from './bulk-action-bar';
+import { candidateStatus } from './candidate-filters';
 
 type StaffUserOption = { id: string; fullName: string; email: string };
-
-const AVAILABILITY_LABEL: Record<CandidateListRow['availabilityStatus'], string> = {
-  AVAILABLE: 'Available',
-  TEMPORARILY_UNAVAILABLE: 'Unavailable',
-  PLACED: 'Placed',
-};
 
 const COLUMNS: ColumnDef<CandidateListRow>[] = [
   {
@@ -32,7 +25,7 @@ const COLUMNS: ColumnDef<CandidateListRow>[] = [
     accessorKey: 'fullName',
     cell: ({ row }) => (
       <div className="flex flex-col">
-        <span className="text-sm font-medium">{row.original.fullName}</span>
+        <span className="text-sm font-semibold">{row.original.fullName}</span>
         <span className="text-xs text-muted-foreground">
           {row.original.email ?? row.original.phone ?? '—'}
         </span>
@@ -43,39 +36,23 @@ const COLUMNS: ColumnDef<CandidateListRow>[] = [
     header: 'Location',
     accessorKey: 'currentCity',
     size: 160,
-    cell: ({ row }) => (
-      <span className="text-xs text-muted-foreground">{row.original.currentCity ?? '—'}</span>
-    ),
+    cell: ({ row }) => {
+      const place = [row.original.currentCity, row.original.currentCountry]
+        .filter(Boolean)
+        .join(', ');
+      return <span className="text-xs text-muted-foreground">{place || '—'}</span>;
+    },
   },
   {
     header: 'Status',
     accessorKey: 'availabilityStatus',
-    size: 170,
+    size: 150,
     cell: ({ row }) => {
-      const lifecycle = row.original.lifecycleStatus;
+      // Same status rule as the cards, so both views agree.
+      const s = candidateStatus(row.original);
       return (
-        <span className="inline-flex items-center gap-2 text-xs" title={`Lifecycle: ${lifecycle}`}>
-          <span className="inline-flex items-center gap-1.5">
-            <StatusDot tone={statusTone(row.original.availabilityStatus)} />
-            {AVAILABILITY_LABEL[row.original.availabilityStatus]}
-          </span>
-          {lifecycle !== 'ACTIVE' && (
-            <Badge variant={statusTone(lifecycle)} className="rounded-full text-[10px]">
-              {lifecycle}
-            </Badge>
-          )}
-          {/* Stage B Wave 3 — derived CS progress (live / finished
-              engagements). Hidden for the plain ACTIVE_CANDIDATE case to
-              keep the approved column quiet by default. */}
-          {(row.original.csProgressStatus === 'IN_PROGRESS' ||
-            row.original.csProgressStatus === 'COMPLETED') && (
-            <Badge
-              variant={statusTone(row.original.csProgressStatus)}
-              className="rounded-full text-[10px]"
-            >
-              {row.original.csProgressStatus === 'IN_PROGRESS' ? 'In progress' : 'Completed'}
-            </Badge>
-          )}
+        <span title={`Lifecycle: ${row.original.lifecycleStatus}`}>
+          <DsStatusPill tone={s.tone}>{s.label}</DsStatusPill>
         </span>
       );
     },
@@ -195,8 +172,6 @@ export function CandidatesTable({
         enableRowSelection
         onSelectionChange={handleSelectionChange}
         selectionResetKey={resetKey}
-        enableGlobalFilter
-        globalFilterPlaceholder="Search candidates…"
         enableColumnVisibility
       />
       <CandidatesBulkActionBar

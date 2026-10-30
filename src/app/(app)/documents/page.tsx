@@ -1,7 +1,10 @@
 import { eq } from 'drizzle-orm';
-import { ArrowLeft, FileText } from 'lucide-react';
+import { ArrowLeft, Building2, Files, FileText, FolderOpen, UserRound } from 'lucide-react';
 import Link from 'next/link';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { StatusTabs } from '@/components/ds/list-controls';
+import { Pagination, paginate } from '@/components/ds/pagination';
+import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { buttonVariants } from '@/components/ui/button';
@@ -22,6 +25,8 @@ import { OwnerSearch } from './owner-search';
 
 export const dynamic = 'force-dynamic';
 
+const PER_OPTIONS = [24, 48, 96];
+
 const VALID_KINDS: readonly (DocumentHubKind | 'ALL')[] = ['ALL', 'UPLOADED', 'INVOICE', 'RECEIPT'];
 
 export default async function DocumentsPage({
@@ -35,10 +40,14 @@ export default async function DocumentsPage({
     q?: string;
     client?: string;
     type?: string;
+    owner?: string;
+    page?: string;
+    per?: string;
   }>;
 }) {
   await requirePermission('candidate_services', 'documents', 'view');
-  const { created, from, to, kind, q, client, type } = await searchParams;
+  const sp = await searchParams;
+  const { created, from, to, kind, q, client, type } = sp;
   const createdRange = parseDateRangeParams({ created, from, to });
   const kindParsed = (kind ?? 'ALL').toUpperCase();
   const kindArg = (
@@ -84,7 +93,7 @@ export default async function DocumentsPage({
           />
         </FadeUp>
         <FadeUp delay={0.03}>
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
             <KindFilter />
           </div>
         </FadeUp>
@@ -97,26 +106,98 @@ export default async function DocumentsPage({
 
   // Landing view — folder grid.
   const folders = await fetchDocumentClientFolders({ ownerQ: q });
+  const people = folders.filter((f) => f.ownerKind === 'PERSON').length;
+  const companies = folders.length - people;
+  const totalDocs = folders.reduce(
+    (n, f) => n + f.filesCount + f.invoicesCount + f.receiptsCount,
+    0,
+  );
+  const ownerTab = sp.owner === 'person' || sp.owner === 'employer' ? sp.owner : 'all';
+  const visible = folders.filter((f) =>
+    ownerTab === 'all'
+      ? true
+      : ownerTab === 'person'
+        ? f.ownerKind === 'PERSON'
+        : f.ownerKind === 'EMPLOYER',
+  );
+  const pageData = paginate(visible, sp.page, sp.per, PER_OPTIONS);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={FileText}
+          iconTone="blue"
           title="Documents"
           description="One folder per client. Open a folder to see every file, invoice, and receipt for that person or employer."
         />
       </FadeUp>
       <FadeUp delay={0.03}>
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <span className="text-xs text-muted-foreground">
-            {folders.length} {folders.length === 1 ? 'client' : 'clients'} with documents
-          </span>
-          <OwnerSearch />
-        </div>
+        <StatTileGrid>
+          <StatTile
+            icon={FolderOpen}
+            tone="blue"
+            label="Client folders"
+            value={folders.length}
+            hint="With at least one document"
+          />
+          <StatTile
+            icon={UserRound}
+            tone="violet"
+            label="Candidates"
+            value={people}
+            hint="Person folders"
+          />
+          <StatTile
+            icon={Building2}
+            tone="amber"
+            label="Employers"
+            value={companies}
+            hint="Company folders"
+          />
+          <StatTile
+            icon={Files}
+            tone="green"
+            label="Documents"
+            value={totalDocs}
+            hint="Files, invoices and receipts"
+          />
+        </StatTileGrid>
       </FadeUp>
       <FadeUp delay={0.05}>
-        <ClientFolders folders={folders} />
+        <section
+          aria-label="Filters"
+          className="mt-6 rounded-2xl border border-border/60 bg-card p-3 shadow-sm"
+        >
+          <OwnerSearch />
+        </section>
+        <div className="mt-4">
+          <StatusTabs
+            param="owner"
+            ariaLabel="Folder owner"
+            tabs={[
+              { key: 'all', label: 'All', count: folders.length },
+              { key: 'person', label: 'Candidates', count: people, tone: 'violet' },
+              { key: 'employer', label: 'Employers', count: companies, tone: 'amber' },
+            ]}
+          />
+        </div>
+      </FadeUp>
+      <FadeUp delay={0.07}>
+        <div className="mt-4">
+          <ClientFolders folders={pageData.items} />
+          <Pagination
+            basePath="/documents"
+            params={sp as Record<string, string | undefined>}
+            page={pageData.page}
+            pages={pageData.pages}
+            per={pageData.per}
+            total={pageData.total}
+            start={pageData.start}
+            noun="folders"
+            perOptions={PER_OPTIONS}
+          />
+        </div>
       </FadeUp>
     </div>
   );

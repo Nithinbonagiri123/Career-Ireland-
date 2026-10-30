@@ -2,6 +2,7 @@
 
 import { Files, FileText, Receipt as ReceiptIcon } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { SEG_TRAY, segItem } from '@/components/ds/segmented';
 import { cn } from '@/lib/utils';
 
 const OPTIONS = [
@@ -12,7 +13,7 @@ const OPTIONS = [
 ] as const;
 
 /**
- * Kind segmented pill — mirrors the leads/candidates chrome pattern.
+ * Kind filter — the Stage 6G segmented tray (white tray, navy active).
  * Drives the `?kind=` query param; server component re-fetches on change.
  */
 export function KindFilter() {
@@ -29,7 +30,8 @@ export function KindFilter() {
   };
 
   return (
-    <div className="inline-flex items-center gap-1 rounded-full border bg-muted/40 p-1">
+    <fieldset className={cn(SEG_TRAY, 'm-0')}>
+      <legend className="sr-only">Document kind</legend>
       {OPTIONS.map((opt) => {
         const isActive = active === opt.value;
         return (
@@ -37,19 +39,14 @@ export function KindFilter() {
             key={opt.value}
             type="button"
             onClick={() => set(opt.value)}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors',
-              isActive
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
+            className={segItem(isActive)}
             aria-pressed={isActive}
           >
-            <opt.icon className="size-3.5" />
+            <opt.icon className="size-3.5" aria-hidden />
             {opt.label}
           </button>
         );
       })}
-    </div>
+    </fieldset>
   );
 }

@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { InvoicePrintable } from '@/components/billing/invoice-printable';
 import { IssueRefundControls } from '@/components/billing/issue-refund-controls';
+import { DsStatusPill } from '@/components/ds/status-pill';
+import { DS_SOFT } from '@/components/ds/tones';
 import { PrintButton } from '@/components/print-button';
-import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { cn } from '@/lib/utils';
@@ -124,9 +125,9 @@ export default async function InvoicePrintPage({
   ];
 
   return (
-    <div className="min-h-screen bg-muted/40 print:bg-white">
+    <div className="min-h-screen bg-background print:bg-white">
       {/* ── Breadcrumb + header card — Stage 6G Screen 10 ────────── */}
-      <div className="mx-auto max-w-3xl px-6 pt-6 print:hidden">
+      <div className="mx-auto max-w-4xl px-4 pt-6 sm:px-6 print:hidden">
         <nav className="text-xs text-muted-foreground" aria-label="Breadcrumb">
           <Link href="/payments" className="hover:text-foreground hover:underline">
             Payments
@@ -137,11 +138,11 @@ export default async function InvoicePrintPage({
           </Link>{' '}
           / <span className="font-medium text-foreground">{data.invoice.number}</span>
         </nav>
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-xl border bg-card p-4 shadow-sm">
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
           <div className="flex min-w-0 items-start gap-3">
             <span
               aria-hidden
-              className="grid size-11 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-700"
+              className={cn('grid size-12 shrink-0 place-items-center rounded-xl', DS_SOFT.blue)}
             >
               <FileText className="size-5" />
             </span>
@@ -150,23 +151,21 @@ export default async function InvoicePrintPage({
                 <h1 className="text-lg font-semibold text-foreground">
                   Invoice <span className="text-sky-800">{data.invoice.number}</span>
                 </h1>
-                <Badge
-                  variant="secondary"
-                  className={cn(
-                    'rounded-full border-transparent text-[10px]',
+                <DsStatusPill
+                  tone={
                     isComplimentary && data.invoice.status !== 'VOIDED'
-                      ? 'bg-status-info-soft text-status-info'
+                      ? 'blue'
                       : data.invoice.status === 'PAID'
-                        ? 'bg-status-success-soft text-status-success'
+                        ? 'green'
                         : data.invoice.status === 'VOIDED'
-                          ? 'bg-muted text-muted-foreground'
-                          : 'bg-amber-100 text-amber-800',
-                  )}
+                          ? 'slate'
+                          : 'amber'
+                  }
                 >
                   {isComplimentary && data.invoice.status !== 'VOIDED'
                     ? 'Complimentary'
                     : (INVOICE_STATUS_LABEL[data.invoice.status] ?? data.invoice.status)}
-                </Badge>
+                </DsStatusPill>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Issued on {format(data.invoice.issuedAt, 'dd MMM yyyy · HH:mm')}
@@ -221,8 +220,8 @@ export default async function InvoicePrintPage({
           correction paths right at the top so staff don't go hunting for
           an Edit button that doesn't exist. */}
       {(canVoid || (canCredit && maxCreditCents > 0)) && (
-        <div className="mx-auto mt-3 max-w-3xl px-6 print:hidden">
-          <div className="rounded-md border border-amber-200 bg-amber-50/80 px-4 py-2.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+        <div className="mx-auto mt-3 max-w-4xl px-4 sm:px-6 print:hidden">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs shadow-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
             <strong className="font-semibold">Need to correct the amount?</strong>{' '}
             {isComplimentary
               ? 'Complimentary invoice — no money moved, so there is nothing to credit or refund. Void it above with a reason (the linked service is cancelled automatically) and re-issue if needed.'
@@ -233,7 +232,7 @@ export default async function InvoicePrintPage({
         </div>
       )}
 
-      <div className="mx-auto mt-4 max-w-3xl px-6 print:mt-0 print:max-w-none print:px-0">
+      <div className="mx-auto mt-4 max-w-4xl px-4 pb-10 sm:px-6 print:mt-0 print:max-w-none print:px-0 print:pb-0">
         <InvoiceDetailTabs
           payments={paymentTrail}
           related={relatedRecords}

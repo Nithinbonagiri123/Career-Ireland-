@@ -31,7 +31,8 @@ test.describe('/candidates', () => {
   });
 
   test('grid view renders at least one candidate card (from the E2E seed)', async ({ page }) => {
-    await page.goto('/candidates?view=grid');
+    // Search narrows the paginated list to the seed candidates.
+    await page.goto('/candidates?view=grid&q=E2E-Fixture');
     // The card body is a <Card> (not a link) with the candidate name in
     // an h3. Assert that at least one candidate-name heading renders —
     // the seed guarantees "E2E-Fixture CandidateOne" / "CandidateTwo".

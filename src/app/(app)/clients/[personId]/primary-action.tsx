@@ -2,6 +2,7 @@
 
 import { ArrowRight, Lock } from 'lucide-react';
 import Link from 'next/link';
+import { NextActionBanner } from '@/components/ds/workspace';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { ClientDialog, ClientNextAction } from '@/modules/clients/next-action';
@@ -25,73 +26,44 @@ export function ClientPrimaryAction({
   action: ClientNextAction;
   onOpenDialog: (dialog: ClientDialog) => void;
 }) {
-  // Stage 6G — compact bar with a coloured left stripe matching the
-  // tone so the operator catches the urgency at a glance without the
-  // badge pill competing with the primary status in the hero above.
-  const stripeCls =
-    action.tone === 'urgent'
-      ? 'bg-status-danger'
-      : action.tone === 'muted'
-        ? 'bg-muted-foreground/40'
-        : 'bg-primary';
-  const bgCls =
-    action.tone === 'urgent'
-      ? 'bg-status-danger-soft/40'
-      : action.tone === 'muted'
-        ? 'bg-muted/30'
-        : 'bg-background';
-  const eyebrowCls =
-    action.tone === 'urgent'
-      ? 'text-status-danger'
-      : action.tone === 'muted'
-        ? 'text-muted-foreground'
-        : 'text-primary';
+  // Stage 6G — the shared NextActionBanner (same as Recruitment); the
+  // action button keeps its three behaviours (link / dialog / disabled).
   return (
-    <div className={cn('relative overflow-hidden rounded-lg border py-3 pl-5 pr-4', bgCls)}>
-      <span aria-hidden className={cn('absolute inset-y-0 left-0 w-1', stripeCls)} />
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <span
-            className={cn('mr-2 text-[10px] font-semibold uppercase tracking-wider', eyebrowCls)}
-          >
-            {action.label}
-          </span>
-          {action.dueHint && (
-            <span className="mr-2 rounded-full bg-status-danger px-1.5 py-0.5 text-[9px] uppercase text-status-danger-foreground">
-              {action.dueHint}
-            </span>
-          )}
-          <span className="text-sm text-foreground">{action.sentence}</span>
-        </div>
-        <div className="shrink-0">{renderButton(action.primary, onOpenDialog)}</div>
-      </div>
-    </div>
+    <NextActionBanner
+      label={action.label}
+      dueHint={action.dueHint}
+      sentence={action.sentence}
+      tone={action.tone}
+      action={renderButton(action.primary, action.tone, onOpenDialog)}
+    />
   );
 }
 
 function renderButton(
   primary: ClientNextAction['primary'],
+  tone: ClientNextAction['tone'],
   onOpenDialog: (dialog: ClientDialog) => void,
 ) {
+  const variant = tone === 'urgent' ? 'default' : 'outline';
   if (primary.kind === 'link') {
     return (
-      <Link href={primary.href} className={cn(buttonVariants({ variant: 'default', size: 'sm' }))}>
+      <Link href={primary.href} className={cn(buttonVariants({ variant, size: 'sm' }))}>
         {primary.label}
-        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+        <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden />
       </Link>
     );
   }
   if (primary.kind === 'dialog') {
     return (
-      <Button size="sm" onClick={() => onOpenDialog(primary.dialog)}>
+      <Button size="sm" variant={variant} onClick={() => onOpenDialog(primary.dialog)}>
         {primary.label}
-        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+        <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden />
       </Button>
     );
   }
   return (
     <Button size="sm" variant="outline" disabled title={primary.reason}>
-      <Lock className="mr-1 h-3.5 w-3.5" />
+      <Lock className="mr-1 h-3.5 w-3.5" aria-hidden />
       {primary.label}
     </Button>
   );

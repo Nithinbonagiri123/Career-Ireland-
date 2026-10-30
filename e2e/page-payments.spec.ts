@@ -9,10 +9,16 @@ test.describe('/payments', () => {
     await expect(page.getByRole('heading', { name: /payments/i, level: 1 })).toBeVisible();
   });
 
-  test('date-range filter is present and defaults to Anytime', async ({ page }) => {
-    const anytime = page.getByRole('tab', { name: /anytime/i });
-    await expect(anytime).toBeVisible();
-    await expect(anytime).toHaveAttribute('aria-selected', 'true');
+  test('date-range filter shows the real default (This month)', async ({ page }) => {
+    // Payments defaults to the current calendar month; the filter must say
+    // so rather than claim "Anytime".
+    const month = page.getByRole('tab', { name: /this month/i });
+    await expect(month).toBeVisible();
+    await expect(month).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: /anytime/i })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    );
   });
 
   test('table or empty state renders', async ({ page }) => {

@@ -1,6 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  ArrowRight,
   BarChart3,
   Briefcase,
   CreditCard,
@@ -11,7 +10,13 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { FOCUS_RING } from '@/components/ds/segmented';
+import { StatTile } from '@/components/ds/stat-tile';
+import { DsStatusPill } from '@/components/ds/status-pill';
+import type { DsTone } from '@/components/ds/tones';
+import { SectionCard } from '@/components/ds/workspace';
 import { FadeUp } from '@/components/motion/motion-primitives';
+import { buttonVariants } from '@/components/ui/button';
 import { requirePermission } from '@/lib/auth/session';
 import { formatCurrency } from '@/lib/currency';
 import { parseDateRangeParams } from '@/lib/date-range';
@@ -94,7 +99,7 @@ export default async function CandidateServicesDashboard({
 
       {/* KPI tiles */}
       <FadeUp delay={0.05} className="mt-6">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
           <KpiTile
             icon={Users}
             tone="blue"
@@ -153,57 +158,34 @@ export default async function CandidateServicesDashboard({
       {/* Recent activity | Top services */}
       <FadeUp delay={0.11} className="mt-5">
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <section className="rounded-2xl border bg-card p-5 shadow-sm ring-1 ring-border/60">
-            <header className="mb-3 flex items-start justify-between gap-3">
-              <div className="flex min-w-0 items-start gap-3">
-                <span
-                  aria-hidden
-                  className="grid size-9 shrink-0 place-items-center rounded-lg bg-emerald-100 text-emerald-700"
-                >
-                  <FileText className="size-4.5" />
-                </span>
-                <div className="min-w-0">
-                  <h2 className="text-base font-semibold text-foreground">Recent activity</h2>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Latest actions across leads, candidates and payments.
-                  </p>
-                </div>
-              </div>
+          <SectionCard
+            icon={FileText}
+            title="Recent activity"
+            description="Latest actions across leads, candidates and payments."
+            action={
               <Link
                 href="/admin/audit"
-                className="inline-flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
               >
                 View all
               </Link>
-            </header>
+            }
+            bodyClassName="mt-3"
+          >
             <ActivityFeed rows={activity} />
-          </section>
+          </SectionCard>
 
-          <section className="rounded-2xl border bg-card p-5 shadow-sm ring-1 ring-border/60">
-            <header className="mb-3 flex items-start justify-between gap-3">
-              <div className="flex min-w-0 items-start gap-3">
-                <span
-                  aria-hidden
-                  className="grid size-9 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700"
-                >
-                  <BarChart3 className="size-4.5" />
-                </span>
-                <div className="min-w-0">
-                  <h2 className="text-base font-semibold text-foreground">
-                    Top services this month
-                  </h2>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Revenue by service and number of candidates.
-                  </p>
-                </div>
-              </div>
-              <Link
-                href="/services"
-                className="inline-flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-              >
+          <SectionCard
+            icon={BarChart3}
+            title="Top services this month"
+            description="Revenue by service and number of candidates."
+            action={
+              <Link href="/services" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
                 View all
               </Link>
-            </header>
+            }
+            bodyClassName="mt-3"
+          >
             {topServices.length === 0 ? (
               <p className="py-8 text-center text-xs text-muted-foreground">
                 No verified revenue in this range yet.
@@ -271,7 +253,7 @@ export default async function CandidateServicesDashboard({
                 </tbody>
               </table>
             )}
-          </section>
+          </SectionCard>
         </div>
       </FadeUp>
     </div>
@@ -285,15 +267,16 @@ function pctChange(current: number, previous: number): number | null {
 }
 
 const TILE_TONES = {
-  blue: { card: 'bg-sky-50/60 ring-sky-200/60', icon: 'bg-sky-100 text-sky-700' },
-  green: { card: 'bg-emerald-50/60 ring-emerald-200/60', icon: 'bg-emerald-100 text-emerald-700' },
-  purple: { card: 'bg-violet-50/60 ring-violet-200/60', icon: 'bg-violet-100 text-violet-700' },
-  amber: { card: 'bg-amber-50/60 ring-amber-200/60', icon: 'bg-amber-100 text-amber-700' },
-  rose: { card: 'bg-rose-50/60 ring-rose-200/60', icon: 'bg-rose-100 text-rose-700' },
-} as const;
+  blue: 'blue',
+  green: 'green',
+  purple: 'violet',
+  amber: 'amber',
+  rose: 'rose',
+} as const satisfies Record<string, DsTone>;
 
+/** Stage 6G summary tile that links to its list (shared StatTile). */
 function KpiTile({
-  icon: Icon,
+  icon,
   tone,
   label,
   value,
@@ -310,49 +293,28 @@ function KpiTile({
   hint: string;
   href: string;
 }) {
-  const t = TILE_TONES[tone];
   return (
     <Link
       href={href}
-      className={cn('group rounded-2xl p-4 ring-1 transition-shadow hover:shadow-md', t.card)}
+      className={cn('block rounded-2xl transition-shadow hover:shadow-md', FOCUS_RING)}
     >
-      <div className="flex items-start gap-3">
-        <span
-          aria-hidden
-          className={cn('grid size-9 shrink-0 place-items-center rounded-full', t.icon)}
-        >
-          <Icon className="size-4.5" />
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-xs font-medium text-foreground/80">{label}</p>
-          <p className="mt-1 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-              {value}
-            </span>
-            {delta !== null && delta !== undefined && (
-              <span
-                className={cn(
-                  'rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums',
-                  delta > 0
-                    ? 'bg-status-success-soft text-status-success'
-                    : delta < 0
-                      ? 'bg-rose-100 text-rose-700'
-                      : 'bg-muted text-muted-foreground',
-                )}
-              >
-                {delta > 0 ? '↑ +' : delta < 0 ? '↓ ' : '→ '}
-                {delta}%
-              </span>
-            )}
-          </p>
-          <p className="mt-1 truncate text-[11px] text-muted-foreground" title={hint}>
-            {hint}
-          </p>
-        </div>
-      </div>
-      <ArrowRight
-        aria-hidden
-        className="mt-1 ml-auto hidden size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+      <StatTile
+        icon={icon}
+        tone={TILE_TONES[tone]}
+        label={label}
+        value={value}
+        hint={hint}
+        trend={
+          delta !== null && delta !== undefined ? (
+            <DsStatusPill
+              tone={delta > 0 ? 'green' : delta < 0 ? 'rose' : 'slate'}
+              className="normal-case tracking-normal"
+            >
+              {delta > 0 ? '↑ +' : delta < 0 ? '↓ ' : '→ '}
+              {delta}%
+            </DsStatusPill>
+          ) : undefined
+        }
       />
     </Link>
   );

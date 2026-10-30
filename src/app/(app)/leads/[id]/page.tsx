@@ -2,15 +2,18 @@ import { eq } from 'drizzle-orm';
 import { ChevronLeft, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { DsStatusPill } from '@/components/ds/status-pill';
+import type { DsTone } from '@/components/ds/tones';
+import { DS_ROW_LIST } from '@/components/ds/workspace';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { requireAnyPermission } from '@/lib/auth/session';
 import { formatCurrency } from '@/lib/currency';
 import { db } from '@/lib/db/client';
 import { persons } from '@/lib/db/schema/persons';
 import { employers, jobRequisitions } from '@/lib/db/schema/recruitment';
+import { cn } from '@/lib/utils';
 import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { fetchLead } from '@/modules/leads/service';
@@ -19,23 +22,11 @@ import { ProFormaComposer } from './pro-formas/pro-forma-composer';
 
 export const dynamic = 'force-dynamic';
 
-function statusTone(status: ProFormaView['status']) {
-  switch (status) {
-    case 'DRAFT':
-      return 'secondary';
-    case 'ISSUED':
-      return 'default';
-    case 'ACCEPTED':
-      return 'default';
-    case 'CONVERTED':
-      return 'default';
-    case 'REJECTED':
-    case 'CANCELLED':
-    case 'SUPERSEDED':
-      return 'destructive';
-    default:
-      return 'secondary';
-  }
+function statusTone(status: ProFormaView['status']): DsTone {
+  if (status === 'ACCEPTED' || status === 'CONVERTED') return 'green';
+  if (status === 'ISSUED') return 'blue';
+  if (status === 'DRAFT') return 'slate';
+  return 'rose';
 }
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -139,7 +130,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           description={`${lead.targetBusiness.replaceAll('_', ' ').toLowerCase()} · ${lead.status.toLowerCase()}`}
         />
         {employer && (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border/60 bg-card px-4 py-3 text-xs shadow-sm">
             <span>
               Employer enquiry from {employer.legalName}
               {employer.industry ? ` · ${employer.industry}` : ''}
@@ -162,7 +153,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
              quote composer and the pro-forma lifecycle actions. Everything
              else about this person now lives on the unified Client
              Workspace. */
-          <div className="mt-3 flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl border border-border/60 bg-card px-4 py-3 text-xs shadow-sm">
             <span>
               This is the quote composer for {payerName}. For the full client picture — identity,
               status, invoices, payments and activation — open the workspace.
@@ -178,10 +169,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       </FadeUp>
 
       <FadeUp delay={0.05}>
-        <section className="mt-6 rounded-md border bg-card p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Lead details
-          </h2>
+        <section className="mt-5 rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
+          <h2 className="text-[15px] font-semibold text-foreground">Lead details</h2>
           <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             {person?.email && (
               <>
@@ -231,11 +220,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       {isCS && (
         <FadeUp delay={0.1}>
           <section className="mt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Pro formas
-                </h2>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-[15px] font-semibold text-foreground">Pro formas</h2>
                 <p className="text-xs text-muted-foreground">
                   Composed offers. Multiple pro formas form a competing group — accepting one
                   supersedes the siblings.
@@ -251,13 +238,16 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             </div>
 
             {proFormas.length === 0 ? (
-              <div className="mt-3 rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+              <div className="mt-3 rounded-2xl border border-dashed border-border/70 bg-card p-6 text-sm text-muted-foreground">
                 No pro formas yet. Create one to propose services and pricing.
               </div>
             ) : (
-              <ul className="mt-3 divide-y rounded-md border bg-card">
+              <ul className={cn(DS_ROW_LIST, 'mt-3 bg-card shadow-sm')}>
                 {proFormas.map((pf) => (
-                  <li key={pf.id} className="flex items-center justify-between gap-4 p-3">
+                  <li
+                    key={pf.id}
+                    className="flex flex-wrap items-center justify-between gap-4 px-4 py-3"
+                  >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <Link
@@ -266,8 +256,10 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                         >
                           {pf.number}
                         </Link>
-                        <Badge variant={statusTone(pf.status)}>{pf.status}</Badge>
-                        <span className="text-xs text-muted-foreground">rev {pf.revision}</span>
+                        <DsStatusPill tone={statusTone(pf.status)}>{pf.status}</DsStatusPill>
+                        <span className="text-xs text-muted-foreground">
+                          Revision {pf.revision}
+                        </span>
                       </div>
                       <div className="mt-0.5 text-xs text-muted-foreground">
                         {pf.lineItems.length} line{pf.lineItems.length === 1 ? '' : 's'}

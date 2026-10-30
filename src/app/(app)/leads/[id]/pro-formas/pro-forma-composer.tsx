@@ -372,9 +372,7 @@ export function ProFormaComposer({
                         />
                       </div>
                       <div className="text-right">
-                        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                          Subtotal
-                        </div>
+                        <div className="text-xs font-medium text-muted-foreground">Subtotal</div>
                         <div
                           className={`text-base font-semibold tabular-nums ${linePreview.ok ? '' : 'text-destructive'}`}
                         >
@@ -415,9 +413,7 @@ export function ProFormaComposer({
               />
             </div>
             <div className="shrink-0 text-right">
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Document total
-              </div>
+              <div className="text-xs font-medium text-muted-foreground">Document total</div>
               <div className="text-2xl font-semibold tabular-nums">
                 {formatCurrency(totals.subtotal, currency)}
               </div>

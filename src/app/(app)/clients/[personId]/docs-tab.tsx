@@ -22,7 +22,8 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { type DocumentTypeOption, DocumentTypePicker } from '@/components/document-type-picker';
-import { Badge } from '@/components/ui/badge';
+import { DsStatusPill } from '@/components/ds/status-pill';
+import { DS_SOFT } from '@/components/ds/tones';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -156,6 +157,8 @@ export function CandidateDocsTab({
   const [dragOver, setDragOver] = useState(false);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('');
+  /** Uploaded within the last N days ('' = all time). Client-side only. */
+  const [timeFilter, setTimeFilter] = useState<string>('');
 
   // Types created inline via the picker's "+ New type…" merge with the
   // server-provided list so they're selectable without a page refresh.
@@ -320,8 +323,13 @@ export function CandidateDocsTab({
           d.originalFilename.toLowerCase().includes(q)
         );
       })
-      .filter((d) => (typeFilter ? d.documentTypeId === typeFilter : true));
-  }, [documents, search, typeFilter]);
+      .filter((d) => (typeFilter ? d.documentTypeId === typeFilter : true))
+      .filter((d) =>
+        timeFilter
+          ? new Date(d.createdAt).getTime() >= Date.now() - Number(timeFilter) * 86_400_000
+          : true,
+      );
+  }, [documents, search, typeFilter, timeFilter]);
 
   const typeNameById = useMemo(
     () => new Map(documentTypes.map((t) => [t.id, t.name])),
@@ -331,12 +339,12 @@ export function CandidateDocsTab({
   return (
     <div className="space-y-5">
       {/* Row 0 — header card */}
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border bg-background p-4 shadow-sm ring-1 ring-border/60 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
         <div className="min-w-0 flex-1">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+          <h2 className="flex items-center gap-3 text-lg font-semibold tracking-tight text-foreground">
             <span
               aria-hidden
-              className="grid size-7 place-items-center rounded-md bg-indigo-100 text-indigo-700"
+              className={cn('grid size-10 place-items-center rounded-xl', DS_SOFT.blue)}
             >
               <FileText className="size-4" />
             </span>
@@ -371,7 +379,7 @@ export function CandidateDocsTab({
       {/* Row 1 — Dropzone + Common types card (col-span 2) | Scan CV card (col-span 1) */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <div className="grid grid-cols-1 overflow-hidden rounded-xl border bg-background shadow-sm ring-1 ring-border/60 sm:grid-cols-[1fr_240px]">
+          <div className="grid grid-cols-1 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm sm:grid-cols-[1fr_240px]">
             {/* Dropzone */}
             <button
               type="button"
@@ -390,20 +398,20 @@ export function CandidateDocsTab({
               }}
               className={cn(
                 'flex flex-col items-center justify-center gap-2 border-dashed p-10 text-center transition-colors sm:border-r',
-                dragOver ? 'bg-sky-50/80' : 'bg-background hover:bg-muted/30',
+                dragOver ? 'bg-sky-50 dark:bg-sky-500/10' : 'bg-card hover:bg-muted/30',
               )}
               disabled={uploading}
             >
               <span
                 aria-hidden
-                className="grid size-14 place-items-center rounded-full bg-sky-100 text-sky-700"
+                className={cn('grid size-14 place-items-center rounded-full', DS_SOFT.blue)}
               >
                 <CloudUpload className="size-7" />
               </span>
               <p className="mt-2 text-sm font-semibold text-foreground">Upload documents</p>
               <p className="text-xs text-muted-foreground">
                 Drag and drop files here or{' '}
-                <span className="text-sky-700 underline underline-offset-2">click to browse</span>
+                <span className="text-primary underline underline-offset-2">click to browse</span>
               </p>
               <p className="text-[11px] text-muted-foreground">
                 You can upload multiple files (PDF, DOC, DOCX, JPG, PNG)
@@ -419,7 +427,7 @@ export function CandidateDocsTab({
               </span>
             </button>
             {/* Common types sidebar */}
-            <div className="border-t bg-muted/20 p-4 sm:border-l sm:border-t-0">
+            <div className="border-t border-border/60 bg-muted/30 p-4 sm:border-l sm:border-t-0">
               <h4 className="mb-3 text-xs font-semibold text-foreground">Common document types</h4>
               <ul className="space-y-2 text-xs">
                 {COMMON_TYPES.map((t) => (
@@ -477,7 +485,7 @@ export function CandidateDocsTab({
               (including "+ New type…") until the operator confirms.
               Nothing is uploaded until "Upload n files" is pressed. */}
           {staged.length > 0 && (
-            <div className="mt-4 rounded-xl border bg-background p-4 shadow-sm ring-1 ring-border/60">
+            <div className="mt-4 rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
               <h4 className="text-xs font-semibold text-foreground">
                 Ready to upload ({staged.length}) — confirm the document type for each file
               </h4>
@@ -588,12 +596,12 @@ export function CandidateDocsTab({
       {/* Row 2 — Uploaded documents TABLE | Extracted CV Information */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <section className="rounded-xl border bg-background shadow-sm ring-1 ring-border/60">
-            <header className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3">
-              <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <section className="rounded-2xl border border-border/60 bg-card shadow-sm">
+            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+              <h3 className="flex items-center gap-2 text-[15px] font-semibold text-foreground">
                 <span
                   aria-hidden
-                  className="grid size-6 place-items-center rounded-md bg-sky-100 text-sky-700"
+                  className={cn('grid size-8 place-items-center rounded-lg', DS_SOFT.blue)}
                 >
                   <FileText className="size-3.5" />
                 </span>
@@ -603,7 +611,7 @@ export function CandidateDocsTab({
                 </span>
               </h3>
             </header>
-            <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
+            <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-3">
               <div className="relative flex-1 min-w-[200px]">
                 <Search
                   className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
@@ -630,19 +638,27 @@ export function CandidateDocsTab({
                   </option>
                 ))}
               </Select>
-              <Select className="h-9 w-auto min-w-[120px]" aria-label="Filter by time" disabled>
-                <option>All time</option>
+              <Select
+                value={timeFilter}
+                onChange={(e) => setTimeFilter(e.target.value)}
+                className="h-9 w-auto min-w-[140px]"
+                aria-label="Filter by time"
+              >
+                <option value="">All time</option>
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="365">Last 12 months</option>
               </Select>
             </div>
             {visibleDocs.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 p-10 text-center">
                 <span
                   aria-hidden
-                  className="grid size-10 place-items-center rounded-full bg-muted text-muted-foreground"
+                  className={cn('grid size-12 place-items-center rounded-full', DS_SOFT.blue)}
                 >
                   <FileText className="size-4" />
                 </span>
-                <p className="text-sm font-medium text-foreground">No documents yet</p>
+                <p className="text-sm font-semibold text-foreground">No documents yet</p>
                 <p className="text-xs text-muted-foreground">
                   Files uploaded from the CRM or the candidate portal appear here.
                 </p>
@@ -650,7 +666,7 @@ export function CandidateDocsTab({
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
-                  <thead className="border-b bg-muted/10 text-left text-muted-foreground">
+                  <thead className="border-b border-border/60 bg-muted/40 text-left text-muted-foreground">
                     <tr>
                       <th className="px-4 py-2 font-medium">Name</th>
                       <th className="px-4 py-2 font-medium">Type</th>
@@ -662,7 +678,10 @@ export function CandidateDocsTab({
                   </thead>
                   <tbody>
                     {visibleDocs.map((d) => (
-                      <tr key={d.id} className="border-b last:border-b-0 hover:bg-muted/20">
+                      <tr
+                        key={d.id}
+                        className="border-b border-border/60 last:border-b-0 hover:bg-muted/30"
+                      >
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <span
@@ -686,7 +705,7 @@ export function CandidateDocsTab({
                           {typeNameById.get(d.documentTypeId) ?? '—'}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground tabular-nums">
-                          {format(new Date(d.createdAt), 'dd MMM yyyy')}
+                          {format(new Date(d.createdAt), 'dd MMM yyyy · HH:mm')}
                         </td>
                         <td className="px-4 py-3 tabular-nums">
                           {d.expiresOn ? (
@@ -840,12 +859,12 @@ function ScanCvCard({
   }
 
   return (
-    <section className="rounded-xl border bg-background shadow-sm ring-1 ring-border/60">
-      <header className="border-b bg-muted/20 px-4 py-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold">
+    <section className="rounded-2xl border border-border/60 bg-card shadow-sm">
+      <header className="border-b border-border/60 px-4 py-3">
+        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-foreground">
           <span
             aria-hidden
-            className="grid size-6 place-items-center rounded-md bg-sky-100 text-sky-700"
+            className={cn('grid size-8 place-items-center rounded-lg', DS_SOFT.blue)}
           >
             <ScanLine className="size-3.5" />
           </span>
@@ -1051,26 +1070,19 @@ function ExtractedCvCard({
   ];
 
   return (
-    <section className="rounded-xl border bg-background shadow-sm ring-1 ring-border/60">
-      <header className="flex items-center justify-between gap-2 border-b bg-muted/20 px-4 py-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold">
+    <section className="rounded-2xl border border-border/60 bg-card shadow-sm">
+      <header className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
+        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-foreground">
           <span
             aria-hidden
-            className="grid size-6 place-items-center rounded-md bg-indigo-100 text-indigo-700"
+            className={cn('grid size-8 place-items-center rounded-lg', DS_SOFT.violet)}
           >
             <FileText className="size-3.5" />
           </span>
           Extracted CV Information{' '}
           <span className="text-xs font-normal text-muted-foreground">(Preview)</span>
         </h3>
-        {!empty && (
-          <Badge
-            variant="secondary"
-            className="rounded-full border-amber-300 bg-amber-100 text-[10px] text-amber-800"
-          >
-            Not saved yet
-          </Badge>
-        )}
+        {!empty && <DsStatusPill tone="amber">Not saved yet</DsStatusPill>}
       </header>
 
       {/* Tab strip */}
@@ -1269,7 +1281,7 @@ function ExtractedCvCard({
                       className={cn(
                         'flex w-full items-start gap-2 rounded-md border p-2 text-left text-[11px] transition-colors',
                         active
-                          ? 'border-sky-400 bg-sky-50'
+                          ? 'border-primary/40 bg-sky-50 dark:bg-sky-500/10'
                           : 'border-border bg-background hover:bg-muted/40',
                       )}
                     >
@@ -1278,7 +1290,7 @@ function ExtractedCvCard({
                         className={cn(
                           'mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-sm border',
                           active
-                            ? 'border-sky-500 bg-sky-500 text-white'
+                            ? 'border-primary bg-primary text-primary-foreground'
                             : 'border-border bg-background',
                         )}
                       >
@@ -1529,10 +1541,10 @@ function formatBytes(bytes: number): string {
 }
 
 function mimeToTone(mime: string): string {
-  if (mime.includes('pdf')) return 'bg-rose-100 text-rose-700';
-  if (mime.includes('image')) return 'bg-emerald-100 text-emerald-700';
-  if (mime.includes('word') || mime.includes('doc')) return 'bg-sky-100 text-sky-700';
-  return 'bg-slate-100 text-slate-700';
+  if (mime.includes('pdf')) return DS_SOFT.rose;
+  if (mime.includes('image')) return DS_SOFT.green;
+  if (mime.includes('word') || mime.includes('doc')) return DS_SOFT.blue;
+  return DS_SOFT.slate;
 }
 
 /* ChevronDown re-exported to silence unused-import lint when the file is

@@ -324,7 +324,9 @@ test.describe('Stage 5 — Candidate Cards', () => {
       // The search box in the page uses the existing data-table filter.
       // Also just rely on the page rendering — the seeded candidates
       // are the newest four, so they land at the top of the grid.
-      await expect(page.getByText(/No candidates yet|added/i).first()).toBeVisible({
+      // Page-rendered sentinel (the sort control is now a select, so the
+      // old "Recently added" text sits inside a hidden <option>).
+      await expect(page.getByRole('heading', { name: /^Candidates$/i, level: 1 })).toBeVisible({
         timeout: 15_000,
       });
       // Confirm each seeded candidate renders.

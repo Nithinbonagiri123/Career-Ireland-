@@ -16,9 +16,10 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DataTable } from '@/components/data-table/data-table';
+import { DsEnumPill, DsStatusPill } from '@/components/ds/status-pill';
+import type { DsTone } from '@/components/ds/tones';
 import { PromptDialog } from '@/components/prompt-dialog';
 import { Timestamp } from '@/components/timestamp';
-import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -29,14 +30,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { formatCurrency } from '@/lib/currency';
-import { statusTone } from '@/lib/ui/status-tone';
 import { reviewDocumentAction, voidDocumentAction } from '@/modules/documents/actions';
 import type { DocumentsHubRow } from '@/modules/documents/hub';
 
-const KIND_TONE: Record<DocumentsHubRow['kind'], 'info' | 'success' | 'neutral'> = {
-  UPLOADED: 'neutral',
-  INVOICE: 'info',
-  RECEIPT: 'success',
+const KIND_TONE: Record<DocumentsHubRow['kind'], DsTone> = {
+  UPLOADED: 'slate',
+  INVOICE: 'blue',
+  RECEIPT: 'green',
 };
 
 const KIND_ICON: Record<DocumentsHubRow['kind'], typeof FileText> = {
@@ -140,8 +140,8 @@ export function DocumentsTable({ documents }: { documents: DocumentsHubRow[] }) 
           <span className="text-sm font-medium group-hover:underline underline-offset-2">
             {row.original.ownerName}
           </span>
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            {row.original.ownerKind}
+          <span className="text-xs text-muted-foreground">
+            {row.original.ownerKind === 'PERSON' ? 'Candidate' : 'Employer'}
           </span>
         </Link>
       ),
@@ -154,10 +154,10 @@ export function DocumentsTable({ documents }: { documents: DocumentsHubRow[] }) 
         const Icon = KIND_ICON[row.original.kind];
         return (
           <div className="flex items-center gap-2">
-            <Badge variant={KIND_TONE[row.original.kind]} className="gap-1">
-              <Icon className="size-3" />
+            <DsStatusPill tone={KIND_TONE[row.original.kind]} className="gap-1">
+              <Icon className="size-3" aria-hidden />
               {row.original.kind === 'UPLOADED' ? 'FILE' : row.original.kind}
-            </Badge>
+            </DsStatusPill>
             <span className="truncate text-xs text-muted-foreground" title={row.original.typeLabel}>
               {row.original.typeLabel}
             </span>
@@ -211,7 +211,7 @@ export function DocumentsTable({ documents }: { documents: DocumentsHubRow[] }) 
             ? row.original.status
             : (row.original.financialStatus ?? 'ISSUED');
         if (!status) return <span className="text-xs text-muted-foreground">—</span>;
-        return <Badge variant={statusTone(status)}>{status.replace(/_/g, ' ')}</Badge>;
+        return <DsEnumPill status={status} />;
       },
     },
     {

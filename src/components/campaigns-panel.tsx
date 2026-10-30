@@ -1,13 +1,14 @@
 import { format, formatDistanceToNow } from 'date-fns';
 import { ArrowRight, CalendarClock, Megaphone, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import { CAMPAIGN_DS_TONE } from '@/app/(app)/campaigns/campaign-tones';
+import { DsStatusPill } from '@/components/ds/status-pill';
 import { EmptyState } from '@/components/empty-state';
 import { SectionHeader } from '@/components/section-header';
-import { StatusChip } from '@/components/status-chip';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { CAMPAIGN_STATUS_LABEL, CAMPAIGN_TONE } from '@/modules/campaigns/labels';
+import { CAMPAIGN_STATUS_LABEL } from '@/modules/campaigns/labels';
 import type { CampaignListRow } from '@/modules/campaigns/service';
 
 /**
@@ -78,11 +79,9 @@ export function CampaignsPanel({
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-medium">{c.name}</p>
-                      <StatusChip
-                        label={CAMPAIGN_STATUS_LABEL[c.status]}
-                        tone={CAMPAIGN_TONE[c.status]}
-                        className="text-[10px]"
-                      />
+                      <DsStatusPill tone={CAMPAIGN_DS_TONE[c.status]}>
+                        {CAMPAIGN_STATUS_LABEL[c.status]}
+                      </DsStatusPill>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
                       {scope === 'employer' && c.requisitionTitle && (

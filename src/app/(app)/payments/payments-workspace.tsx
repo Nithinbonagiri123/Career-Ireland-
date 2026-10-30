@@ -5,8 +5,6 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Clock,
   CreditCard,
   FileText,
@@ -14,17 +12,23 @@ import {
   LayoutGrid,
   MoreHorizontal,
   Receipt,
-  Search,
   Table2,
   Wallet,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { type ReactNode, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { initialsOf } from '@/components/ds/entity-card';
+import { FilterToolbar } from '@/components/ds/list-controls';
+import { Pagination, paginate } from '@/components/ds/pagination';
+import { SEG_TRAY, segItem } from '@/components/ds/segmented';
+import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
+import { DsStatusPill } from '@/components/ds/status-pill';
+import { DS_SOFT, type DsTone } from '@/components/ds/tones';
+import { ActivityTimeline, SectionCard } from '@/components/ds/workspace';
 import { PromptDialog } from '@/components/prompt-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -34,8 +38,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { formatCurrency } from '@/lib/currency';
 import type { UserRole } from '@/lib/db/schema/users';
 import { cn } from '@/lib/utils';
@@ -43,13 +45,17 @@ import { rejectPaymentAction, verifyPaymentAction } from '@/modules/commerce/act
 import type { PaymentsTransactionRow, PaymentsWorkspace } from '@/modules/commerce/service';
 
 /**
- * Stage 6G Screen 07 — the Payments page body below the hero: KPI
- * tiles, the filterable Transactions surface (table/cards views with
- * verify + reject preserved from the old table), and the right rail
- * with quick actions, recent activity and the payment-workflow note.
+ * Stage 6G Screen 07 — the Payments page body below the header: KPI tiles,
+ * the Transactions surface (table / cards, same filtered rows in both, with
+ * verify + reject preserved), and the right rail with quick actions,
+ * recent activity and the payment-workflow note.
+ *
+ * Search (`q`), status (`status`), view (`view=cards`), page and per-page
+ * live in the URL so a filtered view is bookmarkable and survives
+ * navigation. The created-date range stays on DateRangeFilter's params.
  */
 
-const PAGE_SIZE = 8;
+const PER_OPTIONS = [8, 20, 50];
 
 const STATUS_LABEL: Record<PaymentsTransactionRow['status'], string> = {
   PENDING: 'Pending',
@@ -60,55 +66,25 @@ const STATUS_LABEL: Record<PaymentsTransactionRow['status'], string> = {
   PARTIALLY_REFUNDED: 'Partially refunded',
 };
 
-function statusPillClass(status: PaymentsTransactionRow['status']): string {
-  switch (status) {
-    case 'VERIFIED':
-      return 'bg-status-success-soft text-status-success';
-    case 'PENDING':
-    case 'PROOF_UPLOADED':
-      return 'bg-sky-100 text-sky-700';
-    case 'REJECTED':
-      return 'bg-destructive/10 text-destructive';
-    default:
-      return 'bg-amber-100 text-amber-800';
-  }
-}
+const STATUS_TONE: Record<PaymentsTransactionRow['status'], DsTone> = {
+  PENDING: 'blue',
+  PROOF_UPLOADED: 'blue',
+  VERIFIED: 'green',
+  REJECTED: 'rose',
+  REFUNDED: 'amber',
+  PARTIALLY_REFUNDED: 'amber',
+};
 
-function KpiTile({
-  icon: Icon,
-  tone,
-  label,
-  primary,
-  extra,
-  sub,
-}: {
-  icon: typeof Wallet;
-  tone: string;
-  label: string;
-  primary: string;
-  extra?: string[];
-  sub: ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border bg-card p-4 shadow-sm ring-1 ring-border/60">
-      <div className="flex items-center gap-2.5">
-        <span
-          aria-hidden
-          className={cn('grid size-9 shrink-0 place-items-center rounded-lg', tone)}
-        >
-          <Icon className="size-4" />
-        </span>
-        <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      </div>
-      <p className="mt-2.5 text-xl font-semibold tabular-nums text-foreground">{primary}</p>
-      {extra?.map((line) => (
-        <p key={line} className="text-xs tabular-nums text-muted-foreground">
-          {line}
-        </p>
-      ))}
-      <div className="mt-1 text-[11px] text-muted-foreground">{sub}</div>
-    </div>
-  );
+const STATUS_FILTERS = [
+  { value: '', label: 'All statuses' },
+  { value: 'paid', label: 'Paid' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'refunded', label: 'Refunded' },
+];
+
+function StatusPill({ status }: { status: PaymentsTransactionRow['status'] }) {
+  return <DsStatusPill tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</DsStatusPill>;
 }
 
 function DeltaLine({ pct }: { pct: number | null }) {
@@ -118,7 +94,7 @@ function DeltaLine({ pct }: { pct: number | null }) {
     <span
       className={cn(
         'inline-flex items-center gap-0.5 font-medium',
-        up ? 'text-status-success' : 'text-destructive',
+        up ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300',
       )}
     >
       {up ? (
@@ -141,6 +117,21 @@ function amountLines(byCurrency: Record<string, string>): { primary: string; ext
   };
 }
 
+/** Tile value sized so five tiles fit one row on a desktop content area. */
+function TileValue({ children }: { children: ReactNode }) {
+  return <span className="text-xl tabular-nums xl:text-[1.35rem]">{children}</span>;
+}
+
+/** Tile hint: other-currency totals (if any) above the comparison line. */
+function TileHint({ extra, children }: { extra?: string[]; children: ReactNode }) {
+  return (
+    <>
+      {extra && extra.length > 0 && <span className="block tabular-nums">{extra.join(' · ')}</span>}
+      <span className="block">{children}</span>
+    </>
+  );
+}
+
 export function PaymentsWorkspaceView({
   data,
   role,
@@ -151,13 +142,22 @@ export function PaymentsWorkspaceView({
   recordPaymentSlot?: ReactNode;
 }) {
   const router = useRouter();
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
-  const [view, setView] = useState<'table' | 'cards'>('table');
-  const [pageIdx, setPageIdx] = useState(0);
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const search = params.get('q') ?? '';
+  const status = params.get('status') ?? '';
+  const view: 'table' | 'cards' = params.get('view') === 'cards' ? 'cards' : 'table';
   const [busy, setBusy] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<PaymentsTransactionRow | null>(null);
   const [, startTransition] = useTransition();
+
+  const setView = (next: 'table' | 'cards') => {
+    const sp = new URLSearchParams(params.toString());
+    if (next === 'table') sp.delete('view');
+    else sp.set('view', 'cards');
+    const qs = sp.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
 
   const verify = (p: PaymentsTransactionRow) => {
     setBusy(p.id);
@@ -185,6 +185,7 @@ export function PaymentsWorkspaceView({
     });
   };
 
+  // One filtered list feeds both the table and the cards.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return data.transactions.filter((t) => {
@@ -202,21 +203,33 @@ export function PaymentsWorkspaceView({
         .includes(q);
     });
   }, [data.transactions, search, status]);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const page = Math.min(pageIdx, pageCount - 1);
-  const visible = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const pageData = paginate(
+    filtered,
+    params.get('page') ?? undefined,
+    params.get('per') ?? undefined,
+    PER_OPTIONS,
+  );
+  const visible = pageData.items;
 
   const paid = amountLines(data.summary.receivedByCurrency);
   const pending = amountLines(data.pendingByCurrency);
   const overdue = amountLines(data.summary.overdueByCurrency);
 
+  // Verify / Reject stay ADMIN-only on this screen (unchanged per-screen
+  // visibility); the server re-checks finance authority on every action.
   const rowActions = (t: PaymentsTransactionRow) => {
     const canDecide = role === 'ADMIN' && (t.status === 'PENDING' || t.status === 'PROOF_UPLOADED');
     return (
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button variant="ghost" size="icon" aria-label="Actions" disabled={busy === t.id} />
+            <Button
+              variant="outline"
+              size="icon-sm"
+              aria-label="Actions"
+              disabled={busy === t.id}
+              className="shrink-0"
+            />
           }
         >
           <MoreHorizontal className="size-4" />
@@ -246,294 +259,251 @@ export function PaymentsWorkspaceView({
     );
   };
 
+  const reference = (t: PaymentsTransactionRow) => t.receiptNumber ?? t.proofReference;
+
+  const card = (t: PaymentsTransactionRow) => (
+    <article
+      key={t.id}
+      className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/70 bg-card p-3.5"
+    >
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className={cn(
+            'grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold',
+            DS_SOFT[STATUS_TONE[t.status]],
+          )}
+        >
+          {t.personName ? initialsOf(t.personName) : <CreditCard className="size-4" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          {t.personId ? (
+            <Link
+              href={`/clients/${t.personId}?tab=services-billing`}
+              className="block truncate text-sm font-semibold text-foreground hover:underline"
+            >
+              {t.personName ?? 'Unknown'}
+            </Link>
+          ) : (
+            <p className="truncate text-sm font-semibold text-foreground">
+              {t.personName ?? 'Unknown candidate'}
+            </p>
+          )}
+          <p className="truncate text-xs text-muted-foreground">
+            {t.serviceName} · {t.kind}
+          </p>
+        </div>
+        {rowActions(t)}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-base font-semibold tabular-nums">
+          {formatCurrency(t.amount, t.currencyCode)}
+        </span>
+        <StatusPill status={t.status} />
+      </div>
+      <p className="text-xs tabular-nums text-muted-foreground">
+        {format(new Date(t.dateIso), 'dd MMM yyyy · HH:mm')}
+        {reference(t) && <> · {reference(t)}</>}
+      </p>
+    </article>
+  );
+
   return (
     <div className="space-y-5">
-      {/* ── KPI tiles — full-width row above both columns, like the
-          mockup. ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <KpiTile
+      {/* Five tiles, laid out on purpose: phones and tablets lead with
+          Total Paid across the full width then a 2×2 grid; laptops show
+          2 + 3; wide screens one row of five. */}
+      <StatTileGrid className="lg:grid-cols-6 xl:grid-cols-5">
+        <StatTile
+          className="col-span-2 lg:col-span-3 xl:col-span-1"
           icon={Wallet}
-          tone="bg-status-success-soft text-status-success"
+          tone="green"
           label="Total Paid"
-          primary={paid.primary}
-          extra={paid.extra}
-          sub={<DeltaLine pct={data.receiptsDeltaPct} />}
+          value={<TileValue>{paid.primary}</TileValue>}
+          hint={
+            <TileHint extra={paid.extra}>
+              <DeltaLine pct={data.receiptsDeltaPct} />
+            </TileHint>
+          }
         />
-        <KpiTile
+        <StatTile
+          className="lg:col-span-3 xl:col-span-1"
           icon={Clock}
-          tone="bg-info/10 text-info"
+          tone="blue"
           label="Pending"
-          primary={pending.primary}
-          extra={pending.extra}
-          sub={`${data.pendingCount} payment${data.pendingCount === 1 ? '' : 's'}`}
+          value={<TileValue>{pending.primary}</TileValue>}
+          hint={
+            <TileHint extra={pending.extra}>
+              {`${data.pendingCount} payment${data.pendingCount === 1 ? '' : 's'}`}
+            </TileHint>
+          }
         />
-        <KpiTile
+        <StatTile
+          className="lg:col-span-2 xl:col-span-1"
           icon={FileText}
-          tone="bg-violet-100 text-violet-700"
+          tone="violet"
           label="Invoices Issued"
-          primary={String(data.invoicesIssuedCount)}
-          sub={<DeltaLine pct={data.invoicesDeltaPct} />}
+          value={<TileValue>{data.invoicesIssuedCount}</TileValue>}
+          hint={<DeltaLine pct={data.invoicesDeltaPct} />}
         />
-        <KpiTile
+        <StatTile
+          className="lg:col-span-2 xl:col-span-1"
           icon={Receipt}
-          tone="bg-amber-100 text-amber-700"
+          tone="amber"
           label="Receipts Issued"
-          primary={String(data.summary.receivedCount)}
-          sub={<DeltaLine pct={data.receiptsDeltaPct} />}
+          value={<TileValue>{data.summary.receivedCount}</TileValue>}
+          hint={<DeltaLine pct={data.receiptsDeltaPct} />}
         />
-        <KpiTile
+        <StatTile
+          className="lg:col-span-2 xl:col-span-1"
           icon={Clock}
-          tone="bg-destructive/10 text-destructive"
+          tone="rose"
           label="Overdue"
-          primary={overdue.primary}
-          extra={overdue.extra}
-          sub={`${data.summary.overdueCount} invoice${data.summary.overdueCount === 1 ? '' : 's'}`}
+          value={<TileValue>{overdue.primary}</TileValue>}
+          hint={
+            <TileHint extra={overdue.extra}>
+              {`${data.summary.overdueCount} invoice${data.summary.overdueCount === 1 ? '' : 's'}`}
+            </TileHint>
+          }
         />
-      </div>
+      </StatTileGrid>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
         <div className="min-w-0 space-y-5">
-          {/* ── Search + status filter ────────────────────────────── */}
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3 shadow-sm ring-1 ring-border/60">
-            <div className="relative min-w-0 flex-1">
-              <Search
-                className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                aria-hidden
-              />
-              <Input
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPageIdx(0);
-                }}
-                placeholder="Search by candidate, service, reference or amount…"
-                className="h-9 pl-8 text-xs"
-              />
-            </div>
-            <Select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPageIdx(0);
-              }}
-              className="h-9 w-36 text-xs"
-              aria-label="Status filter"
-            >
-              <option value="">All statuses</option>
-              <option value="paid">Paid</option>
-              <option value="pending">Pending</option>
-              <option value="rejected">Rejected</option>
-              <option value="refunded">Refunded</option>
-            </Select>
-          </div>
+          <FilterToolbar
+            searchPlaceholder="Search by candidate, service, reference or amount…"
+            selects={[{ param: 'status', label: 'Status', options: STATUS_FILTERS }]}
+          />
 
-          {/* ── Transactions ──────────────────────────────────────── */}
-          <section className="rounded-xl border bg-card p-4 shadow-sm ring-1 ring-border/60 sm:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <span
-                  aria-hidden
-                  className="grid size-8 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700"
+          <SectionCard
+            icon={CreditCard}
+            title="Transactions"
+            count={filtered.length}
+            action={
+              // Buttons (not links): the toggle swaps the `view` param in place.
+              // Hidden on phones, which always show cards.
+              <fieldset className={cn(SEG_TRAY, 'm-0 shadow-none max-md:hidden')}>
+                <legend className="sr-only">View as</legend>
+                <button
+                  type="button"
+                  onClick={() => setView('table')}
+                  aria-pressed={view === 'table'}
+                  className={segItem(view === 'table')}
                 >
-                  <CreditCard className="size-4" />
-                </span>
-                <h2 className="text-sm font-semibold text-foreground">
-                  Transactions{' '}
-                  <span className="font-normal text-muted-foreground">({filtered.length})</span>
-                </h2>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex overflow-hidden rounded-lg border">
-                  <button
-                    type="button"
-                    onClick={() => setView('table')}
-                    aria-pressed={view === 'table'}
-                    className={cn(
-                      'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
-                      view === 'table'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-background text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    <Table2 className="size-3.5" aria-hidden /> Table
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setView('cards')}
-                    aria-pressed={view === 'cards'}
-                    className={cn(
-                      'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
-                      view === 'cards'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-background text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    <LayoutGrid className="size-3.5" aria-hidden /> Cards
-                  </button>
-                </div>
-              </div>
-            </div>
-
+                  <Table2 className="size-3.5" aria-hidden /> Table
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView('cards')}
+                  aria-pressed={view === 'cards'}
+                  className={segItem(view === 'cards')}
+                >
+                  <LayoutGrid className="size-3.5" aria-hidden /> Cards
+                </button>
+              </fieldset>
+            }
+          >
             {visible.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
                 No payments match the current filters.
               </p>
-            ) : view === 'table' ? (
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[760px] text-xs">
-                  <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="py-2 pr-3 font-medium">Date</th>
-                      <th className="py-2 pr-3 font-medium">Candidate</th>
-                      <th className="py-2 pr-3 font-medium">Service</th>
-                      <th className="py-2 pr-3 font-medium">Type</th>
-                      <th className="py-2 pr-3 text-right font-medium">Amount</th>
-                      <th className="py-2 pr-3 font-medium">Status</th>
-                      <th className="py-2 pr-3 font-medium">Reference</th>
-                      <th className="py-2 font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visible.map((t) => (
-                      <tr key={t.id} className="border-b last:border-b-0">
-                        <td className="py-2.5 pr-3 text-muted-foreground">
-                          <time dateTime={t.dateIso} className="tabular-nums">
-                            {format(new Date(t.dateIso), 'dd MMM yyyy')}
-                            <span className="block text-[10px]">
-                              {format(new Date(t.dateIso), 'HH:mm')}
-                            </span>
-                          </time>
-                        </td>
-                        <td className="py-2.5 pr-3">
-                          {t.personId ? (
-                            <Link
-                              href={`/clients/${t.personId}?tab=services-billing`}
-                              className="font-medium text-foreground underline-offset-2 hover:underline"
-                            >
-                              {t.personName ?? 'Unknown'}
-                            </Link>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 pr-3 text-foreground">{t.serviceName}</td>
-                        <td className="py-2.5 pr-3 text-muted-foreground">{t.kind}</td>
-                        <td className="py-2.5 pr-3 text-right font-medium tabular-nums text-foreground">
-                          {formatCurrency(t.amount, t.currencyCode)}
-                        </td>
-                        <td className="py-2.5 pr-3">
-                          <Badge
-                            variant="secondary"
-                            className={cn(
-                              'rounded-full border-transparent text-[10px]',
-                              statusPillClass(t.status),
-                            )}
-                          >
-                            {STATUS_LABEL[t.status]}
-                          </Badge>
-                        </td>
-                        <td className="py-2.5 pr-3 text-muted-foreground">
-                          {t.receiptNumber ?? t.proofReference ?? '—'}
-                        </td>
-                        <td className="py-2.5">{rowActions(t)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             ) : (
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {visible.map((t) => (
-                  <div key={t.id} className="rounded-xl border bg-background p-3.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">
-                          {t.personName ?? '—'}
-                        </p>
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {t.serviceName} · {t.kind}
-                        </p>
-                      </div>
-                      {rowActions(t)}
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-base font-semibold tabular-nums">
-                        {formatCurrency(t.amount, t.currencyCode)}
-                      </span>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          'rounded-full border-transparent text-[10px]',
-                          statusPillClass(t.status),
-                        )}
-                      >
-                        {STATUS_LABEL[t.status]}
-                      </Badge>
-                    </div>
-                    <p className="mt-1.5 text-[10px] tabular-nums text-muted-foreground">
-                      {format(new Date(t.dateIso), 'dd MMM yyyy · HH:mm')}
-                      {(t.receiptNumber ?? t.proofReference) && (
-                        <> · {t.receiptNumber ?? t.proofReference}</>
-                      )}
-                    </p>
+              <>
+                {view === 'table' && (
+                  // Phones always get cards; the table needs tablet width.
+                  <div className="hidden overflow-x-auto md:block" data-testid="payments-table">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border/70 text-left text-xs text-muted-foreground">
+                          <th className="py-2.5 pr-3 font-medium">Date</th>
+                          <th className="py-2.5 pr-3 font-medium">Candidate</th>
+                          <th className="py-2.5 pr-3 font-medium">Service</th>
+                          <th className="py-2.5 pr-3 text-right font-medium">Amount</th>
+                          <th className="py-2.5 pr-3 font-medium">Status</th>
+                          <th className="py-2.5 pr-3 font-medium">Reference</th>
+                          <th className="w-12 py-2.5 text-right font-medium">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visible.map((t) => (
+                          <tr
+                            key={t.id}
+                            className="border-b border-border/60 last:border-b-0 hover:bg-muted/40"
+                          >
+                            <td className="whitespace-nowrap py-3 pr-3 text-xs text-muted-foreground">
+                              <time dateTime={t.dateIso} className="tabular-nums">
+                                <span className="block text-foreground">
+                                  {format(new Date(t.dateIso), 'dd MMM yyyy')}
+                                </span>
+                                {/* One text node per row keeps the full "date · time" readable
+                                    (and matchable) while the time sits on its own line. */}
+                                <span> · {format(new Date(t.dateIso), 'HH:mm')}</span>
+                              </time>
+                            </td>
+                            <td className="max-w-[12rem] py-3 pr-3">
+                              {t.personId ? (
+                                <Link
+                                  href={`/clients/${t.personId}?tab=services-billing`}
+                                  className="line-clamp-2 font-medium text-foreground underline-offset-2 hover:underline"
+                                >
+                                  {t.personName ?? 'Unknown'}
+                                </Link>
+                              ) : (
+                                <span className="text-muted-foreground">Unknown candidate</span>
+                              )}
+                            </td>
+                            <td className="py-3 pr-3">
+                              <span className="block text-foreground">{t.serviceName}</span>
+                              <span className="block text-xs text-muted-foreground">{t.kind}</span>
+                            </td>
+                            <td className="whitespace-nowrap py-3 pr-3 text-right font-medium tabular-nums text-foreground">
+                              {formatCurrency(t.amount, t.currencyCode)}
+                            </td>
+                            <td className="py-3 pr-3">
+                              <StatusPill status={t.status} />
+                            </td>
+                            <td className="py-3 pr-3 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                              {reference(t) ?? '—'}
+                            </td>
+                            <td className="py-3 text-right">{rowActions(t)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                ))}
-              </div>
+                )}
+                <div
+                  className={cn(
+                    'grid grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))] gap-3',
+                    view === 'table' && 'md:hidden',
+                  )}
+                  data-testid="payments-cards"
+                >
+                  {visible.map(card)}
+                </div>
+              </>
             )}
 
-            {filtered.length > 0 && (
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
-                <p>
-                  Showing {page * PAGE_SIZE + 1} to{' '}
-                  {Math.min(filtered.length, (page + 1) * PAGE_SIZE)} of {filtered.length}{' '}
-                  transaction
-                  {filtered.length === 1 ? '' : 's'}
-                </p>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="size-8"
-                    aria-label="Previous page"
-                    disabled={page === 0}
-                    onClick={() => setPageIdx(page - 1)}
-                  >
-                    <ChevronLeft className="size-4" />
-                  </Button>
-                  {Array.from({ length: pageCount }, (_, i) => i)
-                    .slice(Math.max(0, page - 2), Math.max(0, page - 2) + 5)
-                    .map((i) => (
-                      <Button
-                        key={i}
-                        variant={i === page ? 'default' : 'outline'}
-                        size="icon"
-                        className="size-8 text-xs"
-                        aria-label={`Page ${i + 1}`}
-                        aria-current={i === page ? 'page' : undefined}
-                        onClick={() => setPageIdx(i)}
-                      >
-                        {i + 1}
-                      </Button>
-                    ))}
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="size-8"
-                    aria-label="Next page"
-                    disabled={page >= pageCount - 1}
-                    onClick={() => setPageIdx(page + 1)}
-                  >
-                    <ChevronRight className="size-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </section>
+            <Pagination
+              basePath={pathname}
+              params={Object.fromEntries(params.entries())}
+              page={pageData.page}
+              pages={pageData.pages}
+              per={pageData.per}
+              total={pageData.total}
+              start={pageData.start}
+              noun="transactions"
+              perOptions={PER_OPTIONS}
+            />
+          </SectionCard>
         </div>
 
         {/* ── Right rail ──────────────────────────────────────────── */}
         <div className="space-y-5">
-          <section className="space-y-2 rounded-xl border bg-card p-4 shadow-sm ring-1 ring-border/60">
+          <section
+            aria-label="Quick actions"
+            className="space-y-2 rounded-2xl border border-border/60 bg-card p-4 shadow-sm"
+          >
             <Link href="/leads" className={cn(buttonVariants(), 'w-full justify-center')}>
               <FileText className="mr-1.5 size-4" aria-hidden />
               Create Pro Forma
@@ -555,52 +525,26 @@ export function PaymentsWorkspaceView({
             {recordPaymentSlot}
           </section>
 
-          <section className="rounded-xl border bg-card p-4 shadow-sm ring-1 ring-border/60">
-            <div className="flex items-center gap-2">
-              <Clock className="size-4 text-muted-foreground" aria-hidden />
-              <h2 className="text-sm font-semibold text-foreground">Recent Activity</h2>
-            </div>
+          <SectionCard icon={Clock} title="Recent Activity">
             {data.activity.length === 0 ? (
-              <p className="mt-3 text-xs text-muted-foreground">No billing activity yet.</p>
+              <p className="text-sm text-muted-foreground">No billing activity yet.</p>
             ) : (
-              <ul className="mt-3 space-y-3">
-                {data.activity.map((a) => (
-                  <li key={a.id} className="flex items-start gap-2.5">
-                    <span
-                      aria-hidden
-                      className={cn(
-                        'mt-0.5 grid size-6 shrink-0 place-items-center rounded-full',
-                        a.kind === 'receipt'
-                          ? 'bg-status-success-soft text-status-success'
-                          : 'bg-sky-100 text-sky-700',
-                      )}
-                    >
-                      {a.kind === 'receipt' ? (
-                        <Check className="size-3" />
-                      ) : (
-                        <FileText className="size-3" />
-                      )}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium leading-snug text-foreground">{a.title}</p>
-                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] text-muted-foreground">
-                        <span className="truncate">{a.subtitle}</span>
-                        <time dateTime={a.atIso} className="shrink-0 tabular-nums">
-                          {format(new Date(a.atIso), 'dd MMM yyyy · HH:mm')}
-                        </time>
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <ActivityTimeline
+                items={data.activity.map((a) => ({
+                  id: a.id,
+                  title: a.title,
+                  subtitle: a.subtitle,
+                  at: a.atIso,
+                }))}
+              />
             )}
-          </section>
+          </SectionCard>
 
-          <section className="rounded-xl border border-info/30 bg-info/5 p-4">
+          <section className="rounded-2xl border border-sky-200 bg-sky-50 p-4 dark:border-sky-500/30 dark:bg-sky-500/10">
             <div className="flex items-start gap-2.5">
-              <Info className="mt-0.5 size-4 shrink-0 text-info" aria-hidden />
+              <Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
               <div className="min-w-0 text-xs text-foreground/80">
-                <p className="font-semibold text-foreground">Payment workflow</p>
+                <p className="text-sm font-semibold text-foreground">Payment workflow</p>
                 <p className="mt-1 leading-relaxed">
                   When a payment covering the full agreed amount is verified, the system
                   automatically issues the official invoice and receipt — and for Direct Payment

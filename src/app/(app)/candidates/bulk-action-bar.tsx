@@ -5,7 +5,6 @@ import { UserCheck, UserX, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -49,9 +48,9 @@ export function CandidatesBulkActionBar({
           role="region"
           aria-label="Bulk actions"
         >
-          <Badge variant="secondary" className="rounded-full">
+          <span className="rounded-md bg-primary px-2 py-0.5 text-xs font-semibold tabular-nums text-primary-foreground">
             {count} selected
-          </Badge>
+          </span>
           <Button variant="ghost" size="sm" onClick={onClear}>
             Clear
           </Button>

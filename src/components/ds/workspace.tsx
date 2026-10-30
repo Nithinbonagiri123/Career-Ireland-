@@ -129,19 +129,28 @@ export function NextActionBanner({
   sentence,
   tone = 'default',
   primary,
+  action,
   className,
+  testId,
 }: {
   label: string;
   dueHint?: string | null;
-  sentence: string;
-  tone?: 'default' | 'urgent';
-  primary: { label: string; href: string };
+  sentence: ReactNode;
+  /** `muted`: informational, nothing to do right now. */
+  tone?: 'default' | 'urgent' | 'muted';
+  /** A link action. */
+  primary?: { label: string; href: string };
+  /** Any other action (dialog trigger, disabled button) instead of a link. */
+  action?: ReactNode;
   className?: string;
+  testId?: string;
 }) {
   const urgent = tone === 'urgent';
+  const muted = tone === 'muted';
   return (
     <section
       aria-label="Next step"
+      data-testid={testId}
       className={cn(
         'flex flex-col gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3 shadow-sm sm:flex-row sm:items-center',
         className,
@@ -152,26 +161,32 @@ export function NextActionBanner({
           'inline-flex w-fit shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 ring-inset',
           urgent
             ? 'bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/30'
-            : 'bg-sky-50 text-primary ring-sky-200 dark:bg-sky-500/15 dark:text-sky-200 dark:ring-sky-500/30',
+            : muted
+              ? 'bg-muted text-muted-foreground ring-border'
+              : 'bg-sky-50 text-primary ring-sky-200 dark:bg-sky-500/15 dark:text-sky-200 dark:ring-sky-500/30',
         )}
       >
         <ClipboardList className="size-3.5" aria-hidden />
         {sentenceCase(label)}
       </span>
-      <p className="min-w-0 flex-1 text-sm text-foreground">
+      <div className="min-w-0 flex-1 text-sm text-foreground">
         {sentence}
         {dueHint && <span className="ml-2 text-xs text-muted-foreground">· {dueHint}</span>}
-      </p>
-      <Link
-        href={primary.href}
-        className={cn(
-          buttonVariants({ variant: urgent ? 'default' : 'outline', size: 'sm' }),
-          'w-fit shrink-0',
-        )}
-      >
-        {primary.label}
-        <ArrowRight className="ml-1 size-3.5" aria-hidden />
-      </Link>
+      </div>
+      {action ? (
+        <div className="w-fit shrink-0">{action}</div>
+      ) : primary ? (
+        <Link
+          href={primary.href}
+          className={cn(
+            buttonVariants({ variant: urgent ? 'default' : 'outline', size: 'sm' }),
+            'w-fit shrink-0',
+          )}
+        >
+          {primary.label}
+          <ArrowRight className="ml-1 size-3.5" aria-hidden />
+        </Link>
+      ) : null}
     </section>
   );
 }
