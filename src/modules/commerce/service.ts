@@ -542,6 +542,15 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Payment>
   }
   const data = parsed.data;
 
+  // P0 — business-date rule shared with lead conversion: a blank received
+  // date is today in Europe/Dublin; a future date is refused.
+  const { resolveReceivedDate } = await import('@/modules/leads/conversion-rules');
+  const { todayInDublin } = await import('@/lib/dates');
+  const received = resolveReceivedDate(data.receivedAt, todayInDublin());
+  if (!received.ok) {
+    throw new ValidationError(received.message, { receivedAt: received.message });
+  }
+
   // Fast path: ADMIN + FINANCE record payments after confirming the money
   // in the bank statement, so the two-step record → verify dance is pure
   // friction. When they record, we insert at VERIFIED directly and run
@@ -575,7 +584,7 @@ export async function recordPayment(input: RecordPaymentInput): Promise<Payment>
       currencyCode: data.currencyCode,
       method: data.method,
       proofReference: blankToNull(data.proofReference),
-      receivedAt: data.receivedAt ? new Date(data.receivedAt) : null,
+      receivedAt: new Date(received.date),
       status: initialStatus,
     });
 

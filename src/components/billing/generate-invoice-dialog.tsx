@@ -52,6 +52,8 @@ export function GenerateInvoiceDialog({
   onOpenChange: externalOnOpenChange,
   contextLinks,
   defaultOpen,
+  sourceLeadId,
+  placementContext,
 }: {
   payerMode: 'PERSON' | 'EMPLOYER';
   payerId: string;
@@ -74,6 +76,18 @@ export function GenerateInvoiceDialog({
    *  ?raisePlacement=… query param so the operator lands directly in
    *  the invoice form instead of an extra button click. One-shot. */
   defaultOpen?: boolean;
+  /** Recruitment P0 — the enquiry this invoice is raised on (lead row
+   *  "Invoice"). Stamped on the invoice server-side after checking the
+   *  lead's payer is this payer, so conversion can reuse it instead of
+   *  charging twice. */
+  sourceLeadId?: string;
+  /** Recruitment P0 — what the operator is billing for when
+   *  `contextLinks.placementId` is set (all optional; shown when given). */
+  placementContext?: {
+    candidateName?: string | null;
+    jobTitle?: string | null;
+    startDate?: string | null;
+  };
 }) {
   const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -89,11 +103,19 @@ export function GenerateInvoiceDialog({
     if (defaultOpen) setOpen(true);
   }, []);
 
-  const [serviceId, setServiceId] = useState<string>(services[0]?.id ?? '');
+  const placementId = contextLinks?.placementId;
+  // Recruitment P0 — a placement fee invoice starts on the catalog's
+  // Placement Fee service (code PLACEMENT_FEE, or by name if renamed).
+  const initialServiceId = useMemo(
+    () => (placementId ? placementFeeService(services)?.id : undefined) ?? services[0]?.id ?? '',
+    [placementId, services],
+  );
+  const initialService = services.find((s) => s.id === initialServiceId);
+  const [serviceId, setServiceId] = useState<string>(initialServiceId);
   const [packageId, setPackageId] = useState<string>('');
   const [qty, setQty] = useState<string>('1');
-  const [unitPrice, setUnitPrice] = useState<string>('');
-  const [currency, setCurrency] = useState<string>('EUR');
+  const [unitPrice, setUnitPrice] = useState<string>(initialService?.defaultPrice ?? '');
+  const [currency, setCurrency] = useState<string>(initialService?.defaultCurrencyCode ?? 'EUR');
   const [lineDescription, setLineDescription] = useState<string>('');
   const [pending, startTransition] = useTransition();
   // Stage B Wave 1 — inline duplicate warning + audited override, plus a
@@ -102,18 +124,34 @@ export function GenerateInvoiceDialog({
   const [error, setError] = useState<string | null>(null);
   const [overrideReason, setOverrideReason] = useState('');
   const [showOverride, setShowOverride] = useState(false);
+  // Second invoice for the same placement — finance must give a reason.
+  const [placementOverrideReason, setPlacementOverrideReason] = useState('');
+  const [showPlacementOverride, setShowPlacementOverride] = useState(false);
+
+  // When the dialog opens for a placement (deep link / controlled open),
+  // land on the Placement Fee service even if the dialog was mounted
+  // earlier with another default.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-run only on open / placement change
+  useEffect(() => {
+    if (!open || !placementId) return;
+    const fee = placementFeeService(services);
+    if (fee && fee.id !== serviceId) applyService(fee.id);
+  }, [open, placementId]);
   const idSeed = useId();
   const idempotencyKey = useMemo(() => `gi-${idSeed}-${open ? Date.now() : ''}`, [idSeed, open]);
 
   const service = useMemo(() => services.find((s) => s.id === serviceId), [services, serviceId]);
 
-  const onServiceChange = (nextId: string) => {
+  const applyService = (nextId: string) => {
+    const next = services.find((s) => s.id === nextId);
     setServiceId(nextId);
     setPackageId('');
-    setUnitPrice('');
-    setCurrency('EUR');
+    // Catalog price / currency prefill (still editable).
+    setUnitPrice(next?.defaultPrice ?? '');
+    setCurrency(next?.defaultCurrencyCode ?? 'EUR');
     setLineDescription('');
   };
+  const onServiceChange = applyService;
 
   const onPackageChange = (pkgId: string) => {
     setPackageId(pkgId);
@@ -151,8 +189,12 @@ export function GenerateInvoiceDialog({
         immigrationCaseId: contextLinks?.immigrationCaseId ?? null,
         jobRequisitionId: contextLinks?.jobRequisitionId ?? null,
         placementId: contextLinks?.placementId ?? null,
+        sourceLeadId: sourceLeadId ?? null,
         idempotencyKey,
         overrideDuplicateReason: showOverride ? overrideReason.trim() || null : null,
+        overridePlacementInvoiceReason: showPlacementOverride
+          ? placementOverrideReason.trim() || null
+          : null,
       });
       if (!r.ok) {
         const code = (r.error as { code?: string }).code;
@@ -160,6 +202,11 @@ export function GenerateInvoiceDialog({
           // Keep the dialog open and reveal the audited override path
           // instead of a vanishing toast.
           setShowOverride(true);
+          setError(r.error.message);
+          return;
+        }
+        if (code === 'PLACEMENT_ALREADY_INVOICED') {
+          setShowPlacementOverride(true);
           setError(r.error.message);
           return;
         }
@@ -172,6 +219,8 @@ export function GenerateInvoiceDialog({
       setError(null);
       setOverrideReason('');
       setShowOverride(false);
+      setPlacementOverrideReason('');
+      setShowPlacementOverride(false);
       router.push(r.data.printPath);
     });
   };
@@ -190,7 +239,9 @@ export function GenerateInvoiceDialog({
       )}
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Generate invoice</DialogTitle>
+          <DialogTitle>
+            {placementId ? 'Raise placement fee invoice' : 'Generate invoice'}
+          </DialogTitle>
           <DialogDescription>
             Invoice for <span className="font-medium text-foreground">{payerLabel}</span>. Pick a
             service; QTY, unit price and currency default from the package (if any) but you can edit
@@ -198,6 +249,26 @@ export function GenerateInvoiceDialog({
             save.
           </DialogDescription>
         </DialogHeader>
+
+        {placementId && (
+          <div className="rounded-md border border-border bg-muted/40 p-3 text-xs">
+            <div className="font-medium text-foreground">Placement fee</div>
+            {placementContext?.candidateName || placementContext?.jobTitle ? (
+              <p className="mt-0.5 text-muted-foreground">
+                {placementContext.candidateName ?? 'Candidate'}
+                {placementContext.jobTitle ? ` · ${placementContext.jobTitle}` : ''}
+                {placementContext.startDate ? ` · starts ${placementContext.startDate}` : ''}
+              </p>
+            ) : (
+              <p className="mt-0.5 text-muted-foreground">
+                Linked to the selected placement and its job requirement.
+              </p>
+            )}
+            <p className="mt-1 text-muted-foreground">
+              One invoice per placement — a second one needs a reason and is audited.
+            </p>
+          </div>
+        )}
 
         {services.length === 0 ? (
           <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
@@ -320,9 +391,30 @@ export function GenerateInvoiceDialog({
             </label>
             <textarea
               id="gi-override"
+              autoComplete="off"
               rows={2}
               value={overrideReason}
               onChange={(e) => setOverrideReason(e.target.value)}
+              disabled={pending}
+              maxLength={500}
+              className="w-full rounded-md border border-input bg-background px-2 py-1.5"
+            />
+          </div>
+        )}
+        {showPlacementOverride && (
+          <div className="space-y-1.5 rounded-md border border-amber-400/40 bg-amber-50 p-3 text-xs dark:bg-amber-900/30">
+            <label
+              htmlFor="gi-placement-override"
+              className="font-medium text-amber-900 dark:text-amber-100"
+            >
+              Reason for a second invoice on this placement (audited)
+            </label>
+            <textarea
+              id="gi-placement-override"
+              autoComplete="off"
+              rows={2}
+              value={placementOverrideReason}
+              onChange={(e) => setPlacementOverrideReason(e.target.value)}
               disabled={pending}
               maxLength={500}
               className="w-full rounded-md border border-input bg-background px-2 py-1.5"
@@ -336,11 +428,18 @@ export function GenerateInvoiceDialog({
         )}
 
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" size="sm" disabled={pending} />} />
+          <DialogClose render={<Button variant="outline" size="sm" disabled={pending} />}>
+            Cancel
+          </DialogClose>
           <Button
             size="sm"
             onClick={onSubmit}
-            disabled={pending || !canSubmit || (showOverride && overrideReason.trim().length < 3)}
+            disabled={
+              pending ||
+              !canSubmit ||
+              (showOverride && overrideReason.trim().length < 3) ||
+              (showPlacementOverride && placementOverrideReason.trim().length < 3)
+            }
           >
             {pending && <Loader2 className="mr-1.5 size-4 animate-spin" />}
             Generate invoice
@@ -348,5 +447,14 @@ export function GenerateInvoiceDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The catalog's Placement Fee service: code PLACEMENT_FEE (seeded by
+ *  ensurePlacementFeeCatalogItem), or a renamed one found by name. */
+function placementFeeService(services: InvoiceableService[]): InvoiceableService | undefined {
+  return (
+    services.find((s) => s.code === 'PLACEMENT_FEE') ??
+    services.find((s) => /placement\s*fee/i.test(s.name))
   );
 }

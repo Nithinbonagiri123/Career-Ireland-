@@ -9,7 +9,10 @@
  * displayed to staff) should use `todayInDublin()` instead.
  */
 
-const IRISH_TIMEZONE = 'Europe/Dublin';
+import { BUSINESS_TIMEZONE } from './zoned-time';
+
+/** Single source of truth for the business timezone (Europe/Dublin). */
+const IRISH_TIMEZONE = BUSINESS_TIMEZONE;
 
 /**
  * Today's date in Europe/Dublin as a `YYYY-MM-DD` string.
@@ -17,13 +20,13 @@ const IRISH_TIMEZONE = 'Europe/Dublin';
  * Uses the 'en-CA' locale because it produces ISO-8601-shape dates natively
  * without post-processing (`2026-09-03`, not `03/09/2026`).
  */
-export function todayInDublin(): string {
+export function todayInDublin(now: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: IRISH_TIMEZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(new Date());
+  }).format(now);
 }
 
 /**

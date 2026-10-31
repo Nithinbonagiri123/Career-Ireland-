@@ -15,8 +15,8 @@ import {
   UserX,
 } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { DataTable } from '@/components/data-table/data-table';
@@ -29,13 +29,6 @@ import { PromptDialog } from '@/components/prompt-dialog';
 import { Timestamp } from '@/components/timestamp';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -43,18 +36,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { assignEntityAction } from '@/modules/assignments/actions';
 import type { InvoiceableService } from '@/modules/billing/read';
 import {
-  acceptLeadAction,
   archiveLeadAction,
   reactivateExpiredLeadAction,
   updateLeadStatusAction,
 } from '@/modules/leads/actions';
+import { servicesForTarget } from '@/modules/leads/conversion-rules';
 import type { LeadListRow } from '@/modules/leads/repository';
+import { ConvertLeadDialog } from './convert-lead-dialog';
 import { DirectPaymentDialog } from './direct-payment-dialog';
 import { flagEmojiFromCountryName, LeadCard, leadHref, leadInitials } from './lead-card';
 
@@ -82,6 +74,13 @@ type Props = {
       server page once and passed in so every row's invoice dialog gets
       the same option list (no extra round-trip per menu-open). */
   invoiceableServices: InvoiceableService[];
+  /** Recruitment P0 — EMPLOYER (+ ANY) services for employer-paid leads. */
+  employerServices: InvoiceableService[];
+  /** Finance issues invoices (owner / ADMIN / FINANCE). Others see the
+      lead-row invoice actions disabled with the reason. */
+  canIssueInvoices: boolean;
+  /** Finance verifies payments — drives the convert dialog's summary. */
+  canVerifyPayments: boolean;
   /** Cards or table. Phones always get cards (the table needs width). */
   view: 'cards' | 'table';
 };
@@ -103,6 +102,9 @@ export function LeadsTable({
   currentUserId,
   currentUserRole,
   invoiceableServices,
+  employerServices,
+  canIssueInvoices,
+  canVerifyPayments,
   view,
 }: Props) {
   const canSeeExceptionalFinance = currentUserRole === 'ADMIN' || currentUserRole === 'FINANCE';
@@ -164,26 +166,18 @@ export function LeadsTable({
   );
 
   const [busyId, setBusyId] = useState<string | null>(null);
+  // The convert dialog keeps its lead while it animates closed (only
+  // `convertOpen` flips), so the closing frame never shows an empty,
+  // mistitled dialog.
   const [convertTarget, setConvertTarget] = useState<LeadListRow | null>(null);
+  const [convertOpen, setConvertOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<LeadListRow | null>(null);
   const [reactivateTarget, setReactivateTarget] = useState<LeadListRow | null>(null);
-  const [reason, setReason] = useState('');
-  // Convert dialog is now a Record Payment form — see acceptLead service.
-  const [convertServiceId, setConvertServiceId] = useState<string>('');
-  const [convertAmount, setConvertAmount] = useState<string>('');
-  const [convertCurrency, setConvertCurrency] = useState<string>('EUR');
-  const [convertMethod, setConvertMethod] = useState<'BANK_TRANSFER' | 'CASH' | 'OTHER'>(
-    'BANK_TRANSFER',
-  );
-  const [convertReference, setConvertReference] = useState<string>('');
-  const [convertReceivedAt, setConvertReceivedAt] = useState<string>('');
   const [invoicingLead, setInvoicingLead] = useState<LeadListRow | null>(null);
   // Stage 6E Section 3 — Direct Payment & Convert dialog state. Only
   // reachable for CS leads with a personId (CS leads always have one).
   const [directPaymentLead, setDirectPaymentLead] = useState<LeadListRow | null>(null);
   const [, startTransition] = useTransition();
-
-  const router = useRouter();
 
   const confirmArchive = (archiveReason: string) => {
     if (!archiveTarget) return;
@@ -220,22 +214,6 @@ export function LeadsTable({
     });
   };
 
-  // Prefill the payment form with the first available service when the
-  // dialog opens — operator can switch. First package's price becomes
-  // the default amount so routine conversions are quick to review.
-  useEffect(() => {
-    if (!convertTarget) return;
-    const svc = invoiceableServices[0];
-    if (svc) {
-      setConvertServiceId(svc.id);
-      const firstPkg = svc.packages[0];
-      if (firstPkg) {
-        setConvertAmount(firstPkg.price);
-        setConvertCurrency(firstPkg.currencyCode);
-      }
-    }
-  }, [convertTarget, invoiceableServices]);
-
   const setStatus = (
     lead: LeadListRow,
     status: 'CONTACTED' | 'AWAITING_PAYMENT' | 'LOST' | 'REJECTED',
@@ -265,68 +243,11 @@ export function LeadsTable({
   };
 
   const openConvert = (lead: LeadListRow) => {
-    setReason('');
-    setConvertReference('');
-    setConvertReceivedAt('');
     setConvertTarget(lead);
+    setConvertOpen(true);
   };
 
-  const closeConvert = () => {
-    setConvertTarget(null);
-    setReason('');
-    setConvertServiceId('');
-    setConvertAmount('');
-    setConvertReference('');
-    setConvertReceivedAt('');
-  };
-
-  const convertFormValid =
-    reason.trim().length >= 3 &&
-    convertServiceId.length > 0 &&
-    convertAmount.length > 0 &&
-    Number(convertAmount) > 0 &&
-    convertCurrency.length === 3;
-
-  const confirmConvert = () => {
-    if (!convertTarget || !convertFormValid) return;
-    const target = convertTarget;
-    setBusyId(target.id);
-    startTransition(async () => {
-      const result = await acceptLeadAction({
-        leadId: target.id,
-        reason: reason.trim(),
-        serviceCatalogItemId: convertServiceId,
-        amount: convertAmount,
-        currencyCode: convertCurrency,
-        method: convertMethod,
-        proofReference: convertReference.trim(),
-        receivedAt: convertReceivedAt,
-      });
-      setBusyId(null);
-      if (result.ok) {
-        const landedAs =
-          result.data.targetBusiness === 'RECRUITMENT'
-            ? 'requisition'
-            : result.data.targetBusiness === 'IMMIGRATION'
-              ? 'immigration case'
-              : 'candidate';
-        toast.success(`${target.displayName} converted — ${landedAs} created`);
-        closeConvert();
-        router.refresh();
-        // Deep-link to the freshly-created operational entity so the
-        // operator lands in context (invoices + docs attached).
-        if (result.data.targetBusiness === 'IMMIGRATION') {
-          router.push(`/immigration/${result.data.entityId}`);
-        } else if (result.data.targetBusiness === 'RECRUITMENT') {
-          router.push(`/requisitions/${result.data.entityId}`);
-        } else if (target.personId) {
-          router.push(`/candidates/${target.personId}`);
-        }
-      } else {
-        toast.error(result.error.message);
-      }
-    });
-  };
+  const invoiceBlockedReason = 'Finance issues invoices';
 
   /** "Ready to convert / activate" + "Will expire" chips — table and cards. */
   const statusExtras = (lead: LeadListRow): React.ReactNode => {
@@ -526,7 +447,7 @@ export function LeadsTable({
           </Button>
         );
       } else {
-        primary = (
+        primary = canIssueInvoices ? (
           <Button
             variant="outline"
             size="sm"
@@ -536,6 +457,11 @@ export function LeadsTable({
           >
             <FileText className="mr-1.5 size-3.5" />
             Invoice
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" disabled title={invoiceBlockedReason} className="h-8">
+            <FileText className="mr-1.5 size-3.5" aria-hidden />
+            {invoiceBlockedReason}
           </Button>
         );
       }
@@ -560,14 +486,18 @@ export function LeadsTable({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuLabel>Status</DropdownMenuLabel>
+            {/* An EXPIRED lead reopens only through the audited Reactivate
+                action below; it can still be closed out as lost / rejected. */}
             <DropdownMenuItem
-              disabled={!canTransition || lead.status === 'CONTACTED'}
+              disabled={!canTransition || lead.status === 'CONTACTED' || lead.status === 'EXPIRED'}
               onClick={() => setStatus(lead, 'CONTACTED')}
             >
               Mark contacted
             </DropdownMenuItem>
             <DropdownMenuItem
-              disabled={!canTransition || lead.status === 'AWAITING_PAYMENT'}
+              disabled={
+                !canTransition || lead.status === 'AWAITING_PAYMENT' || lead.status === 'EXPIRED'
+              }
               onClick={() => setStatus(lead, 'AWAITING_PAYMENT')}
             >
               Mark awaiting payment
@@ -605,8 +535,12 @@ export function LeadsTable({
                 }
               />
             ) : (
-              <DropdownMenuItem disabled={!canTransition} onClick={() => setInvoicingLead(lead)}>
-                <FileText className="mr-2 size-4" /> Add another invoice…
+              <DropdownMenuItem
+                disabled={!canTransition || !canIssueInvoices}
+                onClick={() => setInvoicingLead(lead)}
+              >
+                <FileText className="mr-2 size-4" />
+                {canIssueInvoices ? 'Add another invoice…' : `Invoice — ${invoiceBlockedReason}`}
               </DropdownMenuItem>
             )}
             {/* Stage 6D Wave 1d — for Candidate Services, the atomic
@@ -616,7 +550,10 @@ export function LeadsTable({
                     the item for everyone because they don't have a
                     Client Workspace quote-first flow. */}
             {(lead.targetBusiness !== 'CANDIDATE_SERVICES' || canSeeExceptionalFinance) && (
-              <DropdownMenuItem disabled={!canTransition} onClick={() => openConvert(lead)}>
+              <DropdownMenuItem
+                disabled={!canTransition || ['LOST', 'REJECTED', 'EXPIRED'].includes(lead.status)}
+                onClick={() => openConvert(lead)}
+              >
                 <UserCheck className="mr-2 size-4" />{' '}
                 {lead.targetBusiness === 'RECRUITMENT'
                   ? 'Convert → open requisition…'
@@ -861,195 +798,55 @@ export function LeadsTable({
         confirmLabel="Reactivate"
         pending={busyId === reactivateTarget?.id}
       />
-      <Dialog
-        open={convertTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) closeConvert();
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {convertTarget?.targetBusiness === 'RECRUITMENT'
-                ? 'Convert → open requisition'
-                : convertTarget?.targetBusiness === 'IMMIGRATION'
-                  ? 'Convert → open immigration case'
-                  : 'Record payment outside a quote'}
-            </DialogTitle>
-          </DialogHeader>
-          {convertTarget && (
-            <div className="space-y-4">
-              {convertTarget.targetBusiness === 'CANDIDATE_SERVICES' ? (
-                // Stage 6B — explicit warning for the CS exceptional
-                // path. The ordinary journey is: create quote → issue →
-                // record payment → confirm payment received → activate
-                // candidate (all on the Client Workspace). This dialog
-                // short-circuits that in one step and is reserved for
-                // cases where the client already paid without a quote.
-                <div className="space-y-2 rounded-md border border-amber-400/40 bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
-                  <div className="font-medium">Exceptional path — advanced use only</div>
-                  <p>
-                    This creates an engagement, an invoice, a payment and a receipt in one step
-                    without a client-visible quote. Use only when the client has already paid
-                    outside the normal quote flow. The reason you give below is written to the audit
-                    log.
-                  </p>
-                  <p>
-                    Prefer the standard flow: open the Client Workspace, create a quote, record the
-                    payment against it, then activate the candidate.
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Converting <span className="font-medium">{convertTarget.displayName}</span>. A
-                  lead can only become a{' '}
-                  {convertTarget.targetBusiness === 'RECRUITMENT' ? 'requisition' : 'case'} once the
-                  payment is in — record it here and conversion + entity + payment + receipt all
-                  happen atomically in one step.
-                </p>
-              )}
-
-              <div className="space-y-1">
-                <Label htmlFor="convertService">Service *</Label>
-                <select
-                  id="convertService"
-                  value={convertServiceId}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setConvertServiceId(next);
-                    const svc = invoiceableServices.find((s) => s.id === next);
-                    const firstPkg = svc?.packages[0];
-                    if (firstPkg) {
-                      setConvertAmount(firstPkg.price);
-                      setConvertCurrency(firstPkg.currencyCode);
-                    }
-                  }}
-                  className="h-9 w-full rounded-md border bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                >
-                  <option value="">— Pick a service —</option>
-                  {invoiceableServices.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="convertAmount">Amount *</Label>
-                  <Input
-                    id="convertAmount"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={convertAmount}
-                    onChange={(e) => setConvertAmount(e.target.value)}
-                    placeholder="100.00"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="convertCurrency">Currency *</Label>
-                  <Input
-                    id="convertCurrency"
-                    maxLength={3}
-                    value={convertCurrency}
-                    onChange={(e) => setConvertCurrency(e.target.value.toUpperCase())}
-                    placeholder="EUR"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label htmlFor="convertMethod">Method *</Label>
-                  <select
-                    id="convertMethod"
-                    value={convertMethod}
-                    onChange={(e) =>
-                      setConvertMethod(e.target.value as 'BANK_TRANSFER' | 'CASH' | 'OTHER')
-                    }
-                    className="h-9 w-full rounded-md border bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                  >
-                    <option value="BANK_TRANSFER">Bank transfer</option>
-                    <option value="CASH">Cash</option>
-                    <option value="OTHER">Other</option>
-                  </select>
-                  <p className="text-[11px] text-muted-foreground">
-                    Change if the money came via cash or another route.
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="convertReceivedAt">Received at</Label>
-                  <Input
-                    id="convertReceivedAt"
-                    type="date"
-                    value={convertReceivedAt}
-                    onChange={(e) => setConvertReceivedAt(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="convertReference">Reference</Label>
-                <Input
-                  id="convertReference"
-                  value={convertReference}
-                  onChange={(e) => setConvertReference(e.target.value)}
-                  placeholder="Bank txn ID, screenshot URL, …"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="convertReason">Reason (audited) *</Label>
-                <Input
-                  id="convertReason"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="e.g. Bank transfer received 2026-10-17"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && convertFormValid) {
-                      e.preventDefault();
-                      confirmConvert();
-                    }
-                  }}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  At least 3 characters. Written to the audit log.
-                </p>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="ghost" onClick={closeConvert} disabled={busyId === convertTarget?.id}>
-              Cancel
-            </Button>
-            <Button
-              onClick={confirmConvert}
-              disabled={!convertFormValid || busyId === convertTarget?.id}
-            >
-              <UserCheck className="mr-1.5 size-4" /> Convert &amp; record payment
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Controlled invoice dialog — driven from the row-menu "Generate
-          invoice…" item. Rendered once at the table level (not per-row)
-          so the dropdown can close cleanly before the dialog takes
-          focus. */}
-      {invoicingLead?.personId && (
-        <GenerateInvoiceDialog
-          open
-          onOpenChange={(next) => {
-            if (!next) setInvoicingLead(null);
-          }}
-          payerMode="PERSON"
-          payerId={invoicingLead.personId}
-          payerLabel={invoicingLead.displayName}
-          services={invoiceableServices}
+      {convertTarget && (
+        <ConvertLeadDialog
+          key={convertTarget.id}
+          lead={convertTarget}
+          open={convertOpen}
+          onOpenChange={setConvertOpen}
+          personServices={invoiceableServices}
+          employerServices={employerServices}
+          canVerifyPayments={canVerifyPayments}
         />
       )}
+
+      {/* Controlled invoice dialog — driven from the row "Invoice" button /
+          "Add another invoice…" item. Rendered once at the table level (not
+          per-row) so the dropdown can close cleanly before the dialog takes
+          focus. Recruitment leads bill the employer; others the person. The
+          invoice is stamped with the lead (server-validated). */}
+      {invoicingLead &&
+        canIssueInvoices &&
+        invoicingLead.targetBusiness === 'RECRUITMENT' &&
+        invoicingLead.employerId && (
+          <GenerateInvoiceDialog
+            open
+            onOpenChange={(next) => {
+              if (!next) setInvoicingLead(null);
+            }}
+            payerMode="EMPLOYER"
+            payerId={invoicingLead.employerId}
+            payerLabel={invoicingLead.displayName}
+            services={servicesForTarget('RECRUITMENT', employerServices)}
+            sourceLeadId={invoicingLead.id}
+          />
+        )}
+      {invoicingLead &&
+        canIssueInvoices &&
+        invoicingLead.targetBusiness !== 'RECRUITMENT' &&
+        invoicingLead.personId && (
+          <GenerateInvoiceDialog
+            open
+            onOpenChange={(next) => {
+              if (!next) setInvoicingLead(null);
+            }}
+            payerMode="PERSON"
+            payerId={invoicingLead.personId}
+            payerLabel={invoicingLead.displayName}
+            services={invoiceableServices}
+            sourceLeadId={invoicingLead.id}
+          />
+        )}
       {directPaymentLead && (
         <DirectPaymentDialog
           lead={{

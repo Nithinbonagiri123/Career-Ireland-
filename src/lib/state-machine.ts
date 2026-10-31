@@ -109,9 +109,15 @@ export const LEAD_TRANSITIONS = {
   AWAITING_PAYMENT: ['CONVERTED', 'LOST', 'REJECTED'],
   LOST: ['CONTACTED', 'AWAITING_PAYMENT'],
   REJECTED: ['CONTACTED'],
+  // Recruitment P0 — an EXPIRED lead (set by the expiry sweep) may be
+  // closed out as LOST / REJECTED from the status menu. Reopening it
+  // (EXPIRED → CONTACTED) deliberately stays on the separate, audited
+  // Reactivate action (Admin / Manager / Finance, reason required), so the
+  // plain status menu can't quietly undo the sweep's decision.
+  EXPIRED: ['LOST', 'REJECTED'],
   // CONVERTED is fully terminal
 } as const satisfies TransitionMap<
-  'NEW' | 'CONTACTED' | 'AWAITING_PAYMENT' | 'CONVERTED' | 'LOST' | 'REJECTED'
+  'NEW' | 'CONTACTED' | 'AWAITING_PAYMENT' | 'CONVERTED' | 'LOST' | 'REJECTED' | 'EXPIRED'
 >;
 
 /** Offers that block a new offer on the same application. */

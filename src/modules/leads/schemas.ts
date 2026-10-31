@@ -110,34 +110,71 @@ export const UpdateLeadStatusSchema = z.object({
   notes: z.string().max(500).optional().or(z.literal('')),
 });
 
-export const AcceptLeadSchema = z.object({
-  leadId: z.string().uuid(),
-  /**
-   * Free-text rationale ('payment cleared', 'client signed', 'manual
-   * accept'). Audited.
-   *
-   * Stage 4 — relaxed to allow empty strings so an "ordinary"
-   * pro-forma-triggered conversion (where a CONVERTED pro forma
-   * already carries the money record) doesn't demand a reason the
-   * operator has to invent. The service layer still requires `min(3)`
-   * when the conversion is a manual override (no pro-forma-origin
-   * invoice exists on the lead).
-   */
-  reason: z.string().max(500).optional().or(z.literal('')),
-  // Payment-first conversion applies to all three business lines (CS,
-  // Immigration, Recruitment). Accepting a lead atomically creates the
-  // operational entity + engagement + payment + receipt in one tx —
-  // no lead becomes a candidate/case/requisition without the money.
-  // For Recruitment the engagement payer is the employer; for CS and
-  // Immigration it's the person. Resolved from lead.targetBusiness in
-  // the service.
-  serviceCatalogItemId: z.string().uuid(),
-  amount: z.string().refine((v) => !Number.isNaN(Number(v)) && Number(v) > 0, 'Must be > 0'),
-  currencyCode: z.string().length(3),
-  method: z.enum(['BANK_TRANSFER', 'CASH', 'OTHER']),
-  proofReference: z.string().max(500).optional().or(z.literal('')),
-  receivedAt: z.string().date().optional().or(z.literal('')),
-});
+export const AcceptLeadSchema = z
+  .object({
+    leadId: z.string().uuid(),
+    /**
+     * Free-text rationale ('payment cleared', 'client signed', 'manual
+     * accept'). Audited.
+     *
+     * Stage 4 — relaxed to allow empty strings so an "ordinary"
+     * pro-forma-triggered conversion (where a CONVERTED pro forma
+     * already carries the money record) doesn't demand a reason the
+     * operator has to invent. The service layer still requires `min(3)`
+     * when the conversion is a manual override (no pro-forma-origin
+     * invoice exists on the lead). Not required when an existing,
+     * verified invoice is used — the invoice is the audit record.
+     */
+    reason: z.string().max(500).optional().or(z.literal('')),
+    /**
+     * Recruitment P0 — "use existing invoice" conversion. The employer
+     * already has a fully paid, finance-verified invoice for this work;
+     * conversion links it to the lead + new requisition and creates no
+     * engagement, invoice or payment. When set, the payment fields below
+     * are ignored.
+     */
+    existingInvoiceId: z.string().uuid().optional(),
+    // Payment-first conversion applies to all three business lines (CS,
+    // Immigration, Recruitment). Accepting a lead atomically creates the
+    // operational entity + engagement + payment + receipt in one tx —
+    // no lead becomes a candidate/case/requisition without the money.
+    // For Recruitment the engagement payer is the employer; for CS and
+    // Immigration it's the person. Resolved from lead.targetBusiness in
+    // the service. Required unless `existingInvoiceId` is set.
+    serviceCatalogItemId: z.string().uuid().optional(),
+    amount: z
+      .string()
+      .refine((v) => !Number.isNaN(Number(v)) && Number(v) > 0, 'Must be > 0')
+      .optional(),
+    currencyCode: z.string().length(3).optional(),
+    method: z.enum(['BANK_TRANSFER', 'CASH', 'OTHER']).optional(),
+    proofReference: z.string().max(500).optional().or(z.literal('')),
+    /** Business date the money arrived. Blank = today (Europe/Dublin);
+     *  a future date is refused by the service. */
+    receivedAt: z.string().date().optional().or(z.literal('')),
+    /**
+     * Recruitment P0 — finance-only override of the double-charge guard.
+     * When the employer already has an invoice that could be the same
+     * money, recording a new payment is refused unless a finance-authority
+     * user confirms it is a separate charge and says why (audited).
+     */
+    confirmSeparateCharge: z.boolean().optional(),
+    separateChargeReason: z.string().max(500).optional().or(z.literal('')),
+  })
+  .superRefine((v, ctx) => {
+    if (v.existingInvoiceId) return;
+    const missing: Array<[keyof typeof v, string]> = [
+      ['serviceCatalogItemId', 'Pick a service'],
+      ['amount', 'Enter the amount received'],
+      ['currencyCode', 'Enter the currency'],
+      ['method', 'Pick a payment method'],
+    ];
+    for (const [field, message] of missing) {
+      if (v[field] === undefined || v[field] === '') {
+        ctx.addIssue({ code: 'custom', path: [field], message });
+      }
+    }
+  });
 
 export const ArchiveLeadSchema = z.object({
   leadId: z.string().uuid(),
@@ -150,7 +187,7 @@ export const UnarchiveLeadSchema = z.object({
 });
 
 export type CreateLeadInput = z.infer<typeof CreateLeadSchema>;
-export type AcceptLeadInput = z.infer<typeof AcceptLeadSchema>;
+export type AcceptLeadInput = z.input<typeof AcceptLeadSchema>;
 export type UpdateLeadStatusInput = z.infer<typeof UpdateLeadStatusSchema>;
 export type ArchiveLeadInput = z.infer<typeof ArchiveLeadSchema>;
 export type UnarchiveLeadInput = z.infer<typeof UnarchiveLeadSchema>;

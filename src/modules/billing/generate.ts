@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { DbExecutor } from '@/lib/audit/withAudit';
 import { recordAudit } from '@/lib/audit/withAudit';
@@ -6,11 +6,13 @@ import { requireFinanceAuthority } from '@/lib/auth/finance-policy';
 import { db } from '@/lib/db/client';
 import { invoices } from '@/lib/db/schema/billing';
 import { serviceEngagements } from '@/lib/db/schema/commerce';
-import { employers } from '@/lib/db/schema/recruitment';
+import { leads } from '@/lib/db/schema/leads';
+import { employers, jobRequisitions, placements } from '@/lib/db/schema/recruitment';
 import { serviceCatalogItems, servicePackages } from '@/lib/db/schema/services';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { insertEngagement } from '@/modules/commerce/repository';
 import { fetchAppSettings } from '@/modules/settings/service';
+import { lockEmployerForBilling } from './employer-lock';
 import { insertInvoice } from './service';
 
 /**
@@ -56,6 +58,16 @@ export const GenerateInvoiceSchema = z.object({
   immigrationCaseId: z.string().uuid().nullish(),
   jobRequisitionId: z.string().uuid().nullish(),
   placementId: z.string().uuid().nullish(),
+  /** Recruitment P0 — the lead this invoice is raised on (leads-table
+      "Invoice" / "Add another invoice…"). Server-validated: the lead must
+      exist and its payer must be this invoice's payer. Stamped on the
+      invoice so conversion can find and reuse it instead of charging the
+      payer a second time. */
+  sourceLeadId: z.string().uuid().nullish(),
+  /** Recruitment P0 — a placement is normally invoiced once. A second
+      live invoice for the same placement needs this reason (finance
+      only, like every invoice issue) and is audited. */
+  overridePlacementInvoiceReason: z.string().max(500).nullish(),
   /** Stage 6D Wave 1f — operator-confirmed override for the duplicate-
       invoice detector. The server rejects a second invoice with the
       same payer + service + amount + currency where an ISSUED or
@@ -159,6 +171,11 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
       }
     }
 
+    // Recruitment P0 — serialise with lead conversion recording a new
+    // payment for the same employer (see employer-lock.ts). Taken before
+    // the duplicate check so it sees any invoice the other path created.
+    if (data.payerMode === 'EMPLOYER') await lockEmployerForBilling(tx, data.payerId);
+
     // Resolve the service catalog item (and its payerType constraint).
     const [service] = await tx
       .select({
@@ -209,6 +226,10 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
       }
     }
 
+    // Recruitment P0 — server-validated cross-links. Every check runs
+    // before anything is written, inside the same transaction.
+    const links = await resolveInvoiceLinks(tx, data);
+
     // Engagement first — invoice references it. Agreed amount on the
     // engagement is stored as the total subtotal (qty × unit) for
     // downstream reporting; VAT lives only on the invoice row.
@@ -217,7 +238,8 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
 
     // Stage 6D Wave 1f — duplicate-invoice detector. Finds any existing
     // invoice on the same payer + same service + same subtotal + same
-    // currency that is still live (ISSUED or PARTIALLY_PAID). An
+    // currency that is still live (ISSUED or PARTIALLY_PAID; for employers
+    // also a PAID enquiry-conversion invoice from the last 30 days). An
     // operator can legitimately repeat the service — the override flag
     // + reason let them proceed with an audit trail. Does not block
     // genuinely separate services (service id differs → no match) or
@@ -226,6 +248,9 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
       payerPersonId: data.payerMode === 'PERSON' ? data.payerId : null,
       payerEmployerId: data.payerMode === 'EMPLOYER' ? data.payerId : null,
       serviceCatalogItemId: service.id,
+      // A fee for a different placement is a different sale; the
+      // per-placement guard (resolveInvoiceLinks) covers repeats.
+      excludeOtherPlacementsThan: links.placementId,
     });
     if (existingDuplicate && !data.overrideDuplicateReason) {
       throw new BusinessRuleError(
@@ -304,10 +329,25 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
       lineDescription,
       issuedByUserId: session.user.id,
       paymentTermsDays,
-      immigrationCaseId: data.immigrationCaseId ?? null,
-      jobRequisitionId: data.jobRequisitionId ?? null,
-      placementId: data.placementId ?? null,
+      immigrationCaseId: links.immigrationCaseId,
+      jobRequisitionId: links.jobRequisitionId,
+      placementId: links.placementId,
+      sourceLeadId: links.sourceLeadId,
     });
+    if (links.placementOverride) {
+      await recordAudit(tx, {
+        actorUserId: session.user.id,
+        entityType: 'invoice',
+        entityId: links.placementOverride.existingInvoiceId,
+        action: 'PLACEMENT_SECOND_INVOICE_OVERRIDE',
+        context: {
+          placementId: links.placementId,
+          newInvoiceNumber: invoice.number,
+          reason: links.placementOverride.reason,
+          note: 'Finance confirmed a second invoice for the same placement.',
+        },
+      });
+    }
     const printPath =
       data.payerMode === 'PERSON'
         ? `/candidates/${data.payerId}/invoices/${invoice.number}`
@@ -332,16 +372,27 @@ export async function generateInvoiceForPayer(input: unknown): Promise<GenerateI
       // Stage B Wave 1 — replay anchor: a resubmit with the same key
       // finds this row and returns the original result (see the
       // idempotency lookup at the top of the transaction).
-      context: data.idempotencyKey
-        ? {
-            idempotencyKey: data.idempotencyKey,
-            payerMode: data.payerMode,
-            payerId: data.payerId,
-            invoiceNumber: invoice.number,
-            engagementId: engagement.id,
-            printPath,
-          }
-        : undefined,
+      // Recruitment P0 — the cross-links are always recorded so the trail
+      // shows which placement / job / lead / case the invoice was for.
+      context: {
+        placementId: links.placementId,
+        jobRequisitionId: links.jobRequisitionId,
+        sourceLeadId: links.sourceLeadId,
+        immigrationCaseId: links.immigrationCaseId,
+        ...(links.placementOverride
+          ? { placementSecondInvoiceReason: links.placementOverride.reason }
+          : {}),
+        ...(data.idempotencyKey
+          ? {
+              idempotencyKey: data.idempotencyKey,
+              payerMode: data.payerMode,
+              payerId: data.payerId,
+              invoiceNumber: invoice.number,
+              engagementId: engagement.id,
+              printPath,
+            }
+          : {}),
+      },
     });
 
     return {
@@ -376,6 +427,7 @@ async function findLiveDuplicateInvoice(
     payerPersonId: string | null;
     payerEmployerId: string | null;
     serviceCatalogItemId: string;
+    excludeOtherPlacementsThan?: string | null;
   },
 ): Promise<{ id: string; number: string; totalAmount: string; currencyCode: string } | null> {
   const payerClause = args.payerPersonId
@@ -397,9 +449,159 @@ async function findLiveDuplicateInvoice(
       and(
         payerClause,
         eq(serviceEngagements.serviceCatalogItemId, args.serviceCatalogItemId),
-        inArray(invoices.status, ['ISSUED', 'PARTIALLY_PAID']),
+        // Live (unpaid) invoices, plus — for employers — a recent PAID
+        // invoice from an enquiry conversion: that money is already in, so
+        // a fresh invoice for the same service would bill it twice.
+        args.payerEmployerId
+          ? or(
+              inArray(invoices.status, ['ISSUED', 'PARTIALLY_PAID']),
+              and(
+                eq(invoices.status, 'PAID'),
+                isNotNull(invoices.sourceLeadId),
+                gte(invoices.issuedAt, sql`NOW() - INTERVAL '30 days'`),
+              ),
+            )
+          : inArray(invoices.status, ['ISSUED', 'PARTIALLY_PAID']),
+        args.excludeOtherPlacementsThan
+          ? or(
+              isNull(invoices.placementId),
+              eq(invoices.placementId, args.excludeOtherPlacementsThan),
+            )
+          : undefined,
       ),
     )
     .limit(1);
   return rows[0] ?? null;
+}
+
+type InvoiceLinks = {
+  immigrationCaseId: string | null;
+  jobRequisitionId: string | null;
+  placementId: string | null;
+  sourceLeadId: string | null;
+  placementOverride: { existingInvoiceId: string; reason: string } | null;
+};
+
+/**
+ * Recruitment P0 — validate the optional cross-links before an invoice is
+ * issued:
+ *   - sourceLeadId: the lead exists and its payer is this invoice's payer
+ *     (employer for Recruitment, person otherwise). An accepted lead's
+ *     invoice is also linked to the requisition / case it became.
+ *   - placementId: employer invoices only; the placement belongs to the
+ *     payer employer and, when a requisition is given, to that
+ *     requisition (it defaults to the placement's requisition). The
+ *     placement row is locked so two concurrent raises serialize, and a
+ *     second live (non-void) invoice for the same placement is refused
+ *     unless an override reason is given (audited by the caller).
+ *   - jobRequisitionId on an employer invoice belongs to that employer.
+ */
+async function resolveInvoiceLinks(
+  tx: DbExecutor,
+  data: GenerateInvoiceInput,
+): Promise<InvoiceLinks> {
+  const links: InvoiceLinks = {
+    immigrationCaseId: data.immigrationCaseId ?? null,
+    jobRequisitionId: data.jobRequisitionId ?? null,
+    placementId: data.placementId ?? null,
+    sourceLeadId: null,
+    placementOverride: null,
+  };
+
+  if (data.sourceLeadId) {
+    const [lead] = await tx
+      .select({
+        id: leads.id,
+        targetBusiness: leads.targetBusiness,
+        personId: leads.personId,
+        employerId: leads.employerId,
+        acceptedEntityId: leads.acceptedEntityId,
+      })
+      .from(leads)
+      .where(eq(leads.id, data.sourceLeadId))
+      .limit(1);
+    if (!lead) throw new BusinessRuleError('LEAD_NOT_FOUND', 'The enquiry was not found.');
+    const leadPayerMode = lead.targetBusiness === 'RECRUITMENT' ? 'EMPLOYER' : 'PERSON';
+    const leadPayerId = leadPayerMode === 'EMPLOYER' ? lead.employerId : lead.personId;
+    if (leadPayerMode !== data.payerMode || leadPayerId !== data.payerId) {
+      throw new BusinessRuleError(
+        'LEAD_PAYER_MISMATCH',
+        "This invoice's payer is not the enquiry's payer.",
+      );
+    }
+    links.sourceLeadId = lead.id;
+    if (lead.acceptedEntityId) {
+      if (lead.targetBusiness === 'RECRUITMENT' && !links.jobRequisitionId) {
+        links.jobRequisitionId = lead.acceptedEntityId;
+      }
+      if (lead.targetBusiness === 'IMMIGRATION' && !links.immigrationCaseId) {
+        links.immigrationCaseId = lead.acceptedEntityId;
+      }
+    }
+  }
+
+  if (data.placementId) {
+    if (data.payerMode !== 'EMPLOYER') {
+      throw new BusinessRuleError(
+        'PLACEMENT_PAYER_MISMATCH',
+        'A placement fee is invoiced to the employer.',
+      );
+    }
+    const [placement] = await tx
+      .select({
+        id: placements.id,
+        employerId: placements.employerId,
+        jobRequisitionId: placements.jobRequisitionId,
+      })
+      .from(placements)
+      .where(eq(placements.id, data.placementId))
+      .for('update')
+      .limit(1);
+    if (!placement) throw new BusinessRuleError('PLACEMENT_NOT_FOUND', 'Placement not found.');
+    if (placement.employerId !== data.payerId) {
+      throw new BusinessRuleError(
+        'PLACEMENT_PAYER_MISMATCH',
+        'This placement belongs to a different employer.',
+      );
+    }
+    if (links.jobRequisitionId && links.jobRequisitionId !== placement.jobRequisitionId) {
+      throw new BusinessRuleError(
+        'PLACEMENT_REQUISITION_MISMATCH',
+        'This placement is on a different job requirement.',
+      );
+    }
+    links.jobRequisitionId = placement.jobRequisitionId;
+
+    const [already] = await tx
+      .select({ id: invoices.id, number: invoices.number })
+      .from(invoices)
+      .where(and(eq(invoices.placementId, placement.id), ne(invoices.status, 'VOIDED')))
+      .limit(1);
+    if (already) {
+      const reason = (data.overridePlacementInvoiceReason ?? '').trim();
+      if (reason.length < 3) {
+        throw new BusinessRuleError(
+          'PLACEMENT_ALREADY_INVOICED',
+          `This placement already has invoice ${already.number}. A second invoice would bill the employer twice for the same placement. Give a reason to confirm it is correct.`,
+        );
+      }
+      links.placementOverride = { existingInvoiceId: already.id, reason };
+    }
+  }
+
+  if (data.payerMode === 'EMPLOYER' && links.jobRequisitionId && !data.placementId) {
+    const [req] = await tx
+      .select({ employerId: jobRequisitions.employerId })
+      .from(jobRequisitions)
+      .where(eq(jobRequisitions.id, links.jobRequisitionId))
+      .limit(1);
+    if (!req || req.employerId !== data.payerId) {
+      throw new BusinessRuleError(
+        'REQUISITION_PAYER_MISMATCH',
+        'This job requirement belongs to a different employer.',
+      );
+    }
+  }
+
+  return links;
 }

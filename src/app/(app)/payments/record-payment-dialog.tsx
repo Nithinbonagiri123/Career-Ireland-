@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { todayInDublin } from '@/lib/dates';
 import { useFormDialog } from '@/lib/hooks/use-form-dialog';
 import { recordPaymentAction } from '@/modules/commerce/actions';
 import type { EngagementListRow } from '@/modules/commerce/repository';
@@ -43,7 +44,8 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
       currencyCode: openEngagements[0]?.currencyCode ?? '',
       method: 'BANK_TRANSFER',
       proofReference: '',
-      receivedAt: '',
+      // Business date the money arrived — defaults to today in Dublin.
+      receivedAt: todayInDublin(),
     },
   });
   const {
@@ -149,7 +151,12 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
               </Select>
             </FormField>
             <FormField id="p-received" label="Received on">
-              <Input id="p-received" type="date" {...register('receivedAt')} />
+              <Input
+                id="p-received"
+                type="date"
+                max={todayInDublin()}
+                {...register('receivedAt')}
+              />
             </FormField>
           </div>
 

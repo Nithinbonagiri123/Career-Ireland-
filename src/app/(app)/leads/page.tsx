@@ -7,6 +7,7 @@ import { EmptyMineNudge } from '@/components/empty-mine-nudge';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { ScopeFilter } from '@/components/scope-filter';
+import { hasFinanceAuthority } from '@/lib/auth/finance-policy-rules';
 import { requireAnyPermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import type { Lead } from '@/lib/db/schema/leads';
@@ -74,12 +75,21 @@ export default async function LeadsPage({
   const cardView = view === 'grid';
   const workspace = await resolveCurrentWorkspace();
   const targetBusiness = workspace ? targetBusinessForWorkspace(workspace.current) : undefined;
-  const [leads, invoiceableServices, currencies, occupations] = await Promise.all([
-    fetchLeads(scope, createdRange, targetBusiness),
-    fetchInvoiceableServicesFor('PERSON'),
-    fetchCurrencies(),
-    fetchOccupations(),
-  ]);
+  // Recruitment P0 — employer leads are billed to the employer, so the
+  // convert / invoice dialogs need the EMPLOYER (+ ANY) catalog too.
+  const [leads, invoiceableServices, employerServices, currencies, occupations] = await Promise.all(
+    [
+      fetchLeads(scope, createdRange, targetBusiness),
+      fetchInvoiceableServicesFor('PERSON'),
+      targetBusiness === undefined || targetBusiness === 'RECRUITMENT'
+        ? fetchInvoiceableServicesFor('EMPLOYER')
+        : Promise.resolve([]),
+      fetchCurrencies(),
+      fetchOccupations(),
+    ],
+  );
+  const canIssueInvoices = hasFinanceAuthority(session.user, 'ISSUE');
+  const canVerifyPayments = hasFinanceAuthority(session.user, 'VERIFY');
 
   const count = (s: Lead['status']) => leads.filter((l) => l.status === s).length;
 
@@ -112,7 +122,7 @@ export default async function LeadsPage({
           title="Leads"
           description={
             targetBusiness === 'RECRUITMENT'
-              ? 'Employer enquiries. Qualify, assign and convert into an employer profile and requisition — no payment required to convert.'
+              ? 'Employer enquiries. Qualify and assign them, then convert into a requisition once the employer has paid — using their paid invoice, or by recording the payment.'
               : 'Every candidate begins as a Lead. Convert via verified payment or a staff manual override (audited).'
           }
           action={
@@ -208,6 +218,9 @@ export default async function LeadsPage({
             currentUserId={session.user.id}
             currentUserRole={session.user.role}
             invoiceableServices={invoiceableServices}
+            employerServices={employerServices}
+            canIssueInvoices={canIssueInvoices}
+            canVerifyPayments={canVerifyPayments}
           />
         </div>
       </FadeUp>

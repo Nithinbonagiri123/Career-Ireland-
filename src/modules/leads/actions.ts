@@ -12,7 +12,14 @@ import type {
   UnarchiveLeadInput,
   UpdateLeadStatusInput,
 } from './schemas';
-import { acceptLead, archiveLead, createLead, unarchiveLead, updateLeadStatus } from './service';
+import {
+  acceptLead,
+  archiveLead,
+  createLead,
+  fetchLeadConversionOptions,
+  unarchiveLead,
+  updateLeadStatus,
+} from './service';
 
 const revalidate = () => {
   revalidatePath('/leads');
@@ -37,6 +44,13 @@ export async function acceptLeadAction(input: AcceptLeadInput) {
   const result = await toActionResult(() => acceptLead(input));
   if (result.ok) revalidate();
   return result;
+}
+
+/** Recruitment P0 — invoices the convert dialog can offer ("use an
+ *  existing invoice") and any that block recording a new payment. Read
+ *  only; same gate as converting the lead. */
+export async function fetchLeadConversionOptionsAction(input: { leadId: string }) {
+  return toActionResult(() => fetchLeadConversionOptions(input.leadId));
 }
 
 export async function archiveLeadAction(input: ArchiveLeadInput) {
