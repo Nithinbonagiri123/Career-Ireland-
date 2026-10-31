@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { canReadFinance } from '@/lib/auth/finance-read';
 import { requirePermission } from '@/lib/auth/session';
 import {
   applicationFunnel,
@@ -31,6 +32,7 @@ export default async function ReportsPage({
   searchParams: Promise<{ days?: string }>;
 }) {
   await requirePermission('main', 'overview', 'view');
+  const canExportRevenue = await canReadFinance();
   const { days: daysParam } = await searchParams;
   const days = parseDays(daysParam);
   const [placementRows, revenueRows, recruiterRows, requisitionPerfRows, funnelRows] =
@@ -340,12 +342,14 @@ export default async function ReportsPage({
               <Badge variant="secondary" className="rounded-full">
                 {revenueRows.length} groups
               </Badge>
-              <Link
-                href={`/api/reports/revenue?days=${days}`}
-                className={buttonVariants({ variant: 'outline', size: 'sm' })}
-              >
-                <Download className="mr-1.5 size-3.5" /> CSV
-              </Link>
+              {canExportRevenue && (
+                <Link
+                  href={`/api/reports/revenue?days=${days}`}
+                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                >
+                  <Download className="mr-1.5 size-3.5" /> CSV
+                </Link>
+              )}
             </div>
           </CardHeader>
           <CardContent>

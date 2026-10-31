@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { Badge } from '@/components/ui/badge';
+import { canReadFinance } from '@/lib/auth/finance-read';
 import { requireInternalStaff, requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchAgingReport } from '@/modules/billing/aging';
@@ -55,6 +56,7 @@ export default async function DashboardPage({
 }) {
   await requirePermission('main', 'overview', 'view');
   const session = await requireInternalStaff();
+  const canExportRevenue = await canReadFinance();
   const { created, from, to } = await searchParams;
   const range = parseDateRangeParams({ created, from, to });
   const [
@@ -218,7 +220,7 @@ export default async function DashboardPage({
 
       {/* ─── Revenue ─────────────────────────────────────────────── */}
       <FadeUp delay={0.05}>
-        <RevenueSection data={revenue} />
+        <RevenueSection data={revenue} canExport={canExportRevenue} />
       </FadeUp>
 
       {/* ─── Revenue by business (pie + line per source) ─────────── */}

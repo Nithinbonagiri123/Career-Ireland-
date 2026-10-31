@@ -89,7 +89,14 @@ function buildCsvHref(range: { from: Date; to: Date }): string {
   return `/api/export/revenue-services?from=${fromParam}&to=${toParam}`;
 }
 
-export function RevenueSection({ data }: { data: DashboardRevenue }) {
+export function RevenueSection({
+  data,
+  canExport = false,
+}: {
+  data: DashboardRevenue;
+  /** Finance-read users only — the CSV route returns 403 to everyone else. */
+  canExport?: boolean;
+}) {
   const { range, byStream, totalsByCurrency, previousTotalsByCurrency, services } = data;
   const hasRevenue = totalsByCurrency.length > 0;
   const previousByCurrency = new Map(
@@ -162,10 +169,12 @@ export function RevenueSection({ data }: { data: DashboardRevenue }) {
                     Ordered by revenue in the selected range.
                   </span>
                 </div>
-                <CsvExportButton
-                  href={buildCsvHref(range)}
-                  label={`Download all ${services.length} services`}
-                />
+                {canExport && (
+                  <CsvExportButton
+                    href={buildCsvHref(range)}
+                    label={`Download all ${services.length} services`}
+                  />
+                )}
               </div>
               <div className="overflow-hidden rounded-lg glass-panel">
                 <table className="w-full text-sm">

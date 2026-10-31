@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { recordAudit } from '@/lib/audit/withAudit';
+import { financeReadDeniedResponse } from '@/lib/auth/finance-read';
 import { requireInternalStaff, type Session } from '@/lib/auth/session';
 import { toCsv } from '@/lib/csv';
 import { db } from '@/lib/db/client';
@@ -130,6 +131,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
   }
 
   if (resource === 'payments') {
+    // Same policy as the /payments page — internal staff alone is not enough.
+    const denied = await financeReadDeniedResponse();
+    if (denied) return denied;
     const rows = await fetchPayments();
     return auditedCsvResponse(
       session,
@@ -210,6 +214,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
   }
 
   if (resource === 'revenue-services') {
+    const denied = await financeReadDeniedResponse();
+    if (denied) return denied;
     // Same URL contract as the dashboard section — `from`/`to` are the
     // ISO date strings the DateRangeFilter writes. If omitted, the
     // aggregator defaults to MTD, matching what the user sees on-page.

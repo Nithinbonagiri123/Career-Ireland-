@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { financeReadDeniedResponse } from '@/lib/auth/finance-read';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { toCsv } from '@/lib/csv';
 import {
@@ -43,6 +44,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ name
   }
 
   if (name === 'revenue') {
+    // Revenue is finance data: same policy as /payments, not just staff.
+    const denied = await financeReadDeniedResponse();
+    if (denied) return denied;
     const rows = await revenueByCurrencyAndService(days);
     const csv = toCsv(rows, [
       { key: 'currency', header: 'Currency' },
