@@ -17,9 +17,12 @@
  */
 
 import { config } from 'dotenv';
+import { automatedRunRefusal, exitOnRefusal } from '../src/lib/db/manual-db-guard';
 
 // Load env BEFORE any @/ import that transitively loads src/lib/env.ts.
 config({ path: '.env.local' });
+// Decision 8: never against the manual-testing DB (no override).
+exitOnRefusal(automatedRunRefusal('repro-task-generator-race', process.env.DATABASE_URL));
 
 async function main() {
   const { eq, sql } = await import('drizzle-orm');

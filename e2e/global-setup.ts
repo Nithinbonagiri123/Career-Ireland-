@@ -1,6 +1,12 @@
 import { mkdirSync } from 'node:fs';
 import { chromium, type FullConfig } from '@playwright/test';
 import { config as loadEnv } from 'dotenv';
+import {
+  automatedRunRefusal,
+  fetchDatabaseIdentity,
+  liveIdentityRefusal,
+  manualServerRefusal,
+} from '../src/lib/db/manual-db-guard';
 
 // Load .env.local BEFORE any module that touches env.ts (that would validate too early).
 loadEnv({ path: '.env.local' });
@@ -224,6 +230,24 @@ async function ensureBaselineDocumentTypes() {
     .onConflictDoNothing({ target: documentTypes.code });
 }
 
+/**
+ * Decision 8 — never seed fixtures into, or drive, the manual-testing
+ * environment: refuse the manual DB by URL name, by live
+ * `current_database()` / COMMENT label, and refuse a base URL on :3001.
+ * The URL is never printed.
+ */
+async function assertNotManualEnvironment(baseURL: string): Promise<void> {
+  const server = manualServerRefusal('e2e global setup', baseURL);
+  if (server) throw new Error(server);
+  const url = process.env.DATABASE_URL;
+  const byName = automatedRunRefusal('e2e global setup', url);
+  if (byName) throw new Error(byName);
+  if (!url) return;
+  const identity = await fetchDatabaseIdentity(url);
+  const live = identity ? liveIdentityRefusal('e2e global setup', identity) : null;
+  if (live) throw new Error(live);
+}
+
 export default async function globalSetup(config: FullConfig) {
   assertLocalDatabase();
   // Fail fast with a clear message before any seeding if a secret is missing.
@@ -231,6 +255,7 @@ export default async function globalSetup(config: FullConfig) {
   void E2E_STAFF.password;
   const baseURL =
     config.projects[0]?.use.baseURL ?? process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
+  await assertNotManualEnvironment(baseURL);
 
   console.log('▸ Seeding baseline currencies…');
   await ensureBaselineCurrencies();

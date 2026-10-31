@@ -1,6 +1,11 @@
 import './_bootstrap-env';
 import { db } from '@/lib/db/client';
 import { skills } from '@/lib/db/schema/reference';
+import { assertSetupTarget } from './_assert-local-db';
+
+// Decision 8: manual-testing DB only with ALLOW_MANUAL_DB_MIGRATE=1.
+// The db client connects lazily, so no query has run yet.
+assertSetupTarget('seed-skills');
 
 /**
  * Idempotent seed for the Skills catalog. The CV parser's catalog-hit

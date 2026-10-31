@@ -1,6 +1,9 @@
 import { config } from 'dotenv';
+import { assertSetupTarget } from './_assert-local-db';
 
 config({ path: '.env.local' });
+// Decision 8: manual-testing DB only with ALLOW_MANUAL_DB_MIGRATE=1.
+assertSetupTarget('seed-currencies');
 
 const SEED = [
   { code: 'ZAR', name: 'South African Rand', symbol: 'R' },

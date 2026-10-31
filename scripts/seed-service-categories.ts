@@ -1,7 +1,10 @@
 import { config } from 'dotenv';
+import { assertSetupTarget } from './_assert-local-db';
 
 // Load env BEFORE requiring anything that imports env.ts (validates process.env at import time).
 config({ path: '.env.local' });
+// Decision 8: manual-testing DB only with ALLOW_MANUAL_DB_MIGRATE=1.
+assertSetupTarget('seed-service-categories');
 
 /**
  * Session 34 — seed the four starter business-line categories so a

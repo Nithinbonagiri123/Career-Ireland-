@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack -H 127.0.0.1",
+    "dev:manual": "tsx --env-file=.env.manual.local scripts/manual-env-preflight.ts && node --env-file=.env.manual.local node_modules/next/dist/bin/next dev --turbopack -H 127.0.0.1 -p 3001",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
@@ -12,6 +13,9 @@
     "format": "biome format --write .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/lib/db/migrate.ts",
+    "db:migrate:manual": "tsx --env-file=.env.manual.local src/lib/db/migrate.ts",
+    "db:seed:manual": "tsx --env-file=.env.manual.local scripts/seed-currencies.ts && tsx --env-file=.env.manual.local scripts/seed-service-categories.ts && tsx --env-file=.env.manual.local scripts/seed-services-2026.ts && tsx --env-file=.env.manual.local scripts/seed-document-types.ts && tsx --env-file=.env.manual.local scripts/seed-accounting.ts && tsx --env-file=.env.manual.local scripts/seed-skills.ts",
+    "db:seed:admin:manual": "tsx --env-file=.env.manual.local scripts/seed-admin.ts",
     "db:studio": "drizzle-kit studio",
     "db:seed:admin": "tsx scripts/seed-admin.ts",
     "db:seed:e2e-admin": "tsx scripts/seed-e2e-admin.ts",

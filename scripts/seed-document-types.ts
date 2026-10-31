@@ -1,7 +1,10 @@
 import { config } from 'dotenv';
+import { assertSetupTarget } from './_assert-local-db';
 
 // Load env BEFORE importing anything that reads process.env at import time.
 config({ path: '.env.local' });
+// Decision 8: manual-testing DB only with ALLOW_MANUAL_DB_MIGRATE=1.
+assertSetupTarget('seed-document-types');
 
 /**
  * Idempotent seed for the full document-type catalog Tracey uses on real

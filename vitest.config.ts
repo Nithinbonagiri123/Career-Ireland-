@@ -7,6 +7,8 @@ export default defineConfig({
     globals: true,
     include: ['src/**/*.test.ts'],
     setupFiles: ['./vitest.setup.ts'],
+    // Decision 8 — one-time refusal of the manual-testing database.
+    globalSetup: ['./vitest.global-setup.ts'],
   },
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },

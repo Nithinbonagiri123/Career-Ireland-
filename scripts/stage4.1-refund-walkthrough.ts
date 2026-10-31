@@ -1,6 +1,9 @@
 import { config } from 'dotenv';
+import { automatedRunRefusal, exitOnRefusal } from '../src/lib/db/manual-db-guard';
 
 config({ path: '.env.local' });
+// Decision 8: never against the manual-testing DB (no override).
+exitOnRefusal(automatedRunRefusal('stage4.1-refund-walkthrough', process.env.DATABASE_URL));
 
 /**
  * Stage 4.1 end-to-end refund walkthrough. Runs the Finance scenario:

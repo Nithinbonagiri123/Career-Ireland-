@@ -45,6 +45,11 @@
 import './_bootstrap-env';
 import { sql } from 'drizzle-orm';
 import { db } from '../src/lib/db/client';
+import { assertSetupTarget } from './_assert-local-db';
+
+// Decision 8: manual-testing DB only with ALLOW_MANUAL_DB_MIGRATE=1.
+// The db client connects lazily, so no query has run yet.
+assertSetupTarget('reconcile-invoice-line-items');
 
 type OrphanRow = {
   id: string;

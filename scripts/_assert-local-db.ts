@@ -7,8 +7,13 @@
  * at a shared or production database they would do real damage, so there
  * is deliberately no override flag. The URL itself is never printed.
  *
+ * They also refuse the manual-testing database (Decision 8), with no
+ * override: those rows belong to the owner's hand-made scenarios.
+ *
  * Call it after dotenv has loaded and before importing the db client.
  */
+import { automatedRunRefusal, exitOnRefusal, setupRunRefusal } from '../src/lib/db/manual-db-guard';
+
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
 export function isLocalDatabaseUrl(url: string | undefined): boolean {
@@ -31,6 +36,17 @@ export function assertLocalDatabase(scriptName: string): void {
     );
     process.exit(2);
   }
+  exitOnRefusal(automatedRunRefusal(scriptName, process.env.DATABASE_URL));
+}
+
+/**
+ * Guard for idempotent reference seeds, the first-admin seed and data
+ * repair scripts (Decision 8). Dev / CI databases: unchanged. The
+ * manual-testing database: only with ALLOW_MANUAL_DB_MIGRATE=1, and that flag
+ * is refused on any other database. Call after dotenv has loaded.
+ */
+export function assertSetupTarget(scriptName: string): void {
+  exitOnRefusal(setupRunRefusal(scriptName, process.env.DATABASE_URL, process.env));
 }
 
 /**

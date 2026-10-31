@@ -1,6 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
+import { manualServerRefusal } from './src/lib/db/manual-db-guard';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
+
+// Decision 8 — refuse at config load, BEFORE `webServer` runs: with
+// `reuseExistingServer: true` Playwright would otherwise silently drive
+// whatever already listens on the manual server's port (:3001).
+{
+  const refusal = manualServerRefusal('playwright.config', BASE_URL);
+  if (refusal) throw new Error(refusal);
+}
 
 /**
  * Playwright E2E harness for the CRM.
