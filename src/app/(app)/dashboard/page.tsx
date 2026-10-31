@@ -14,10 +14,11 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react';
+import Link from 'next/link';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { Badge } from '@/components/ui/badge';
 import { canReadFinance } from '@/lib/auth/finance-read';
-import { requireInternalStaff, requirePermission } from '@/lib/auth/session';
+import { checkPermission, requireInternalStaff, requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchAgingReport } from '@/modules/billing/aging';
 import { fetchInvoiceableServicesFor } from '@/modules/billing/read';
@@ -57,6 +58,10 @@ export default async function DashboardPage({
   await requirePermission('main', 'overview', 'view');
   const session = await requireInternalStaff();
   const canExportRevenue = await canReadFinance();
+  // Staff attendance (People strip + who's working now) is HR Board data:
+  // only holders of main.hr_board.view (or the owner) get it — the data is
+  // not fetched at all for anyone else.
+  const canViewHr = await checkPermission('main', 'hr_board', 'view');
   const { created, from, to } = await searchParams;
   const range = parseDateRangeParams({ created, from, to });
   const [
@@ -80,11 +85,11 @@ export default async function DashboardPage({
     fetchDashboardDrilldowns(),
     fetchDashboardPipelines(),
     fetchRecentActivity(10),
-    fetchHrDashboard(),
+    canViewHr ? fetchHrDashboard() : Promise.resolve(null),
     fetchDashboardTrends(),
     fetchDashboardRevenue({ from: range.from, to: range.to }),
     fetchRevenueTrendBySource({ from: range.from, to: range.to }),
-    fetchStaffCurrentlyWorking(),
+    canViewHr ? fetchStaffCurrentlyWorking() : Promise.resolve(null),
     fetchAgingReport(),
     fetchAppSettings(),
     // Payer-type PERSON — Leads always bill an individual candidate; the
@@ -246,60 +251,65 @@ export default async function DashboardPage({
       </FadeUp>
 
       {/* ─── HR strip ────────────────────────────────────────────── */}
-      <FadeUp delay={0.06}>
-        <section aria-label="HR" className="mb-8">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
-              People
-            </h2>
-            <span className="text-[11px] text-foreground/60">
-              Attendance is server-side + audited.
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatChip
-              label="Clocked in now"
-              value={hr.currentlyClockedIn}
-              hint="Across the internal team"
-              href="/hr/admin"
-              icon={LogIn}
-              noteTone="green"
-            />
-            <StatChip
-              label="Sessions today"
-              value={hr.todayTotal}
-              hint="Since midnight"
-              href="/hr/admin"
-              icon={Clock}
-              noteTone="blue"
-            />
-            <StatChip
-              label="Missing clock-outs"
-              value={hr.missingClockOuts}
-              hint="Open past yesterday"
-              href="/hr/admin"
-              icon={AlertCircle}
-              noteTone="pink"
-            />
-            <StatChip
-              label="Late today"
-              value={hr.lateToday}
-              hint="Clock-in after 09:15"
-              href="/hr/admin"
-              icon={Clock}
-              noteTone="yellow"
-            />
-          </div>
+      {hr && workingNow && (
+        <FadeUp delay={0.06}>
+          <section aria-label="HR" className="mb-8">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground/75">
+                People
+              </h2>
+              <Link
+                href="/hr/admin"
+                className="rounded-sm text-[11px] text-foreground/70 hover:text-foreground hover:underline"
+              >
+                Open HR Board
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatChip
+                label="Clocked in now"
+                value={hr.currentlyClockedIn}
+                hint="Across the internal team"
+                href="/hr/admin"
+                icon={LogIn}
+                noteTone="green"
+              />
+              <StatChip
+                label="Sessions today"
+                value={hr.todayTotal}
+                hint="Since midnight"
+                href="/hr/admin"
+                icon={Clock}
+                noteTone="blue"
+              />
+              <StatChip
+                label="Missing clock-outs"
+                value={hr.missingClockOuts}
+                hint="Open past yesterday"
+                href="/hr/admin"
+                icon={AlertCircle}
+                noteTone="pink"
+              />
+              <StatChip
+                label="Late today"
+                value={hr.lateToday}
+                hint="Clock-in after 09:15"
+                href="/hr/admin"
+                icon={Clock}
+                noteTone="yellow"
+              />
+            </div>
 
-          {/* Owner's at-a-glance view: names of everyone clocked in
-              right now, whether they're on break, and their clock-in
-              time. Keeps the visibility that a physical office would
-              have when the owner isn't there. */}
-          <div className="mt-3">
-            <WorkingNowCard initial={workingNow} />
-          </div>
-        </section>
-      </FadeUp>
+            {/* Owner's at-a-glance view: names of everyone clocked in
+                right now, whether they're on break, and their clock-in
+                time. Keeps the visibility that a physical office would
+                have when the owner isn't there. */}
+            <div className="mt-3">
+              <WorkingNowCard initial={workingNow} />
+            </div>
+          </section>
+        </FadeUp>
+      )}
 
       {/* ─── Row · 30-day trends ─────────────────────────────────── */}
       <FadeUp delay={0.07}>

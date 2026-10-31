@@ -155,8 +155,8 @@ export function ClockWidget({
           <span
             className={
               status === 'on_break'
-                ? 'absolute inset-0 animate-ping rounded-full bg-amber-500/60'
-                : 'absolute inset-0 animate-ping rounded-full bg-emerald-500/60'
+                ? 'absolute inset-0 motion-safe:animate-ping rounded-full bg-amber-500/60'
+                : 'absolute inset-0 motion-safe:animate-ping rounded-full bg-emerald-500/60'
             }
           />
           <span

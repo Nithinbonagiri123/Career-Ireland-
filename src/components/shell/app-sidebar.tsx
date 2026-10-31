@@ -123,6 +123,7 @@ export function AppSidebar({
                       <Link
                         href={item.href}
                         data-nav-active={active ? 'true' : 'false'}
+                        aria-current={active ? 'page' : undefined}
                         className={cn(
                           'group relative flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                           active && 'text-sidebar-foreground',
@@ -152,12 +153,15 @@ export function AppSidebar({
       <div className="border-t border-sidebar-border px-3 py-3">
         <ul className="space-y-0.5">
           {USER_SCOPED_ITEMS.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            // Exact match: /hr/admin and /hr/team have their own nav items,
+            // so "My attendance" (/hr) must not light up alongside them.
+            const active = pathname === item.href;
             return (
               <li key={item.href}>
                 <Link
                   href={item.href}
                   data-nav-active={active ? 'true' : 'false'}
+                  aria-current={active ? 'page' : undefined}
                   className={cn(
                     'group relative flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                     active && 'text-sidebar-foreground',

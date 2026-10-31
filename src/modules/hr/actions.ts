@@ -10,13 +10,15 @@ import {
   correctAttendance,
   endBreak,
   startBreak,
+  toSessionView,
   upsertStaffProfile,
 } from './service';
 
 /**
  * Attendance actions. Timestamps come from the server (`NOW()` inside
  * the transaction) — the browser never gets to say what time it is.
- * The caller IP is captured for audit only, not for any decision.
+ * The caller IP is captured for audit only, not for any decision, and
+ * is never sent back: session results go through `toSessionView`.
  */
 async function readCallerIp(): Promise<string | null> {
   try {
@@ -31,14 +33,14 @@ async function readCallerIp(): Promise<string | null> {
 
 export async function clockInAction() {
   const ip = await readCallerIp();
-  const r = await toActionResult(() => clockIn(ip));
+  const r = await toActionResult(async () => toSessionView(await clockIn(ip)));
   if (r.ok) revalidatePath('/hr');
   return r;
 }
 
 export async function clockOutAction() {
   const ip = await readCallerIp();
-  const r = await toActionResult(() => clockOut(ip));
+  const r = await toActionResult(async () => toSessionView(await clockOut(ip)));
   if (r.ok) revalidatePath('/hr');
   return r;
 }
@@ -56,7 +58,7 @@ export async function endBreakAction() {
 }
 
 export async function correctAttendanceAction(input: CorrectAttendanceInput) {
-  const r = await toActionResult(() => correctAttendance(input));
+  const r = await toActionResult(async () => toSessionView(await correctAttendance(input)));
   if (r.ok) {
     revalidatePath('/hr');
     revalidatePath('/hr/admin');

@@ -1,145 +1,141 @@
-import { format, formatDistanceToNowStrict } from 'date-fns';
-import { ArrowLeft, Users2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Coffee, LogIn, Users2 } from 'lucide-react';
 import Link from 'next/link';
+import {
+  type AttendanceState,
+  AttendanceStatePill,
+  attendanceStates,
+  DateTime,
+  RunningDuration,
+} from '@/components/ds/attendance';
+import { FOCUS_RING } from '@/components/ds/segmented';
+import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
+import { DS_ROW, DS_ROW_LIST, SectionCard } from '@/components/ds/workspace';
 import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { StatusDot } from '@/components/ui/status-dot';
 import { requireSession } from '@/lib/auth/session';
+import { cn } from '@/lib/utils';
 import { fetchDirectReports } from '@/modules/hr/service';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'My team · HR' };
 
 /**
- * Manager team view — shows every user whose staff_profile.manager_user_id
- * points at the caller, with each report's latest attendance state. No
- * `requireRole` gate: any internal user can visit this page and see
- * their own reports (if they have any); the query itself is scoped so
- * there's nothing to leak from someone with zero reports.
+ * Stage 6G My team — every user whose staff profile names the caller as
+ * manager, with each report's latest attendance. Scope and gate are
+ * unchanged: signed-in only, query limited to the caller's own reports.
+ * (A clocked-in-only "Team on duty" view is a separate proposal.)
  */
 export default async function HrTeamPage() {
   const session = await requireSession();
   const reports = await fetchDirectReports(session.user.id);
+  const now = new Date();
+
+  const rows = reports.map((r) => {
+    const s = r.latestSession;
+    const states = s
+      ? attendanceStates({
+          clockInAt: s.clockInAt,
+          clockOutAt: s.clockOutAt,
+          autoClosed: s.autoClosed,
+          correctionReason: s.correctionReason,
+          onBreak: r.openBreak !== null,
+          now,
+        })
+      : [];
+    return { r, s, states };
+  });
+  const count = (state: AttendanceState) => rows.filter((x) => x.states.includes(state)).length;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
       <FadeUp>
         <PageHeader
           icon={Users2}
+          iconTone="purple"
           title="My team"
-          description="Attendance state for staff who report to you."
+          description="Your direct reports and their latest attendance."
           breadcrumbs={[{ label: 'HR', href: '/hr' }, { label: 'My team' }]}
           action={
-            <Link href="/hr" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-              <ArrowLeft className="mr-1.5 size-4" />
-              Back to my attendance
+            <Link
+              href="/hr"
+              className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), FOCUS_RING)}
+            >
+              <ArrowLeft className="mr-1.5 size-4" aria-hidden />
+              My attendance
             </Link>
           }
         />
       </FadeUp>
 
-      <FadeUp delay={0.05}>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              Direct reports{' '}
-              <span className="text-xs font-normal text-muted-foreground">({reports.length})</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {reports.length === 0 ? (
-              <EmptyState
-                icon={Users2}
-                title="No direct reports"
-                description="You'll see reports here once an admin sets your userId as their manager on their staff profile."
-              />
-            ) : (
-              <ul className="divide-y rounded-md border">
-                {reports.map((r) => {
-                  const s = r.latestSession;
-                  const isActive = s !== null && s.clockOutAt === null;
-                  const isOnBreak = isActive && r.openBreak !== null;
-                  const isStale =
-                    isActive &&
-                    s !== null &&
-                    s.clockInAt.getTime() < Date.now() - 14 * 60 * 60 * 1000;
-                  return (
-                    <li
-                      key={r.userId}
-                      className="flex items-center justify-between px-3 py-2.5 text-sm"
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <StatusDot
-                          tone={
-                            isStale
-                              ? 'danger'
-                              : isOnBreak
-                                ? 'warning'
-                                : isActive
-                                  ? 'success'
-                                  : 'neutral'
-                          }
-                        />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{r.userName}</p>
-                          <p className="truncate text-[11px] text-muted-foreground">
-                            {r.userEmail}
-                          </p>
+      {reports.length > 0 && (
+        <FadeUp delay={0.04}>
+          <StatTileGrid className="mb-6">
+            <StatTile icon={Users2} tone="violet" label="Direct reports" value={reports.length} />
+            <StatTile icon={LogIn} tone="green" label="Working now" value={count('working')} />
+            <StatTile icon={Coffee} tone="amber" label="On break" value={count('on_break')} />
+            <StatTile
+              icon={AlertCircle}
+              tone="rose"
+              label="Missing clock-out"
+              value={count('missing_clock_out')}
+              hint="Open longer than 14 hours"
+            />
+          </StatTileGrid>
+        </FadeUp>
+      )}
+
+      <FadeUp delay={0.07}>
+        <SectionCard icon={Users2} title="Direct reports" count={reports.length}>
+          {reports.length === 0 ? (
+            <EmptyState
+              icon={Users2}
+              title="No direct reports"
+              description="People appear here when their HR profile names you as their reporting manager."
+            />
+          ) : (
+            <ul aria-label="Direct reports" className={DS_ROW_LIST}>
+              {rows.map(({ r, s, states }) => (
+                <li key={r.userId} className={DS_ROW}>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">{r.userName}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">{r.userEmail}</p>
+                  </div>
+                  <div className="flex w-full min-w-0 flex-col items-start gap-1 text-left text-xs text-muted-foreground sm:w-auto sm:items-end sm:text-right">
+                    {s === null ? (
+                      <span>No attendance yet</span>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap justify-start gap-1 sm:justify-end">
+                          {states.map((st) => (
+                            <AttendanceStatePill key={st} state={st} />
+                          ))}
                         </div>
-                      </div>
-                      <div className="text-right text-xs text-muted-foreground">
-                        {s === null ? (
-                          <span>No attendance yet</span>
-                        ) : isActive ? (
-                          <>
-                            <div className="flex items-center justify-end gap-1.5">
-                              {isOnBreak && (
-                                <Badge
-                                  variant="warning"
-                                  className="rounded-full text-[9px] uppercase"
-                                >
-                                  On break
-                                </Badge>
-                              )}
-                              <span>
-                                Since{' '}
-                                <span className="font-medium text-foreground">
-                                  {format(s.clockInAt, 'HH:mm')}
-                                </span>
-                              </span>
-                            </div>
-                            <div className="text-[10px] uppercase tracking-wider">
-                              {isOnBreak && r.openBreak
-                                ? `Break started ${formatDistanceToNowStrict(r.openBreak.breakStartedAt)} ago`
-                                : formatDistanceToNowStrict(s.clockInAt)}
-                              {isStale && (
-                                <Badge variant="danger" className="ml-1.5 rounded-full text-[9px]">
-                                  Missing clock-out
-                                </Badge>
-                              )}
-                            </div>
-                          </>
+                        {s.clockOutAt === null ? (
+                          <span>
+                            {r.openBreak ? (
+                              <>
+                                Break since <DateTime value={r.openBreak.breakStartedAt} />
+                              </>
+                            ) : (
+                              <RunningDuration since={s.clockInAt} now={now} />
+                            )}
+                          </span>
                         ) : (
-                          <>
-                            <div>Last: {format(s.clockInAt, 'EEE d MMM')}</div>
-                            <div className="text-[10px] uppercase tracking-wider">
-                              {format(s.clockInAt, 'HH:mm')} –{' '}
-                              {s.clockOutAt ? format(s.clockOutAt, 'HH:mm') : '?'}
-                            </div>
-                          </>
+                          <span>
+                            Last: <DateTime value={s.clockInAt} /> –{' '}
+                            <DateTime value={s.clockOutAt} variant="time" />
+                          </span>
                         )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+                      </>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionCard>
       </FadeUp>
     </div>
   );

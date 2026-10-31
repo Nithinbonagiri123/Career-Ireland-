@@ -1,6 +1,11 @@
-import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gte, isNull, lt, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
-import { requireInternalStaff, requireRole, requireSession } from '@/lib/auth/session';
+import {
+  requireInternalStaff,
+  requirePermission,
+  requireRole,
+  requireSession,
+} from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
   type AttendanceBreakSession,
@@ -38,6 +43,37 @@ const LATE_THRESHOLD_MINUTES = 15;
 /** Notional shift-start local time, used only for the "late" indicator. */
 const SHIFT_START_HOUR = 9;
 
+// ─── Privacy boundary ───────────────────────────────────────────────
+
+/**
+ * Attendance rows as they leave the server. The clock-in / clock-out IP
+ * addresses are kept in the database and in the audit log, but never
+ * returned by a read helper or an action result, so they cannot reach
+ * a browser payload.
+ */
+export type AttendanceSessionView = Omit<AttendanceSession, 'clockInIp' | 'clockOutIp'>;
+
+const {
+  clockInIp: _clockInIp,
+  clockOutIp: _clockOutIp,
+  ...SESSION_VIEW_COLUMNS
+} = getTableColumns(attendanceSessions);
+
+/** Strip the IP columns from a full row (used on action results). */
+export function toSessionView(row: AttendanceSession): AttendanceSessionView {
+  const { clockInIp: _in, clockOutIp: _out, ...view } = row;
+  return view;
+}
+
+/**
+ * Team-wide attendance (HR Board, staff directory, "who's working now",
+ * team counts) needs the existing HR Board grant — `main.hr_board.view`.
+ * The owner bypasses as everywhere else. Own attendance is unaffected.
+ */
+async function requireHrBoardView() {
+  return requirePermission('main', 'hr_board', 'view');
+}
+
 // ─── Read helpers ───────────────────────────────────────────────────
 
 export async function findOpenSessionForUser(userId: string): Promise<AttendanceSession | null> {
@@ -52,9 +88,9 @@ export async function findOpenSessionForUser(userId: string): Promise<Attendance
 export async function fetchMyRecentSessions(
   userId: string,
   limit = 20,
-): Promise<AttendanceSession[]> {
+): Promise<AttendanceSessionView[]> {
   return db
-    .select()
+    .select(SESSION_VIEW_COLUMNS)
     .from(attendanceSessions)
     .where(eq(attendanceSessions.userId, userId))
     .orderBy(desc(attendanceSessions.clockInAt))
@@ -68,9 +104,9 @@ export async function fetchMyRecentSessions(
  * timezone-of-server never leaks into the UI.
  */
 export type MyTodayStatus = {
-  openSession: AttendanceSession | null;
+  openSession: AttendanceSessionView | null;
   openBreak: AttendanceBreakSession | null;
-  todaySessions: AttendanceSession[];
+  todaySessions: AttendanceSessionView[];
   todayBreaks: AttendanceBreakSession[];
 };
 
@@ -79,7 +115,7 @@ export async function fetchMyTodayStatus(userId: string): Promise<MyTodayStatus>
   startOfDay.setHours(0, 0, 0, 0);
 
   const todaySessions = await db
-    .select()
+    .select(SESSION_VIEW_COLUMNS)
     .from(attendanceSessions)
     .where(
       and(eq(attendanceSessions.userId, userId), gte(attendanceSessions.clockInAt, startOfDay)),
@@ -96,7 +132,7 @@ export async function fetchMyTodayStatus(userId: string): Promise<MyTodayStatus>
 }
 
 export type AttendanceRow = {
-  session: AttendanceSession;
+  session: AttendanceSessionView;
   userName: string;
   userEmail: string;
   /** Every break belonging to this session (open or closed). */
@@ -104,7 +140,7 @@ export type AttendanceRow = {
 };
 
 async function attachBreaks(
-  rows: Array<{ session: AttendanceSession; userName: string; userEmail: string }>,
+  rows: Array<{ session: AttendanceSessionView; userName: string; userEmail: string }>,
 ): Promise<AttendanceRow[]> {
   if (rows.length === 0) return [];
   const breaks = await fetchBreaksForSessions(rows.map((r) => r.session.id));
@@ -119,11 +155,12 @@ async function attachBreaks(
 
 export async function fetchTodayAttendance(): Promise<AttendanceRow[]> {
   await requireInternalStaff();
+  await requireHrBoardView();
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
   const rows = await db
     .select({
-      session: attendanceSessions,
+      session: SESSION_VIEW_COLUMNS,
       userName: users.fullName,
       userEmail: users.email,
     })
@@ -145,13 +182,14 @@ export async function fetchRecentAttendance(opts?: {
   to?: Date;
 }): Promise<AttendanceRow[]> {
   await requireInternalStaff();
+  await requireHrBoardView();
   const limit = opts?.limit ?? 50;
   const conditions = [];
   if (opts?.from) conditions.push(gte(attendanceSessions.clockInAt, opts.from));
   if (opts?.to) conditions.push(lt(attendanceSessions.clockInAt, opts.to));
   const rows = await db
     .select({
-      session: attendanceSessions,
+      session: SESSION_VIEW_COLUMNS,
       userName: users.fullName,
       userEmail: users.email,
     })
@@ -181,7 +219,7 @@ export type TeamReportRow = {
   userId: string;
   userName: string;
   userEmail: string;
-  latestSession: AttendanceSession | null;
+  latestSession: AttendanceSessionView | null;
   /** If the report is currently on a break, this is that open break. */
   openBreak: AttendanceBreakSession | null;
 };
@@ -206,7 +244,7 @@ export async function fetchDirectReports(managerUserId: string): Promise<TeamRep
   const enriched = await Promise.all(
     reportRows.map(async (r) => {
       const [latest] = await db
-        .select()
+        .select(SESSION_VIEW_COLUMNS)
         .from(attendanceSessions)
         .where(eq(attendanceSessions.userId, r.userId))
         .orderBy(desc(attendanceSessions.clockInAt))
@@ -239,6 +277,7 @@ export async function fetchDirectReports(managerUserId: string): Promise<TeamRep
 
 export async function fetchStaffDirectory(): Promise<StaffDirectoryRow[]> {
   await requireInternalStaff();
+  await requireHrBoardView();
   // Alias join for manager. Drizzle needs an alias when joining the
   // same table twice — use raw SQL for the manager LEFT JOIN.
   const rows = await db
@@ -278,6 +317,7 @@ export type WorkingNowRow = {
 
 export async function fetchStaffCurrentlyWorking(): Promise<WorkingNowRow[]> {
   await requireInternalStaff();
+  await requireHrBoardView();
   // One SQL: open attendance sessions LEFT JOIN open break session per
   // session. Ordered by clock-in ascending so the earliest arrivers show
   // at the top (matches "punch card" mental model).
@@ -305,6 +345,7 @@ export async function fetchStaffCurrentlyWorking(): Promise<WorkingNowRow[]> {
 
 export async function fetchHrDashboard(): Promise<HrDashboard> {
   await requireInternalStaff();
+  await requireHrBoardView();
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
   const yesterday = new Date();

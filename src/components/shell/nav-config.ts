@@ -105,9 +105,10 @@ export const WORKSPACES: Record<Business, WorkspaceConfig> = {
             module: 'activities',
           },
           { label: 'HR Board', href: '/hr/admin', icon: Users2, module: 'hr_board' },
-          // Who's clocked in right now — complements HR Board (full timesheet
-          // review) with the live roll-call owners want at a glance.
-          { label: 'Team on duty', href: '/hr/team', icon: Users, module: 'hr_board' },
+          // The caller's direct reports and their latest attendance (owner
+          // decision 31 Oct 2026: labelled "My team"; a clocked-in-only
+          // "Team on duty" view is a separate, unapproved change).
+          { label: 'My team', href: '/hr/team', icon: Users, module: 'hr_board' },
           { label: 'Admin', href: '/admin', icon: UserCog, module: 'admin' },
           // Operational payments list. Previously labelled "Accounts" which
           // collided with the Accounting (GL) entry one line below. Session 41

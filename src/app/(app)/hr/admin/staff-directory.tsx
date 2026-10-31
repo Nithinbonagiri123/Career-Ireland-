@@ -1,10 +1,12 @@
 'use client';
 
+import { format } from 'date-fns';
 import { Pencil } from 'lucide-react';
 import { useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { FOCUS_RING } from '@/components/ds/segmented';
+import { DsEnumPill } from '@/components/ds/status-pill';
+import { DS_ROW, DS_ROW_LIST } from '@/components/ds/workspace';
 import { Button } from '@/components/ui/button';
-import { statusTone } from '@/lib/ui/status-tone';
 import type { StaffDirectoryRow } from '@/modules/hr/service';
 import { type ManagerOption, StaffProfileDialog } from './staff-profile-dialog';
 
@@ -26,25 +28,25 @@ export function StaffDirectory({
 
   return (
     <>
-      <ul className="divide-y rounded-md border">
+      <ul aria-label="Staff directory" className={DS_ROW_LIST}>
         {rows.map((s) => (
-          <li key={s.profile.id} className="flex items-center justify-between px-3 py-2.5">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">{s.userName}</p>
-              <p className="text-[11px] text-muted-foreground">
+          <li key={s.profile.id} className={DS_ROW}>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-foreground">{s.userName}</p>
+              <p className="text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
                 {s.userEmail}
                 {s.profile.department ? ` · ${s.profile.department}` : ''}
                 {s.profile.position ? ` · ${s.profile.position}` : ''}
                 {s.managerName ? ` · reports to ${s.managerName}` : ''}
+                {s.profile.joiningDate ? ` · joined ${formatJoining(s.profile.joiningDate)}` : ''}
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={statusTone(s.profile.status)} className="rounded-full">
-                {s.profile.status.replace(/_/g, ' ')}
-              </Badge>
+              <DsEnumPill status={s.profile.status} />
               <Button
                 variant="ghost"
                 size="icon-sm"
+                className={FOCUS_RING}
                 aria-label={`Edit HR profile for ${s.userName}`}
                 onClick={() =>
                   setTarget({
@@ -55,7 +57,7 @@ export function StaffDirectory({
                   })
                 }
               >
-                <Pencil className="size-3.5" />
+                <Pencil className="size-3.5" aria-hidden />
               </Button>
             </div>
           </li>
@@ -70,4 +72,11 @@ export function StaffDirectory({
       />
     </>
   );
+}
+
+/** Joining date is a calendar date (YYYY-MM-DD) — shown as "3 Mar 2025". */
+function formatJoining(isoDay: string): string {
+  const [y, m, d] = isoDay.split('-').map(Number);
+  if (!y || !m || !d) return isoDay;
+  return format(new Date(y, m - 1, d), 'd MMM yyyy');
 }

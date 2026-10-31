@@ -15,8 +15,9 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { AttendanceSession } from '@/lib/db/schema/hr';
+import { Textarea } from '@/components/ui/textarea';
 import { correctAttendanceAction } from '@/modules/hr/actions';
+import type { AttendanceSessionView } from '@/modules/hr/service';
 
 /**
  * Admin correction dialog. Controlled — parent owns the target so
@@ -27,7 +28,7 @@ export function CorrectionDialog({
   target,
   onOpenChange,
 }: {
-  target: AttendanceSession | null;
+  target: AttendanceSessionView | null;
   onOpenChange: (next: boolean) => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -78,9 +79,9 @@ export function CorrectionDialog({
           <DialogTitle>Correct attendance</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 text-sm">
-          <p className="text-xs text-muted-foreground">
-            Adjust the clock-in or clock-out timestamp. Every correction is written to the audit log
-            with your reason so the trail stays intact.
+          <p id="correction-help" className="text-xs text-muted-foreground">
+            Adjust the clock-in or clock-out time. Each correction is recorded in the audit log with
+            your reason. Times are in {timeZoneLabel()}.
           </p>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-1.5">
@@ -88,6 +89,7 @@ export function CorrectionDialog({
               <Input
                 id="clock-in"
                 type="datetime-local"
+                aria-describedby="correction-help"
                 value={clockInAt}
                 onChange={(e) => setClockInAt(e.currentTarget.value)}
               />
@@ -97,27 +99,35 @@ export function CorrectionDialog({
               <Input
                 id="clock-out"
                 type="datetime-local"
+                aria-describedby="clock-out-hint correction-help"
                 value={clockOutAt}
                 onChange={(e) => setClockOutAt(e.currentTarget.value)}
               />
-              <p className="text-[11px] text-muted-foreground">
-                Leave blank to keep the session open.
+              <p id="clock-out-hint" className="text-[11px] text-muted-foreground">
+                Leave blank to leave the session open (a closed session is re-opened).
               </p>
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="reason">Reason (audited)</Label>
-            <Input
+            <Label htmlFor="reason">Reason (recorded in the audit log)</Label>
+            <Textarea
               id="reason"
+              rows={3}
               value={reason}
               onChange={(e) => setReason(e.currentTarget.value)}
               maxLength={500}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? 'correction-error' : undefined}
               placeholder="e.g. Staff forgot to clock out; verified with manager."
             />
           </div>
           {error && (
-            <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-              <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+            <div
+              id="correction-error"
+              role="alert"
+              className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+            >
+              <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
               <span>{error}</span>
             </div>
           )}
@@ -132,6 +142,15 @@ export function CorrectionDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** The zone `datetime-local` uses here — the browser's (unchanged behaviour). */
+function timeZoneLabel(): string {
+  try {
+    return `your browser's time zone (${Intl.DateTimeFormat().resolvedOptions().timeZone})`;
+  } catch {
+    return "your browser's time zone";
+  }
 }
 
 /** Convert a JS Date to a value the `datetime-local` input can display. */

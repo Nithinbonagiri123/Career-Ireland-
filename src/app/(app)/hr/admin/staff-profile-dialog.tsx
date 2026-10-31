@@ -146,7 +146,7 @@ export function StaffProfileDialog({
           <FormField
             id="sp-manager"
             label="Reporting manager"
-            hint="Feeds /hr/team — direct reports show up under their manager."
+            hint="This person will appear on their manager's My team page."
           >
             <Select
               id="sp-manager"

@@ -1,21 +1,21 @@
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { Coffee, LogIn, LogOut, Pause, Play } from 'lucide-react';
+import { Coffee, LogIn, LogOut, Pause, Play, Timer } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { formatDuration } from '@/components/ds/attendance';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusDot } from '@/components/ui/status-dot';
-import type { AttendanceBreakSession, AttendanceSession } from '@/lib/db/schema/hr';
+import type { AttendanceBreakSession } from '@/lib/db/schema/hr';
 import {
   clockInAction,
   clockOutAction,
   endBreakAction,
   startBreakAction,
 } from '@/modules/hr/actions';
-import type { MyTodayStatus } from '@/modules/hr/service';
+import type { AttendanceSessionView, MyTodayStatus } from '@/modules/hr/service';
 
 /**
  * Today card — the caller sees their current attendance state
@@ -31,9 +31,11 @@ type Status = 'off' | 'working' | 'on_break';
 
 export function ClockPanel({ initial }: { initial: MyTodayStatus }) {
   const router = useRouter();
-  const [openSession, setOpenSession] = useState<AttendanceSession | null>(initial.openSession);
+  const [openSession, setOpenSession] = useState<AttendanceSessionView | null>(initial.openSession);
   const [openBreak, setOpenBreak] = useState<AttendanceBreakSession | null>(initial.openBreak);
-  const [todaySessions, setTodaySessions] = useState<AttendanceSession[]>(initial.todaySessions);
+  const [todaySessions, setTodaySessions] = useState<AttendanceSessionView[]>(
+    initial.todaySessions,
+  );
   const [todayBreaks, setTodayBreaks] = useState<AttendanceBreakSession[]>(initial.todayBreaks);
   const [pending, startTransition] = useTransition();
   const [now, setNow] = useState<Date>(() => new Date());
@@ -114,11 +116,18 @@ export function ClockPanel({ initial }: { initial: MyTodayStatus }) {
   };
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Today</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <section
+      aria-labelledby="clock-today-heading"
+      className="min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5"
+    >
+      <h2
+        id="clock-today-heading"
+        className="mb-4 flex items-center gap-2 text-[15px] font-semibold text-foreground"
+      >
+        <Timer className="size-[18px] shrink-0 text-primary" aria-hidden />
+        Today
+      </h2>
+      <div className="space-y-4">
         <StatusPanel status={status} elapsedMs={primaryTimerMs} />
 
         <AnimatePresence mode="wait" initial={false}>
@@ -179,7 +188,7 @@ export function ClockPanel({ initial }: { initial: MyTodayStatus }) {
           </motion.div>
         </AnimatePresence>
 
-        <div className="grid grid-cols-2 gap-2 rounded-md border bg-muted/30 p-3 text-center">
+        <div className="grid grid-cols-2 gap-2 rounded-xl border border-border/60 bg-muted/30 p-3 text-center">
           <div>
             <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               Worked today
@@ -197,8 +206,8 @@ export function ClockPanel({ initial }: { initial: MyTodayStatus }) {
             </div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 
@@ -227,7 +236,7 @@ function StatusPanel({ status, elapsedMs }: { status: Status; elapsedMs: number 
   return (
     <motion.div
       layout
-      className={`flex items-center gap-3 rounded-md border px-4 py-3 ${cfg.border}`}
+      className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${cfg.border}`}
     >
       <StatusDot tone={cfg.tone} />
       <div className="min-w-0 flex-1">
@@ -246,9 +255,9 @@ function StatusPanel({ status, elapsedMs }: { status: Status; elapsedMs: number 
 }
 
 function computeTodayTotals(
-  sessions: AttendanceSession[],
+  sessions: AttendanceSessionView[],
   breaks: AttendanceBreakSession[],
-  openSession: AttendanceSession | null,
+  openSession: AttendanceSessionView | null,
   openBreak: AttendanceBreakSession | null,
   now: Date,
 ) {
@@ -278,12 +287,4 @@ function formatElapsed(ms: number): string {
   const s = total % 60;
   if (h > 0) return `${h}h ${m}m ${s.toString().padStart(2, '0')}s`;
   return `${m}m ${s.toString().padStart(2, '0')}s`;
-}
-
-function formatDuration(ms: number): string {
-  const total = Math.floor(ms / 60_000);
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  if (h === 0) return `${m}m`;
-  return `${h}h ${m}m`;
 }
