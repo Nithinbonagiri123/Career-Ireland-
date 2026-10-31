@@ -4,6 +4,7 @@ import { DateRangeFilter } from '@/components/date-range-filter';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
 import { requireFinanceRead } from '@/lib/auth/finance-read';
+import { checkPermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
 import { fetchEngagements, fetchPaymentsWorkspace } from '@/modules/commerce/service';
 import { PaymentsWorkspaceView } from './payments-workspace';
@@ -32,10 +33,17 @@ export default async function PaymentsPage({
   // writes `created=all`, which parses to no restriction.
   const effectiveCreated = created ?? (from || to ? undefined : 'month');
   const createdRange = parseDateRangeParams({ created: effectiveCreated, from, to });
-  const [data, engagements] = await Promise.all([
+  const [data, engagements, leadsCs, leadsRec, leadsMain, canViewAccounting] = await Promise.all([
     fetchPaymentsWorkspace(createdRange),
     fetchEngagements(),
+    // Quick-action links are shown only to viewers who can open them —
+    // the same grants the /leads and /admin/accounting pages check.
+    checkPermission('candidate_services', 'leads', 'view'),
+    checkPermission('recruitment', 'leads', 'view'),
+    checkPermission('main', 'leads', 'view'),
+    checkPermission('main', 'accounting', 'view'),
   ]);
+  const canViewLeads = leadsCs || leadsRec || leadsMain;
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
@@ -58,6 +66,8 @@ export default async function PaymentsPage({
           data={data}
           role={session.user.role}
           recordPaymentSlot={<RecordPaymentDialog key="record-payment" engagements={engagements} />}
+          canViewLeads={canViewLeads}
+          canViewAccounting={canViewAccounting}
         />
       </FadeUp>
     </div>

@@ -144,8 +144,9 @@ test.describe('periods', () => {
   test('list page explains the state machine', async ({ page }) => {
     await page.goto('/admin/accounting/periods', { waitUntil: 'networkidle' });
     await expect(page.getByRole('heading', { name: /accounting periods/i })).toBeVisible();
-    // Description references the state transitions
-    await expect(page.getByText(/OPEN.*SOFT_CLOSED.*CLOSED.*LOCKED/i).first()).toBeVisible();
+    // Description references the state transitions (now in plain words:
+    // "Open → Soft closed → Closed → Locked").
+    await expect(page.getByText(/open.*soft[ _]closed.*closed.*locked/i).first()).toBeVisible();
     await shot(page, 'e2e__accounting-periods');
   });
 });

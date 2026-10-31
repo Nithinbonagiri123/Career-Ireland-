@@ -138,7 +138,7 @@ test.describe('Stage 4.1 — final journey', () => {
     await page.getByRole('button', { name: 'Record client acceptance' }).click();
     await page.getByPlaceholder('Required for the audit log').fill('Stage 4.1 journey');
     await page.getByRole('button', { name: 'Mark as accepted' }).click();
-    await expect(page.getByText(/ACCEPTED/).first()).toBeVisible();
+    await expect(page.getByText('Accepted', { exact: true }).first()).toBeVisible();
     await shot(page, '03-pf-accepted');
 
     await page.getByRole('button', { name: 'Record payment' }).click();
@@ -150,7 +150,7 @@ test.describe('Stage 4.1 — final journey', () => {
       timeout: 10_000,
     });
     expect(await page.getByRole('button', { name: 'Verify' }).count()).toBe(0);
-    await expect(page.getByText(/CONVERTED/).first()).toBeVisible();
+    await expect(page.getByText('Converted', { exact: true }).first()).toBeVisible();
     await shot(page, '04-invoice-issued-pf-converted');
 
     // Note: the "Convert → activate candidate" action from the leads-row

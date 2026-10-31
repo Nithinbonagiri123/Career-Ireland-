@@ -1,9 +1,11 @@
 'use client';
 
 import { FileText, Loader2 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { formatMoney } from '@/components/ds/money';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -18,7 +20,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { formatCurrency } from '@/lib/currency';
 import { generateInvoiceAction } from '@/modules/billing/generate-actions';
 import type { InvoiceableService } from '@/modules/billing/read';
 
@@ -201,18 +202,22 @@ export function GenerateInvoiceDialog({
         {services.length === 0 ? (
           <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
             No active {payerMode.toLowerCase()} services in the catalog.{' '}
-            <a href="/admin/services" className="underline">
-              Add one in /admin/services
-            </a>{' '}
+            <Link href="/admin/services" className="underline underline-offset-2">
+              Add a service in Admin → Services
+            </Link>{' '}
             first.
           </div>
         ) : (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="svc" className="text-xs font-medium">
+              <Label htmlFor="gi-service" className="text-xs font-medium">
                 Service
               </Label>
-              <Select id="svc" value={serviceId} onChange={(e) => onServiceChange(e.target.value)}>
+              <Select
+                id="gi-service"
+                value={serviceId}
+                onChange={(e) => onServiceChange(e.target.value)}
+              >
                 {services.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -223,18 +228,18 @@ export function GenerateInvoiceDialog({
 
             {(service?.packages.length ?? 0) > 0 && (
               <div className="space-y-1.5">
-                <Label htmlFor="pkg" className="text-xs font-medium">
+                <Label htmlFor="gi-package" className="text-xs font-medium">
                   Prefill from package (optional)
                 </Label>
                 <Select
-                  id="pkg"
+                  id="gi-package"
                   value={packageId}
                   onChange={(e) => onPackageChange(e.target.value)}
                 >
                   <option value="">— none, enter unit price manually —</option>
                   {service?.packages.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.currencyCode} · {formatCurrency(p.price, p.currencyCode)} · {p.name}
+                      {p.currencyCode} · {formatMoney(p.price, p.currencyCode)} · {p.name}
                     </option>
                   ))}
                 </Select>
@@ -244,13 +249,13 @@ export function GenerateInvoiceDialog({
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
-                <Label htmlFor="qty" className="text-xs font-medium">
+                <Label htmlFor="gi-qty" className="text-xs font-medium">
                   QTY
                 </Label>
                 <Input
-                  id="qty"
+                  id="gi-qty"
                   inputMode="numeric"
                   value={qty}
                   onChange={(e) => setQty(e.target.value.replace(/[^0-9]/g, ''))}
@@ -258,11 +263,11 @@ export function GenerateInvoiceDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="unitPrice" className="text-xs font-medium">
+                <Label htmlFor="gi-unit-price" className="text-xs font-medium">
                   Unit price
                 </Label>
                 <Input
-                  id="unitPrice"
+                  id="gi-unit-price"
                   inputMode="decimal"
                   value={unitPrice}
                   onChange={(e) => setUnitPrice(e.target.value)}
@@ -270,11 +275,11 @@ export function GenerateInvoiceDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="currency" className="text-xs font-medium">
+                <Label htmlFor="gi-currency" className="text-xs font-medium">
                   Currency
                 </Label>
                 <Select
-                  id="currency"
+                  id="gi-currency"
                   value={currency}
                   onChange={(e) => setCurrency(e.target.value)}
                 >
@@ -282,21 +287,21 @@ export function GenerateInvoiceDialog({
                   <option value="ZAR">ZAR</option>
                 </Select>
               </div>
-              <div className="col-span-3 text-[11px] text-muted-foreground">
+              <div className="text-[11px] text-muted-foreground sm:col-span-3">
                 Total = QTY × Unit price. VAT is added on top per the rate set in{' '}
-                <a href="/admin/settings" className="underline">
-                  /admin/settings
-                </a>{' '}
+                <Link href="/admin/settings" className="underline underline-offset-2">
+                  Admin → Settings
+                </Link>{' '}
                 (0% = no VAT row on the printable).
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="descr" className="text-xs font-medium">
+              <Label htmlFor="gi-description" className="text-xs font-medium">
                 Line description (optional)
               </Label>
               <Input
-                id="descr"
+                id="gi-description"
                 value={lineDescription}
                 onChange={(e) => setLineDescription(e.target.value)}
                 placeholder={service?.name ?? 'e.g. CV & Cover Letter'}

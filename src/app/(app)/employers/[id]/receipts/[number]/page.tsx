@@ -1,9 +1,10 @@
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
+import { Receipt } from 'lucide-react';
 import { notFound } from 'next/navigation';
+import { FinanceDocumentShell, ReceiptMeta } from '@/components/billing/finance-document-shell';
 import { ReceiptPrintable } from '@/components/billing/receipt-printable';
+import { DocumentHeader } from '@/components/ds/document-header';
+import { formatMoney } from '@/components/ds/money';
 import { PrintButton } from '@/components/print-button';
-import { buttonVariants } from '@/components/ui/button';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { fetchReceiptForPrint } from '@/modules/billing/read';
 import { fetchAppSettings } from '@/modules/settings/service';
@@ -26,19 +27,42 @@ export default async function EmployerReceiptPrintPage({
     ? `${employer.legalName} (t/a ${employer.tradingName})`
     : employer.legalName;
   const locationLine = [employer.city, employer.country].filter(Boolean).join(', ');
+  const billingHref = `/employers/${id}?tab=billing`;
+  // Link the invoice only when its page exists for this same payer.
+  const invoiceHref =
+    data.invoice && data.invoice.payerEmployerId === id
+      ? `/employers/${id}/invoices/${data.invoice.number}`
+      : null;
 
   return (
-    <div className="min-h-screen bg-muted/40 print:bg-white">
-      <div className="mx-auto flex max-w-3xl items-center justify-between px-6 pt-6 print:hidden">
-        <Link
-          href={`/employers/${id}`}
-          className={buttonVariants({ variant: 'outline', size: 'sm' })}
-        >
-          <ArrowLeft className="mr-1.5 size-4" /> Back to employer
-        </Link>
-        <PrintButton />
-      </div>
-
+    <FinanceDocumentShell
+      header={
+        <DocumentHeader
+          breadcrumbs={[
+            { label: 'Employers', href: '/employers' },
+            { label: employer.legalName, href: billingHref },
+            { label: data.receipt.number },
+          ]}
+          back={{ href: billingHref, label: 'Back to billing' }}
+          icon={Receipt}
+          tone="green"
+          kind="Receipt"
+          number={data.receipt.number}
+          issuedAt={data.receipt.issuedAt}
+          meta={[
+            <ReceiptMeta
+              key="m"
+              payerName={displayName}
+              amount={formatMoney(data.receipt.amount, data.receipt.currencyCode)}
+              receivedAt={data.receipt.receivedAt}
+              invoiceNumber={data.invoice?.number ?? null}
+              invoiceHref={invoiceHref}
+            />,
+          ]}
+          actions={<PrintButton />}
+        />
+      }
+    >
       <ReceiptPrintable
         receipt={data.receipt}
         payment={data.payment}
@@ -52,6 +76,6 @@ export default async function EmployerReceiptPrintPage({
           ].filter((r): r is { label: string; value: string } => r !== null),
         }}
       />
-    </div>
+    </FinanceDocumentShell>
   );
 }

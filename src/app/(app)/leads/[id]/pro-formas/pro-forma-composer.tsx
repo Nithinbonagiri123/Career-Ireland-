@@ -2,7 +2,7 @@
 
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState, useTransition } from 'react';
+import { useId, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -101,8 +101,12 @@ export function ProFormaComposer({
   existingProposalGroupId?: string | null;
 }) {
   const router = useRouter();
+  const baseId = useId();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  // Inline copy of the last validation / server error (the toast still
+  // fires too) so the message stays next to the form while it's fixed.
+  const [formError, setFormError] = useState<string | null>(null);
 
   const [currency, setCurrency] = useState(initial?.currencyCode ?? 'EUR');
   const [paymentTerms, setPaymentTerms] = useState(initial?.paymentTerms ?? '');
@@ -166,28 +170,34 @@ export function ProFormaComposer({
     if (pack?.currencyCode) setCurrency(pack.currencyCode);
   }
 
+  function fail(message: string) {
+    setFormError(message);
+    toast.error(message);
+  }
+
   function submit() {
+    setFormError(null);
     if (lines.length === 0) {
-      toast.error('Add at least one line');
+      fail('Add at least one line');
       return;
     }
     for (const l of lines) {
       if (!l.serviceCatalogItemId) {
-        toast.error('Every line needs a service');
+        fail('Every line needs a service');
         return;
       }
       if (!l.description.trim()) {
-        toast.error('Every line needs a description');
+        fail('Every line needs a description');
         return;
       }
       const r = parseLine(l);
       if (!r.ok) {
-        toast.error('Every line needs a positive quantity and a non-negative price');
+        fail('Every line needs a positive quantity and a non-negative price');
         return;
       }
     }
     if (mode === 'revise' && reason.trim().length < 3) {
-      toast.error('Please note what changed (min 3 characters)');
+      fail('Please note what changed (min 3 characters)');
       return;
     }
 
@@ -211,7 +221,7 @@ export function ProFormaComposer({
         });
       } else if (mode === 'edit') {
         if (!proFormaInvoiceId) {
-          toast.error('Missing pro forma id');
+          fail('Missing pro forma id');
           return;
         }
         result = await editDraftProFormaAction({
@@ -223,7 +233,7 @@ export function ProFormaComposer({
         });
       } else {
         if (!proFormaInvoiceId) {
-          toast.error('Missing pro forma id');
+          fail('Missing pro forma id');
           return;
         }
         result = await reviseIssuedProFormaAction({
@@ -246,7 +256,7 @@ export function ProFormaComposer({
         setOpen(false);
         router.refresh();
       } else {
-        toast.error(result.error.message);
+        fail(result.error.message);
       }
     });
   }
@@ -261,7 +271,13 @@ export function ProFormaComposer({
         : 'Revise issued pro forma';
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setFormError(null);
+      }}
+    >
       <DialogTrigger
         render={
           <Button variant={triggerVariant} size="sm">
@@ -312,23 +328,34 @@ export function ProFormaComposer({
             </div>
           </div>
 
-          <div className="space-y-2.5">
+          <fieldset className="min-w-0 space-y-2.5">
+            <legend className="sr-only">Line items</legend>
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Line items</Label>
+              <span aria-hidden className="text-sm font-medium">
+                Line items
+              </span>
               <Button variant="ghost" size="sm" type="button" onClick={addLine}>
-                <Plus className="mr-1 h-3.5 w-3.5" /> Add line
+                <Plus className="mr-1 h-3.5 w-3.5" aria-hidden /> Add line
               </Button>
             </div>
             <div className="space-y-2">
-              {lines.map((l) => {
+              {lines.map((l, index) => {
                 const linePreview = parseLine(l);
                 const canRemove = lines.length > 1;
+                const fid = `${baseId}-${l.id}`;
+                const n = index + 1;
                 return (
-                  <div key={l.id} className="rounded-lg border bg-card p-3.5 space-y-3">
+                  <div
+                    key={l.id}
+                    className="space-y-3 rounded-xl border border-border/60 bg-card p-3.5"
+                  >
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1 space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">Service</Label>
+                        <Label htmlFor={`${fid}-service`} className="text-xs text-muted-foreground">
+                          Service <span className="sr-only">(line {n})</span>
+                        </Label>
                         <Select
+                          id={`${fid}-service`}
                           value={l.serviceCatalogItemId}
                           onChange={(e) => onPickService(l.id, e.target.value)}
                         >
@@ -345,33 +372,42 @@ export function ProFormaComposer({
                         type="button"
                         onClick={() => removeLine(l.id)}
                         disabled={!canRemove}
+                        aria-label={`Remove line ${n}`}
                         title={canRemove ? 'Remove line' : 'A pro forma needs at least one line'}
                         className="mt-6 shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-30"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" aria-hidden />
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-[auto_auto_1fr] items-end gap-x-3 gap-y-1.5">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">Qty</Label>
+                    <div className="grid grid-cols-2 items-end gap-x-3 gap-y-2 sm:grid-cols-[auto_auto_1fr]">
+                      <div className="min-w-0 space-y-1.5">
+                        <Label htmlFor={`${fid}-qty`} className="text-xs text-muted-foreground">
+                          Qty <span className="sr-only">(line {n})</span>
+                        </Label>
                         <Input
+                          id={`${fid}-qty`}
                           inputMode="decimal"
                           value={l.quantity}
+                          aria-invalid={!linePreview.ok || undefined}
                           onChange={(e) => updateLine(l.id, { quantity: e.target.value })}
-                          className="w-20 text-right tabular-nums"
+                          className="w-full text-right tabular-nums sm:w-20"
                         />
                       </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-muted-foreground">Unit price</Label>
+                      <div className="min-w-0 space-y-1.5">
+                        <Label htmlFor={`${fid}-price`} className="text-xs text-muted-foreground">
+                          Unit price <span className="sr-only">(line {n})</span>
+                        </Label>
                         <Input
+                          id={`${fid}-price`}
                           inputMode="decimal"
                           value={l.unitPrice}
+                          aria-invalid={!linePreview.ok || undefined}
                           onChange={(e) => updateLine(l.id, { unitPrice: e.target.value })}
-                          className="w-28 text-right tabular-nums"
+                          className="w-full text-right tabular-nums sm:w-28"
                         />
                       </div>
-                      <div className="text-right">
+                      <div className="col-span-2 flex items-baseline justify-between gap-2 sm:col-span-1 sm:block sm:text-right">
                         <div className="text-xs font-medium text-muted-foreground">Subtotal</div>
                         <div
                           className={`text-base font-semibold tabular-nums ${linePreview.ok ? '' : 'text-destructive'}`}
@@ -382,10 +418,12 @@ export function ProFormaComposer({
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">
+                      <Label htmlFor={`${fid}-desc`} className="text-xs text-muted-foreground">
                         Description <span className="text-muted-foreground/70">(on the PDF)</span>
+                        <span className="sr-only"> (line {n})</span>
                       </Label>
                       <Input
+                        id={`${fid}-desc`}
                         value={l.description}
                         onChange={(e) => updateLine(l.id, { description: e.target.value })}
                         maxLength={500}
@@ -396,9 +434,9 @@ export function ProFormaComposer({
                 );
               })}
             </div>
-          </div>
+          </fieldset>
 
-          <div className="flex items-end justify-between gap-4 border-t pt-3">
+          <div className="flex flex-col gap-4 border-t pt-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0 flex-1 space-y-1.5">
               <Label htmlFor="pf-notes" className="text-xs text-muted-foreground">
                 Internal notes <span className="text-muted-foreground/70">(not on the PDF)</span>
@@ -412,7 +450,7 @@ export function ProFormaComposer({
                 placeholder="Context for the team — not shown on the PDF"
               />
             </div>
-            <div className="shrink-0 text-right">
+            <div className="flex shrink-0 items-baseline justify-between gap-3 sm:block sm:text-right">
               <div className="text-xs font-medium text-muted-foreground">Document total</div>
               <div className="text-2xl font-semibold tabular-nums">
                 {formatCurrency(totals.subtotal, currency)}
@@ -431,6 +469,14 @@ export function ProFormaComposer({
                 maxLength={500}
               />
             </div>
+          )}
+          {formError && (
+            <p
+              role="alert"
+              className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+            >
+              {formError}
+            </p>
           )}
         </div>
 

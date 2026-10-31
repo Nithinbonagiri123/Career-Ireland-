@@ -3,6 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus } from 'lucide-react';
 import { useForm } from 'react-hook-form';
+import { formatMoney } from '@/components/ds/money';
 import { FormErrorAlert } from '@/components/form-error-alert';
 import { FormField } from '@/components/form-field';
 import { SubmitButton } from '@/components/submit-button';
@@ -84,7 +85,7 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
             className="w-full justify-center"
             disabled={openEngagements.length === 0}
           >
-            <Plus className="mr-1.5 size-4" /> Record payment
+            <Plus className="mr-1.5 size-4" aria-hidden /> Record payment
           </Button>
         }
       />
@@ -102,7 +103,7 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
             label="Service"
             hint={
               selectedEngagement
-                ? `Agreed ${selectedEngagement.agreedAmount} ${selectedEngagement.currencyCode} · status ${selectedEngagement.status.replace(/_/g, ' ')}`
+                ? `Agreed ${formatMoney(selectedEngagement.agreedAmount, selectedEngagement.currencyCode)} · status ${selectedEngagement.status.replace(/_/g, ' ')}`
                 : undefined
             }
           >
@@ -113,7 +114,7 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
             >
               {openEngagements.map((e) => (
                 <option key={e.id} value={e.id}>
-                  {e.serviceName} — {e.payerLabel} — {e.agreedAmount} {e.currencyCode}
+                  {e.serviceName} — {e.payerLabel} — {formatMoney(e.agreedAmount, e.currencyCode)}
                 </option>
               ))}
             </Select>
@@ -153,11 +154,7 @@ export function RecordPaymentDialog({ engagements }: { engagements: EngagementLi
           </div>
 
           <FormField id="p-ref" label="Proof reference (bank statement id / cash receipt #)">
-            <Input
-              id="p-ref"
-              placeholder="Optional — file uploads land in 5.7"
-              {...register('proofReference')}
-            />
+            <Input id="p-ref" placeholder="Optional" {...register('proofReference')} />
           </FormField>
 
           <FormErrorAlert error={formError} />

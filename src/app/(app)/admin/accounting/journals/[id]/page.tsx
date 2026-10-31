@@ -1,23 +1,18 @@
-import { format } from 'date-fns';
 import { Landmark } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { BalanceCheck } from '@/components/ds/balance-check';
+import { DsTable, DsTBody, DsTd, DsTFoot, DsTHead, DsTh, DsTr } from '@/components/ds/data-table';
+import { DocumentHeader } from '@/components/ds/document-header';
+import { FinanceStatusPill } from '@/components/ds/finance-status';
+import { Money } from '@/components/ds/money';
+import { FOCUS_RING } from '@/components/ds/segmented';
+import { SectionCard } from '@/components/ds/workspace';
 import { FadeUp } from '@/components/motion/motion-primitives';
-import { PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { requirePermission } from '@/lib/auth/session';
-import { formatCurrency } from '@/lib/currency';
-import { statusTone } from '@/lib/ui/status-tone';
+import { cn } from '@/lib/utils';
 import { fetchJournalWithLines } from '@/modules/accounting/read';
+import { ACC_CRUMBS, ACC_PAGE, COL_MD, COL_SM, FLUSH_TABLE, formatDay } from '../../accounting-ui';
 import { ReverseJournalButton } from './reverse-journal-button';
 
 export const dynamic = 'force-dynamic';
@@ -31,61 +26,63 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
 
   const totalDebit = lines.reduce((s, l) => s + Number.parseFloat(l.debit), 0);
   const totalCredit = lines.reduce((s, l) => s + Number.parseFloat(l.credit), 0);
+  // Display-only check on the figures above (cent precision).
+  const balanced = Math.round(totalDebit * 100) === Math.round(totalCredit * 100);
+
+  const meta = [
+    <span key="date">
+      Journal date <strong className="text-foreground">{formatDay(header.journalDate)}</strong>
+      {' · '}By <strong className="text-foreground">{header.createdByName ?? '—'}</strong>
+    </span>,
+    <span key="ccy">
+      Currency <strong className="text-foreground">{header.transactionCurrency}</strong>
+      {header.transactionCurrency !== header.functionalCurrency && (
+        <>
+          {' '}
+          at <strong className="text-foreground">{header.exchangeRate}</strong>
+        </>
+      )}
+    </span>,
+  ];
+  if (header.reversesJournalId && header.reversesJournalNumber) {
+    meta.push(
+      <span key="rev">
+        Reverses{' '}
+        <Link
+          href={`/admin/accounting/journals/${header.reversesJournalId}`}
+          className={cn(
+            'rounded-sm font-mono text-foreground underline underline-offset-2',
+            FOCUS_RING,
+          )}
+        >
+          {header.reversesJournalNumber}
+        </Link>
+      </span>,
+    );
+  }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+    <div className={ACC_PAGE}>
       <FadeUp>
-        <PageHeader
-          icon={Landmark}
-          badge="Journal"
-          title={header.number}
-          description={header.description}
+        <DocumentHeader
           breadcrumbs={[
-            { label: 'Admin', href: '/admin' },
-            { label: 'Accounting', href: '/admin/accounting' },
+            ...ACC_CRUMBS,
             { label: 'Journals', href: '/admin/accounting/journals' },
             { label: header.number },
           ]}
-          meta={
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
-              <Badge variant={statusTone(header.status)} className="rounded-full">
-                {header.status}
-              </Badge>
-              <span>
-                Journal date <strong className="text-foreground">{header.journalDate}</strong>
-              </span>
-              <span>
-                Posted{' '}
-                <strong className="text-foreground">
-                  {header.postedAt ? format(header.postedAt, 'd MMM yyyy · HH:mm') : '—'}
-                </strong>
-              </span>
-              <span>
-                By <strong className="text-foreground">{header.createdByName ?? '—'}</strong>
-              </span>
-              <span>
-                Currency <strong className="text-foreground">{header.transactionCurrency}</strong>
-                {header.transactionCurrency !== header.functionalCurrency && (
-                  <>
-                    {' '}
-                    @ <strong className="text-foreground">{header.exchangeRate}</strong>
-                  </>
-                )}
-              </span>
-              {header.reversesJournalId && header.reversesJournalNumber && (
-                <span>
-                  Reverses{' '}
-                  <Link
-                    href={`/admin/accounting/journals/${header.reversesJournalId}`}
-                    className="font-mono text-foreground underline-offset-2 hover:underline"
-                  >
-                    {header.reversesJournalNumber}
-                  </Link>
-                </span>
-              )}
-            </div>
-          }
-          action={
+          icon={Landmark}
+          kind="Journal"
+          number={header.number}
+          status={<FinanceStatusPill kind="journal" status={header.status} />}
+          issuedAt={header.postedAt}
+          issuedLabel="Posted"
+          meta={[
+            <span key="desc" className="text-sm text-foreground">
+              {header.description}
+            </span>,
+            ...meta,
+          ]}
+          actions={
             header.status === 'POSTED' ? (
               <ReverseJournalButton journalId={header.id} journalNumber={header.number} />
             ) : null
@@ -93,66 +90,91 @@ export default async function JournalDetailPage({ params }: { params: Promise<{ 
         />
       </FadeUp>
 
-      <FadeUp delay={0.05} className="mt-6">
-        <Card>
-          <CardContent className="pt-5">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">#</TableHead>
-                  <TableHead className="w-28">Account</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="w-28">Division</TableHead>
-                  <TableHead className="w-28 text-right">Debit</TableHead>
-                  <TableHead className="w-28 text-right">Credit</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lines.map((l) => (
-                  <TableRow key={l.id}>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
+      <FadeUp delay={0.05} className="mt-5">
+        <SectionCard
+          title="Lines"
+          count={lines.length}
+          action={
+            <BalanceCheck
+              balanced={balanced}
+              difference={totalDebit - totalCredit}
+              currency={header.transactionCurrency}
+            />
+          }
+          bodyClassName="mt-3"
+        >
+          <DsTable
+            label="Journal lines"
+            caption={`Lines of journal ${header.number}`}
+            card={false}
+            minWidth={320}
+            className={FLUSH_TABLE}
+          >
+            <DsTHead>
+              <tr>
+                <DsTh className={cn('w-12', COL_SM)}>#</DsTh>
+                <DsTh className={cn('w-24', COL_SM)}>Account</DsTh>
+                <DsTh>Name</DsTh>
+                <DsTh className={cn('w-32', COL_MD)}>Division</DsTh>
+                <DsTh numeric className="w-32">
+                  Debit
+                </DsTh>
+                <DsTh numeric className="w-32">
+                  Credit
+                </DsTh>
+              </tr>
+            </DsTHead>
+            <DsTBody>
+              {lines.map((l) => {
+                const debit = Number.parseFloat(l.debit);
+                const credit = Number.parseFloat(l.credit);
+                return (
+                  <DsTr key={l.id}>
+                    <DsTd className={cn('font-mono text-xs text-muted-foreground', COL_SM)}>
                       {l.lineNumber}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">{l.accountCode}</TableCell>
-                    <TableCell>
-                      <div className="text-sm">{l.accountName}</div>
+                    </DsTd>
+                    <DsTd className={cn('font-mono text-xs', COL_SM)}>{l.accountCode}</DsTd>
+                    <DsTd>
+                      <div className="text-foreground">{l.accountName}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground md:hidden">
+                        <span className="font-mono sm:hidden">{l.accountCode} · </span>
+                        {l.divisionName ?? 'No division'}
+                      </div>
                       {l.description && (
-                        <div className="text-xs text-muted-foreground">{l.description}</div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">{l.description}</div>
                       )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    </DsTd>
+                    <DsTd className={cn('text-xs text-muted-foreground', COL_MD)}>
                       {l.divisionName ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums">
-                      {Number.parseFloat(l.debit) > 0
-                        ? formatCurrency(Number.parseFloat(l.debit), l.currencyCode)
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums">
-                      {Number.parseFloat(l.credit) > 0
-                        ? formatCurrency(Number.parseFloat(l.credit), l.currencyCode)
-                        : '—'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                <TableRow className="border-t-2">
-                  <TableCell />
-                  <TableCell />
-                  <TableCell className="text-right text-xs font-semibold uppercase tracking-wider">
-                    Totals
-                  </TableCell>
-                  <TableCell />
-                  <TableCell className="text-right text-sm font-semibold tabular-nums">
-                    {formatCurrency(totalDebit, header.transactionCurrency)}
-                  </TableCell>
-                  <TableCell className="text-right text-sm font-semibold tabular-nums">
-                    {formatCurrency(totalCredit, header.transactionCurrency)}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                    </DsTd>
+                    <DsTd numeric>
+                      {debit > 0 ? <Money amount={debit} currency={l.currencyCode} /> : '—'}
+                    </DsTd>
+                    <DsTd numeric>
+                      {credit > 0 ? <Money amount={credit} currency={l.currencyCode} /> : '—'}
+                    </DsTd>
+                  </DsTr>
+                );
+              })}
+            </DsTBody>
+            <DsTFoot>
+              <tr>
+                <td className={COL_SM} />
+                <td className={COL_SM} />
+                <th scope="row" className="px-4 py-3 text-left text-sm font-semibold">
+                  Totals
+                </th>
+                <td className={COL_MD} />
+                <DsTd numeric>
+                  <Money amount={totalDebit} currency={header.transactionCurrency} />
+                </DsTd>
+                <DsTd numeric>
+                  <Money amount={totalCredit} currency={header.transactionCurrency} />
+                </DsTd>
+              </tr>
+            </DsTFoot>
+          </DsTable>
+        </SectionCard>
       </FadeUp>
     </div>
   );

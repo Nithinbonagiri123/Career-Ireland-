@@ -1,28 +1,25 @@
 import { format } from 'date-fns';
-import { Library } from 'lucide-react';
+import { Library, TriangleAlert } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { BalanceCheck } from '@/components/ds/balance-check';
+import { DsTable, DsTBody, DsTd, DsTFoot, DsTHead, DsTh, DsTr } from '@/components/ds/data-table';
+import { Money } from '@/components/ds/money';
+import { AsOfPicker } from '@/components/ds/report-date-picker';
+import { isIsoDay, parseDateParam, toIsoDay } from '@/components/ds/report-dates';
+import { SectionCard } from '@/components/ds/workspace';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { requirePermission } from '@/lib/auth/session';
 import { type BalanceSheetRow, fetchBalanceSheet } from '@/modules/accounting/reports';
+import { ACC_CRUMBS, ACC_PAGE, EmptyLine, FLUSH_TABLE, LEDGER_CURRENCY } from '../accounting-ui';
+import { ReportToolbar } from '../report-toolbar';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Balance sheet at a point in time. Three sections (Assets /
- * Liabilities / Equity) plus a synthetic "Current Year P&L" line that
- * keeps the sheet balanced before a year-end close journal exists.
- *
- * Range is a single date: `?asOf=YYYY-MM-DD`. Default is today.
+ * Balance sheet at a point in time (`?asOf=YYYY-MM-DD`, default today).
+ * Assets / Liabilities / Equity, plus a "Current year profit" line that
+ * keeps the sheet balanced until the year-end close journal posts.
  */
 export default async function BalanceSheetPage({
   searchParams,
@@ -31,70 +28,101 @@ export default async function BalanceSheetPage({
 }) {
   await requirePermission('main', 'accounting', 'view');
   const { asOf } = await searchParams;
-  const asOfDate = asOf ? new Date(asOf) : new Date();
+  const today = new Date();
+  // An invalid `?asOf=` falls back to today instead of throwing.
+  const asOfDate = parseDateParam(asOf, today);
   const bs = await fetchBalanceSheet(asOfDate);
+  const difference =
+    Number.parseFloat(bs.totals.assets) - Number.parseFloat(bs.totals.liabilitiesPlusEquity);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+    <div className={ACC_PAGE}>
       <FadeUp>
         <PageHeader
           icon={Library}
-          badge="Accounting · Report"
+          iconTone="green"
           title="Balance sheet"
-          description={`Position as at ${format(asOfDate, 'd MMM yyyy')}. Assets = Liabilities + Equity; if the balanced badge is red the ledger has drifted.`}
-          breadcrumbs={[
-            { label: 'Admin', href: '/admin' },
-            { label: 'Accounting', href: '/admin/accounting' },
-            { label: 'Balance sheet' },
-          ]}
-          meta={
-            <div className="flex items-center gap-2 text-xs">
-              <Badge
-                variant={bs.totals.balanced ? 'default' : 'destructive'}
-                className="rounded-full"
-              >
-                {bs.totals.balanced ? 'Balanced ✓' : 'UNBALANCED ✗'}
-              </Badge>
-            </div>
+          description={`Position as at ${format(asOfDate, 'd MMM yyyy')}. Assets must equal liabilities plus equity.`}
+          breadcrumbs={[...ACC_CRUMBS, { label: 'Balance sheet' }]}
+        />
+      </FadeUp>
+
+      <FadeUp delay={0.03}>
+        <ReportToolbar
+          picker={<AsOfPicker value={isIsoDay(asOf) ? asOf : toIsoDay(today)} />}
+          status={
+            <BalanceCheck
+              balanced={bs.totals.balanced}
+              difference={difference}
+              currency={LEDGER_CURRENCY}
+            />
           }
         />
       </FadeUp>
 
-      <FadeUp delay={0.05} className="mt-6 space-y-5">
+      <FadeUp delay={0.05} className="space-y-4">
         <Section title="Assets" rows={bs.assets} total={bs.totals.assets} />
         <Section title="Liabilities" rows={bs.liabilities} total={bs.totals.liabilities} />
-        <EquitySection
+        <Section
+          title="Equity"
           rows={bs.equity}
-          currentYearProfit={bs.totals.currentYearProfit}
-          totalEquity={bs.totals.equity}
+          total={bs.totals.equity}
+          totalLabel="Total equity"
+          extraRow={
+            <DsTr>
+              <DsTd className="font-mono text-xs text-muted-foreground">—</DsTd>
+              <DsTd>
+                <div className="text-foreground">Current year profit / (loss)</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  Profit or loss for the year to date. Moves to Retained Earnings at year-end close.
+                </div>
+              </DsTd>
+              <DsTd numeric>
+                <Money
+                  amount={bs.totals.currentYearProfit}
+                  currency={LEDGER_CURRENCY}
+                  tone="negative"
+                />
+              </DsTd>
+            </DsTr>
+          }
         />
 
-        <Card>
-          <CardContent className="space-y-2 pt-5">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold uppercase tracking-wider">Total assets</span>
-              <span className="text-xl font-semibold tabular-nums">{bs.totals.assets}</span>
-            </div>
-            <div className="flex items-center justify-between border-t pt-2">
-              <span className="text-sm font-semibold uppercase tracking-wider">
-                Total liabilities + equity
+        <section
+          aria-label="Balance sheet totals"
+          className="space-y-3 rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-foreground">Total assets</span>
+            <Money
+              amount={bs.totals.assets}
+              currency={LEDGER_CURRENCY}
+              tone="negative"
+              className="text-xl font-semibold"
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+            <span className="text-sm font-semibold text-foreground">
+              Total liabilities + equity
+            </span>
+            <Money
+              amount={bs.totals.liabilitiesPlusEquity}
+              currency={LEDGER_CURRENCY}
+              tone="negative"
+              className="text-xl font-semibold"
+            />
+          </div>
+          {!bs.totals.balanced && (
+            <p className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span>
+                The balance sheet does not balance (difference{' '}
+                <Money amount={difference} currency={LEDGER_CURRENCY} />
+                ). Check the trial balance for the account that drifted.
               </span>
-              <span className="text-xl font-semibold tabular-nums">
-                {bs.totals.liabilitiesPlusEquity}
-              </span>
-            </div>
-            {!bs.totals.balanced && (
-              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
-                Balance sheet does not balance. Difference:{' '}
-                {(
-                  Number.parseFloat(bs.totals.assets) -
-                  Number.parseFloat(bs.totals.liabilitiesPlusEquity)
-                ).toFixed(2)}
-                . Check the Trial Balance for the drifted account.
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            </p>
+          )}
+        </section>
       </FadeUp>
     </div>
   );
@@ -104,112 +132,61 @@ function Section({
   title,
   rows,
   total,
+  totalLabel = 'Total',
+  extraRow,
 }: {
   title: string;
   rows: BalanceSheetRow[];
   total: string;
+  totalLabel?: string;
+  extraRow?: ReactNode;
 }) {
+  const empty = rows.length === 0 && !extraRow;
   return (
-    <Card>
-      <CardContent className="pt-5">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider">{title}</h2>
-        {rows.length === 0 ? (
-          <p className="py-4 text-center text-xs text-muted-foreground">
-            No {title.toLowerCase()} with a non-zero balance yet.
-          </p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-24">Code</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead className="w-36 text-right">Balance</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow key={r.accountCode}>
-                  <TableCell className="font-mono text-xs">{r.accountCode}</TableCell>
-                  <TableCell className="text-sm">{r.accountName}</TableCell>
-                  <TableCell className="text-right text-sm tabular-nums">{r.balance}</TableCell>
-                </TableRow>
-              ))}
-              <TableRow className="border-t-2">
-                <TableCell />
-                <TableCell className="text-right text-xs font-semibold uppercase tracking-wider">
-                  Total
-                </TableCell>
-                <TableCell className="text-right text-sm font-semibold tabular-nums">
-                  {total}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function EquitySection({
-  rows,
-  currentYearProfit,
-  totalEquity,
-}: {
-  rows: BalanceSheetRow[];
-  currentYearProfit: string;
-  totalEquity: string;
-}) {
-  const profitFloat = Number.parseFloat(currentYearProfit);
-  return (
-    <Card>
-      <CardContent className="pt-5">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider">Equity</h2>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-24">Code</TableHead>
-              <TableHead>Account</TableHead>
-              <TableHead className="w-36 text-right">Balance</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+    <SectionCard title={title} bodyClassName="mt-3">
+      {empty ? (
+        <EmptyLine>No {title.toLowerCase()} with a balance on this date.</EmptyLine>
+      ) : (
+        <DsTable
+          label={`${title} table`}
+          caption={`${title} accounts with a balance`}
+          card={false}
+          minWidth={300}
+          className={FLUSH_TABLE}
+        >
+          <DsTHead>
+            <tr>
+              <DsTh className="w-24">Code</DsTh>
+              <DsTh>Account</DsTh>
+              <DsTh numeric className="w-40">
+                Balance
+              </DsTh>
+            </tr>
+          </DsTHead>
+          <DsTBody>
             {rows.map((r) => (
-              <TableRow key={r.accountCode}>
-                <TableCell className="font-mono text-xs">{r.accountCode}</TableCell>
-                <TableCell className="text-sm">{r.accountName}</TableCell>
-                <TableCell className="text-right text-sm tabular-nums">{r.balance}</TableCell>
-              </TableRow>
+              <DsTr key={r.accountCode}>
+                <DsTd className="font-mono text-xs">{r.accountCode}</DsTd>
+                <DsTd className="text-foreground">{r.accountName}</DsTd>
+                <DsTd numeric>
+                  <Money amount={r.balance} currency={LEDGER_CURRENCY} tone="negative" />
+                </DsTd>
+              </DsTr>
             ))}
-            <TableRow>
-              <TableCell className="font-mono text-xs text-muted-foreground">—</TableCell>
-              <TableCell>
-                <span className="text-sm">Current year profit / (loss)</span>
-                <div className="text-[11px] text-muted-foreground">
-                  Synthetic — net of REVENUE / OTHER_INCOME less COST_OF_SALES / EXPENSE /
-                  OTHER_EXPENSE YTD. Posted at year-end to Retained Earnings.
-                </div>
-              </TableCell>
-              <TableCell
-                className={`text-right text-sm tabular-nums ${
-                  profitFloat < 0 ? 'text-destructive' : ''
-                }`}
-              >
-                {currentYearProfit}
-              </TableCell>
-            </TableRow>
-            <TableRow className="border-t-2">
-              <TableCell />
-              <TableCell className="text-right text-xs font-semibold uppercase tracking-wider">
-                Total equity
-              </TableCell>
-              <TableCell className="text-right text-sm font-semibold tabular-nums">
-                {totalEquity}
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+            {extraRow}
+          </DsTBody>
+          <DsTFoot>
+            <tr>
+              <th scope="row" colSpan={2} className="px-4 py-3 text-left text-sm font-semibold">
+                {totalLabel}
+              </th>
+              <DsTd numeric>
+                <Money amount={total} currency={LEDGER_CURRENCY} tone="negative" />
+              </DsTd>
+            </tr>
+          </DsTFoot>
+        </DsTable>
+      )}
+    </SectionCard>
   );
 }

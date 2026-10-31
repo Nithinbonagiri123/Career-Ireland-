@@ -1,28 +1,33 @@
 import { format } from 'date-fns';
 import { TrendingUp } from 'lucide-react';
+import { DsTable, DsTBody, DsTd, DsTFoot, DsTHead, DsTh, DsTr } from '@/components/ds/data-table';
+import { Money } from '@/components/ds/money';
+import { ReportRangePicker } from '@/components/ds/report-date-picker';
+import { isIsoDay, parseDateParam, toIsoDay } from '@/components/ds/report-dates';
+import { SectionCard } from '@/components/ds/workspace';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { requirePermission } from '@/lib/auth/session';
+import { cn } from '@/lib/utils';
 import { fetchProfitLoss, type ProfitLossRow } from '@/modules/accounting/reports';
+import {
+  ACC_CRUMBS,
+  ACC_PAGE,
+  COL_SM,
+  EmptyLine,
+  FLUSH_TABLE,
+  LEDGER_CURRENCY,
+  PHONE_NOTE,
+} from '../accounting-ui';
+import { ReportToolbar } from '../report-toolbar';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Profit & Loss for a date range. Query-string driven: `?from=…&to=…`
- * (ISO dates). Default is the current calendar month.
- *
- * Grouping is `(account, division)` so staff can see revenue by
- * business line without a second report. Totals row underneath each
- * section + top-level Gross / Operating / Net below.
+ * Profit & Loss for a date range (`?from=…&to=…`, ISO dates; default the
+ * current calendar month). Grouped by (account, division) so revenue can
+ * be read per business line; subtotal per section, then Gross /
+ * Operating / Net profit.
  */
 export default async function ProfitLossPage({
   searchParams,
@@ -36,31 +41,40 @@ export default async function ProfitLossPage({
   const defaultFrom = new Date(now.getFullYear(), now.getMonth(), 1);
   const defaultTo = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-  const fromDate = from ? new Date(from) : defaultFrom;
-  const toDate = to ? new Date(to) : defaultTo;
+  // Invalid dates fall back to the default month instead of throwing.
+  const fromDate = parseDateParam(from, defaultFrom);
+  const toDate = parseDateParam(to, defaultTo);
   const pl = await fetchProfitLoss(fromDate, toDate);
+  const range = `${format(fromDate, 'd MMM yyyy')} – ${format(toDate, 'd MMM yyyy')}`;
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+    <div className={ACC_PAGE}>
       <FadeUp>
         <PageHeader
           icon={TrendingUp}
-          badge="Accounting · Report"
+          iconTone="green"
           title="Profit &amp; loss"
-          description={`${format(fromDate, 'd MMM yyyy')} — ${format(toDate, 'd MMM yyyy')}. Revenue, costs, and the resulting net profit from the posted ledger. Pass ?from=YYYY-MM-DD&to=YYYY-MM-DD to change the range.`}
-          breadcrumbs={[
-            { label: 'Admin', href: '/admin' },
-            { label: 'Accounting', href: '/admin/accounting' },
-            { label: 'Profit & loss' },
-          ]}
+          description={`${range}. Revenue, costs and the resulting net profit from the posted ledger.`}
+          breadcrumbs={[...ACC_CRUMBS, { label: 'Profit & loss' }]}
         />
       </FadeUp>
 
-      <FadeUp delay={0.05} className="mt-6 space-y-5">
+      <FadeUp delay={0.03}>
+        <ReportToolbar
+          picker={
+            <ReportRangePicker
+              from={isIsoDay(from) ? from : toIsoDay(defaultFrom)}
+              to={isIsoDay(to) ? to : toIsoDay(defaultTo)}
+            />
+          }
+        />
+      </FadeUp>
+
+      <FadeUp delay={0.05} className="space-y-4">
         <Section title="Revenue" rows={pl.revenue} total={pl.totals.revenue} />
         <Section title="Cost of sales" rows={pl.costOfSales} total={pl.totals.costOfSales} />
 
-        <TotalCard label="Gross profit" amount={pl.totals.grossProfit} tone="emerald" />
+        <ResultCard label="Gross profit" amount={pl.totals.grossProfit} />
 
         <Section
           title="Operating expenses"
@@ -68,7 +82,7 @@ export default async function ProfitLossPage({
           total={pl.totals.operatingExpense}
         />
 
-        <TotalCard label="Operating profit" amount={pl.totals.operatingProfit} tone="emerald" />
+        <ResultCard label="Operating profit" amount={pl.totals.operatingProfit} />
 
         {(pl.otherIncome.length > 0 || pl.otherExpense.length > 0) && (
           <>
@@ -77,12 +91,7 @@ export default async function ProfitLossPage({
           </>
         )}
 
-        <TotalCard
-          label="Net profit"
-          amount={pl.totals.netProfit}
-          tone={Number.parseFloat(pl.totals.netProfit) >= 0 ? 'emerald' : 'red'}
-          large
-        />
+        <ResultCard label="Net profit" amount={pl.totals.netProfit} large />
       </FadeUp>
     </div>
   );
@@ -90,70 +99,92 @@ export default async function ProfitLossPage({
 
 function Section({ title, rows, total }: { title: string; rows: ProfitLossRow[]; total: string }) {
   return (
-    <Card>
-      <CardContent className="pt-5">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider">{title}</h2>
-        {rows.length === 0 ? (
-          <p className="py-4 text-center text-xs text-muted-foreground">No activity.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-24">Code</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead className="w-32">Division</TableHead>
-                <TableHead className="w-32 text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow key={`${r.accountCode}-${r.divisionCode ?? 'none'}`}>
-                  <TableCell className="font-mono text-xs">{r.accountCode}</TableCell>
-                  <TableCell className="text-sm">{r.accountName}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {r.divisionName ?? '—'}
-                  </TableCell>
-                  <TableCell className="text-right text-sm tabular-nums">{r.amount}</TableCell>
-                </TableRow>
-              ))}
-              <TableRow className="border-t-2">
-                <TableCell />
-                <TableCell className="text-right text-xs font-semibold uppercase tracking-wider">
-                  Subtotal
-                </TableCell>
-                <TableCell />
-                <TableCell className="text-right text-sm font-semibold tabular-nums">
-                  {total}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+    <SectionCard title={title} bodyClassName="mt-3">
+      {rows.length === 0 ? (
+        <EmptyLine>No activity in this period.</EmptyLine>
+      ) : (
+        <DsTable
+          label={`${title} table`}
+          caption={`${title} by account and division`}
+          card={false}
+          minWidth={300}
+          className={FLUSH_TABLE}
+        >
+          <DsTHead>
+            <tr>
+              <DsTh className={cn('w-24', COL_SM)}>Code</DsTh>
+              <DsTh>Account</DsTh>
+              <DsTh className={cn('w-36', COL_SM)}>Division</DsTh>
+              <DsTh numeric className="w-36">
+                Amount
+              </DsTh>
+            </tr>
+          </DsTHead>
+          <DsTBody>
+            {rows.map((r) => (
+              <DsTr key={`${r.accountCode}-${r.divisionCode ?? 'none'}`}>
+                <DsTd className={cn('font-mono text-xs', COL_SM)}>{r.accountCode}</DsTd>
+                <DsTd>
+                  <div className="text-foreground">{r.accountName}</div>
+                  <div className={PHONE_NOTE}>
+                    <span className="font-mono">{r.accountCode}</span>
+                    {r.divisionName ? ` · ${r.divisionName}` : ''}
+                  </div>
+                </DsTd>
+                <DsTd className={cn('text-xs text-muted-foreground', COL_SM)}>
+                  {r.divisionName ?? '—'}
+                </DsTd>
+                <DsTd numeric>
+                  <Money amount={r.amount} currency={LEDGER_CURRENCY} tone="negative" />
+                </DsTd>
+              </DsTr>
+            ))}
+          </DsTBody>
+          <DsTFoot>
+            <tr>
+              <td className={COL_SM} />
+              <th scope="row" className="px-4 py-3 text-left text-sm font-semibold">
+                Subtotal
+              </th>
+              <td className={COL_SM} />
+              <DsTd numeric>
+                <Money amount={total} currency={LEDGER_CURRENCY} tone="negative" />
+              </DsTd>
+            </tr>
+          </DsTFoot>
+        </DsTable>
+      )}
+    </SectionCard>
   );
 }
 
-function TotalCard({
+function ResultCard({
   label,
   amount,
-  tone,
   large = false,
 }: {
   label: string;
   amount: string;
-  tone: 'emerald' | 'red';
   large?: boolean;
 }) {
-  const toneClass =
-    tone === 'emerald' ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive';
-  const sizeClass = large ? 'text-3xl' : 'text-2xl';
+  const negative = Number.parseFloat(amount) < 0;
   return (
-    <Card>
-      <CardContent className="flex items-center justify-between py-4">
-        <span className="text-sm font-medium uppercase tracking-wider">{label}</span>
-        <span className={`${sizeClass} font-semibold tabular-nums ${toneClass}`}>{amount}</span>
-      </CardContent>
-    </Card>
+    <div
+      className={cn(
+        'flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-card px-4 py-4 shadow-sm sm:px-5',
+        large ? 'border-primary/30' : 'border-border/60',
+      )}
+    >
+      <span className="text-sm font-semibold text-foreground">{label}</span>
+      <Money
+        amount={amount}
+        currency={LEDGER_CURRENCY}
+        className={cn(
+          'font-semibold',
+          large ? 'text-2xl sm:text-3xl' : 'text-xl sm:text-2xl',
+          negative ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-400',
+        )}
+      />
+    </div>
   );
 }

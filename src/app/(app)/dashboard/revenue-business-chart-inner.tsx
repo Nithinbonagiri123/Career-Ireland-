@@ -13,7 +13,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { formatCurrency } from '@/lib/currency';
+import { formatMoney } from '@/components/ds/money';
+import { cn } from '@/lib/utils';
 import type {
   RevenueServiceRow,
   RevenueSource,
@@ -38,6 +39,13 @@ const SOURCE_META: Record<RevenueSource, { label: string; stroke: string; fill: 
   },
 };
 
+/** Stage 6G card surface (flat, no glass). */
+const CARD = 'min-w-0 rounded-2xl border border-border/60 bg-card shadow-sm';
+
+/** Whole units, as the chart has always shown. */
+const whole = (amount: number, currency: string) =>
+  formatMoney(amount, currency, { decimals: false });
+
 const PIE_PALETTE = [
   'oklch(0.55 0.16 245)', // navy
   'oklch(0.58 0.14 145)', // emerald
@@ -53,8 +61,9 @@ const PIE_PALETTE = [
  * Pie + line combo for a single business (source). The pie shows the
  * revenue MIX inside that business (which services drove the number);
  * the line shows the DAILY revenue trend within the selected range.
- * Both charts are wrapped in the shared `glass-panel` so they inherit
- * the app's frosted look.
+ * Stage 6G: a flat white card. The charts are decorative for screen
+ * readers (aria-hidden); a visually hidden table carries the same
+ * figures so the data is available without seeing the chart.
  *
  * Currency-aware: if the business collected multiple currencies, we
  * render the primary (highest-total) currency's chart and note the
@@ -104,7 +113,7 @@ export function RevenueBusinessChart({
 
   if (!hasData) {
     return (
-      <div className="glass-panel rounded-lg p-6">
+      <section aria-label={`${meta.label} revenue`} className={cn(CARD, 'p-6')}>
         <header className="mb-2 flex items-center gap-2">
           <span
             aria-hidden
@@ -114,12 +123,12 @@ export function RevenueBusinessChart({
           <h3 className="text-sm font-medium">{meta.label}</h3>
         </header>
         <p className="py-4 text-center text-xs text-foreground/55">{emptyLabel}</p>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="glass-panel rounded-lg p-4">
+    <section aria-label={`${meta.label} revenue`} className={cn(CARD, 'p-4')}>
       <header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex items-center gap-2">
           <span
@@ -131,7 +140,7 @@ export function RevenueBusinessChart({
         </div>
         <div className="text-right">
           <div className="text-lg font-semibold leading-none tabular-nums">
-            {formatCurrency(totalRevenue, primaryCurrency, { maximumFractionDigits: 0 })}
+            {whole(totalRevenue, primaryCurrency)}
           </div>
           {otherCurrencies.length > 0 && (
             <div className="mt-0.5 text-[10px] text-foreground/50">
@@ -141,7 +150,49 @@ export function RevenueBusinessChart({
         </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
+      {/* Text alternative for the two charts below. */}
+      <div className="sr-only">
+        <table>
+          <caption>
+            {meta.label} service mix, {primaryCurrency}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Service</th>
+              <th scope="col">Revenue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pieRows.map((r) => (
+              <tr key={r.name}>
+                <td>{r.name}</td>
+                <td>{whole(r.value, primaryCurrency)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <table>
+          <caption>
+            {meta.label} daily revenue, {primaryCurrency}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Day</th>
+              <th scope="col">Revenue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lineRows.map((r) => (
+              <tr key={r.date}>
+                <td>{format(parseISO(r.date), 'd MMM yyyy')}</td>
+                <td>{whole(r.total, primaryCurrency)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-5" aria-hidden>
         {/* Pie — service mix (2 columns) */}
         <div className="sm:col-span-2">
           <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-foreground/60">
@@ -175,9 +226,7 @@ export function RevenueBusinessChart({
                     padding: '4px 8px',
                   }}
                   formatter={(value, name) => [
-                    formatCurrency(Number(value ?? 0), primaryCurrency, {
-                      maximumFractionDigits: 0,
-                    }),
+                    whole(Number(value ?? 0), primaryCurrency),
                     String(name ?? ''),
                   ]}
                 />
@@ -249,12 +298,7 @@ export function RevenueBusinessChart({
                         ? format(parseISO(label), 'EEE, d MMM yyyy')
                         : String(label)
                     }
-                    formatter={(value) => [
-                      formatCurrency(Number(value ?? 0), primaryCurrency, {
-                        maximumFractionDigits: 0,
-                      }),
-                      'Revenue',
-                    ]}
+                    formatter={(value) => [whole(Number(value ?? 0), primaryCurrency), 'Revenue']}
                   />
                   <Area
                     type="monotone"
@@ -273,7 +317,7 @@ export function RevenueBusinessChart({
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 

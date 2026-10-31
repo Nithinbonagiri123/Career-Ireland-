@@ -10,9 +10,11 @@ import {
 } from 'lucide-react';
 import { CsvExportButton } from '@/components/csv-export-button';
 import { DateRangeFilter } from '@/components/date-range-filter';
+import { DsTable, DsTBody, DsTd, DsTHead, DsTh, DsTr } from '@/components/ds/data-table';
+import { formatMoney as formatMoneyDs } from '@/components/ds/money';
+import { DsStatusPill } from '@/components/ds/status-pill';
+import { DS_SOFT } from '@/components/ds/tones';
 import { EmptyState } from '@/components/empty-state';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type {
   DashboardRevenue,
@@ -47,24 +49,13 @@ const STREAM_META: Record<RevenueSource, { label: string; icon: typeof Coins; hr
   immigration: { label: 'Immigration', icon: PlaneTakeoff, href: '/immigration' },
 };
 
-const currencyFormatterCache = new Map<string, Intl.NumberFormat>();
+/** Dashboard summaries show whole units (as before), via the kit formatter. */
 function formatMoney(amount: number, currencyCode: string): string {
-  let fmt = currencyFormatterCache.get(currencyCode);
-  if (!fmt) {
-    try {
-      fmt = new Intl.NumberFormat('en-IE', {
-        style: 'currency',
-        currency: currencyCode,
-        maximumFractionDigits: 0,
-      });
-    } catch {
-      // Fallback for non-ISO or unknown currency codes.
-      fmt = new Intl.NumberFormat('en-IE', { maximumFractionDigits: 0 });
-    }
-    currencyFormatterCache.set(currencyCode, fmt);
-  }
-  return fmt.format(amount);
+  return formatMoneyDs(amount, currencyCode, { decimals: false });
 }
+
+/** Stage 6G card surface used by the stream cards and the empty state. */
+const CARD = 'min-w-0 rounded-2xl border border-border/60 bg-card shadow-sm';
 
 function formatRangeLabel(from: Date, to: Date): string {
   const sameYear = from.getFullYear() === to.getFullYear();
@@ -119,15 +110,13 @@ export function RevenueSection({
       </div>
 
       {!hasRevenue ? (
-        <Card>
-          <CardContent className="py-8">
-            <EmptyState
-              icon={Coins}
-              title="No verified revenue in this range"
-              description="Verified payments in the selected window will roll up here per currency and per stream."
-            />
-          </CardContent>
-        </Card>
+        <div className={cn(CARD, 'px-4 py-8')}>
+          <EmptyState
+            icon={Coins}
+            title="No verified revenue in this range"
+            description="Verified payments in the selected window will roll up here per currency and per stream."
+          />
+        </div>
       ) : (
         <>
           {/* ── Rolled-up totals + MoM delta ──────────────────────── */}
@@ -176,42 +165,45 @@ export function RevenueSection({
                   />
                 )}
               </div>
-              <div className="overflow-hidden rounded-lg glass-panel">
-                <table className="w-full text-sm">
-                  <thead className="border-b bg-muted/20 text-left text-xs uppercase tracking-wider text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-2 font-medium">Service</th>
-                      <th className="px-4 py-2 font-medium">Stream</th>
-                      <th className="px-4 py-2 font-medium">Payments</th>
-                      <th className="px-4 py-2 text-right font-medium">Revenue</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {topServices.map((r) => (
-                      <tr
-                        key={`${r.source}::${r.serviceCode}::${r.currencyCode}`}
-                        className="border-b last:border-b-0 hover:bg-muted/20"
-                      >
-                        <td className="px-4 py-2">
-                          <div className="text-sm font-medium">{r.serviceName}</div>
-                          <div className="text-[11px] text-muted-foreground">{r.serviceCode}</div>
-                        </td>
-                        <td className="px-4 py-2 text-xs">
-                          <Badge variant="outline" className="rounded-full text-[10px]">
-                            {STREAM_META[r.source].label}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-2 text-xs tabular-nums text-muted-foreground">
-                          {r.count}
-                        </td>
-                        <td className="px-4 py-2 text-right text-sm font-medium tabular-nums">
-                          {formatMoney(r.total, r.currencyCode)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {/* Scrolls inside its own region on narrow screens instead of
+                  being clipped by the card. */}
+              <DsTable
+                label="Top services"
+                caption="Top services by verified revenue in the selected range"
+                minWidth={520}
+                testId="revenue-top-services"
+              >
+                <DsTHead>
+                  <tr>
+                    <DsTh>Service</DsTh>
+                    <DsTh>Stream</DsTh>
+                    <DsTh numeric>Payments</DsTh>
+                    <DsTh numeric>Revenue</DsTh>
+                  </tr>
+                </DsTHead>
+                <DsTBody>
+                  {topServices.map((r) => (
+                    <DsTr
+                      key={`${r.source}::${r.serviceCode}::${r.currencyCode}`}
+                      className="hover:bg-muted/30"
+                    >
+                      <DsTd>
+                        <div className="text-sm font-medium text-foreground">{r.serviceName}</div>
+                        <div className="text-[11px] text-muted-foreground">{r.serviceCode}</div>
+                      </DsTd>
+                      <DsTd>
+                        <DsStatusPill tone="slate">{STREAM_META[r.source].label}</DsStatusPill>
+                      </DsTd>
+                      <DsTd numeric className="text-xs text-muted-foreground">
+                        {r.count}
+                      </DsTd>
+                      <DsTd numeric className="font-medium text-foreground">
+                        {formatMoney(r.total, r.currencyCode)}
+                      </DsTd>
+                    </DsTr>
+                  ))}
+                </DsTBody>
+              </DsTable>
             </div>
           )}
         </>
@@ -268,16 +260,17 @@ function StreamCard({ stream }: { stream: RevenueByStream }) {
   const isEmpty = stream.byCurrency.length === 0;
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center gap-2">
-          <div className="flex size-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
-            <Icon className="size-3.5" aria-hidden />
-          </div>
-          <CardTitle className="text-sm">{meta.label}</CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <section aria-label={`${meta.label} revenue`} className={cn(CARD, 'p-4')}>
+      <div className="mb-3 flex items-center gap-2.5">
+        <span
+          aria-hidden
+          className={cn('grid size-8 shrink-0 place-items-center rounded-lg', DS_SOFT.blue)}
+        >
+          <Icon className="size-4" />
+        </span>
+        <h3 className="text-sm font-semibold text-foreground">{meta.label}</h3>
+      </div>
+      <div>
         {isEmpty ? (
           <p className="py-2 text-center text-xs text-foreground/55">No revenue in this range.</p>
         ) : (
@@ -288,7 +281,7 @@ function StreamCard({ stream }: { stream: RevenueByStream }) {
                 className="flex items-baseline justify-between gap-2 text-sm"
               >
                 <span className="text-xs text-muted-foreground">
-                  {c.currencyCode} · {c.count}
+                  {c.currencyCode} · {c.count} payment{c.count === 1 ? '' : 's'}
                 </span>
                 <span className="font-medium tabular-nums">
                   {formatMoney(c.total, c.currencyCode)}
@@ -297,7 +290,7 @@ function StreamCard({ stream }: { stream: RevenueByStream }) {
             ))}
           </ul>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }

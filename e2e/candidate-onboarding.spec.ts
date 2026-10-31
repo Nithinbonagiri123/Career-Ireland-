@@ -137,8 +137,14 @@ test('full happy path: fill form → Create → open invoice and receipt', async
   await expect(page.getByText(/INV-\d{4}-\d{6}/).first()).toBeVisible();
   // Bill-to line shows the candidate we just created. The exact name also
   // appears embedded in the line-description ("Candidate Onboarding —
-  // <name>"), so use exact-match to pin to the Bill-to <div>.
-  await expect(page.getByText(`${firstName} ${lastName}`, { exact: true })).toBeVisible();
+  // <name>"), so use exact-match to pin to the Bill-to cell. Scoped to the
+  // invoice document: the page header's breadcrumb and "Billed to" line
+  // name the candidate too.
+  await expect(
+    page
+      .getByRole('article', { name: 'Invoice document' })
+      .getByText(`${firstName} ${lastName}`, { exact: true }),
+  ).toBeVisible();
 
   // History back returns us to /candidates/<id>?just_created=1 with the
   // success card still mounted — the invoice page's "Back to candidate" link

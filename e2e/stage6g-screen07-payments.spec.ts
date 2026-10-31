@@ -204,8 +204,13 @@ test('stage 6G screen 07 — payments page matches the approved layout', async (
     await expect(page.locator('tbody').getByText(`George Lugalo-${stamp}`).first()).toBeVisible();
     await expect(page.locator('tbody').getByText('Paid').first()).toBeVisible();
     await expect(page.locator('tbody').getByText('Pending').first()).toBeVisible();
-    await expect(page.getByRole('link', { name: /Create Pro Forma/ })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Direct Payment & Convert/ })).toBeVisible();
+    // Quick actions link only to existing pages: pro formas and Direct
+    // Payment & Convert both start from a lead's row on /leads.
+    const quick = page.getByTestId('payments-quick-actions');
+    await expect(quick.getByRole('link', { name: 'Open Leads' })).toHaveAttribute('href', '/leads');
+    await expect(
+      quick.getByText(/Pro formas and Direct Payment & Convert start from a lead/),
+    ).toBeVisible();
     await expect(page.getByText('Recent Activity')).toBeVisible();
     await expect(page.getByText('Payment workflow')).toBeVisible();
     // Let the FadeUp entrance animation finish before capturing.
@@ -217,11 +222,8 @@ test('stage 6G screen 07 — payments page matches the approved layout', async (
 
     // Cards view toggle.
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.getByRole('button', { name: /Cards/ }).click();
-    await expect(page.getByRole('button', { name: /Cards/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await page.getByRole('link', { name: /Cards/ }).click();
+    await expect(page.getByRole('link', { name: /Cards/ })).toHaveAttribute('aria-pressed', 'true');
     await page.waitForTimeout(600);
     await page.screenshot({ path: path.join(SHOTS_DIR, `screen07-cards-${stamp}.png`) });
 

@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { formatMoney } from '@/components/ds/money';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -72,17 +73,17 @@ export function BillPaymentDialog({
         <DialogHeader>
           <DialogTitle>Record payment</DialogTitle>
           <DialogDescription>
-            Posts DR 2000 Accounts Payable / CR 1010 Bank. Bill status flips to PAID if this settles
-            the balance, PARTIALLY_PAID otherwise. Outstanding today:{' '}
-            <span className="font-medium text-foreground">
-              {outstanding} {currencyCode}
+            Posts DR 2000 Accounts Payable / CR 1010 Bank. The bill becomes Paid if this settles the
+            balance, otherwise Partially paid. Outstanding now:{' '}
+            <span className="font-medium text-foreground tabular-nums">
+              {formatMoney(outstanding, currencyCode)}
             </span>
             .
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="pay-date" className="text-xs font-medium">
                 Payment date
@@ -147,9 +148,11 @@ export function BillPaymentDialog({
         </div>
 
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" size="sm" disabled={pending} />} />
+          <DialogClose render={<Button variant="outline" size="sm" disabled={pending} />}>
+            Cancel
+          </DialogClose>
           <Button size="sm" onClick={onSubmit} disabled={pending}>
-            {pending && <Loader2 className="mr-1.5 size-4 animate-spin" />}
+            {pending && <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden />}
             Record payment
           </Button>
         </DialogFooter>

@@ -13,7 +13,7 @@ test('STAFF never sees Verify / Reject on /payments', async ({ page }) => {
     await expect(page.getByRole('menuitem', { name: /Verify|Reject/ })).toHaveCount(0);
     return;
   }
-  const actions = page.getByTestId('payments-table').getByRole('button', { name: 'Actions' });
+  const actions = page.getByTestId('payments-table').getByRole('button', { name: /^Actions for / });
   const n = Math.min(await actions.count(), 3);
   for (let i = 0; i < n; i++) {
     await actions.nth(i).click();

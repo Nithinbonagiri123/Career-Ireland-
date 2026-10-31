@@ -42,7 +42,7 @@ const RevenueBusinessGridInner = dynamic(
 
 function ChartSkeleton() {
   return (
-    <div className="glass-panel rounded-lg p-4">
+    <div className="min-w-0 rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
         <div className="h-4 w-24 rounded bg-muted/60" />
         <div className="h-4 w-16 rounded bg-muted/60" />

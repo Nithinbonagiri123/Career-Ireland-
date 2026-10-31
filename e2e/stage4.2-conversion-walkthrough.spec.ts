@@ -166,7 +166,7 @@ test.describe('Stage 4.2 — lead-to-candidate conversion', () => {
       await page.getByRole('button', { name: 'Record client acceptance' }).click();
       await page.getByPlaceholder('Required for the audit log').fill('Stage 4.2 conversion');
       await page.getByRole('button', { name: 'Mark as accepted' }).click();
-      await expect(page.getByText(/ACCEPTED/).first()).toBeVisible();
+      await expect(page.getByText('Accepted', { exact: true }).first()).toBeVisible();
       await page.getByRole('button', { name: 'Record payment' }).click();
       await page.getByLabel(/^Amount \(EUR\)$/).fill('250.00');
       await page.getByRole('dialog').getByRole('button', { name: 'Record payment' }).click();
@@ -176,7 +176,7 @@ test.describe('Stage 4.2 — lead-to-candidate conversion', () => {
         timeout: 10_000,
       });
       expect(await page.getByRole('button', { name: 'Verify' }).count()).toBe(0);
-      await expect(page.getByText(/CONVERTED/).first()).toBeVisible();
+      await expect(page.getByText('Converted', { exact: true }).first()).toBeVisible();
       await shot(page, '01-pf-converted');
 
       // Independent DB verification: profession transferred, no dupes

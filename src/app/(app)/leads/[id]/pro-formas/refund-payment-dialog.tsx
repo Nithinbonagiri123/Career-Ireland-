@@ -136,14 +136,14 @@ export function RefundPaymentButton({
         <DialogHeader>
           <DialogTitle>Refund payment</DialogTitle>
           <DialogDescription>
-            Returns funds for a verified payment before any official invoice has been issued. Flags
-            the payment as PARTIALLY_REFUNDED or REFUNDED and reduces the pro-forma's paid balance
-            accordingly. Finance only — the action is audited.
+            Returns funds for a verified payment before any official invoice has been issued. Marks
+            the payment as partially refunded or refunded and reduces the pro forma&apos;s paid
+            balance accordingly. Finance only — the action is audited.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-2">
+            <div className="space-y-1.5">
               <Label htmlFor="refund-amount">
                 Amount ({currencyCode})
                 <span className="ml-1 text-xs text-muted-foreground">max {paymentAmount}</span>
@@ -155,7 +155,7 @@ export function RefundPaymentButton({
                 onChange={(e) => setAmount(e.target.value)}
               />
             </div>
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="refund-method">Method</Label>
               <Select
                 id="refund-method"
@@ -168,7 +168,7 @@ export function RefundPaymentButton({
               </Select>
             </div>
           </div>
-          <div>
+          <div className="space-y-1.5">
             <Label htmlFor="refund-ref">
               Refund reference{' '}
               <span className="text-xs text-muted-foreground">(bank line / cash slip)</span>
@@ -181,7 +181,7 @@ export function RefundPaymentButton({
               maxLength={500}
             />
           </div>
-          <div>
+          <div className="space-y-1.5">
             <Label htmlFor="refund-reason">Reason (audited)</Label>
             <Textarea
               id="refund-reason"
@@ -192,16 +192,16 @@ export function RefundPaymentButton({
               maxLength={500}
             />
           </div>
-          <label className="flex cursor-pointer items-start gap-2 rounded-md border bg-amber-50/60 p-3 text-xs dark:bg-amber-950/30">
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-xs dark:border-amber-500/30 dark:bg-amber-950/30">
             <input
               type="checkbox"
               checked={confirmChecked}
               onChange={(e) => setConfirmChecked(e.target.checked)}
-              className="mt-0.5"
+              className="mt-0.5 size-4 shrink-0 accent-sky-600"
             />
             <span>
-              I confirm this refund is authorised by Finance. The payment record is NOT deleted;
-              this writes a <code>pro_forma_payment_refunds</code> row and emits a ledger reversal.
+              I confirm this refund is authorised by Finance. The payment record is NOT deleted; the
+              refund is recorded against it and a matching ledger reversal is posted.
             </span>
           </label>
         </div>

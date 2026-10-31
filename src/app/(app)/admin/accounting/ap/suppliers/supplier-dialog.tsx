@@ -2,7 +2,7 @@
 
 import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useId, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -53,6 +53,9 @@ export function SupplierDialog({
   const [terms, setTerms] = useState(String(initial?.paymentTermsDays ?? 30));
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  // Unique ids: one dialog per supplier row lives on the same page.
+  const uid = useId();
+  const fid = (name: string) => `${uid}-${name}`;
 
   const onSubmit = () => {
     if (!legalName.trim()) {
@@ -87,68 +90,79 @@ export function SupplierDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={trigger} />
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit supplier' : 'Add supplier'}</DialogTitle>
           <DialogDescription>
-            Supplier master record. Payment terms drive bill due-date suggestions; currency acts as
-            the default for new bills (overridable per bill).
+            Supplier master record. Payment terms set the due date on new bills; the currency is the
+            default for new bills and can be changed per bill.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          <Field label="Legal name" htmlFor="legal-name">
+          <Field label="Legal name" htmlFor={fid('legal-name')}>
             <Input
-              id="legal-name"
+              id={fid('legal-name')}
               value={legalName}
               onChange={(e) => setLegalName(e.target.value)}
               placeholder="Acme Legal Services Ltd"
             />
           </Field>
-          <Field label="Trading name (optional)" htmlFor="trading-name">
+          <Field label="Trading name (optional)" htmlFor={fid('trading-name')}>
             <Input
-              id="trading-name"
+              id={fid('trading-name')}
               value={tradingName}
               onChange={(e) => setTradingName(e.target.value)}
             />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Email" htmlFor="email">
-              <Input id="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Email" htmlFor={fid('email')}>
+              <Input
+                id={fid('email')}
+                type="email"
+                autoComplete="off"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </Field>
-            <Field label="Phone" htmlFor="phone">
-              <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <Field label="Phone" htmlFor={fid('phone')}>
+              <Input
+                id={fid('phone')}
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
             </Field>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Tax number" htmlFor="tax-number">
+            <Field label="Tax number" htmlFor={fid('tax-number')}>
               <Input
-                id="tax-number"
+                id={fid('tax-number')}
                 value={taxNumber}
                 onChange={(e) => setTaxNumber(e.target.value)}
               />
             </Field>
-            <Field label="Country (2-letter)" htmlFor="country">
+            <Field label="Country (2-letter)" htmlFor={fid('country')}>
               <Input
-                id="country"
+                id={fid('country')}
                 value={country}
                 onChange={(e) => setCountry(e.target.value.toUpperCase())}
                 maxLength={2}
                 placeholder="IE"
               />
             </Field>
-            <Field label="Currency" htmlFor="currency">
+            <Field label="Currency" htmlFor={fid('currency')}>
               <Input
-                id="currency"
+                id={fid('currency')}
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value.toUpperCase())}
                 maxLength={3}
               />
             </Field>
           </div>
-          <Field label="Payment terms (days)" htmlFor="terms">
+          <Field label="Payment terms (days)" htmlFor={fid('terms')}>
             <Input
-              id="terms"
+              id={fid('terms')}
               inputMode="numeric"
               value={terms}
               onChange={(e) => setTerms(e.target.value.replace(/[^0-9]/g, ''))}
@@ -157,9 +171,11 @@ export function SupplierDialog({
         </div>
 
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" size="sm" disabled={pending} />} />
+          <DialogClose render={<Button variant="outline" size="sm" disabled={pending} />}>
+            Cancel
+          </DialogClose>
           <Button size="sm" onClick={onSubmit} disabled={pending}>
-            {pending && <Loader2 className="mr-1.5 size-4 animate-spin" />}
+            {pending && <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden />}
             {isEdit ? 'Save' : 'Create'}
           </Button>
         </DialogFooter>

@@ -146,7 +146,7 @@ export function RecordInvoicePaymentDialog({
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <input type="hidden" {...register('serviceEngagementId')} />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="rp-amount">Amount</Label>
               <Input
@@ -169,7 +169,7 @@ export function RecordInvoicePaymentDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="rp-method">Method</Label>
               <Select id="rp-method" {...register('method')}>

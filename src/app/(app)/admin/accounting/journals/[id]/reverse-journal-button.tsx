@@ -35,7 +35,7 @@ export function ReverseJournalButton({
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Undo2 className="mr-1.5 size-4" /> Reverse
+        <Undo2 className="mr-1.5 size-4" aria-hidden /> Reverse
       </Button>
       <PromptDialog
         open={open}

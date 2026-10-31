@@ -4,29 +4,29 @@ import { format } from 'date-fns';
 import {
   ArrowDown,
   ArrowUp,
+  BookOpen,
   Check,
   Clock,
   CreditCard,
   FileText,
   Info,
-  LayoutGrid,
   MoreHorizontal,
   Receipt,
-  Table2,
   Wallet,
   X,
+  Zap,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { type ReactNode, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { initialsOf } from '@/components/ds/entity-card';
-import { FilterToolbar } from '@/components/ds/list-controls';
+import { EntityCard, EntityCardGrid, initialsOf } from '@/components/ds/entity-card';
+import { FilterToolbar, ViewToggle } from '@/components/ds/list-controls';
+import { formatMoney, Money } from '@/components/ds/money';
 import { Pagination, paginate } from '@/components/ds/pagination';
-import { SEG_TRAY, segItem } from '@/components/ds/segmented';
 import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
 import { DsStatusPill } from '@/components/ds/status-pill';
-import { DS_SOFT, type DsTone } from '@/components/ds/tones';
+import type { DsTone } from '@/components/ds/tones';
 import { ActivityTimeline, SectionCard } from '@/components/ds/workspace';
 import { PromptDialog } from '@/components/prompt-dialog';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -38,7 +38,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { formatCurrency } from '@/lib/currency';
 import type { UserRole } from '@/lib/db/schema/users';
 import { cn } from '@/lib/utils';
 import { rejectPaymentAction, verifyPaymentAction } from '@/modules/commerce/actions';
@@ -50,9 +49,10 @@ import type { PaymentsTransactionRow, PaymentsWorkspace } from '@/modules/commer
  * verify + reject preserved), and the right rail with quick actions,
  * recent activity and the payment-workflow note.
  *
- * Search (`q`), status (`status`), view (`view=cards`), page and per-page
- * live in the URL so a filtered view is bookmarkable and survives
- * navigation. The created-date range stays on DateRangeFilter's params.
+ * Search (`q`), status (`status`), view (`view=grid`, the kit's value;
+ * the older `view=cards` still opens cards), page and per-page live in the
+ * URL so a filtered view is bookmarkable and survives navigation. The
+ * created-date range stays on DateRangeFilter's params.
  */
 
 const PER_OPTIONS = [8, 20, 50];
@@ -109,11 +109,11 @@ function DeltaLine({ pct }: { pct: number | null }) {
 
 function amountLines(byCurrency: Record<string, string>): { primary: string; extra: string[] } {
   const entries = Object.entries(byCurrency);
-  if (entries.length === 0) return { primary: formatCurrency('0', 'EUR'), extra: [] };
+  if (entries.length === 0) return { primary: formatMoney('0', 'EUR'), extra: [] };
   const [first, ...rest] = entries as [string, string][];
   return {
-    primary: formatCurrency(first[1], first[0]),
-    extra: rest.map(([c, v]) => formatCurrency(v, c)),
+    primary: formatMoney(first[1], first[0]),
+    extra: rest.map(([c, v]) => formatMoney(v, c)),
   };
 }
 
@@ -132,32 +132,37 @@ function TileHint({ extra, children }: { extra?: string[]; children: ReactNode }
   );
 }
 
+/** Unique accessible name for a row's actions menu. */
+function actionsLabel(t: PaymentsTransactionRow): string {
+  const who = t.personName ?? 'unknown candidate';
+  const when = format(new Date(t.dateIso), 'dd MMM yyyy HH:mm');
+  return `Actions for ${who}, ${formatMoney(t.amount, t.currencyCode)}, ${when}`;
+}
+
 export function PaymentsWorkspaceView({
   data,
   role,
   recordPaymentSlot,
+  canViewLeads = false,
+  canViewAccounting = false,
 }: {
   data: PaymentsWorkspace;
   role: UserRole;
   recordPaymentSlot?: ReactNode;
+  /** Quick-action links are shown only where the viewer can open them. */
+  canViewLeads?: boolean;
+  canViewAccounting?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const search = params.get('q') ?? '';
   const status = params.get('status') ?? '';
-  const view: 'table' | 'cards' = params.get('view') === 'cards' ? 'cards' : 'table';
+  const viewParam = params.get('view');
+  const view: 'table' | 'cards' = viewParam === 'grid' || viewParam === 'cards' ? 'cards' : 'table';
   const [busy, setBusy] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<PaymentsTransactionRow | null>(null);
   const [, startTransition] = useTransition();
-
-  const setView = (next: 'table' | 'cards') => {
-    const sp = new URLSearchParams(params.toString());
-    if (next === 'table') sp.delete('view');
-    else sp.set('view', 'cards');
-    const qs = sp.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  };
 
   const verify = (p: PaymentsTransactionRow) => {
     setBusy(p.id);
@@ -226,13 +231,13 @@ export function PaymentsWorkspaceView({
             <Button
               variant="outline"
               size="icon-sm"
-              aria-label="Actions"
+              aria-label={actionsLabel(t)}
               disabled={busy === t.id}
               className="shrink-0"
             />
           }
         >
-          <MoreHorizontal className="size-4" />
+          <MoreHorizontal className="size-4" aria-hidden />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {t.personId && (
@@ -262,50 +267,38 @@ export function PaymentsWorkspaceView({
   const reference = (t: PaymentsTransactionRow) => t.receiptNumber ?? t.proofReference;
 
   const card = (t: PaymentsTransactionRow) => (
-    <article
+    <EntityCard
       key={t.id}
-      className="flex min-w-0 flex-col gap-3 rounded-xl border border-border/70 bg-card p-3.5"
-    >
-      <div className="flex items-start gap-3">
-        <span
-          aria-hidden
-          className={cn(
-            'grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold',
-            DS_SOFT[STATUS_TONE[t.status]],
-          )}
-        >
-          {t.personName ? initialsOf(t.personName) : <CreditCard className="size-4" />}
-        </span>
-        <div className="min-w-0 flex-1">
-          {t.personId ? (
-            <Link
-              href={`/clients/${t.personId}?tab=services-billing`}
-              className="block truncate text-sm font-semibold text-foreground hover:underline"
-            >
-              {t.personName ?? 'Unknown'}
-            </Link>
-          ) : (
-            <p className="truncate text-sm font-semibold text-foreground">
-              {t.personName ?? 'Unknown candidate'}
-            </p>
-          )}
-          <p className="truncate text-xs text-muted-foreground">
-            {t.serviceName} · {t.kind}
-          </p>
-        </div>
-        {rowActions(t)}
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-base font-semibold tabular-nums">
-          {formatCurrency(t.amount, t.currencyCode)}
-        </span>
-        <StatusPill status={t.status} />
-      </div>
-      <p className="text-xs tabular-nums text-muted-foreground">
-        {format(new Date(t.dateIso), 'dd MMM yyyy · HH:mm')}
-        {reference(t) && <> · {reference(t)}</>}
-      </p>
-    </article>
+      ariaLabel={`Payment from ${t.personName ?? 'unknown candidate'}`}
+      avatar={
+        t.personName
+          ? { initials: initialsOf(t.personName), tone: STATUS_TONE[t.status] }
+          : { icon: CreditCard, tone: STATUS_TONE[t.status] }
+      }
+      status={<StatusPill status={t.status} />}
+      menu={rowActions(t)}
+      title={t.personName ?? 'Unknown candidate'}
+      titleHref={t.personId ? `/clients/${t.personId}?tab=services-billing` : undefined}
+      subtitle={`${t.serviceName} · ${t.kind}`}
+      meta={[
+        {
+          key: 'date',
+          icon: Clock,
+          content: (
+            <time dateTime={t.dateIso} className="tabular-nums">
+              {format(new Date(t.dateIso), 'dd MMM yyyy · HH:mm')}
+            </time>
+          ),
+        },
+        { key: 'ref', icon: Receipt, content: reference(t) },
+      ]}
+      stats={[
+        {
+          value: <Money amount={t.amount} currency={t.currencyCode} />,
+          label: 'Amount',
+        },
+      ]}
+    />
   );
 
   return (
@@ -380,27 +373,10 @@ export function PaymentsWorkspaceView({
             title="Transactions"
             count={filtered.length}
             action={
-              // Buttons (not links): the toggle swaps the `view` param in place.
-              // Hidden on phones, which always show cards.
-              <fieldset className={cn(SEG_TRAY, 'm-0 shadow-none max-md:hidden')}>
-                <legend className="sr-only">View as</legend>
-                <button
-                  type="button"
-                  onClick={() => setView('table')}
-                  aria-pressed={view === 'table'}
-                  className={segItem(view === 'table')}
-                >
-                  <Table2 className="size-3.5" aria-hidden /> Table
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView('cards')}
-                  aria-pressed={view === 'cards'}
-                  className={segItem(view === 'cards')}
-                >
-                  <LayoutGrid className="size-3.5" aria-hidden /> Cards
-                </button>
-              </fieldset>
+              // The kit toggle; hidden on phones, which always show cards.
+              <div className="max-md:hidden">
+                <ViewToggle current={view} defaultView="table" />
+              </div>
             }
           >
             {visible.length === 0 ? (
@@ -457,7 +433,7 @@ export function PaymentsWorkspaceView({
                               <span className="block text-xs text-muted-foreground">{t.kind}</span>
                             </td>
                             <td className="whitespace-nowrap py-3 pr-3 text-right font-medium tabular-nums text-foreground">
-                              {formatCurrency(t.amount, t.currencyCode)}
+                              <Money amount={t.amount} currency={t.currencyCode} />
                             </td>
                             <td className="py-3 pr-3">
                               <StatusPill status={t.status} />
@@ -472,14 +448,8 @@ export function PaymentsWorkspaceView({
                     </table>
                   </div>
                 )}
-                <div
-                  className={cn(
-                    'grid grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))] gap-3',
-                    view === 'table' && 'md:hidden',
-                  )}
-                  data-testid="payments-cards"
-                >
-                  {visible.map(card)}
+                <div className={cn(view === 'table' && 'md:hidden')} data-testid="payments-cards">
+                  <EntityCardGrid>{visible.map(card)}</EntityCardGrid>
                 </div>
               </>
             )}
@@ -500,30 +470,46 @@ export function PaymentsWorkspaceView({
 
         {/* ── Right rail ──────────────────────────────────────────── */}
         <div className="space-y-5">
-          <section
-            aria-label="Quick actions"
-            className="space-y-2 rounded-2xl border border-border/60 bg-card p-4 shadow-sm"
+          {/* Links go only to existing pages the viewer can open. Pro formas
+              and Direct Payment & Convert both start from a lead's row on
+              /leads; there is no invoices list — invoices and receipts live
+              on each client's Services & billing tab. */}
+          <SectionCard
+            icon={Zap}
+            title="Quick actions"
+            testId="payments-quick-actions"
+            bodyClassName="space-y-3"
           >
-            <Link href="/leads" className={cn(buttonVariants(), 'w-full justify-center')}>
-              <FileText className="mr-1.5 size-4" aria-hidden />
-              Create Pro Forma
-            </Link>
-            <Link
-              href="/leads"
-              className={cn(buttonVariants({ variant: 'outline' }), 'w-full justify-center')}
-            >
-              <CreditCard className="mr-1.5 size-4" aria-hidden />
-              Direct Payment &amp; Convert
-            </Link>
-            <Link
-              href="/admin/accounting"
-              className={cn(buttonVariants({ variant: 'outline' }), 'w-full justify-center')}
-            >
-              <Receipt className="mr-1.5 size-4" aria-hidden />
-              View Invoices
-            </Link>
+            {canViewLeads && (
+              <div className="space-y-1.5">
+                <Link
+                  href="/leads"
+                  className={cn(buttonVariants(), 'w-full justify-center')}
+                  aria-describedby="payments-qa-leads-hint"
+                >
+                  <FileText className="mr-1.5 size-4" aria-hidden />
+                  Open Leads
+                </Link>
+                <p id="payments-qa-leads-hint" className="text-xs text-muted-foreground">
+                  Pro formas and Direct Payment &amp; Convert start from a lead&rsquo;s row.
+                </p>
+              </div>
+            )}
             {recordPaymentSlot}
-          </section>
+            {canViewAccounting && (
+              <Link
+                href="/admin/accounting"
+                className={cn(buttonVariants({ variant: 'outline' }), 'w-full justify-center')}
+              >
+                <BookOpen className="mr-1.5 size-4" aria-hidden />
+                Accounting ledger
+              </Link>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Invoices and receipts are on each client&rsquo;s Services &amp; billing tab — use
+              &ldquo;View candidate&rdquo; in a row&rsquo;s menu.
+            </p>
+          </SectionCard>
 
           <SectionCard icon={Clock} title="Recent Activity">
             {data.activity.length === 0 ? (
@@ -563,7 +549,7 @@ export function PaymentsWorkspaceView({
         title="Reject payment"
         description={
           rejectTarget
-            ? `${formatCurrency(rejectTarget.amount, rejectTarget.currencyCode)} for ${rejectTarget.serviceName}.`
+            ? `${formatMoney(rejectTarget.amount, rejectTarget.currencyCode)} for ${rejectTarget.serviceName}.`
             : undefined
         }
         label="Reason (audited)"

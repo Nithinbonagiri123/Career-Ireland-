@@ -1,9 +1,10 @@
 import {
-  ArrowRight,
+  AlertTriangle,
   BookOpen,
   CalendarCheck,
   CalendarRange,
   FileClock,
+  Hourglass,
   Landmark,
   Library,
   ListTree,
@@ -13,12 +14,9 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react';
-import Link from 'next/link';
+import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
-import { buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requirePermission } from '@/lib/auth/session';
 import {
   fetchBusinessDivisions,
@@ -26,8 +24,14 @@ import {
   fetchFinancialEvents,
   fetchJournals,
 } from '@/modules/accounting/read';
+import { ACC_PAGE, HubCard } from './accounting-ui';
 
 export const dynamic = 'force-dynamic';
+
+/** Same window the Financial events page lists. */
+const EVENT_WINDOW = 200;
+/** Same window the Journals page lists. */
+const JOURNAL_WINDOW = 100;
 
 export default async function AccountingHubPage() {
   await requirePermission('main', 'accounting', 'view');
@@ -35,200 +39,151 @@ export default async function AccountingHubPage() {
   const [accounts, divisions, journals, events] = await Promise.all([
     fetchChartOfAccounts(),
     fetchBusinessDivisions(),
-    fetchJournals(5),
-    fetchFinancialEvents(5),
+    fetchJournals(JOURNAL_WINDOW),
+    fetchFinancialEvents(EVENT_WINDOW),
   ]);
 
+  // Counts are exact unless a list hit its window; then the hint says so
+  // (the hub used to count only the latest 5 rows without saying so).
+  const journalsCapped = journals.length >= JOURNAL_WINDOW;
   const postedJournals = journals.filter((j) => j.status === 'POSTED').length;
+  const journalHint = journalsCapped
+    ? `In the latest ${JOURNAL_WINDOW} journals`
+    : `Of ${journals.length} journal${journals.length === 1 ? '' : 's'}`;
+  const eventsCapped = events.length >= EVENT_WINDOW;
+  // Event counts are exact unless the list hit its window.
+  const eventScope = eventsCapped ? ` · latest ${EVENT_WINDOW} events` : '';
   const pendingEvents = events.filter(
     (e) => e.status === 'RECEIVED' || e.status === 'PROCESSING',
   ).length;
   const failedEvents = events.filter((e) => e.status === 'FAILED').length;
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+    <div className={ACC_PAGE}>
       <FadeUp>
         <PageHeader
           icon={BookOpen}
-          badge="Accounting · Phase 1"
+          iconTone="blue"
           title="Double-entry ledger"
-          description="Chart of accounts, journals, and financial events. The ledger shadow-records every finance event the operational system emits; nothing in the invoice / payment UI changes."
+          description="Chart of accounts, journals, reports and accounts payable. Every invoice, payment, credit note and bill is recorded in the ledger as a balanced journal."
           breadcrumbs={[{ label: 'Admin', href: '/admin' }, { label: 'Accounting' }]}
         />
       </FadeUp>
 
-      <FadeUp delay={0.05} className="mt-6 mb-8">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
+      <FadeUp delay={0.05} className="mb-6">
+        <StatTileGrid>
+          <StatTile
+            icon={ListTree}
             label="Chart accounts"
-            value={accounts.length.toString()}
-            hint={`${divisions.length} divisions`}
+            value={accounts.length}
+            hint={`${divisions.length} division${divisions.length === 1 ? '' : 's'}`}
           />
-          <StatCard
+          <StatTile
+            icon={Landmark}
+            tone="green"
             label="Posted journals"
-            value={postedJournals.toString()}
-            hint={`${journals.length} shown`}
+            value={postedJournals}
+            hint={journalHint}
           />
-          <StatCard
+          <StatTile
+            icon={Hourglass}
+            tone={pendingEvents > 0 ? 'amber' : 'slate'}
             label="Events in queue"
-            value={pendingEvents.toString()}
-            hint="RECEIVED or PROCESSING"
-            tone={pendingEvents > 0 ? 'warning' : 'default'}
+            value={pendingEvents}
+            hint={`Received or processing${eventScope}`}
           />
-          <StatCard
+          <StatTile
+            icon={AlertTriangle}
+            tone={failedEvents > 0 ? 'rose' : 'slate'}
             label="Failed events"
-            value={failedEvents.toString()}
-            hint="needs manual review"
-            tone={failedEvents > 0 ? 'danger' : 'default'}
+            value={failedEvents}
+            hint={`Need manual review${eventScope}`}
           />
-        </div>
+        </StatTileGrid>
       </FadeUp>
 
       <FadeUp delay={0.1}>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <HubLink
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <HubCard
             href="/admin/accounting/accounts"
             icon={ListTree}
             title="Chart of accounts"
-            description="Browse the chart; see which accounts allow posting."
+            description="Browse the chart and see which accounts accept postings."
             count={`${accounts.length} accounts`}
           />
-          <HubLink
+          <HubCard
             href="/admin/accounting/journals"
             icon={Landmark}
             title="Journals"
-            description="Every balanced posting with drill-down to its lines."
-            count={`${journals.length} recent`}
+            description="Every balanced posting, with its lines."
+            count={`${journals.length}${journalsCapped ? '+' : ''} journal${journals.length === 1 ? '' : 's'}`}
           />
-          <HubLink
+          <HubCard
             href="/admin/accounting/journals?post=1"
             icon={Plus}
+            tone="green"
             title="Post manual journal"
-            description="Admin + Finance only. Debits must equal credits — enforced by DB trigger."
+            description="Admin and Finance only. Debits must equal credits, or nothing is saved."
           />
-          <HubLink
+          <HubCard
             href="/admin/accounting/events"
             icon={FileClock}
+            tone="violet"
             title="Financial events"
-            description="Outbox of events the operational system has emitted. Phase 2 wires these to journal postings."
-            count={`${events.length} recent`}
+            description="Events from invoices, payments, credit notes and bills, and the journal each one produced."
+            count={`${events.length}${eventsCapped ? '+' : ''} event${events.length === 1 ? '' : 's'}`}
           />
-          <HubLink
+          <HubCard
             href="/admin/accounting/trial-balance"
             icon={Scale}
+            tone="teal"
             title="Trial balance"
-            description="Internal consistency check — every POSTED journal line aggregated by account. Debits must equal credits."
+            description="Every posted journal line totalled by account. Debits must equal credits."
           />
-          <HubLink
+          <HubCard
             href="/admin/accounting/profit-loss"
             icon={TrendingUp}
-            title="Profit &amp; loss"
-            description="Revenue, cost of sales, operating expenses and net profit for a period. Reads straight from the ledger."
+            tone="teal"
+            title="Profit & loss"
+            description="Revenue, cost of sales, operating expenses and net profit for a period."
           />
-          <HubLink
+          <HubCard
             href="/admin/accounting/balance-sheet"
             icon={Library}
+            tone="teal"
             title="Balance sheet"
-            description="Assets, liabilities and equity at a point in time. Synthetic current-year profit line keeps the sheet balanced before year-end close."
+            description="Assets, liabilities and equity on a date, including this year's profit to date."
           />
-          <HubLink
+          <HubCard
             href="/admin/accounting/periods"
             icon={CalendarRange}
+            tone="amber"
             title="Periods"
-            description="Month-end lifecycle: OPEN → SOFT_CLOSED → CLOSED → LOCKED. Close is blocked if DRAFT journals remain or the period doesn't balance."
+            description="Month-end: Open → Soft closed → Closed → Locked. A period can't close while draft journals remain or it doesn't balance."
           />
-          <HubLink
+          <HubCard
             href="/admin/accounting/vat"
             icon={Percent}
+            tone="violet"
             title="VAT return"
-            description="Irish VAT3 T1 / T2 / T3 totals for a period, with CSV export of every underlying transaction for Revenue filing."
+            description="Irish VAT3 T1–T4 totals for a period, with a CSV of every transaction behind them."
           />
-          <HubLink
+          <HubCard
             href="/admin/accounting/ap"
             icon={Wallet}
+            tone="rose"
             title="Accounts Payable"
-            description="Supplier master, bills, bill payments, and AP aging. Every bill posts DR Expense / DR VAT Recoverable / CR AP; payments reduce AP against Bank."
+            description="Suppliers, bills, bill payments and AP aging."
           />
-          <HubLink
+          <HubCard
             href="/admin/accounting/year-end"
             icon={CalendarCheck}
+            tone="amber"
             title="Year-end close"
-            description="Zero the P&L accounts into Retained Earnings. ADMIN only. Needed once per fiscal year — after it posts, the Balance Sheet's synthetic current-year-profit line drops to zero."
+            description="Move the year's profit and loss into Retained Earnings. Admin only, once per financial year."
           />
         </div>
       </FadeUp>
     </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  hint,
-  tone = 'default',
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: 'default' | 'warning' | 'danger';
-}) {
-  const toneClass =
-    tone === 'danger'
-      ? 'text-destructive'
-      : tone === 'warning'
-        ? 'text-amber-600 dark:text-amber-400'
-        : 'text-foreground';
-  return (
-    <Card>
-      <CardContent className="pt-5">
-        <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          {label}
-        </div>
-        <div className={`mt-1 text-2xl font-semibold tabular-nums ${toneClass}`}>{value}</div>
-        {hint && <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div>}
-      </CardContent>
-    </Card>
-  );
-}
-
-function HubLink({
-  href,
-  icon: Icon,
-  title,
-  description,
-  count,
-}: {
-  href: string;
-  icon: typeof BookOpen;
-  title: string;
-  description: string;
-  count?: string;
-}) {
-  return (
-    <Card className="transition-colors hover:border-foreground/20">
-      <CardHeader className="flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="flex size-9 items-center justify-center rounded-md bg-muted/60">
-            <Icon className="size-4" />
-          </span>
-          <CardTitle className="text-base">{title}</CardTitle>
-        </div>
-        {count && (
-          <Badge variant="secondary" className="rounded-full text-[10px]">
-            {count}
-          </Badge>
-        )}
-      </CardHeader>
-      <CardContent className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{description}</p>
-        <Link
-          href={href}
-          className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} shrink-0`}
-          aria-label={`Open ${title}`}
-        >
-          Open <ArrowRight className="ml-1.5 size-3.5" />
-        </Link>
-      </CardContent>
-    </Card>
   );
 }

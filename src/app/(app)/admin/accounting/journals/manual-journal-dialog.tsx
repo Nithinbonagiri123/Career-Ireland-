@@ -1,8 +1,8 @@
 'use client';
 
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, Loader2, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useId, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { todayInDublin } from '@/lib/dates';
+import { cn } from '@/lib/utils';
 import { postManualJournalAction } from '@/modules/accounting/actions';
 
 /**
@@ -27,8 +28,8 @@ import { postManualJournalAction } from '@/modules/accounting/actions';
  * accepted before they submit; the server does the check again and the
  * DB-level trigger does it a third time at commit.
  *
- * No draft support in Phase 1 — the form posts straight to POSTED on
- * submit. Admins who need draft/approval use the reversal flow instead.
+ * There is no draft step — the form posts straight to POSTED on submit.
+ * Corrections go through the reversal flow.
  */
 
 type Account = { id: string; code: string; name: string; allowPosting: boolean };
@@ -68,6 +69,7 @@ export function ManualJournalDialog({
   const [currency, setCurrency] = useState('EUR');
   const [lines, setLines] = useState<LineRow[]>([EMPTY_LINE, EMPTY_LINE]);
   const [pending, startTransition] = useTransition();
+  const ids = useId();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally one-shot
   useEffect(() => {
@@ -145,64 +147,87 @@ export function ManualJournalDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={trigger} />
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Post manual journal</DialogTitle>
           <DialogDescription>
-            Debits must equal credits. The DB-level balance trigger enforces this at commit — if the
-            numbers don't tie, nothing is written.
+            Debits must equal credits. If the totals don't match, nothing is saved.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
-              <Label htmlFor="jrn-date" className="text-xs font-medium">
+              <Label htmlFor={`${ids}-date`} className="text-xs font-medium">
                 Journal date
               </Label>
               <Input
-                id="jrn-date"
+                id={`${ids}-date`}
                 type="date"
                 value={journalDate}
                 onChange={(e) => setJournalDate(e.target.value)}
               />
             </div>
-            <div className="space-y-1.5 sm:col-span-1">
-              <Label htmlFor="jrn-ccy" className="text-xs font-medium">
+            <div className="space-y-1.5">
+              <Label htmlFor={`${ids}-ccy`} className="text-xs font-medium">
                 Currency
               </Label>
-              <Select id="jrn-ccy" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              <Select
+                id={`${ids}-ccy`}
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+              >
                 <option value="EUR">EUR</option>
                 <option value="ZAR">ZAR</option>
               </Select>
             </div>
-            <div className="space-y-1.5 sm:col-span-1">
-              <Label className="text-xs font-medium">Lines</Label>
-              <div className="text-sm tabular-nums">
-                <span className={totals.balanced ? 'text-emerald-600' : 'text-destructive'}>
+            <div className="col-span-2 space-y-1.5 sm:col-span-1">
+              <p className="text-xs font-medium text-foreground">Balance</p>
+              <p
+                role="status"
+                aria-live="polite"
+                className={cn(
+                  'flex flex-wrap items-center gap-x-1.5 text-sm tabular-nums',
+                  totals.balanced
+                    ? 'text-emerald-700 dark:text-emerald-400'
+                    : 'text-rose-700 dark:text-rose-300',
+                )}
+              >
+                {totals.balanced ? (
+                  <CheckCircle2 className="size-4 shrink-0" aria-hidden />
+                ) : (
+                  <TriangleAlert className="size-4 shrink-0" aria-hidden />
+                )}
+                <span className="font-semibold">
+                  {totals.balanced ? 'Balanced' : 'Not balanced'}
+                </span>
+                <span className="text-muted-foreground">
                   DR {totals.debit} / CR {totals.credit}
                 </span>
-              </div>
+              </p>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="jrn-desc" className="text-xs font-medium">
+            <Label htmlFor={`${ids}-desc`} className="text-xs font-medium">
               Description
             </Label>
             <Input
-              id="jrn-desc"
+              id={`${ids}-desc`}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="e.g. Opening balance — bank"
             />
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-medium">Journal lines</Label>
+          <fieldset className="min-w-0 space-y-2">
+            <legend className="sr-only">Journal lines</legend>
+            <div className="flex items-center justify-between gap-2">
+              <p aria-hidden className="text-xs font-medium">
+                Journal lines
+              </p>
               <Button variant="outline" size="sm" onClick={addLine}>
-                <Plus className="mr-1.5 size-3.5" /> Add line
+                <Plus className="mr-1.5 size-3.5" aria-hidden /> Add line
               </Button>
             </div>
             <div className="space-y-2">
@@ -210,9 +235,9 @@ export function ManualJournalDialog({
                 <div
                   // biome-ignore lint/suspicious/noArrayIndexKey: lines are rendered in input order; adding/removing shifts indices intentionally
                   key={i}
-                  className="grid grid-cols-12 gap-2 rounded-md border border-border bg-background p-2"
+                  className="grid grid-cols-[1fr_1fr_auto] gap-2 rounded-xl border border-border/70 bg-background p-2 sm:grid-cols-12"
                 >
-                  <div className="col-span-4">
+                  <div className="col-span-3 sm:col-span-4">
                     <Select
                       value={l.accountCode}
                       onChange={(e) => updateLine(i, { accountCode: e.target.value })}
@@ -226,7 +251,7 @@ export function ManualJournalDialog({
                       ))}
                     </Select>
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-3 sm:col-span-2">
                     <Select
                       value={l.divisionCode}
                       onChange={(e) => updateLine(i, { divisionCode: e.target.value })}
@@ -240,7 +265,7 @@ export function ManualJournalDialog({
                       ))}
                     </Select>
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <Input
                       inputMode="decimal"
                       value={l.debit}
@@ -249,7 +274,7 @@ export function ManualJournalDialog({
                       aria-label={`Line ${i + 1} debit`}
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <Input
                       inputMode="decimal"
                       value={l.credit}
@@ -258,7 +283,7 @@ export function ManualJournalDialog({
                       aria-label={`Line ${i + 1} credit`}
                     />
                   </div>
-                  <div className="col-span-2 flex items-center justify-end">
+                  <div className="flex items-center justify-end sm:col-span-2">
                     <Button
                       variant="ghost"
                       size="icon"
@@ -266,19 +291,21 @@ export function ManualJournalDialog({
                       disabled={lines.length <= 2}
                       aria-label={`Delete line ${i + 1}`}
                     >
-                      <Trash2 className="size-3.5" />
+                      <Trash2 className="size-3.5" aria-hidden />
                     </Button>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </fieldset>
         </div>
 
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" size="sm" disabled={pending} />} />
+          <DialogClose render={<Button variant="outline" size="sm" disabled={pending} />}>
+            Cancel
+          </DialogClose>
           <Button size="sm" onClick={onSubmit} disabled={pending || !canSubmit}>
-            {pending && <Loader2 className="mr-1.5 size-4 animate-spin" />}
+            {pending && <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden />}
             Post journal
           </Button>
         </DialogFooter>

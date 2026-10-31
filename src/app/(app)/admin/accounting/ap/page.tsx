@@ -1,24 +1,20 @@
-import { Building2, type FileSpreadsheet, Receipt, Wallet } from 'lucide-react';
+import { AlarmClock, Building2, Layers, Receipt, Wallet } from 'lucide-react';
+import { DsTable, DsTBody, DsTd, DsTHead, DsTh, DsTr } from '@/components/ds/data-table';
+import { Money } from '@/components/ds/money';
+import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
+import { SectionCard } from '@/components/ds/workspace';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { requirePermission } from '@/lib/auth/session';
+import { cn } from '@/lib/utils';
 import { fetchApAging, listSupplierBills, listSuppliers } from '@/modules/ap/service';
+import { ACC_CRUMBS, ACC_PAGE, COL_SM, EmptyLine, FLUSH_TABLE, HubCard } from '../accounting-ui';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * AP hub — four cards + aging snapshot. Deliberately a single page
- * rather than a sub-tree so finance can see suppliers, bills, aging in
- * one view when reviewing the end-of-month position.
+ * AP hub — counts, links to suppliers and bills, and the aging snapshot
+ * on one page so finance can review the month-end position at a glance.
  */
 export default async function ApHubPage() {
   await requirePermission('main', 'accounting', 'view');
@@ -31,158 +27,111 @@ export default async function ApHubPage() {
 
   const outstanding = bills.filter((b) => b.status === 'POSTED' || b.status === 'PARTIALLY_PAID');
   const overdueBuckets = aging.filter((b) => b.label !== 'Current');
+  const overdueBills = overdueBuckets.reduce((n, b) => n + b.billCount, 0);
+  const activeSuppliers = suppliers.filter((s) => s.isActive).length;
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+    <div className={ACC_PAGE}>
       <FadeUp>
         <PageHeader
           icon={Wallet}
-          badge="Accounting · AP"
+          iconTone="pink"
           title="Accounts Payable"
-          description="Supplier master, bills, and bill payments. Every bill emits a shadow-ledger event; the drain posts DR Expense (per bill) / DR VAT Recoverable / CR Accounts Payable; payments post DR AP / CR Bank."
-          breadcrumbs={[
-            { label: 'Admin', href: '/admin' },
-            { label: 'Accounting', href: '/admin/accounting' },
-            { label: 'AP' },
-          ]}
+          description="Suppliers, bills and bill payments. Each bill posts to Expense, VAT recoverable and Accounts payable; each payment reduces Accounts payable against Bank."
+          breadcrumbs={[...ACC_CRUMBS, { label: 'AP' }]}
         />
       </FadeUp>
 
-      <FadeUp
-        delay={0.05}
-        className="mt-6 mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
-      >
-        <StatCard
-          label="Suppliers"
-          value={suppliers.filter((s) => s.isActive).length.toString()}
-          hint={`${suppliers.length} total`}
-        />
-        <StatCard
-          label="Open bills"
-          value={outstanding.length.toString()}
-          hint={`${bills.length} all-time`}
-        />
-        <StatCard
-          label="Overdue"
-          value={overdueBuckets.reduce((n, b) => n + b.billCount, 0).toString()}
-          hint="past due date"
-          tone={overdueBuckets.length > 0 ? 'warning' : 'default'}
-        />
-        <StatCard
-          label="Aging buckets"
-          value={aging.length.toString()}
-          hint="distinct currency / overdue combos"
-        />
+      <FadeUp delay={0.05} className="mb-5">
+        <StatTileGrid>
+          <StatTile
+            icon={Building2}
+            label="Suppliers"
+            value={activeSuppliers}
+            hint={`${suppliers.length} in total`}
+          />
+          <StatTile
+            icon={Receipt}
+            tone="violet"
+            label="Open bills"
+            value={outstanding.length}
+            hint={`${bills.length} bill${bills.length === 1 ? '' : 's'} in total`}
+          />
+          <StatTile
+            icon={AlarmClock}
+            tone={overdueBills > 0 ? 'amber' : 'slate'}
+            label="Overdue"
+            value={overdueBills}
+            hint="Past their due date"
+          />
+          <StatTile
+            icon={Layers}
+            tone="slate"
+            label="Aging buckets"
+            value={aging.length}
+            hint="By currency and days overdue"
+          />
+        </StatTileGrid>
       </FadeUp>
 
-      <FadeUp delay={0.1} className="space-y-5">
-        <HubCard
-          icon={Building2}
-          href="/admin/accounting/ap/suppliers"
-          title="Suppliers"
-          description={`Supplier master — ${suppliers.length} record${suppliers.length === 1 ? '' : 's'}. Add new vendors, edit payment terms, deactivate.`}
-        />
-        <HubCard
-          icon={Receipt}
-          href="/admin/accounting/ap/bills"
-          title="Bills"
-          description="Vendor invoices received. Each posts an Expense + VAT journal and sits in AP until paid. Clicking in opens the detail + record-payment flow."
-        />
+      <FadeUp delay={0.1} className="space-y-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <HubCard
+            icon={Building2}
+            href="/admin/accounting/ap/suppliers"
+            title="Suppliers"
+            description="Add suppliers, edit payment terms and deactivate old ones."
+            count={`${suppliers.length} supplier${suppliers.length === 1 ? '' : 's'}`}
+          />
+          <HubCard
+            icon={Receipt}
+            tone="violet"
+            href="/admin/accounting/ap/bills"
+            title="Bills"
+            description="Supplier invoices received. Open a bill to see its payments and record a new one."
+            count={`${bills.length} bill${bills.length === 1 ? '' : 's'}`}
+          />
+        </div>
 
-        <Card>
-          <CardContent className="pt-5">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider">AP aging</h2>
-            {aging.length === 0 ? (
-              <p className="py-4 text-center text-xs text-muted-foreground">
-                No outstanding bills.
-              </p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Bucket</TableHead>
-                    <TableHead className="w-24">Ccy</TableHead>
-                    <TableHead className="w-24 text-right">Bills</TableHead>
-                    <TableHead className="w-36 text-right">Outstanding</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {aging.map((b) => (
-                    <TableRow key={`${b.label}-${b.currencyCode}`}>
-                      <TableCell className="text-sm">{b.label}</TableCell>
-                      <TableCell className="font-mono text-xs">{b.currencyCode}</TableCell>
-                      <TableCell className="text-right text-sm tabular-nums">
-                        {b.billCount}
-                      </TableCell>
-                      <TableCell className="text-right text-sm font-medium tabular-nums">
-                        {b.outstandingAmount}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+        <SectionCard title="AP aging" bodyClassName="mt-3">
+          {aging.length === 0 ? (
+            <EmptyLine>No outstanding bills.</EmptyLine>
+          ) : (
+            <DsTable
+              label="AP aging table"
+              caption="Outstanding bills by age and currency"
+              card={false}
+              minWidth={300}
+              className={FLUSH_TABLE}
+            >
+              <DsTHead>
+                <tr>
+                  <DsTh>Bucket</DsTh>
+                  <DsTh className={cn('w-24', COL_SM)}>Currency</DsTh>
+                  <DsTh numeric className="w-24">
+                    Bills
+                  </DsTh>
+                  <DsTh numeric className="w-40">
+                    Outstanding
+                  </DsTh>
+                </tr>
+              </DsTHead>
+              <DsTBody>
+                {aging.map((b) => (
+                  <DsTr key={`${b.label}-${b.currencyCode}`}>
+                    <DsTd className="text-foreground">{b.label}</DsTd>
+                    <DsTd className={cn('font-mono text-xs', COL_SM)}>{b.currencyCode}</DsTd>
+                    <DsTd numeric>{b.billCount}</DsTd>
+                    <DsTd numeric className="font-medium">
+                      <Money amount={b.outstandingAmount} currency={b.currencyCode} />
+                    </DsTd>
+                  </DsTr>
+                ))}
+              </DsTBody>
+            </DsTable>
+          )}
+        </SectionCard>
       </FadeUp>
     </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  hint,
-  tone = 'default',
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: 'default' | 'warning' | 'danger';
-}) {
-  const toneClass =
-    tone === 'danger'
-      ? 'text-destructive'
-      : tone === 'warning'
-        ? 'text-amber-600 dark:text-amber-400'
-        : 'text-foreground';
-  return (
-    <Card>
-      <CardContent className="pt-5">
-        <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          {label}
-        </div>
-        <div className={`mt-1 text-2xl font-semibold tabular-nums ${toneClass}`}>{value}</div>
-        {hint && <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div>}
-      </CardContent>
-    </Card>
-  );
-}
-
-function HubCard({
-  icon: Icon,
-  href,
-  title,
-  description,
-}: {
-  icon: typeof FileSpreadsheet;
-  href: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <Card className="transition-colors hover:border-foreground/20">
-      <CardContent className="flex items-start gap-4 pt-5">
-        <span className="mt-1 flex size-10 shrink-0 items-center justify-center rounded-md bg-muted/60">
-          <Icon className="size-5" />
-        </span>
-        <div className="flex-1">
-          <a href={href} className="text-base font-semibold hover:underline">
-            {title}
-          </a>
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-        </div>
-      </CardContent>
-    </Card>
   );
 }

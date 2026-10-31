@@ -1,27 +1,28 @@
 import { ListTree } from 'lucide-react';
+import { DsTable, DsTBody, DsTd, DsTHead, DsTh, DsTr } from '@/components/ds/data-table';
+import { DsStatusPill } from '@/components/ds/status-pill';
+import { SectionCard } from '@/components/ds/workspace';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { requirePermission } from '@/lib/auth/session';
+import { cn } from '@/lib/utils';
 import { fetchChartOfAccounts } from '@/modules/accounting/read';
+import { ACC_CRUMBS, ACC_PAGE, COL_SM, FLUSH_TABLE, PHONE_NOTE } from '../accounting-ui';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * Chart of accounts — read-only in Phase 1. Admins seed the chart via
- * `pnpm tsx scripts/seed-accounting.ts`; a CRUD UI for accounts arrives
- * later (Phase 4) once there's a real need for ops to add accounts
- * mid-year.
- */
+const TYPE_ORDER = [
+  'ASSET',
+  'LIABILITY',
+  'EQUITY',
+  'REVENUE',
+  'COST_OF_SALES',
+  'EXPENSE',
+  'OTHER_INCOME',
+  'OTHER_EXPENSE',
+] as const;
+
+/** Chart of accounts — read-only; the chart is maintained outside the app. */
 export default async function ChartOfAccountsPage() {
   await requirePermission('main', 'accounting', 'view');
   const accounts = await fetchChartOfAccounts();
@@ -32,91 +33,67 @@ export default async function ChartOfAccountsPage() {
     acc[a.type] = bucket;
     return acc;
   }, {});
-  const typeOrder = [
-    'ASSET',
-    'LIABILITY',
-    'EQUITY',
-    'REVENUE',
-    'COST_OF_SALES',
-    'EXPENSE',
-    'OTHER_INCOME',
-    'OTHER_EXPENSE',
-  ] as const;
+  const typeCount = Object.keys(byType).length;
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+    <div className={ACC_PAGE}>
       <FadeUp>
         <PageHeader
           icon={ListTree}
-          badge="Accounting"
+          iconTone="blue"
           title="Chart of accounts"
-          description={`${accounts.length} accounts across ${Object.keys(byType).length} types. Edit the chart by rerunning scripts/seed-accounting.ts — Phase 1 doesn't expose a CRUD UI yet.`}
-          breadcrumbs={[
-            { label: 'Admin', href: '/admin' },
-            { label: 'Accounting', href: '/admin/accounting' },
-            { label: 'Chart of accounts' },
-          ]}
+          description={`${accounts.length} accounts across ${typeCount} type${typeCount === 1 ? '' : 's'}. Posting accounts accept journal lines; summary accounts only group others.`}
+          breadcrumbs={[...ACC_CRUMBS, { label: 'Chart of accounts' }]}
         />
       </FadeUp>
 
-      <FadeUp delay={0.05} className="mt-6 space-y-5">
-        {typeOrder
-          .filter((type) => byType[type]?.length)
-          .map((type) => (
-            <Card key={type}>
-              <CardContent className="pt-5">
-                <div className="mb-3 flex items-center gap-2">
-                  <h2 className="text-sm font-semibold uppercase tracking-wider">
-                    {humanType(type)}
-                  </h2>
-                  <Badge variant="secondary" className="rounded-full text-[10px]">
-                    {byType[type].length}
-                  </Badge>
-                </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-24">Code</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead className="w-24">Currency</TableHead>
-                      <TableHead className="w-24 text-right">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {byType[type].map((a) => (
-                      <TableRow key={a.id}>
-                        <TableCell className="font-mono text-xs">{a.code}</TableCell>
-                        <TableCell>
-                          <div className="text-sm font-medium">{a.name}</div>
-                          {a.description && (
-                            <div className="text-xs text-muted-foreground">{a.description}</div>
-                          )}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {a.currencyCode ?? <span className="text-muted-foreground">any</span>}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {!a.active ? (
-                            <Badge variant="outline" className="rounded-full text-[10px]">
-                              inactive
-                            </Badge>
-                          ) : !a.allowPosting ? (
-                            <Badge variant="secondary" className="rounded-full text-[10px]">
-                              summary
-                            </Badge>
-                          ) : (
-                            <Badge variant="default" className="rounded-full text-[10px]">
-                              posting
-                            </Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          ))}
+      <FadeUp delay={0.05} className="space-y-5">
+        {TYPE_ORDER.filter((type) => byType[type]?.length).map((type) => (
+          <SectionCard key={type} title={humanType(type)} count={byType[type].length}>
+            <DsTable
+              label={`${humanType(type)} accounts`}
+              caption={`${humanType(type)} accounts`}
+              card={false}
+              minWidth={300}
+              className={FLUSH_TABLE}
+            >
+              <DsTHead>
+                <tr>
+                  <DsTh className="w-24">Code</DsTh>
+                  <DsTh>Name</DsTh>
+                  <DsTh className={cn('w-24', COL_SM)}>Currency</DsTh>
+                  <DsTh className="w-28">Status</DsTh>
+                </tr>
+              </DsTHead>
+              <DsTBody>
+                {byType[type].map((a) => (
+                  <DsTr key={a.id}>
+                    <DsTd className="font-mono text-xs">{a.code}</DsTd>
+                    <DsTd>
+                      <div className="font-medium text-foreground">{a.name}</div>
+                      {a.description && (
+                        <div className="mt-0.5 text-xs text-muted-foreground">{a.description}</div>
+                      )}
+                      <div className={PHONE_NOTE}>Currency: {a.currencyCode ?? 'Any'}</div>
+                    </DsTd>
+                    <DsTd className={cn('font-mono text-xs', COL_SM)}>
+                      {a.currencyCode ?? <span className="text-muted-foreground">Any</span>}
+                    </DsTd>
+                    <DsTd>
+                      {!a.active ? (
+                        <DsStatusPill tone="slate">Inactive</DsStatusPill>
+                      ) : !a.allowPosting ? (
+                        <DsStatusPill tone="violet">Summary</DsStatusPill>
+                      ) : (
+                        <DsStatusPill tone="green">Posting</DsStatusPill>
+                      )}
+                    </DsTd>
+                  </DsTr>
+                ))}
+              </DsTBody>
+            </DsTable>
+          </SectionCard>
+        ))}
       </FadeUp>
     </div>
   );
@@ -126,5 +103,5 @@ function humanType(type: string): string {
   return type
     .replace(/_/g, ' ')
     .toLowerCase()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+    .replace(/^\w/, (c) => c.toUpperCase());
 }

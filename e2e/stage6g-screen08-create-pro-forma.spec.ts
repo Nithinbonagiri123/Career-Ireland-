@@ -105,10 +105,10 @@ test('stage 6G screen 08 — create pro forma page matches the approved layout',
     await expect(page.getByRole('link', { name: /Back to Candidate/ })).toBeVisible();
     await expect(page.getByRole('link', { name: /View Profile/ })).toBeVisible();
     // Form cards.
-    await expect(page.getByText('Invoice Details')).toBeVisible();
+    await expect(page.getByText('Pro forma details')).toBeVisible();
     await expect(page.getByLabel('Payment terms')).toBeVisible();
     await expect(page.getByText('Candidate Information')).toBeVisible();
-    await expect(page.getByText('Invoice Summary')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Pro forma summary' })).toBeVisible();
     // Preselected rows total 100 + 200 = 300.
     await expect(page.getByText('€300.00').first()).toBeVisible();
     await expect(

@@ -97,8 +97,8 @@ export function RecordPaymentDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-2">
+            <div className="space-y-1.5">
               <Label htmlFor="pfp-amount">Amount ({currencyCode})</Label>
               <Input
                 id="pfp-amount"
@@ -107,7 +107,7 @@ export function RecordPaymentDialog({
                 onChange={(e) => setAmount(e.target.value)}
               />
             </div>
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="pfp-method">Method</Label>
               <Select
                 id="pfp-method"
@@ -120,7 +120,7 @@ export function RecordPaymentDialog({
               </Select>
             </div>
           </div>
-          <div>
+          <div className="space-y-1.5">
             <Label htmlFor="pfp-received">Received on</Label>
             <Input
               id="pfp-received"
@@ -129,7 +129,7 @@ export function RecordPaymentDialog({
               onChange={(e) => setReceivedAt(e.target.value)}
             />
           </div>
-          <div>
+          <div className="space-y-1.5">
             <Label htmlFor="pfp-ref">Reference (optional)</Label>
             <Input
               id="pfp-ref"

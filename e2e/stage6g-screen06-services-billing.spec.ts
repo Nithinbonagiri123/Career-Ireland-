@@ -254,7 +254,7 @@ test('stage 6G screen 06 — services & billing tab matches the approved layout'
     await page.getByRole('link', { name: 'Create Pro Forma' }).first().click();
     await expect(page).toHaveURL(/create-pro-forma\?services=/, { timeout: 15_000 });
     await expect(page.getByRole('heading', { name: 'Create Pro Forma' })).toBeVisible();
-    await expect(page.getByText('Invoice Summary')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Pro forma summary' })).toBeVisible();
     await page.screenshot({
       path: path.join(SHOTS_DIR, `screen06-to-08-prefill-${stamp}.png`),
     });

@@ -53,23 +53,39 @@ export default async function CreateProFormaPage({
     <div className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8 md:px-10">
       <FadeUp>
         {/* ── Slim candidate hero ────────────────────────────────── */}
-        <nav className="text-xs text-muted-foreground" aria-label="Breadcrumb">
-          <Link href="/candidates" className="hover:text-foreground hover:underline">
-            Candidates
-          </Link>{' '}
-          / <span className="font-medium text-foreground">Create Pro Forma</span>
+        <nav className="text-sm text-muted-foreground" aria-label="Breadcrumb">
+          <ol className="flex flex-wrap items-center gap-1.5">
+            <li>
+              <Link href="/candidates" className="rounded-sm hover:text-foreground hover:underline">
+                Candidates
+              </Link>
+            </li>
+            <li aria-hidden>/</li>
+            <li className="min-w-0">
+              <Link
+                href={`/clients/${personId}`}
+                className="rounded-sm hover:text-foreground hover:underline [overflow-wrap:anywhere]"
+              >
+                {fullName}
+              </Link>
+            </li>
+            <li aria-hidden>/</li>
+            <li aria-current="page" className="font-medium text-foreground">
+              Create pro forma
+            </li>
+          </ol>
         </nav>
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
           <div className="flex min-w-0 items-start gap-4">
             <span
               aria-hidden
-              className="grid size-16 shrink-0 place-items-center rounded-full bg-sky-100 text-xl font-semibold text-sky-700"
+              className="grid size-12 shrink-0 place-items-center rounded-full bg-sky-100 text-lg font-semibold text-sky-700 sm:size-16 sm:text-xl dark:bg-sky-500/15 dark:text-sky-300"
             >
               {initials}
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                <h1 className="text-xl font-semibold tracking-tight text-foreground [overflow-wrap:anywhere] sm:text-2xl">
                   {fullName}
                 </h1>
                 {candidateProfile?.lifecycleStatus === 'ACTIVE' && (
@@ -78,7 +94,7 @@ export default async function CreateProFormaPage({
                   </Badge>
                 )}
               </div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                 {person.email && (
                   <span className="inline-flex items-center gap-1.5">
                     <Mail className="size-3.5" aria-hidden /> {person.email}
@@ -121,17 +137,18 @@ export default async function CreateProFormaPage({
         </div>
 
         {/* ── Page title card ───────────────────────────────────── */}
-        <div className="mt-5 flex items-start gap-3 rounded-xl border bg-card p-4 shadow-sm ring-1 ring-border/60 sm:p-5">
+        <div className="mt-5 flex items-start gap-3 rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:p-5">
           <span
             aria-hidden
-            className="grid size-9 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700"
+            className="grid size-10 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300"
           >
-            <FileText className="size-4.5" />
+            <FileText className="size-5" />
           </span>
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Create Pro Forma</h2>
+            <h2 className="text-lg font-semibold text-foreground">Create pro forma</h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Generate a pro forma invoice for this candidate&apos;s selected services.
+              Prepare a pro forma — a quote, not a tax invoice — for this candidate&apos;s selected
+              services.
             </p>
           </div>
         </div>
@@ -154,7 +171,7 @@ export default async function CreateProFormaPage({
             preselectedIds={preselectedIds}
           />
         ) : (
-          <div className="rounded-xl border bg-card p-8 text-center shadow-sm ring-1 ring-border/60">
+          <div className="rounded-2xl border border-border/60 bg-card p-8 text-center shadow-sm">
             <p className="text-sm text-muted-foreground">
               This candidate has no open Candidate Services lead, so a pro forma can&apos;t be
               raised here. Create a lead first from the Leads page.

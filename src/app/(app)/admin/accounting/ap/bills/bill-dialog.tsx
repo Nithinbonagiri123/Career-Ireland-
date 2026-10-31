@@ -2,7 +2,7 @@
 
 import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState, useTransition } from 'react';
+import { useId, useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -52,6 +52,8 @@ export function BillDialog({
   const [expenseAccount, setExpenseAccount] = useState(expenseAccounts[0]?.code ?? '');
   const [description, setDescription] = useState('');
   const [pending, startTransition] = useTransition();
+  const uid = useId();
+  const fid = (name: string) => `${uid}-${name}`;
 
   const selectedSupplier = suppliers.find((s) => s.id === supplierId);
   // Compute due date = bill date + supplier's payment terms days.
@@ -105,12 +107,13 @@ export function BillDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={trigger} />
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>New supplier bill</DialogTitle>
           <DialogDescription>
-            Posts to the ledger as DR {expenseAccount || '[expense]'} / DR 1050 VAT Recoverable (if
-            tax &gt; 0) / CR 2000 Accounts Payable. Payment is recorded separately.
+            Posts to the ledger: debit the expense account
+            {expenseAccount ? ` ${expenseAccount}` : ''} and 1050 VAT Recoverable (when VAT is above
+            0), credit 2000 Accounts Payable. Record the payment separately.
           </DialogDescription>
         </DialogHeader>
 
@@ -121,11 +124,11 @@ export function BillDialog({
         ) : (
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="supplier" className="text-xs font-medium">
+              <Label htmlFor={fid('supplier')} className="text-xs font-medium">
                 Supplier
               </Label>
               <Select
-                id="supplier"
+                id={fid('supplier')}
                 value={supplierId}
                 onChange={(e) => {
                   setSupplierId(e.target.value);
@@ -142,24 +145,24 @@ export function BillDialog({
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="bill-date" className="text-xs font-medium">
+                <Label htmlFor={fid('bill-date')} className="text-xs font-medium">
                   Bill date
                 </Label>
                 <Input
-                  id="bill-date"
+                  id={fid('bill-date')}
                   type="date"
                   value={billDate}
                   onChange={(e) => setBillDate(e.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="supplier-ref" className="text-xs font-medium">
+                <Label htmlFor={fid('supplier-ref')} className="text-xs font-medium">
                   Supplier invoice ref (optional)
                 </Label>
                 <Input
-                  id="supplier-ref"
+                  id={fid('supplier-ref')}
                   value={supplierRef}
                   onChange={(e) => setSupplierRef(e.target.value)}
                   placeholder="e.g. 2026-003"
@@ -167,13 +170,13 @@ export function BillDialog({
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="space-y-1.5">
-                <Label htmlFor="currency" className="text-xs font-medium">
+                <Label htmlFor={fid('currency')} className="text-xs font-medium">
                   Currency
                 </Label>
                 <Select
-                  id="currency"
+                  id={fid('currency')}
                   value={currency}
                   onChange={(e) => setCurrency(e.target.value)}
                 >
@@ -182,11 +185,11 @@ export function BillDialog({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="subtotal" className="text-xs font-medium">
+                <Label htmlFor={fid('subtotal')} className="text-xs font-medium">
                   Subtotal
                 </Label>
                 <Input
-                  id="subtotal"
+                  id={fid('subtotal')}
                   inputMode="decimal"
                   value={subtotal}
                   onChange={(e) => setSubtotal(e.target.value)}
@@ -194,11 +197,11 @@ export function BillDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="tax" className="text-xs font-medium">
+                <Label htmlFor={fid('tax')} className="text-xs font-medium">
                   VAT
                 </Label>
                 <Input
-                  id="tax"
+                  id={fid('tax')}
                   inputMode="decimal"
                   value={taxAmount}
                   onChange={(e) => setTaxAmount(e.target.value)}
@@ -206,19 +209,25 @@ export function BillDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Total</Label>
-                <div className="rounded-md border border-border bg-muted/40 px-2 py-1.5 text-sm tabular-nums">
+                <Label htmlFor={fid('total')} className="text-xs font-medium">
+                  Total
+                </Label>
+                <output
+                  id={fid('total')}
+                  aria-live="polite"
+                  className="block rounded-md border border-border bg-muted/40 px-2 py-1.5 text-sm tabular-nums"
+                >
                   {total}
-                </div>
+                </output>
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="expense" className="text-xs font-medium">
+              <Label htmlFor={fid('expense')} className="text-xs font-medium">
                 Expense account
               </Label>
               <Select
-                id="expense"
+                id={fid('expense')}
                 value={expenseAccount}
                 onChange={(e) => setExpenseAccount(e.target.value)}
               >
@@ -231,11 +240,11 @@ export function BillDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="description" className="text-xs font-medium">
+              <Label htmlFor={fid('description')} className="text-xs font-medium">
                 Description
               </Label>
               <Input
-                id="description"
+                id={fid('description')}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="e.g. December office rent"
@@ -249,13 +258,15 @@ export function BillDialog({
         )}
 
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" size="sm" disabled={pending} />} />
+          <DialogClose render={<Button variant="outline" size="sm" disabled={pending} />}>
+            Cancel
+          </DialogClose>
           <Button
             size="sm"
             onClick={onSubmit}
             disabled={pending || !canSubmit || suppliers.length === 0}
           >
-            {pending && <Loader2 className="mr-1.5 size-4 animate-spin" />}
+            {pending && <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden />}
             Post bill
           </Button>
         </DialogFooter>

@@ -135,12 +135,14 @@ test.describe('Stage 3 — add alternative + partial payment issuance', () => {
     await page.getByRole('button', { name: 'Record client acceptance' }).click();
     await page.getByPlaceholder('Required for the audit log').fill('Client chose Tier B');
     await page.getByRole('button', { name: 'Mark as accepted' }).click();
-    await expect(page.getByText(/ACCEPTED/).first()).toBeVisible();
+    await expect(page.getByText('Accepted', { exact: true }).first()).toBeVisible();
     await shot(page, '05-alt-accepted');
 
     // Verify the base pro forma flipped to SUPERSEDED by navigating directly.
     await page.goto(`/leads/${leadId}/pro-formas/${basePfId}`);
-    await expect(page.getByText('SUPERSEDED').first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Superseded', { exact: true }).first()).toBeVisible({
+      timeout: 5_000,
+    });
     await shot(page, '06-base-superseded');
   });
 
@@ -163,7 +165,7 @@ test.describe('Stage 3 — add alternative + partial payment issuance', () => {
     await page.getByRole('button', { name: 'Record client acceptance' }).click();
     await page.getByPlaceholder('Required for the audit log').fill('Agreement signed');
     await page.getByRole('button', { name: 'Mark as accepted' }).click();
-    await expect(page.getByText(/ACCEPTED/).first()).toBeVisible();
+    await expect(page.getByText('Accepted', { exact: true }).first()).toBeVisible();
     await shot(page, '07-pf-accepted-ready-for-payment');
 
     // Record first payment: €200 and verify.
@@ -204,7 +206,7 @@ test.describe('Stage 3 — add alternative + partial payment issuance', () => {
       timeout: 10_000,
     });
     // Status flipped to CONVERTED. Outstanding is 0.
-    await expect(page.getByText(/CONVERTED/).first()).toBeVisible();
+    await expect(page.getByText('Converted', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('€0.00')).toBeVisible();
     await shot(page, '11-converted-with-invoice');
   });
@@ -228,7 +230,7 @@ test.describe('Stage 3 — add alternative + partial payment issuance', () => {
     await page.getByRole('button', { name: 'Record client acceptance' }).click();
     await page.getByPlaceholder('Required for the audit log').fill('for test');
     await page.getByRole('button', { name: 'Mark as accepted' }).click();
-    await expect(page.getByText(/ACCEPTED/).first()).toBeVisible();
+    await expect(page.getByText('Accepted', { exact: true }).first()).toBeVisible();
 
     // Record EUR 150 (overpay) — recording is allowed, verifying is not.
     await page.getByRole('button', { name: 'Record payment' }).click();

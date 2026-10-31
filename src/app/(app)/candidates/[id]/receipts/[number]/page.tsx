@@ -1,9 +1,11 @@
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
+import { Receipt } from 'lucide-react';
 import { notFound } from 'next/navigation';
+import { FinanceDocumentShell, ReceiptMeta } from '@/components/billing/finance-document-shell';
 import { ReceiptPrintable } from '@/components/billing/receipt-printable';
+import { CorrectionBanner } from '@/components/ds/correction-banner';
+import { DocumentHeader } from '@/components/ds/document-header';
+import { formatMoney } from '@/components/ds/money';
 import { PrintButton } from '@/components/print-button';
-import { buttonVariants } from '@/components/ui/button';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { fetchReceiptForPrint } from '@/modules/billing/read';
 import { fetchAppSettings } from '@/modules/settings/service';
@@ -22,48 +24,66 @@ export default async function ReceiptPrintPage({
   if (data?.payer.kind !== 'PERSON' || data.payer.person.id !== id) notFound();
 
   const person = data.payer.person;
-
+  const personName = `${person.firstName} ${person.lastName}`.trim();
+  const billingHref = `/clients/${id}?tab=services-billing`;
   const relatedInvoiceVoided = data.invoice?.status === 'VOIDED';
+  // Link the invoice only when its page exists for this same payer.
+  const invoiceHref =
+    data.invoice && data.invoice.payerPersonId === id
+      ? `/candidates/${id}/invoices/${data.invoice.number}`
+      : null;
 
   return (
-    <div className="min-h-screen bg-background print:bg-white">
-      <div className="mx-auto flex max-w-3xl items-center justify-between px-6 pt-6 print:hidden">
-        <Link
-          href={`/candidates/${id}`}
-          className={buttonVariants({ variant: 'outline', size: 'sm' })}
-        >
-          <ArrowLeft className="mr-1.5 size-4" /> Back to candidate
-        </Link>
-        <PrintButton />
-      </div>
-
-      {/* Correction-path banner — receipts are immutable by design, same
-          as invoices. Mirrors the invoice page's amber banner so staff
-          don't go hunting for an Edit button that doesn't exist, and
-          flags the orphan case where the underlying invoice was voided
-          after the receipt was issued. */}
-      <div className="mx-auto mt-3 max-w-3xl px-6 print:hidden">
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs shadow-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
-          <strong className="font-semibold">Need to correct this payment?</strong>{' '}
+    <FinanceDocumentShell
+      header={
+        <DocumentHeader
+          breadcrumbs={[
+            { label: 'Payments', href: '/payments' },
+            { label: personName || 'Candidate', href: billingHref },
+            { label: data.receipt.number },
+          ]}
+          back={{ href: billingHref, label: 'Back to billing' }}
+          icon={Receipt}
+          tone="green"
+          kind="Receipt"
+          number={data.receipt.number}
+          issuedAt={data.receipt.issuedAt}
+          meta={[
+            <ReceiptMeta
+              key="m"
+              payerName={personName}
+              amount={formatMoney(data.receipt.amount, data.receipt.currencyCode)}
+              receivedAt={data.receipt.receivedAt}
+              invoiceNumber={data.invoice?.number ?? null}
+              invoiceHref={invoiceHref}
+            />,
+          ]}
+          actions={<PrintButton />}
+        />
+      }
+      notice={
+        // Receipts are immutable by design, same as invoices; also flags
+        // the case where the underlying invoice was voided afterwards.
+        <CorrectionBanner title="Need to correct this payment?">
           {relatedInvoiceVoided
             ? "The invoice tied to this receipt has been voided. Issue a refund to the payer if the money was returned, then raise a fresh invoice from the candidate's Billing tab."
             : "Receipts are final once issued. If the amount or date is wrong, void the related invoice first, then raise a fresh invoice from the candidate's Billing tab."}
-        </div>
-      </div>
-
+        </CorrectionBanner>
+      }
+    >
       <ReceiptPrintable
         receipt={data.receipt}
         payment={data.payment}
         invoice={data.invoice}
         settings={settings}
         payer={{
-          displayName: `${person.firstName} ${person.lastName}`.trim(),
+          displayName: personName,
           contactRows: [
             person.email ? { label: 'Customer Email', value: person.email } : null,
             person.phone ? { label: 'Customer Telephone Contact', value: person.phone } : null,
           ].filter((r): r is { label: string; value: string } => r !== null),
         }}
       />
-    </div>
+    </FinanceDocumentShell>
   );
 }

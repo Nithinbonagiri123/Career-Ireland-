@@ -15,6 +15,8 @@ import {
 import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition } from 'react';
 import { toast } from 'sonner';
+import { AmountSummary } from '@/components/ds/amount-summary';
+import { SectionCard } from '@/components/ds/workspace';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -103,6 +105,9 @@ export function CreateProFormaForm({
     }));
   });
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Inline copy of the last error (the toast still fires) so it stays next
+  // to the actions while the operator fixes it.
+  const [formError, setFormError] = useState<string | null>(null);
   const [pickerId, setPickerId] = useState('');
 
   const includedRows = rows.filter(
@@ -149,12 +154,17 @@ export function CreateProFormaForm({
       quantity: String(r.quantity),
       unitPrice: Number.parseFloat(r.unitPrice || '0').toFixed(2),
     }));
+    const fail = (message: string) => {
+      setFormError(message);
+      toast.error(message);
+    };
+    setFormError(null);
     if (lines.length === 0) {
-      toast.error('Select at least one service with a quantity above zero.');
+      fail('Select at least one service with a quantity above zero.');
       return;
     }
     if (lines.some((l) => !(Number.parseFloat(l.unitPrice) > 0))) {
-      toast.error('Every selected service needs a unit price above zero.');
+      fail('Every selected service needs a unit price above zero.');
       return;
     }
     startTransition(async () => {
@@ -166,7 +176,7 @@ export function CreateProFormaForm({
         lines,
       });
       if (!created.ok) {
-        toast.error(created.error.message);
+        fail(created.error.message);
         return;
       }
       if (issueAfterCreate) {
@@ -185,35 +195,32 @@ export function CreateProFormaForm({
     });
   };
 
+  const labelCls = 'text-xs font-medium text-foreground/80';
+
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-5">
-        {/* ── Invoice details ──────────────────────────────────── */}
-        <section className="rounded-xl border bg-card shadow-sm ring-1 ring-border/60">
-          <div className="flex items-center gap-2.5 border-b px-4 py-3 sm:px-5">
-            <span
-              aria-hidden
-              className="grid size-7 place-items-center rounded-md bg-sky-100 text-sky-700"
-            >
-              <Settings2 className="size-4" />
-            </span>
-            <h2 className="text-sm font-semibold text-foreground">Invoice Details</h2>
-          </div>
-          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4">
-            <div className="space-y-1">
-              <label htmlFor="pf-date" className="text-xs font-medium text-foreground/80">
-                Invoice date
+        {/* ── Pro forma details ────────────────────────────────── */}
+        <SectionCard icon={Settings2} title="Pro forma details">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="min-w-0 space-y-1">
+              <label htmlFor="pf-date" className={labelCls}>
+                Pro forma date
               </label>
               <Input
                 id="pf-date"
                 value={format(today, 'dd MMM yyyy')}
                 readOnly
+                aria-describedby="pf-date-hint"
                 className="cursor-not-allowed bg-muted/40 text-sm"
                 title="Stamped automatically when the pro forma is issued"
               />
+              <p id="pf-date-hint" className="text-[11px] text-muted-foreground">
+                Date and time are stamped when it&apos;s issued.
+              </p>
             </div>
-            <div className="space-y-1">
-              <label htmlFor="pf-expiry" className="text-xs font-medium text-foreground/80">
+            <div className="min-w-0 space-y-1">
+              <label htmlFor="pf-expiry" className={labelCls}>
                 Expiry date
               </label>
               <Input
@@ -224,8 +231,8 @@ export function CreateProFormaForm({
                 className="text-sm"
               />
             </div>
-            <div className="space-y-1">
-              <label htmlFor="pf-terms" className="text-xs font-medium text-foreground/80">
+            <div className="min-w-0 space-y-1">
+              <label htmlFor="pf-terms" className={labelCls}>
                 Payment terms
               </label>
               <Select
@@ -251,8 +258,8 @@ export function CreateProFormaForm({
                 />
               )}
             </div>
-            <div className="space-y-1">
-              <label htmlFor="pf-currency" className="text-xs font-medium text-foreground/80">
+            <div className="min-w-0 space-y-1">
+              <label htmlFor="pf-currency" className={labelCls}>
                 Currency
               </label>
               <Select
@@ -269,164 +276,149 @@ export function CreateProFormaForm({
               </Select>
             </div>
           </div>
-        </section>
+        </SectionCard>
 
         {/* ── Services ─────────────────────────────────────────── */}
-        <section className="rounded-xl border bg-card shadow-sm ring-1 ring-border/60">
-          <div className="flex items-center gap-2.5 border-b px-4 py-3 sm:px-5">
-            <span
-              aria-hidden
-              className="grid size-7 place-items-center rounded-md bg-violet-100 text-violet-700"
-            >
-              <ListChecks className="size-4" />
-            </span>
-            <h2 className="text-sm font-semibold text-foreground">Services</h2>
+        {/* One list for every width: a table-like grid from md up, a card
+            per service on phones — no sideways scroll, no duplicate inputs. */}
+        <SectionCard icon={ListChecks} title="Services">
+          <div
+            aria-hidden
+            className="hidden border-b border-border/60 pb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground md:grid md:grid-cols-[1.5rem_minmax(0,1fr)_minmax(0,1.3fr)_6.5rem_6rem_6.5rem_1.5rem] md:gap-3"
+          >
+            <span />
+            <span>Service</span>
+            <span>Description</span>
+            <span className="text-right">Unit price</span>
+            <span className="text-center">Qty</span>
+            <span className="text-right">Total</span>
+            <span />
           </div>
-          <div className="overflow-x-auto p-4 sm:p-5">
-            <table className="w-full min-w-[560px] text-xs">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="w-8 py-2" aria-label="Included" />
-                  <th className="py-2 pr-3 font-medium">Service</th>
-                  <th className="py-2 pr-3 font-medium">Description</th>
-                  <th className="py-2 pr-3 text-right font-medium">Unit price</th>
-                  <th className="py-2 pr-3 text-center font-medium">Qty</th>
-                  <th className="py-2 pr-3 text-right font-medium">Total</th>
-                  <th className="w-8 py-2" aria-label="Remove" />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => {
-                  const price = Number.parseFloat(r.unitPrice || '0');
-                  const lineTotal = ((Math.round(price * 100) * r.quantity) / 100).toFixed(2);
-                  return (
-                    <tr
-                      key={r.key}
-                      className={cn('border-b last:border-b-0', !r.included && 'opacity-60')}
-                    >
-                      <td className="py-2.5 pr-2">
-                        <input
-                          type="checkbox"
-                          checked={r.included}
-                          onChange={(e) =>
-                            patchRow(r.key, {
-                              included: e.target.checked,
-                              quantity: e.target.checked && r.quantity === 0 ? 1 : r.quantity,
-                            })
-                          }
-                          aria-label={`Include ${r.name}`}
-                          className="size-4 accent-sky-600"
-                        />
-                      </td>
-                      <td className="py-2.5 pr-3 font-medium text-foreground">{r.name}</td>
-                      <td className="py-2.5 pr-3">
-                        <Input
-                          value={r.description}
-                          onChange={(e) => patchRow(r.key, { description: e.target.value })}
-                          aria-label={`Description for ${r.name}`}
-                          className="h-8 min-w-44 text-xs"
-                        />
-                      </td>
-                      <td className="py-2.5 pr-3 text-right">
-                        <Input
-                          value={r.unitPrice}
-                          onChange={(e) => patchRow(r.key, { unitPrice: e.target.value })}
-                          inputMode="decimal"
-                          aria-label={`Unit price for ${r.name}`}
-                          className="ml-auto h-8 w-24 text-right text-xs tabular-nums"
-                        />
-                      </td>
-                      <td className="py-2.5 pr-3">
-                        <div className="mx-auto flex w-fit items-center rounded-lg border">
-                          <button
-                            type="button"
-                            aria-label={`Decrease quantity for ${r.name}`}
-                            className="px-1.5 py-1 text-muted-foreground hover:text-foreground"
-                            onClick={() =>
-                              patchRow(r.key, { quantity: Math.max(0, r.quantity - 1) })
-                            }
-                          >
-                            <Minus className="size-3" />
-                          </button>
-                          <span className="w-7 text-center tabular-nums">{r.quantity}</span>
-                          <button
-                            type="button"
-                            aria-label={`Increase quantity for ${r.name}`}
-                            className="px-1.5 py-1 text-muted-foreground hover:text-foreground"
-                            onClick={() =>
-                              patchRow(r.key, { quantity: r.quantity + 1, included: true })
-                            }
-                          >
-                            <Plus className="size-3" />
-                          </button>
-                        </div>
-                      </td>
-                      <td className="py-2.5 pr-3 text-right font-medium tabular-nums text-foreground">
-                        {r.included
-                          ? formatCurrency(lineTotal, currency)
-                          : formatCurrency('0', currency)}
-                      </td>
-                      <td className="py-2.5">
-                        <button
-                          type="button"
-                          aria-label={`Remove ${r.name}`}
-                          className="text-muted-foreground transition-colors hover:text-destructive"
-                          onClick={() => setRows((prev) => prev.filter((x) => x.key !== r.key))}
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-            <div className="mt-3">
-              {pickerOpen ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Select
-                    value={pickerId}
-                    onChange={(e) => setPickerId(e.target.value)}
-                    aria-label="Service to add"
-                    className="h-9 w-64 text-xs"
-                  >
-                    <option value="">Choose a service…</option>
-                    {services.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </Select>
-                  <Button type="button" size="sm" onClick={addService} disabled={!pickerId}>
-                    Add
-                  </Button>
-                  <Button
+          <ul aria-label="Services on this pro forma" className="divide-y divide-border/50">
+            {rows.map((r) => {
+              const price = Number.parseFloat(r.unitPrice || '0');
+              const lineTotal = ((Math.round(price * 100) * r.quantity) / 100).toFixed(2);
+              return (
+                <li
+                  key={r.key}
+                  className={cn(
+                    'grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 py-3 md:grid-cols-[1.5rem_minmax(0,1fr)_minmax(0,1.3fr)_6.5rem_6rem_6.5rem_1.5rem]',
+                    !r.included && 'opacity-60',
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={r.included}
+                    onChange={(e) =>
+                      patchRow(r.key, {
+                        included: e.target.checked,
+                        quantity: e.target.checked && r.quantity === 0 ? 1 : r.quantity,
+                      })
+                    }
+                    aria-label={`Include ${r.name}`}
+                    className="size-4 accent-sky-600"
+                  />
+                  <span className="min-w-0 text-sm font-medium text-foreground [overflow-wrap:anywhere]">
+                    {r.name}
+                  </span>
+                  <button
                     type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setPickerOpen(false)}
+                    aria-label={`Remove ${r.name}`}
+                    className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:text-destructive md:order-last"
+                    onClick={() => setRows((prev) => prev.filter((x) => x.key !== r.key))}
                   >
-                    Cancel
-                  </Button>
-                </div>
-              ) : (
+                    <Trash2 className="size-4" aria-hidden />
+                  </button>
+                  <div className="col-span-3 min-w-0 md:col-span-1">
+                    <Input
+                      value={r.description}
+                      onChange={(e) => patchRow(r.key, { description: e.target.value })}
+                      aria-label={`Description for ${r.name}`}
+                      className="h-9 text-xs md:h-8"
+                    />
+                  </div>
+                  <div className="col-span-3 grid grid-cols-3 items-center gap-3 md:contents">
+                    <Input
+                      value={r.unitPrice}
+                      onChange={(e) => patchRow(r.key, { unitPrice: e.target.value })}
+                      inputMode="decimal"
+                      aria-label={`Unit price for ${r.name}`}
+                      className="h-9 w-full text-right text-xs tabular-nums md:h-8"
+                    />
+                    <div className="mx-auto flex w-fit items-center rounded-lg border">
+                      <button
+                        type="button"
+                        aria-label={`Decrease quantity for ${r.name}`}
+                        className="px-2 py-1.5 text-muted-foreground hover:text-foreground"
+                        onClick={() => patchRow(r.key, { quantity: Math.max(0, r.quantity - 1) })}
+                      >
+                        <Minus className="size-3" aria-hidden />
+                      </button>
+                      <span className="w-7 text-center text-xs tabular-nums">
+                        <span className="sr-only">Quantity </span>
+                        {r.quantity}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Increase quantity for ${r.name}`}
+                        className="px-2 py-1.5 text-muted-foreground hover:text-foreground"
+                        onClick={() =>
+                          patchRow(r.key, { quantity: r.quantity + 1, included: true })
+                        }
+                      >
+                        <Plus className="size-3" aria-hidden />
+                      </button>
+                    </div>
+                    <span className="text-right text-sm font-medium tabular-nums text-foreground">
+                      {r.included
+                        ? formatCurrency(lineTotal, currency)
+                        : formatCurrency('0', currency)}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="mt-3">
+            {pickerOpen ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={pickerId}
+                  onChange={(e) => setPickerId(e.target.value)}
+                  aria-label="Service to add"
+                  className="h-9 w-full text-xs sm:w-64"
+                >
+                  <option value="">Choose a service…</option>
+                  {services.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </Select>
+                <Button type="button" size="sm" onClick={addService} disabled={!pickerId}>
+                  Add
+                </Button>
                 <Button
                   type="button"
-                  variant="outline"
                   size="sm"
-                  onClick={() => setPickerOpen(true)}
+                  variant="ghost"
+                  onClick={() => setPickerOpen(false)}
                 >
-                  <Plus className="mr-1.5 size-4" aria-hidden />
-                  Add Service
+                  Cancel
                 </Button>
-              )}
-            </div>
+              </div>
+            ) : (
+              <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
+                <Plus className="mr-1.5 size-4" aria-hidden />
+                Add Service
+              </Button>
+            )}
           </div>
-        </section>
+        </SectionCard>
 
         {/* ── Info note ────────────────────────────────────────── */}
-        <div className="flex items-start gap-2.5 rounded-xl border border-info/30 bg-info/5 px-4 py-3 text-xs text-foreground/80">
+        <div className="flex items-start gap-2.5 rounded-2xl border border-info/30 bg-info/5 px-4 py-3 text-xs text-foreground/80">
           <Info className="mt-0.5 size-4 shrink-0 text-info" aria-hidden />
           <p>
             This pro forma will not create a payment request. You can use it to confirm the cost
@@ -435,40 +427,41 @@ export function CreateProFormaForm({
         </div>
 
         {/* ── Footer actions ───────────────────────────────────── */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4 shadow-sm ring-1 ring-border/60">
-          <p className="text-[11px] text-muted-foreground">
-            Print &amp; PDF become available from the workspace once the pro forma is issued.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              onClick={() => submit(false)}
+        <div className="space-y-3 rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+          {formError && (
+            <p
+              role="alert"
+              className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
             >
-              Save Draft
-            </Button>
-            <Button type="button" disabled={pending} onClick={() => submit(true)}>
-              <Check className="mr-1.5 size-4" aria-hidden />
-              Create Pro Forma
-            </Button>
+              {formError}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[11px] text-muted-foreground">
+              Print &amp; PDF become available from the workspace once the pro forma is issued.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                onClick={() => submit(false)}
+              >
+                Save Draft
+              </Button>
+              <Button type="button" disabled={pending} onClick={() => submit(true)}>
+                <Check className="mr-1.5 size-4" aria-hidden />
+                Create Pro Forma
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* ── Right rail ──────────────────────────────────────────── */}
-      <div className="space-y-5">
-        <section className="rounded-xl border bg-card shadow-sm ring-1 ring-border/60">
-          <div className="flex items-center gap-2.5 border-b px-4 py-3">
-            <span
-              aria-hidden
-              className="grid size-7 place-items-center rounded-md bg-sky-100 text-sky-700"
-            >
-              <User className="size-4" />
-            </span>
-            <h2 className="text-sm font-semibold text-foreground">Candidate Information</h2>
-          </div>
-          <dl className="space-y-2.5 p-4 text-xs">
+      <div className="min-w-0 space-y-5">
+        <SectionCard icon={User} title="Candidate Information">
+          <dl className="space-y-2.5 text-xs">
             {[
               ['Name', person.name],
               ['Email', person.email],
@@ -484,35 +477,19 @@ export function CreateProFormaForm({
               </div>
             ))}
           </dl>
-        </section>
+        </SectionCard>
 
-        <section className="rounded-xl border bg-card shadow-sm ring-1 ring-border/60">
-          <div className="flex items-center gap-2.5 border-b px-4 py-3">
-            <span
-              aria-hidden
-              className="grid size-7 place-items-center rounded-md bg-emerald-100 text-emerald-700"
-            >
-              <Calculator className="size-4" />
-            </span>
-            <h2 className="text-sm font-semibold text-foreground">Invoice Summary</h2>
-          </div>
-          <div className="space-y-2 p-4 text-sm">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Subtotal:</span>
-              <span className="font-medium tabular-nums">{formatCurrency(subtotal, currency)}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">VAT (0%):</span>
-              <span className="font-medium tabular-nums">{formatCurrency('0', currency)}</span>
-            </div>
-            <div className="flex items-center justify-between border-t pt-2.5">
-              <span className="font-semibold">Total:</span>
-              <span className="text-lg font-bold tabular-nums text-sky-700">
-                {formatCurrency(subtotal, currency)}
-              </span>
-            </div>
-          </div>
-        </section>
+        <SectionCard icon={Calculator} title="Pro forma summary">
+          <AmountSummary
+            label="Pro forma summary"
+            currency={currency}
+            lines={[
+              { key: 'subtotal', label: 'Subtotal', amount: subtotal, emphasis: 'muted' },
+              { key: 'vat', label: 'VAT (0%)', amount: 0, emphasis: 'muted' },
+              { key: 'total', label: 'Total', amount: subtotal, emphasis: 'total' },
+            ]}
+          />
+        </SectionCard>
       </div>
     </div>
   );

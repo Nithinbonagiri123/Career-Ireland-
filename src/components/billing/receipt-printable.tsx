@@ -56,18 +56,21 @@ export function ReceiptPrintable({
   const money = (v: string) => formatCurrency(v, receipt.currencyCode);
 
   return (
-    <main className="mx-auto my-6 max-w-3xl bg-white p-10 shadow-sm print:my-0 print:max-w-none print:p-0 print:shadow-none">
+    <article
+      aria-label="Receipt document"
+      className="mx-auto my-6 max-w-3xl rounded-2xl border border-border/60 bg-white p-10 shadow-sm max-sm:my-0 max-sm:p-4 max-sm:[&_td]:px-2 max-sm:[&_th]:px-2 max-sm:[&_td.font-mono]:text-xs max-sm:[&_td.font-mono]:[overflow-wrap:anywhere] max-sm:[&_td.tabular-nums]:whitespace-nowrap print:my-0 print:max-w-none print:rounded-none print:border-0 print:p-0 print:shadow-none"
+    >
       {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="flex items-start justify-between border-b border-emerald-800/20 pb-6">
+      <header className="flex items-start justify-between border-b border-emerald-800/20 pb-6 max-sm:flex-col max-sm:gap-3 max-sm:pb-4">
         <Image
           src="/logo-icg.png"
           alt={settings.legalName}
           width={280}
           height={215}
           priority
-          className="h-24 w-auto object-contain"
+          className="h-24 w-auto object-contain max-sm:h-16"
         />
-        <div className="text-right font-black tracking-[0.35em] text-emerald-900 text-4xl">
+        <div className="text-right font-black tracking-[0.35em] text-emerald-900 text-4xl max-sm:text-left max-sm:text-2xl max-sm:tracking-[0.25em]">
           RECEIPT
         </div>
       </header>
@@ -182,6 +185,6 @@ export function ReceiptPrintable({
           {settings.vatNumber ? ` · VAT ${settings.vatNumber}` : ''}
         </p>
       )}
-    </main>
+    </article>
   );
 }

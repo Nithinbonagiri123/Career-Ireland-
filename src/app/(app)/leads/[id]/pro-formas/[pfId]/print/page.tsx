@@ -32,13 +32,14 @@ export default async function ProFormaPrintPage({
   if (!pf || pf.sourceLeadId !== leadId) notFound();
 
   return (
-    <div className="min-h-screen bg-slate-100 print:bg-white">
-      <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 print:hidden">
+    // Sits on the app's Stage 6G page background on screen; white on paper.
+    <div className="min-h-full px-4 pb-8 print:bg-white print:p-0">
+      <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-2 py-4 print:hidden">
         <Link
           href={`/leads/${leadId}/pro-formas/${pfId}`}
           className={buttonVariants({ variant: 'ghost', size: 'sm' })}
         >
-          <ArrowLeft className="mr-1 h-4 w-4" /> Back
+          <ArrowLeft className="mr-1 h-4 w-4" aria-hidden /> Back to pro forma
         </Link>
         <PrintButton />
       </div>

@@ -161,7 +161,7 @@ test('04 · Employer invoice — dialog + manual price flow', async ({ page }) =
   }
 
   // Prefill from a package if available…
-  const pkgSelect = page.locator('#pkg');
+  const pkgSelect = page.getByLabel(/Prefill from package/i);
   if ((await pkgSelect.count()) > 0) {
     const opts = await pkgSelect.locator('option').all();
     if (opts.length > 1) {
@@ -172,7 +172,7 @@ test('04 · Employer invoice — dialog + manual price flow', async ({ page }) =
   // Per-run unique price keeps the invoice rows distinguishable across
   // re-runs against a non-fresh database.
   await page
-    .locator('#unitPrice')
+    .getByLabel('Unit price', { exact: true })
     .fill(`${200 + (Date.now() % 700)}.${String((Date.now() % 90) + 10)}`);
 
   await page

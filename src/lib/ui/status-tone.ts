@@ -119,6 +119,21 @@ const TONE_MAP: Record<string, StatusTone> = {
 
   // Generic revoke label used in link-history rows
   ACTIVE_LINK: 'success',
+
+  // Accounting (journals, periods, bills, financial events) — additive;
+  // OPEN / CLOSED / DRAFT / PAID / PARTIALLY_PAID / FAILED reuse the entries above.
+  PENDING_APPROVAL: 'warning',
+  POSTED: 'success',
+  REVERSED: 'info',
+  VOID: 'danger',
+  SOFT_CLOSED: 'warning',
+  LOCKED: 'info',
+  RECEIVED: 'info',
+  PROCESSING: 'info',
+  PROCESSED: 'success',
+  MANUAL_REVIEW: 'warning',
+  PARTIALLY_REFUNDED: 'warning',
+  SUPERSEDED: 'neutral',
 };
 
 export function statusTone(status: string): StatusTone {

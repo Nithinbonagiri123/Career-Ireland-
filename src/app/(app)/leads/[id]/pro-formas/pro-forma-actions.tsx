@@ -171,8 +171,10 @@ export function CancelProFormaButton({ proFormaInvoiceId }: { proFormaInvoiceId:
   return (
     <ReasonDialog
       trigger={
+        // Named "Cancel pro forma…" so it can't be confused with the
+        // dialogs' own "Cancel" (dismiss) buttons.
         <Button size="sm" variant="outline">
-          Cancel
+          Cancel pro forma…
         </Button>
       }
       title="Cancel this pro forma"

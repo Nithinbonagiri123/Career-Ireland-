@@ -1,6 +1,6 @@
 import { AlertTriangle, FileText, HandCoins, Hourglass } from 'lucide-react';
+import { formatMoney } from '@/components/ds/money';
 import { StatTile } from '@/components/ds/stat-tile';
-import { formatCurrency } from '@/lib/currency';
 import { isInvoiceOverdue } from '@/modules/billing/aging';
 import type { PersonBillingRow } from '@/modules/billing/read';
 
@@ -66,19 +66,19 @@ export function FinancialSummaryCard({ invoices }: { invoices: PersonBillingRow[
               icon={FileText}
               tone="blue"
               label="Invoiced"
-              value={formatCurrency(b.invoiced.toFixed(2), currencyCode)}
+              value={formatMoney(b.invoiced.toFixed(2), currencyCode)}
             />
             <StatTile
               icon={HandCoins}
               tone="green"
               label="Received"
-              value={formatCurrency(b.received.toFixed(2), currencyCode)}
+              value={formatMoney(b.received.toFixed(2), currencyCode)}
             />
             <StatTile
               icon={Hourglass}
               tone={b.outstanding > 0 ? 'amber' : 'slate'}
               label="Outstanding"
-              value={formatCurrency(b.outstanding.toFixed(2), currencyCode)}
+              value={formatMoney(b.outstanding.toFixed(2), currencyCode)}
             />
             <StatTile
               icon={AlertTriangle}

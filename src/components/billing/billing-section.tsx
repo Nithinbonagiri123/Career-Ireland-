@@ -1,12 +1,12 @@
 import { format } from 'date-fns';
 import { ArrowUpRight, FileText, Receipt as ReceiptIcon } from 'lucide-react';
 import Link from 'next/link';
+import { formatMoney } from '@/components/ds/money';
 import { DsEnumPill, DsStatusPill } from '@/components/ds/status-pill';
 import { DS_SOFT } from '@/components/ds/tones';
 import { DS_ROW_LIST } from '@/components/ds/workspace';
 import { EmptyState } from '@/components/empty-state';
 import { buttonVariants } from '@/components/ui/button';
-import { formatCurrency } from '@/lib/currency';
 import { cn } from '@/lib/utils';
 import { isInvoiceOverdue, OVERDUE_THRESHOLD_DAYS } from '@/modules/billing/aging';
 import type { PersonBillingRow, PersonReceiptRow } from '@/modules/billing/read';
@@ -111,17 +111,16 @@ export function BillingSection({
                         {(paidFloat > 0 || creditedFloat > 0) && invoice.status !== 'VOIDED' && (
                           <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
                             <span className="tabular-nums font-medium text-emerald-700 dark:text-emerald-300">
-                              {formatCurrency(paidAmount, invoice.currencyCode)} paid
+                              {formatMoney(paidAmount, invoice.currencyCode)} paid
                             </span>
                             {creditedFloat > 0 && (
                               <span className="tabular-nums text-muted-foreground">
-                                {formatCurrency(creditedAmount, invoice.currencyCode)} credited
+                                {formatMoney(creditedAmount, invoice.currencyCode)} credited
                               </span>
                             )}
                             {outstandingFloat > 0 ? (
                               <span className="tabular-nums font-medium text-amber-700 dark:text-amber-300">
-                                {formatCurrency(outstandingAmount, invoice.currencyCode)}{' '}
-                                outstanding
+                                {formatMoney(outstandingAmount, invoice.currencyCode)} outstanding
                               </span>
                             ) : (
                               <span className="tabular-nums text-muted-foreground">Settled</span>
@@ -133,7 +132,7 @@ export function BillingSection({
                     <div className="flex flex-wrap items-center gap-3 sm:flex-nowrap sm:justify-end">
                       <div className="mr-auto text-left sm:mr-0 sm:text-right">
                         <p className="tabular-nums text-sm font-semibold">
-                          {formatCurrency(invoice.totalAmount, invoice.currencyCode)}
+                          {formatMoney(invoice.totalAmount, invoice.currencyCode)}
                         </p>
                         <p className="text-[11px] text-muted-foreground">
                           {Number.parseFloat(invoice.taxAmount) > 0 ? 'Total (incl. VAT)' : 'Total'}
@@ -221,7 +220,7 @@ export function BillingSection({
                 <div className="flex items-center gap-3">
                   <div className="mr-auto text-left sm:mr-0 sm:text-right">
                     <p className="tabular-nums text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-                      {formatCurrency(receipt.amount, receipt.currencyCode)}
+                      {formatMoney(receipt.amount, receipt.currencyCode)}
                     </p>
                     <p className="text-[11px] text-muted-foreground">Received</p>
                   </div>

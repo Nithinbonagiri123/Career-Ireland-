@@ -306,7 +306,7 @@ test.describe('Stage 2 — pro forma close-out', () => {
     await expect(page.getByText('Pro forma draft created').first()).toBeVisible();
 
     const cancelCard = quoteCard(page, cancelAmount);
-    await cancelCard.getByRole('button', { name: /^Cancel$/ }).click();
+    await cancelCard.getByRole('button', { name: /^Cancel pro forma…$/ }).click();
     await page.getByPlaceholder('Required for the audit log').fill('Replaced with new offer');
     await page.getByRole('button', { name: /^Cancel pro forma$/ }).click();
     await expect(cancelCard).toBeHidden({ timeout: 10_000 });

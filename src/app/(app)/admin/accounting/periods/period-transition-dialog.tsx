@@ -116,7 +116,7 @@ export function PeriodTransitionMenu({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" aria-label={`Transition ${periodLabel}`}>
               Transition
             </Button>
           }
@@ -131,7 +131,7 @@ export function PeriodTransitionMenu({
                   variant={COPY[t].destructive ? 'destructive' : undefined}
                   onClick={() => setTarget(t)}
                 >
-                  <Icon className="mr-2 size-3.5" /> {COPY[t].label}
+                  <Icon className="mr-2 size-3.5" aria-hidden /> {COPY[t].label}
                 </DropdownMenuItem>
               </div>
             );

@@ -1,24 +1,28 @@
 import { ArrowRight, Plus, Receipt } from 'lucide-react';
 import Link from 'next/link';
+import {
+  DsActionsTh,
+  DsCardItem,
+  DsCardList,
+  DsTable,
+  DsTBody,
+  DsTd,
+  DsTHead,
+  DsTh,
+  DsTr,
+  ResponsiveTable,
+} from '@/components/ds/data-table';
+import { FinanceStatusPill } from '@/components/ds/finance-status';
+import { Money } from '@/components/ds/money';
 import { EmptyState } from '@/components/empty-state';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { requirePermission } from '@/lib/auth/session';
-import { formatCurrency } from '@/lib/currency';
-import { statusTone } from '@/lib/ui/status-tone';
+import { cn } from '@/lib/utils';
 import { fetchChartOfAccounts } from '@/modules/accounting/read';
 import { listSupplierBills, listSuppliers } from '@/modules/ap/service';
+import { ACC_CRUMBS, ACC_PAGE, formatDay } from '../../accounting-ui';
 import { BillDialog } from './bill-dialog';
 
 export const dynamic = 'force-dynamic';
@@ -52,17 +56,26 @@ export default async function BillsListPage() {
       paymentTermsDays: s.paymentTermsDays,
     }));
 
+  const openLink = (id: string, number: string) => (
+    <Link
+      href={`/admin/accounting/ap/bills/${id}`}
+      aria-label={`Open bill ${number}`}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'shrink-0')}
+    >
+      Open <ArrowRight className="ml-1.5 size-3.5" aria-hidden />
+    </Link>
+  );
+
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-10 md:py-10">
+    <div className={ACC_PAGE}>
       <FadeUp>
         <PageHeader
           icon={Receipt}
-          badge="Accounting · AP"
+          iconTone="pink"
           title="Supplier bills"
-          description={`${bills.length} bill${bills.length === 1 ? '' : 's'}. Each posts DR Expense / DR VAT Recoverable / CR Accounts Payable automatically via the shadow-ledger.`}
+          description={`${bills.length} bill${bills.length === 1 ? '' : 's'}. Each bill posts to Expense, VAT recoverable and Accounts payable automatically.`}
           breadcrumbs={[
-            { label: 'Admin', href: '/admin' },
-            { label: 'Accounting', href: '/admin/accounting' },
+            ...ACC_CRUMBS,
             { label: 'AP', href: '/admin/accounting/ap' },
             { label: 'Bills' },
           ]}
@@ -72,7 +85,7 @@ export default async function BillsListPage() {
               expenseAccounts={expenseAccounts}
               trigger={
                 <Button size="sm">
-                  <Plus className="mr-1.5 size-4" /> New bill
+                  <Plus className="mr-1.5 size-4" aria-hidden /> New bill
                 </Button>
               }
             />
@@ -80,65 +93,95 @@ export default async function BillsListPage() {
         />
       </FadeUp>
 
-      <FadeUp delay={0.05} className="mt-6">
-        <Card>
-          <CardContent className="pt-5">
-            {bills.length === 0 ? (
-              <EmptyState
-                icon={Receipt}
-                title="No bills yet"
-                description="Post a supplier bill to see it show up here with its ledger journal. Add a supplier first if none exist."
-              />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-32">Number</TableHead>
-                    <TableHead>Supplier</TableHead>
-                    <TableHead className="w-28">Date</TableHead>
-                    <TableHead className="w-28">Due</TableHead>
-                    <TableHead className="w-32 text-right">Total</TableHead>
-                    <TableHead className="w-28 text-right">Paid</TableHead>
-                    <TableHead className="w-28">Status</TableHead>
-                    <TableHead className="w-20 text-right" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+      <FadeUp delay={0.05}>
+        {bills.length === 0 ? (
+          <div className="rounded-2xl border border-border/60 bg-card shadow-sm">
+            <EmptyState
+              icon={Receipt}
+              title="No bills yet"
+              description="Record a supplier bill to see it here with its ledger journal. Add a supplier first if none exist."
+            />
+          </div>
+        ) : (
+          <ResponsiveTable
+            table={
+              <DsTable label="Supplier bills table" caption="Supplier bills" minWidth={860}>
+                <DsTHead>
+                  <tr>
+                    <DsTh className="w-36">Number</DsTh>
+                    <DsTh>Supplier</DsTh>
+                    <DsTh className="w-28">Date</DsTh>
+                    <DsTh className="w-28">Due</DsTh>
+                    <DsTh numeric className="w-32">
+                      Total
+                    </DsTh>
+                    <DsTh numeric className="w-32">
+                      Paid
+                    </DsTh>
+                    <DsTh className="w-32">Status</DsTh>
+                    <DsActionsTh />
+                  </tr>
+                </DsTHead>
+                <DsTBody>
                   {bills.map((b) => (
-                    <TableRow key={b.id}>
-                      <TableCell className="font-mono text-xs">{b.number}</TableCell>
-                      <TableCell>
-                        <div className="text-sm">{b.supplierName}</div>
-                        <div className="text-xs text-muted-foreground">{b.description}</div>
-                      </TableCell>
-                      <TableCell className="text-xs tabular-nums">{b.billDate}</TableCell>
-                      <TableCell className="text-xs tabular-nums">{b.dueDate}</TableCell>
-                      <TableCell className="text-right text-sm tabular-nums">
-                        {formatCurrency(Number.parseFloat(b.totalAmount), b.currencyCode)}
-                      </TableCell>
-                      <TableCell className="text-right text-sm tabular-nums text-muted-foreground">
-                        {formatCurrency(Number.parseFloat(b.paidAmount), b.currencyCode)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusTone(b.status)} className="rounded-full text-[10px]">
-                          {b.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Link
-                          href={`/admin/accounting/ap/bills/${b.id}`}
-                          className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-                        >
-                          Open <ArrowRight className="ml-1.5 size-3.5" />
-                        </Link>
-                      </TableCell>
-                    </TableRow>
+                    <DsTr key={b.id}>
+                      <DsTd className="whitespace-nowrap font-mono text-xs">{b.number}</DsTd>
+                      <DsTd>
+                        <div className="text-foreground">{b.supplierName}</div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">{b.description}</div>
+                      </DsTd>
+                      <DsTd className="whitespace-nowrap text-xs tabular-nums">
+                        {formatDay(b.billDate)}
+                      </DsTd>
+                      <DsTd className="whitespace-nowrap text-xs tabular-nums">
+                        {formatDay(b.dueDate)}
+                      </DsTd>
+                      <DsTd numeric>
+                        <Money amount={b.totalAmount} currency={b.currencyCode} />
+                      </DsTd>
+                      <DsTd numeric className="text-muted-foreground">
+                        <Money amount={b.paidAmount} currency={b.currencyCode} />
+                      </DsTd>
+                      <DsTd>
+                        <FinanceStatusPill kind="bill" status={b.status} />
+                      </DsTd>
+                      <DsTd className="py-2 text-right">{openLink(b.id, b.number)}</DsTd>
+                    </DsTr>
                   ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                </DsTBody>
+              </DsTable>
+            }
+            cards={
+              <DsCardList label="Supplier bills">
+                {bills.map((b) => (
+                  <DsCardItem key={b.id}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-mono text-xs text-foreground">{b.number}</span>
+                      <FinanceStatusPill kind="bill" status={b.status} />
+                    </div>
+                    <p className="mt-2 text-sm font-medium text-foreground">{b.supplierName}</p>
+                    <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                      {b.description}
+                    </p>
+                    <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                      <dt className="text-muted-foreground">Total</dt>
+                      <dd className="text-right font-semibold text-foreground">
+                        <Money amount={b.totalAmount} currency={b.currencyCode} />
+                      </dd>
+                      <dt className="text-muted-foreground">Paid</dt>
+                      <dd className="text-right">
+                        <Money amount={b.paidAmount} currency={b.currencyCode} />
+                      </dd>
+                      <dt className="text-muted-foreground">Due</dt>
+                      <dd className="text-right tabular-nums">{formatDay(b.dueDate)}</dd>
+                    </dl>
+                    <div className="mt-2 flex justify-end">{openLink(b.id, b.number)}</div>
+                  </DsCardItem>
+                ))}
+              </DsCardList>
+            }
+          />
+        )}
       </FadeUp>
     </div>
   );

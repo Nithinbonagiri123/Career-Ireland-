@@ -22,17 +22,15 @@ test.describe('/payments (Stage 6G)', () => {
     await expect.poll(() => params(page.url()).get('q')).toBe('zz-no-such-payment');
     await expect(page.getByText(/no payments match the current filters/i)).toBeVisible();
 
-    await page.getByRole('button', { name: /Cards/ }).click();
-    await expect.poll(() => params(page.url()).get('view')).toBe('cards');
+    // Kit view toggle (links); cards are `view=grid`.
+    await page.getByRole('link', { name: /Cards/ }).click();
+    await expect.poll(() => params(page.url()).get('view')).toBe('grid');
 
     await page.reload({ waitUntil: 'networkidle' });
     expect(params(page.url()).get('created')).toBe('90d');
     await expect(filters.getByRole('combobox', { name: 'Status' })).toHaveValue('paid');
     await expect(filters.getByRole('searchbox')).toHaveValue('zz-no-such-payment');
-    await expect(page.getByRole('button', { name: /Cards/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await expect(page.getByRole('link', { name: /Cards/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('desktop: the Actions column is fully visible', async ({ page }) => {
@@ -63,7 +61,9 @@ test.describe('/payments (Stage 6G)', () => {
   test('ADMIN still gets Verify / Reject on a pending payment', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/payments?created=90d&status=pending', { waitUntil: 'networkidle' });
-    const actions = page.getByTestId('payments-table').getByRole('button', { name: 'Actions' });
+    const actions = page
+      .getByTestId('payments-table')
+      .getByRole('button', { name: /^Actions for / });
     if ((await actions.count()) === 0) test.skip(true, 'no pending payments in this database');
     await actions.first().click();
     await expect(page.getByRole('menuitem', { name: /Verify/ })).toBeVisible();

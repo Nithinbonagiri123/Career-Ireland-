@@ -71,7 +71,13 @@ export function ProFormaPrintable({
   ].filter((row): row is { label: string; value: string } => Boolean(row));
 
   return (
-    <main className="relative mx-auto my-6 max-w-3xl bg-white p-10 shadow-sm print:my-0 print:max-w-none print:p-0 print:shadow-none">
+    // An <article>, not <main>: the app shell already provides the page's
+    // main landmark. Phone-only spacing below; every print: rule keeps the
+    // PDF identical to before.
+    <article
+      aria-label={`Pro forma ${proForma.number}`}
+      className="relative mx-auto my-6 max-w-3xl rounded-2xl border border-border/60 bg-white p-5 shadow-sm sm:p-10 print:my-0 print:max-w-none print:rounded-none print:border-0 print:p-0 print:shadow-none"
+    >
       {watermark && (
         <div
           aria-hidden
@@ -84,17 +90,19 @@ export function ProFormaPrintable({
       )}
 
       {/* ── Header ─────────────────────────────────────────────── */}
-      <header className="flex items-start justify-between border-b border-emerald-800/20 pb-6">
+      <header className="flex items-start justify-between gap-3 border-b border-emerald-800/20 pb-6">
         <Image
           src="/logo-icg.png"
           alt={settings.legalName}
           width={280}
           height={215}
           priority
-          className="h-24 w-auto object-contain"
+          className="h-14 w-auto object-contain sm:h-24 print:h-24"
         />
         <div className="text-right">
-          <div className="font-black tracking-[0.35em] text-emerald-900 text-4xl">PRO FORMA</div>
+          <div className="text-2xl font-black tracking-[0.2em] text-emerald-900 sm:text-4xl sm:tracking-[0.35em] print:text-4xl print:tracking-[0.35em]">
+            PRO FORMA
+          </div>
           <div className="mt-1 text-xs uppercase tracking-widest text-slate-500">
             Not a tax invoice
           </div>
@@ -166,57 +174,59 @@ export function ProFormaPrintable({
       <h2 className="mt-6 text-sm font-bold uppercase tracking-widest text-emerald-900">
         Proposed Services
       </h2>
-      <table className="mt-2 w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-slate-100 text-left text-xs uppercase tracking-wider text-slate-700">
-            <th className="w-[10%] border border-slate-300 px-3 py-2 text-center font-semibold">
-              QTY
-            </th>
-            <th className="border border-slate-300 px-3 py-2 font-semibold">Service</th>
-            <th className="w-[22%] border border-slate-300 px-3 py-2 text-right font-semibold">
-              Unit Price
-            </th>
-            <th className="w-[22%] border border-slate-300 px-3 py-2 text-right font-semibold">
-              Line Total
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {proForma.lineItems.map((li) => (
-            <tr key={li.id}>
-              <td className="border border-slate-300 px-3 py-2 text-center tabular-nums">
-                {Number.parseFloat(li.quantity).toLocaleString(undefined, {
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 3,
-                })}
+      <div className="mt-2 overflow-x-auto print:overflow-visible">
+        <table className="w-full min-w-[300px] border-collapse text-sm">
+          <thead>
+            <tr className="bg-slate-100 text-left text-xs uppercase tracking-wider text-slate-700">
+              <th className="w-[10%] border border-slate-300 px-3 py-2 text-center font-semibold">
+                QTY
+              </th>
+              <th className="border border-slate-300 px-3 py-2 font-semibold">Service</th>
+              <th className="w-[22%] border border-slate-300 px-3 py-2 text-right font-semibold">
+                Unit Price
+              </th>
+              <th className="w-[22%] border border-slate-300 px-3 py-2 text-right font-semibold">
+                Line Total
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {proForma.lineItems.map((li) => (
+              <tr key={li.id}>
+                <td className="border border-slate-300 px-3 py-2 text-center tabular-nums">
+                  {Number.parseFloat(li.quantity).toLocaleString(undefined, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 3,
+                  })}
+                </td>
+                <td className="border border-slate-300 px-3 py-2">
+                  <div className="font-medium">{li.serviceName}</div>
+                  {li.description !== li.serviceName && (
+                    <div className="text-xs text-slate-600">{li.description}</div>
+                  )}
+                </td>
+                <td className="border border-slate-300 px-3 py-2 text-right tabular-nums">
+                  {money(li.unitPrice)}
+                </td>
+                <td className="border border-slate-300 px-3 py-2 text-right tabular-nums">
+                  {money(li.lineSubtotal)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td className="px-3 py-2" colSpan={2} />
+              <td className="border border-emerald-900 bg-emerald-900 px-3 py-2 text-right text-xs font-bold uppercase tracking-wider text-white">
+                Document Total
               </td>
-              <td className="border border-slate-300 px-3 py-2">
-                <div className="font-medium">{li.serviceName}</div>
-                {li.description !== li.serviceName && (
-                  <div className="text-xs text-slate-600">{li.description}</div>
-                )}
-              </td>
-              <td className="border border-slate-300 px-3 py-2 text-right tabular-nums">
-                {money(li.unitPrice)}
-              </td>
-              <td className="border border-slate-300 px-3 py-2 text-right tabular-nums">
-                {money(li.lineSubtotal)}
+              <td className="border border-emerald-900 bg-emerald-50 px-3 py-3 text-right text-base font-bold tabular-nums text-emerald-900">
+                {money(proForma.subtotal)}
               </td>
             </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td className="px-3 py-2" colSpan={2} />
-            <td className="border border-emerald-900 bg-emerald-900 px-3 py-2 text-right text-xs font-bold uppercase tracking-wider text-white">
-              Document Total
-            </td>
-            <td className="border border-emerald-900 bg-emerald-50 px-3 py-3 text-right text-base font-bold tabular-nums text-emerald-900">
-              {money(proForma.subtotal)}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+          </tfoot>
+        </table>
+      </div>
 
       {/* ── Payment terms (optional) ──────────────────────────── */}
       {proForma.paymentTerms && (
@@ -288,6 +298,6 @@ export function ProFormaPrintable({
           <p className="mt-2 whitespace-pre-wrap">{settings.invoiceFooter}</p>
         )}
       </div>
-    </main>
+    </article>
   );
 }
