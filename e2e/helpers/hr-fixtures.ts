@@ -43,10 +43,15 @@ export async function seedHrScenario() {
   const now = Date.now();
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
-  // "Earlier today" that is still today even just after midnight.
+  // "Earlier today": still today even just after midnight, and never more
+  // than 8 hours ago — an open session older than 14 hours is (correctly)
+  // shown as "Missing clock-out", so a fraction of the whole day made the
+  // working / on-break rows flip state when the suite ran after ~20:00.
   const sinceMidnight = now - todayStart.getTime();
+  const window = Math.min(sinceMidnight, 8 * 60 * 60_000);
+  const windowStart = now - window;
   const todayAt = (fraction: number) =>
-    new Date(todayStart.getTime() + Math.max(60_000, sinceMidnight * fraction));
+    new Date(Math.max(todayStart.getTime() + 60_000, windowStart + window * fraction));
   const daysAgo = (d: number, hour: number, minute = 0) => {
     const x = new Date(todayStart.getTime() - d * DAY);
     x.setHours(hour, minute, 0, 0);

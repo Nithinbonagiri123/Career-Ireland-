@@ -363,7 +363,26 @@ test.describe('Wave 4 — permissions and prohibited actions', () => {
     const stamp = Math.random().toString(36).slice(2, 6);
     const m = await dbModules();
     const personId = await seedCandidate(m, `perm-${stamp}`);
+    // A second candidate with an ordinary, unpaid engagement, so the
+    // /payments dialog has a real payment target of its own. Without it the
+    // test depended on other spec files having left payable engagements in
+    // the database (on a fresh CI shard the button is correctly disabled).
+    const payablePersonId = await seedCandidate(m, `pay-${stamp}`);
     const serviceName = await firstActiveServiceName(m);
+    const [svc] = await m.db
+      .select({ id: m.schemas.serviceCatalogItems.id })
+      .from(m.schemas.serviceCatalogItems)
+      .where(m.eq(m.schemas.serviceCatalogItems.name, serviceName))
+      .limit(1);
+    if (!svc) throw new Error('service lookup failed');
+    await m.db.insert(m.schemas.serviceEngagements).values({
+      serviceCatalogItemId: svc.id,
+      payerPersonId: payablePersonId,
+      beneficiaryPersonId: payablePersonId,
+      agreedAmount: '150.00',
+      currencyCode: 'EUR',
+      status: 'PENDING_PAYMENT',
+    });
     const reason = `Wave4 perm e2e ${stamp} — goodwill gesture`;
     try {
       // Admin grants first (so a complimentary engagement exists).
@@ -391,6 +410,8 @@ test.describe('Wave 4 — permissions and prohibited actions', () => {
       const engagementSelect = page.locator('#p-engagement');
       await expect(engagementSelect).toBeVisible({ timeout: 10_000 });
       const optionText = (await engagementSelect.textContent()) ?? '';
+      // The ordinary engagement is offered; the complimentary one is not.
+      expect(optionText).toContain(`Wave4 Comp-pay-${stamp}`);
       expect(optionText).not.toContain(`Wave4 Comp-perm-${stamp}`);
       await page.keyboard.press('Escape');
 
@@ -426,6 +447,7 @@ test.describe('Wave 4 — permissions and prohibited actions', () => {
       }
     } finally {
       await cleanupCandidate(m, personId);
+      await cleanupCandidate(m, payablePersonId);
     }
   });
 });

@@ -216,27 +216,116 @@ test('05 · Existing receipt renders in the new template + PDF', async ({ page }
   await page.goto('/payments', { waitUntil: 'networkidle' });
   await expect(page.getByRole('heading', { level: 1, name: /payments/i })).toBeVisible();
 
-  const { desc } = await import('drizzle-orm');
+  const { desc, eq, inArray } = await import('drizzle-orm');
   const { db } = await import('../src/lib/db/client');
   const { receipts } = await import('../src/lib/db/schema/billing');
-  const [receipt] = await db
-    .select({
-      number: receipts.number,
-      personId: receipts.payerPersonId,
-      employerId: receipts.payerEmployerId,
-    })
-    .from(receipts)
-    .orderBy(desc(receipts.issuedAt))
-    .limit(1);
-  test.skip(!receipt, 'no receipts in DB');
-  if (!receipt) return;
+  const { persons, candidateProfiles } = await import('../src/lib/db/schema/persons');
+  const { serviceEngagements, payments } = await import('../src/lib/db/schema/commerce');
+  const { serviceCatalogItems } = await import('../src/lib/db/schema/services');
+  const latestReceipt = async () =>
+    (
+      await db
+        .select({
+          number: receipts.number,
+          personId: receipts.payerPersonId,
+          employerId: receipts.payerEmployerId,
+        })
+        .from(receipts)
+        .orderBy(desc(receipts.issuedAt))
+        .limit(1)
+    )[0];
 
-  const url =
-    receipt.personId !== null
-      ? `/candidates/${receipt.personId}/receipts/${receipt.number}`
-      : `/employers/${receipt.employerId}/receipts/${receipt.number}`;
-  await page.goto(url, { waitUntil: 'networkidle' });
-  await expect(page.getByText(/^RECEIPT$/)).toBeVisible();
-  await fullShot(page, 'e2e__receipt-print');
-  await pdfIt(page, 'e2e__receipt');
+  // Render an existing receipt when the DB has one (legacy data). On a
+  // fresh database (e.g. an isolated CI shard) make one through the real
+  // flow instead of skipping: an unpaid engagement, paid from /payments by
+  // the admin (finance authority verifies at once, which issues a receipt).
+  let receipt = await latestReceipt();
+  let seededPersonId: string | null = null;
+  try {
+    if (!receipt) {
+      const stamp = Math.random().toString(36).slice(2, 7);
+      const [person] = await db
+        .insert(persons)
+        .values({
+          firstName: 'Receipt',
+          lastName: `QA-${stamp}`,
+          email: `receipt-qa-${stamp}@example.test`,
+          source: 'DIRECT',
+        })
+        .returning({ id: persons.id });
+      if (!person) throw new Error('person seed failed');
+      seededPersonId = person.id;
+      await db.insert(candidateProfiles).values({
+        personId: person.id,
+        lifecycleStatus: 'ACTIVE',
+        availabilityStatus: 'AVAILABLE',
+      });
+      const [svc] = await db
+        .select({ id: serviceCatalogItems.id })
+        .from(serviceCatalogItems)
+        .where(eq(serviceCatalogItems.isActive, true))
+        .limit(1);
+      if (!svc) throw new Error('no active service');
+      await db.insert(serviceEngagements).values({
+        serviceCatalogItemId: svc.id,
+        payerPersonId: person.id,
+        beneficiaryPersonId: person.id,
+        agreedAmount: '120.00',
+        currencyCode: 'EUR',
+        status: 'PENDING_PAYMENT',
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      const dialog = page.getByRole('dialog');
+      await expect(async () => {
+        await page
+          .getByRole('button', { name: /Record payment/i })
+          .first()
+          .click();
+        await expect(dialog.locator('#p-engagement')).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 20_000 });
+      const option = dialog
+        .locator('#p-engagement option')
+        .filter({ hasText: `Receipt QA-${stamp}` });
+      await dialog
+        .locator('#p-engagement')
+        .selectOption({ value: (await option.getAttribute('value')) ?? '' });
+      await dialog.locator('#p-amount').fill('120.00');
+      await dialog.getByRole('button', { name: 'Record payment' }).click();
+      await expect(page.getByText(/Payment recorded and verified/).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      receipt = await latestReceipt();
+    }
+    expect(receipt, 'a receipt to render').toBeTruthy();
+    if (!receipt) return;
+
+    const url =
+      receipt.personId !== null
+        ? `/candidates/${receipt.personId}/receipts/${receipt.number}`
+        : `/employers/${receipt.employerId}/receipts/${receipt.number}`;
+    await page.goto(url, { waitUntil: 'networkidle' });
+    await expect(page.getByText(/^RECEIPT$/)).toBeVisible();
+    await fullShot(page, 'e2e__receipt-print');
+    await pdfIt(page, 'e2e__receipt');
+  } finally {
+    if (seededPersonId) {
+      const engs = await db
+        .select({ id: serviceEngagements.id })
+        .from(serviceEngagements)
+        .where(eq(serviceEngagements.payerPersonId, seededPersonId));
+      const engIds = engs.map((e) => e.id);
+      if (engIds.length > 0) {
+        const pays = await db
+          .select({ id: payments.id })
+          .from(payments)
+          .where(inArray(payments.serviceEngagementId, engIds));
+        const payIds = pays.map((x) => x.id);
+        if (payIds.length > 0) await db.delete(receipts).where(inArray(receipts.paymentId, payIds));
+        await db.delete(payments).where(inArray(payments.serviceEngagementId, engIds));
+        await db.delete(serviceEngagements).where(inArray(serviceEngagements.id, engIds));
+      }
+      await db.delete(candidateProfiles).where(eq(candidateProfiles.personId, seededPersonId));
+      await db.delete(persons).where(eq(persons.id, seededPersonId));
+    }
+  }
 });
