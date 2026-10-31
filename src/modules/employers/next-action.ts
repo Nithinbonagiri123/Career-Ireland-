@@ -28,7 +28,14 @@ export type EmployerNextActionInput = {
     personName: string;
     jobRequisitionId: string;
     latestInvoice: { number: string; issuedAt: Date; outstandingAmount: string } | null;
+    /** P0 — a fee can be raised now (CONFIRMED / STARTED / COMPLETED, not
+     *  archived, no non-void invoice; see placements/fee.ts). Defaults to
+     *  `latestInvoice == null` when omitted. */
+    feeRaisable?: boolean;
   }>;
+  /** P0 — the viewer may issue invoices (finance authority). When false the
+   *  fee step points at the Billing tab instead of an action they can't do. */
+  canIssueInvoice?: boolean;
   now?: Date;
 };
 
@@ -65,8 +72,17 @@ export function computeEmployerNextAction(
     };
   }
 
-  const uninvoicedPlacement = placements.find((p) => p.latestInvoice == null);
+  const uninvoicedPlacement = placements.find((p) => p.feeRaisable ?? p.latestInvoice == null);
   if (uninvoicedPlacement) {
+    if (input.canIssueInvoice === false) {
+      return {
+        label: 'NEXT STEP',
+        dueHint: null,
+        sentence: `The placement fee for ${uninvoicedPlacement.personName} is ready to invoice — Finance issues invoices.`,
+        tone: 'default',
+        primary: { label: 'View billing', href: `/employers/${employerId}?tab=billing` },
+      };
+    }
     return {
       label: 'NEXT STEP',
       dueHint: null,
@@ -74,7 +90,7 @@ export function computeEmployerNextAction(
       tone: 'default',
       primary: {
         label: 'Raise placement fee',
-        href: `/employers/${employerId}?raisePlacement=${uninvoicedPlacement.id}`,
+        href: `/employers/${employerId}?raisePlacement=${uninvoicedPlacement.id}&raiseRequisition=${uninvoicedPlacement.jobRequisitionId}`,
       },
     };
   }

@@ -47,7 +47,7 @@ export function computeCampaignNextAction(i: CampaignNextActionInput): CampaignN
       label: 'Paused',
       dueHint: null,
       sentence:
-        'The campaign is paused and its advertisements are suspended. Resume it, then reactivate the advertisements you want running.',
+        'The campaign is paused and its advertisements are suspended. Resume it, then mark the advertisements you want live again.',
       tone: 'default',
       primary: { label: 'Advertisements', href: `${base}?tab=ads` },
     };
@@ -57,23 +57,25 @@ export function computeCampaignNextAction(i: CampaignNextActionInput): CampaignN
       ? {
           label: 'Set up',
           dueHint: null,
-          sentence: 'Add the first advertisement, then activate the campaign when it goes live.',
+          sentence:
+            'Record the first advertisement, then activate the campaign once you have posted it.',
           tone: 'default',
           primary: { label: 'Advertisements', href: `${base}?tab=ads` },
         }
       : {
           label: 'Ready to launch',
           dueHint: null,
-          sentence: 'The campaign is still a draft. Activate it when its advertisements go live.',
+          sentence:
+            'The campaign is still a draft. Activate it once you have posted its advertisements.',
           tone: 'default',
           primary: { label: 'Advertisements', href: `${base}?tab=ads` },
         };
   }
   if (i.status === 'ACTIVE' && i.activeAdCount === 0) {
     return {
-      label: 'Nothing running',
+      label: 'Nothing marked live',
       dueHint: null,
-      sentence: 'The campaign is active but no advertisement is running.',
+      sentence: 'The campaign is active but no advertisement is marked live.',
       tone: 'urgent',
       primary: { label: 'Advertisements', href: `${base}?tab=ads` },
     };

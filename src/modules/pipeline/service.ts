@@ -85,6 +85,8 @@ export async function fetchRequisitionPipeline(requisitionId: string): Promise<P
         // from the pipeline board's perspective; only "PROPOSED" and
         // "TERMINATED_EARLY" are excluded.
         inArray(placements.status, ['CONFIRMED', 'STARTED', 'COMPLETED']),
+        // P0 — archived placements hold no seat (same rule as Seats / KPIs).
+        isNull(placements.archivedAt),
         isNull(persons.archivedAt),
       ),
     );

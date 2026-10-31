@@ -20,8 +20,11 @@ const reason = z
 /**
  * R4 — create / edit a campaign's details. Status is never set here: new
  * campaigns start as DRAFT and move only through TransitionCampaignSchema.
- * The employer is optional and only used to check the chosen job belongs
- * to it (campaigns store the job; the employer is the job's employer).
+ * Two kinds (owner decision 7): a talent pool (no job, no employer) or a
+ * job campaign (an advertisable job). The campaign stores only the job;
+ * its employer is the job's employer. `employerId` is an optional
+ * cross-check only — it must match the job's employer and is refused
+ * without a job.
  */
 export const SaveCampaignSchema = z.object({
   id: z.string().uuid().optional(),
@@ -79,6 +82,8 @@ export const CreateProspectSchema = z
       })
       .optional(),
     notes: z.string().max(1000).optional().or(z.literal('')),
+    /** The user confirmed a same-name match is a different person (audited). */
+    confirmDifferentPerson: z.boolean().optional(),
   })
   .superRefine((v, ctx) => {
     const hasPerson = Boolean(v.personId);

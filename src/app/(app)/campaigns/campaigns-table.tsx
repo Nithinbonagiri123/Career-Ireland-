@@ -63,7 +63,7 @@ export function CampaignsTable({
         size: 90,
         cell: ({ row }) => (
           <span className="text-xs tabular-nums text-muted-foreground">
-            {row.original.activeAdCount} of {row.original.adCount} running
+            {row.original.activeAdCount} of {row.original.adCount} marked live
           </span>
         ),
       },

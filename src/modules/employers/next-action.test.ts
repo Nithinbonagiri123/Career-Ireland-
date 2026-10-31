@@ -73,7 +73,9 @@ describe('computeEmployerNextAction', () => {
       now: NOW,
     });
     expect(result?.sentence).toMatch(/raise the placement fee invoice for niamh byrne/i);
-    expect(result?.primary.href).toBe(`/employers/${EMPLOYER_ID}?raisePlacement=p1`);
+    expect(result?.primary.href).toBe(
+      `/employers/${EMPLOYER_ID}?raisePlacement=p1&raiseRequisition=r1`,
+    );
     expect(result?.tone).toBe('default');
   });
 

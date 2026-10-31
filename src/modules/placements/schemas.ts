@@ -22,6 +22,27 @@ export const PlacementOfferExceptionSchema = z.object({
     .max(500, 'Keep the reason under 500 characters'),
 });
 
+/**
+ * P0 — optional terms typed by the user on the audited no-offer exception
+ * path (there is no accepted offer to copy them from). Both optional;
+ * when an accepted offer exists its terms are used instead.
+ */
+export const PlacementTermsSchema = z.object({
+  salary: z
+    .string()
+    .trim()
+    .regex(/^\d{1,12}(\.\d{1,2})?$/, 'Enter the salary as a number, e.g. 34000')
+    .optional()
+    .or(z.literal('')),
+  salaryCurrencyCode: z
+    .string()
+    .trim()
+    .regex(/^[A-Z]{3}$/, 'Use a 3-letter currency code, e.g. EUR')
+    .optional()
+    .or(z.literal('')),
+  startDate: z.string().date('Enter a valid start date').optional().or(z.literal('')),
+});
+
 export const CreatePlacementSchema = z.object({
   personId: z.string().uuid(),
   employerId: z.string().uuid(),
@@ -59,6 +80,7 @@ export const UnarchivePlacementSchema = z.object({
 });
 
 export type PlacementOfferException = z.input<typeof PlacementOfferExceptionSchema>;
+export type PlacementTerms = z.input<typeof PlacementTermsSchema>;
 export type CreatePlacementInput = Omit<z.infer<typeof CreatePlacementSchema>, 'offerException'> & {
   offerException?: PlacementOfferException;
 };

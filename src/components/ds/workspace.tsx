@@ -209,13 +209,16 @@ export const DS_TABS_LIST = cn(
 );
 export const DS_TAB_TRIGGER = cn(
   'group relative h-12 shrink-0 rounded-none px-3.5 text-sm font-medium text-muted-foreground transition-colors sm:px-4',
-  'hover:text-foreground data-[selected]:font-semibold data-[selected]:text-foreground',
-  'after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent data-[selected]:after:bg-primary',
+  // `aria-selected`, not `data-[selected]`: base-ui 1.7 marks the active tab
+  // with `data-active` + `aria-selected="true"`; hand-rolled tab strips
+  // (invoice-detail-tabs) set `aria-selected` too, so one selector fits both.
+  'hover:text-foreground aria-selected:font-semibold aria-selected:text-foreground',
+  'after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-transparent aria-selected:after:bg-primary',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
 );
 /** Count badge inside a DS tab (navy when the tab is active). */
 export const DS_TAB_COUNT =
-  'ml-1.5 rounded-md bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground group-data-[selected]:bg-primary group-data-[selected]:text-primary-foreground';
+  'ml-1.5 rounded-md bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground group-aria-selected:bg-primary group-aria-selected:text-primary-foreground';
 
 /** White section card: icon + title (+ count), contextual action, body. */
 export function SectionCard({

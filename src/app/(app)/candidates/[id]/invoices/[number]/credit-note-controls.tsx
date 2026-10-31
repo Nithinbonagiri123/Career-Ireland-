@@ -131,6 +131,7 @@ export function CreditNoteControls({
             <Label htmlFor="cn-reason">Reason (audited)</Label>
             <Textarea
               id="cn-reason"
+              autoComplete="off"
               rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}

@@ -1,10 +1,12 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { AlertCircle, Loader2, Mail, Plus, Search, User, UserPlus } from 'lucide-react';
+import { AlertCircle, Info, Loader2, Mail, Plus, Search, User, UserPlus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogClose,
@@ -15,6 +17,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useServerSearch } from '@/lib/hooks/use-server-search';
 import { cn } from '@/lib/utils';
 import { manuallyShortlistPersonAction } from '@/modules/matching/actions';
@@ -42,6 +45,11 @@ export function AddCandidateDialog({
   const [selected, setSelected] = useState<PersonPickerItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  /** Person id the server asked to confirm (placed / unavailable). */
+  const [needsConfirm, setNeedsConfirm] = useState<string | null>(null);
+  const [confirmAvailability, setConfirmAvailability] = useState(false);
+  const router = useRouter();
   // R2 — candidates are searched on the server (paginated, access-checked)
   // instead of shipping every person to the browser with the page.
   const search = useServerSearch(searchPersonsForPickerAction, { enabled: open });
@@ -52,22 +60,50 @@ export function AddCandidateDialog({
     search.reset();
     setSelected(null);
     setFormError(null);
+    setNotice(null);
+    setNeedsConfirm(null);
+    setConfirmAvailability(false);
     setSubmitting(false);
   };
 
+  // P0 — the server returns what actually happened; say exactly that.
   const submit = async (id: string, name?: string) => {
+    const label = name ?? (selected ? `${selected.firstName} ${selected.lastName}` : 'Candidate');
     setSubmitting(true);
     setFormError(null);
-    const r = await manuallyShortlistPersonAction(id, requisitionId);
+    setNotice(null);
+    const confirm = needsConfirm === id && confirmAvailability;
+    const r = await manuallyShortlistPersonAction(id, requisitionId, {
+      confirmAvailability: confirm,
+    });
     setSubmitting(false);
     if (!r.ok) {
       setFormError(r.error.message);
       return;
     }
-    const label = name ?? (selected ? `${selected.firstName} ${selected.lastName}` : null);
-    toast.success(label ? `${label} added to Shortlisted` : 'Added to Shortlisted');
+    const res = r.data;
+    if (res.outcome === 'already_at_stage') {
+      const msg = `${label} is already on this job at ${res.stage} — nothing was changed.`;
+      setNotice(msg);
+      toast.info(msg);
+      return;
+    }
+    if (res.outcome === 'refused') {
+      if (res.code === 'AVAILABILITY_CONFIRMATION_REQUIRED') {
+        setNeedsConfirm(id);
+        setConfirmAvailability(false);
+      }
+      setFormError(res.reason);
+      return;
+    }
+    toast.success(
+      res.outcome === 'reactivated'
+        ? `${label} is back on the shortlist (previously ${res.previousStatus === 'DISMISSED' ? 'dismissed' : 'removed from the shortlist'})`
+        : `${label} added to Shortlisted`,
+    );
     reset();
     setOpen(false);
+    router.refresh();
   };
 
   // "Create + shortlist in one" when the query has no match. Parses the
@@ -184,7 +220,15 @@ export function AddCandidateDialog({
                   <li key={p.id}>
                     <button
                       type="button"
-                      onClick={() => setSelected(p)}
+                      onClick={() => {
+                        setSelected(p);
+                        setNotice(null);
+                        setFormError(null);
+                        if (needsConfirm !== p.id) {
+                          setNeedsConfirm(null);
+                          setConfirmAvailability(false);
+                        }
+                      }}
                       className={cn(
                         'flex w-full items-center gap-3 px-3 py-2 text-left transition-colors',
                         isSelected ? 'bg-accent/10' : 'hover:bg-muted',
@@ -250,6 +294,17 @@ export function AddCandidateDialog({
           </button>
         )}
 
+        {notice && (
+          <div
+            className="flex items-start gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-100"
+            role="status"
+            data-testid="add-candidate-notice"
+          >
+            <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            <span>{notice}</span>
+          </div>
+        )}
+
         {formError && (
           <motion.div
             initial={{ opacity: 0, y: -4 }}
@@ -262,9 +317,29 @@ export function AddCandidateDialog({
           </motion.div>
         )}
 
+        {needsConfirm && needsConfirm === personId && (
+          <div className="flex items-start gap-2">
+            <Checkbox
+              id="ac-confirm-availability"
+              checked={confirmAvailability}
+              onCheckedChange={(v) => setConfirmAvailability(v === true)}
+              className="mt-0.5"
+            />
+            <Label htmlFor="ac-confirm-availability" className="text-sm font-normal leading-snug">
+              Add them anyway — I know their current availability. This is recorded in the audit
+              log.
+            </Label>
+          </div>
+        )}
+
         <DialogFooter>
           <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-          <Button onClick={() => submit(personId)} disabled={submitting || !personId}>
+          <Button
+            onClick={() => submit(personId)}
+            disabled={
+              submitting || !personId || (needsConfirm === personId && !confirmAvailability)
+            }
+          >
             {submitting && <Loader2 className="mr-2 size-4 animate-spin" />}
             <User className="mr-1.5 size-3.5" />
             Add to shortlist

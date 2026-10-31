@@ -1,7 +1,8 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { type ReactElement, useMemo, useState } from 'react';
+import { Lock } from 'lucide-react';
+import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { type EmployerOption, EmployerSearchSelect } from '@/components/employer-search-select';
 import { FormErrorAlert } from '@/components/form-error-alert';
@@ -26,7 +27,10 @@ import type { Currency } from '@/lib/db/schema/currencies';
 import type { Occupation } from '@/lib/db/schema/occupations';
 import type { Employer, JobRequisition } from '@/lib/db/schema/recruitment';
 import { useFormDialog } from '@/lib/hooks/use-form-dialog';
-import { upsertRequisitionAction } from '@/modules/requisitions/actions';
+import {
+  fetchRequisitionEmployerLockAction,
+  upsertRequisitionAction,
+} from '@/modules/requisitions/actions';
 import {
   type UpsertRequisitionInput,
   UpsertRequisitionSchema,
@@ -90,7 +94,42 @@ export function RequisitionDialog({
     setValue,
     formState: { errors, isSubmitting },
   } = form;
-  const { open, onOpenChange, formError, submit } = useFormDialog(form, { defaultOpen });
+  const {
+    open,
+    onOpenChange: onDialogOpenChange,
+    formError,
+    submit,
+  } = useFormDialog(form, { defaultOpen });
+
+  // P0 — once a job has activity (campaign, match, shortlist, application,
+  // interview, offer, placement or invoice) its employer is fixed; the
+  // server refuses the change too. Checked each time the edit dialog opens;
+  // read-only until the answer arrives.
+  const editId = initial?.id;
+  const [employerLock, setEmployerLock] = useState<'checking' | 'locked' | 'free'>('checking');
+  const checkLock = useCallback(() => {
+    if (!editId) return;
+    setEmployerLock('checking');
+    fetchRequisitionEmployerLockAction(editId).then((r) => {
+      setEmployerLock(r.ok && !r.data.locked ? 'free' : 'locked');
+    });
+  }, [editId]);
+  useEffect(() => {
+    if (defaultOpen) checkLock();
+  }, [defaultOpen, checkLock]);
+  const onOpenChange = (next: boolean) => {
+    if (next) {
+      // Fresh session: the employer picker starts from the record / prefill.
+      setPickedEmployer(initialEmployer ?? null);
+      checkLock();
+    }
+    onDialogOpenChange(next);
+  };
+  const employerReadOnly = isEdit && employerLock !== 'free';
+  const currentEmployerName =
+    employers?.find((e) => e.id === initial?.employerId)?.legalName ??
+    initialEmployer?.legalName ??
+    '';
 
   const [locallyCreatedOccupations, setLocallyCreatedOccupations] = useState<OccupationOption[]>(
     [],
@@ -122,29 +161,54 @@ export function RequisitionDialog({
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-6" noValidate>
           <FormSection title="Role">
-            <FormField id="jr-employer" label="Employer" error={errors.employerId?.message}>
-              {employers ? (
-                <Select id="jr-employer" {...register('employerId')}>
-                  {employers.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.legalName}
-                    </option>
-                  ))}
-                </Select>
-              ) : (
-                <>
-                  <input type="hidden" {...register('employerId')} />
-                  <EmployerSearchSelect
-                    id="jr-employer"
-                    value={pickedEmployer}
-                    onChange={(next) => {
-                      setPickedEmployer(next);
-                      setValue('employerId', next.id, { shouldDirty: true, shouldValidate: true });
-                    }}
-                  />
-                </>
-              )}
-            </FormField>
+            {employerReadOnly ? (
+              <FormField
+                id="jr-employer"
+                label="Employer"
+                hint={
+                  employerLock === 'locked'
+                    ? 'This job already has activity for this employer, so the employer can’t change. Create a new job for another employer.'
+                    : undefined
+                }
+              >
+                <input type="hidden" {...register('employerId')} />
+                <p
+                  id="jr-employer"
+                  className="flex items-center gap-1.5 text-sm font-medium"
+                  data-testid="requisition-employer-readonly"
+                >
+                  <Lock className="size-3.5 text-muted-foreground" aria-hidden />
+                  {currentEmployerName || 'Current employer'}
+                </p>
+              </FormField>
+            ) : (
+              <FormField id="jr-employer" label="Employer" error={errors.employerId?.message}>
+                {employers ? (
+                  <Select id="jr-employer" {...register('employerId')}>
+                    {employers.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.legalName}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <>
+                    <input type="hidden" {...register('employerId')} />
+                    <EmployerSearchSelect
+                      id="jr-employer"
+                      value={pickedEmployer}
+                      onChange={(next) => {
+                        setPickedEmployer(next);
+                        setValue('employerId', next.id, {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        });
+                      }}
+                    />
+                  </>
+                )}
+              </FormField>
+            )}
             <FormField id="jr-title" label="Job title" error={errors.title?.message}>
               <Input id="jr-title" aria-invalid={Boolean(errors.title)} {...register('title')} />
             </FormField>

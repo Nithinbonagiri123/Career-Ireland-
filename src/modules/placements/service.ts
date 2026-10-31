@@ -3,8 +3,10 @@ import { recordAudit } from '@/lib/audit/withAudit';
 import { requireRecruitment } from '@/lib/auth/recruitment-guards';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
+import { todayInDublin } from '@/lib/dates';
 import { db } from '@/lib/db/client';
 import { invoices } from '@/lib/db/schema/billing';
+import { currencies } from '@/lib/db/schema/currencies';
 import { offers } from '@/lib/db/schema/interviews_offers';
 import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import {
@@ -20,6 +22,7 @@ import {
   assertTransition,
   PLACEMENT_TRANSITIONS,
 } from '@/lib/state-machine';
+import { lockJobForPipelineWork } from '@/modules/pipeline/job-guard';
 import {
   type ArchivePlacementInput,
   ArchivePlacementSchema,
@@ -27,6 +30,8 @@ import {
   CreatePlacementSchema,
   type PlacementOfferException,
   PlacementOfferExceptionSchema,
+  type PlacementTerms,
+  PlacementTermsSchema,
   type RestoreAvailabilityInput,
   RestoreAvailabilitySchema,
   type UnarchivePlacementInput,
@@ -43,10 +48,9 @@ export type PlacementListRow = Placement & {
   personName: string;
   employerName: string;
   requisitionTitle: string;
-  /** Most recent non-voided fee invoice raised for this placement, if
-   *  any. Powers the "Invoice" column on the placements table so staff
-   *  can see at a glance whether the placement has been billed. Null
-   *  when no invoice with placement_id === this row exists. */
+  /** Most recent fee invoice raised for this placement (any status, so a
+   *  voided one still shows), or null when none exists. Powers the
+   *  "Invoice" column on the placements table. */
   latestInvoice: {
     id: string;
     number: string;
@@ -54,7 +58,81 @@ export type PlacementListRow = Placement & {
     totalAmount: string;
     currencyCode: string;
   } | null;
+  /** P0 — any linked invoice that is not VOIDED. A live invoice blocks a
+   *  second placement fee (see ./fee.ts). */
+  hasLiveInvoice: boolean;
+  /** P0 — pay period of the accepted offer the salary was copied from
+   *  (ANNUAL / MONTHLY / WEEKLY / HOURLY), null when unknown. The
+   *  placement row itself stores no period. */
+  salaryPeriod: string | null;
 };
+
+type PlacementJoinRow = {
+  placement: Placement;
+  firstName: string;
+  lastName: string;
+  employerName: string;
+  requisitionTitle: string;
+};
+
+/** Bulk-loads fee-invoice state and offer pay periods for list rows. */
+async function decoratePlacementRows(rows: PlacementJoinRow[]): Promise<PlacementListRow[]> {
+  const placementIds = rows.map((r) => r.placement.id);
+  const invoiceById = new Map<string, PlacementListRow['latestInvoice']>();
+  const live = new Set<string>();
+  const periodByApp = new Map<string, string>();
+  if (placementIds.length > 0) {
+    // Rank by issuedAt DESC so voided-then-reissued reads the reissue.
+    const invoiceRows = await db
+      .select({
+        id: invoices.id,
+        number: invoices.number,
+        status: invoices.status,
+        totalAmount: invoices.totalAmount,
+        currencyCode: invoices.currencyCode,
+        placementId: invoices.placementId,
+        rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${invoices.placementId} ORDER BY ${invoices.issuedAt} DESC)`,
+      })
+      .from(invoices)
+      .where(inArray(invoices.placementId, placementIds));
+    for (const iv of invoiceRows) {
+      if (!iv.placementId) continue;
+      if (iv.status !== 'VOIDED') live.add(iv.placementId);
+      if (Number(iv.rn) !== 1) continue;
+      invoiceById.set(iv.placementId, {
+        id: iv.id,
+        number: iv.number,
+        status: iv.status as 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOIDED',
+        totalAmount: iv.totalAmount,
+        currencyCode: iv.currencyCode,
+      });
+    }
+    const appIds = rows
+      .map((r) => r.placement.jobApplicationId)
+      .filter((v): v is string => Boolean(v));
+    if (appIds.length > 0) {
+      const offerRows = await db
+        .select({ appId: offers.jobApplicationId, period: offers.period })
+        .from(offers)
+        .where(and(inArray(offers.jobApplicationId, appIds), eq(offers.status, 'ACCEPTED')))
+        .orderBy(desc(offers.updatedAt));
+      for (const o of offerRows) if (!periodByApp.has(o.appId)) periodByApp.set(o.appId, o.period);
+    }
+  }
+
+  return rows.map((r) => ({
+    ...r.placement,
+    personName: `${r.firstName} ${r.lastName}`,
+    employerName: r.employerName,
+    requisitionTitle: r.requisitionTitle,
+    latestInvoice: invoiceById.get(r.placement.id) ?? null,
+    hasLiveInvoice: live.has(r.placement.id),
+    salaryPeriod:
+      r.placement.salary && r.placement.jobApplicationId
+        ? (periodByApp.get(r.placement.jobApplicationId) ?? null)
+        : null,
+  }));
+}
 
 export async function fetchPlacements(createdRange?: DateRange): Promise<PlacementListRow[]> {
   await requireInternalStaff();
@@ -75,51 +153,14 @@ export async function fetchPlacements(createdRange?: DateRange): Promise<Placeme
     .innerJoin(jobRequisitions, eq(jobRequisitions.id, placements.jobRequisitionId))
     .where(and(...whereConds))
     .orderBy(desc(placements.createdAt));
-
-  // Bulk-load the latest fee invoice for each placement in one query.
-  // Rank by issuedAt DESC so voided-then-reissued reads the reissue.
-  const placementIds = rows.map((r) => r.placement.id);
-  const invoiceById = new Map<string, PlacementListRow['latestInvoice']>();
-  if (placementIds.length > 0) {
-    const invoiceRows = await db
-      .select({
-        id: invoices.id,
-        number: invoices.number,
-        status: invoices.status,
-        totalAmount: invoices.totalAmount,
-        currencyCode: invoices.currencyCode,
-        placementId: invoices.placementId,
-        rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${invoices.placementId} ORDER BY ${invoices.issuedAt} DESC)`,
-      })
-      .from(invoices)
-      .where(inArray(invoices.placementId, placementIds));
-    for (const iv of invoiceRows) {
-      if (iv.rn !== 1 || !iv.placementId) continue;
-      invoiceById.set(iv.placementId, {
-        id: iv.id,
-        number: iv.number,
-        status: iv.status as 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOIDED',
-        totalAmount: iv.totalAmount,
-        currencyCode: iv.currencyCode,
-      });
-    }
-  }
-
-  return rows.map((r) => ({
-    ...r.placement,
-    personName: `${r.firstName} ${r.lastName}`,
-    employerName: r.employerName,
-    requisitionTitle: r.requisitionTitle,
-    latestInvoice: invoiceById.get(r.placement.id) ?? null,
-  }));
+  return decoratePlacementRows(rows);
 }
 
 /**
  * Placements scoped to a single requisition, with their fee-invoice
- * summary. Feeds the "Placements & Fees" card on the requisition
- * detail page so staff can see who was placed, at what salary, and
- * whether a fee invoice has been raised — all without leaving the
- * requisition.
+ * summary. Feeds the Seats & placements tab on the requisition detail
+ * page so staff can see who was placed, at what salary, and whether a
+ * fee invoice has been raised — all without leaving the requisition.
  */
 export async function listPlacementsForRequisition(
   requisitionId: string,
@@ -139,41 +180,7 @@ export async function listPlacementsForRequisition(
     .innerJoin(jobRequisitions, eq(jobRequisitions.id, placements.jobRequisitionId))
     .where(and(eq(placements.jobRequisitionId, requisitionId), isNull(placements.archivedAt)))
     .orderBy(desc(placements.createdAt));
-
-  const placementIds = rows.map((r) => r.placement.id);
-  const invoiceById = new Map<string, PlacementListRow['latestInvoice']>();
-  if (placementIds.length > 0) {
-    const invoiceRows = await db
-      .select({
-        id: invoices.id,
-        number: invoices.number,
-        status: invoices.status,
-        totalAmount: invoices.totalAmount,
-        currencyCode: invoices.currencyCode,
-        placementId: invoices.placementId,
-        rn: sql<number>`ROW_NUMBER() OVER (PARTITION BY ${invoices.placementId} ORDER BY ${invoices.issuedAt} DESC)`,
-      })
-      .from(invoices)
-      .where(inArray(invoices.placementId, placementIds));
-    for (const iv of invoiceRows) {
-      if (iv.rn !== 1 || !iv.placementId) continue;
-      invoiceById.set(iv.placementId, {
-        id: iv.id,
-        number: iv.number,
-        status: iv.status as 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOIDED',
-        totalAmount: iv.totalAmount,
-        currencyCode: iv.currencyCode,
-      });
-    }
-  }
-
-  return rows.map((r) => ({
-    ...r.placement,
-    personName: `${r.firstName} ${r.lastName}`,
-    employerName: r.employerName,
-    requisitionTitle: r.requisitionTitle,
-    latestInvoice: invoiceById.get(r.placement.id) ?? null,
-  }));
+  return decoratePlacementRows(rows);
 }
 
 /**
@@ -190,6 +197,9 @@ export async function listPlacementsForRequisition(
 export async function markApplicationPlaced(
   applicationId: string,
   offerException?: PlacementOfferException,
+  /** P0 — salary / start date typed on the no-offer exception path. Ignored
+   *  when an accepted offer exists (its terms are copied instead). */
+  exceptionTerms?: PlacementTerms,
 ): Promise<Placement> {
   const session = await requireRecruitment('placements', 'create');
   return db.transaction(async (tx) => {
@@ -209,6 +219,11 @@ export async function markApplicationPlaced(
         'APPLICATION_EXTERNAL',
         'External applications cannot be placed on our requisitions',
       );
+
+    // P0 — no placing on draft, closed, cancelled or archived jobs. FILLED
+    // is left to the seat guard below so its message names the capacity.
+    const req = await lockJobForPipelineWork(tx, app.jobRequisitionId, 'place');
+
     // R0 — this used to jump an application to ACCEPTED from any status
     // with no transition check and no audit row. Placement is only legal
     // from OFFER (the OFFER→ACCEPTED hop) or from an already-ACCEPTED
@@ -216,13 +231,6 @@ export async function markApplicationPlaced(
     if (app.status !== 'ACCEPTED') {
       assertTransition('application', app.status, 'ACCEPTED', APPLICATION_TRANSITIONS);
     }
-
-    const [req] = await tx
-      .select({ employerId: jobRequisitions.employerId })
-      .from(jobRequisitions)
-      .where(eq(jobRequisitions.id, app.jobRequisitionId))
-      .limit(1);
-    if (!req) throw new BusinessRuleError('REQUISITION_NOT_FOUND', 'Requisition not found');
 
     // Already placed? Return the existing row so the pipeline click stays
     // idempotent (double-clicks, revalidate races, etc.).
@@ -253,12 +261,10 @@ export async function markApplicationPlaced(
           context: { via: 'pipeline_mark_placed' },
         });
       }
-      // Stage C workflow collapse — accepting an application auto-creates
-      // a PROPOSED placement (applications/service.ts), so "mark placed"
-      // on it means CONFIRM that placement: the same PROPOSED→CONFIRMED
-      // hop updatePlacementStatus performs, with the same availability
-      // flip and audit. Without this, the one-click path returned the
-      // proposed row untouched and the candidate never read as Placed.
+      // A legacy PROPOSED placement (older "application accepted" path):
+      // "mark placed" on it means CONFIRM that placement — the same
+      // PROPOSED→CONFIRMED hop updatePlacementStatus performs, with the
+      // same availability flip and audit.
       if (existing.status === 'PROPOSED') {
         await assertSeatAvailable(tx, {
           requisitionId: app.jobRequisitionId,
@@ -270,9 +276,20 @@ export async function markApplicationPlaced(
           requisitionId: app.jobRequisitionId,
           offerException,
         });
+        const terms = await resolvePlacementTerms(tx, basis, exceptionTerms);
         const [confirmed] = await tx
           .update(placements)
-          .set({ status: 'CONFIRMED', updatedAt: sql`NOW()` })
+          .set({
+            status: 'CONFIRMED',
+            // Keep anything already recorded on the row; fill the gaps.
+            salary: existing.salary ?? terms.salary,
+            salaryCurrencyCode: existing.salary
+              ? existing.salaryCurrencyCode
+              : terms.salaryCurrencyCode,
+            startDate: existing.startDate ?? terms.startDate,
+            offerDate: existing.offerDate ?? terms.offerDate,
+            updatedAt: sql`NOW()`,
+          })
           .where(eq(placements.id, existing.id))
           .returning();
         if (!confirmed) throw new Error('placement confirm returned no row');
@@ -281,9 +298,24 @@ export async function markApplicationPlaced(
           entityType: 'placement',
           entityId: confirmed.id,
           action: 'STATUS_CHANGED',
-          before: { status: 'PROPOSED' },
-          after: { status: 'CONFIRMED' },
-          context: { via: 'pipeline_mark_placed', applicationId, ...basisContext(basis) },
+          before: {
+            status: 'PROPOSED',
+            salary: existing.salary,
+            salaryCurrencyCode: existing.salaryCurrencyCode,
+            startDate: existing.startDate,
+          },
+          after: {
+            status: 'CONFIRMED',
+            salary: confirmed.salary,
+            salaryCurrencyCode: confirmed.salaryCurrencyCode,
+            startDate: confirmed.startDate,
+          },
+          context: {
+            via: 'pipeline_mark_placed',
+            applicationId,
+            ...basisContext(basis),
+            ...termsContext(terms),
+          },
         });
         await auditOfferException(tx, session.user.id, confirmed.id, basis, applicationId);
         await flipAvailabilityToPlaced(tx, session.user.id, confirmed.personId, confirmed.id);
@@ -302,6 +334,7 @@ export async function markApplicationPlaced(
       requisitionId: app.jobRequisitionId,
       offerException,
     });
+    const terms = await resolvePlacementTerms(tx, basis, exceptionTerms);
     const [created] = await tx
       .insert(placements)
       .values({
@@ -310,6 +343,10 @@ export async function markApplicationPlaced(
         jobRequisitionId: app.jobRequisitionId,
         jobApplicationId: applicationId,
         status: 'CONFIRMED',
+        salary: terms.salary,
+        salaryCurrencyCode: terms.salaryCurrencyCode ?? undefined,
+        startDate: terms.startDate,
+        offerDate: terms.offerDate,
       })
       .returning();
     if (!created) throw new Error('placement insert returned no row');
@@ -324,8 +361,16 @@ export async function markApplicationPlaced(
         employerId: created.employerId,
         jobRequisitionId: created.jobRequisitionId,
         status: created.status,
+        salary: created.salary,
+        salaryCurrencyCode: created.salaryCurrencyCode,
+        startDate: created.startDate,
       },
-      context: { via: 'pipeline_mark_placed', applicationId, ...basisContext(basis) },
+      context: {
+        via: 'pipeline_mark_placed',
+        applicationId,
+        ...basisContext(basis),
+        ...termsContext(terms),
+      },
     });
     await auditOfferException(tx, session.user.id, created.id, basis, applicationId);
 
@@ -354,6 +399,94 @@ export async function markApplicationPlaced(
   });
 }
 
+/** Salary, currency and dates that go onto a new / confirmed placement. */
+type ResolvedTerms = {
+  salary: string | null;
+  salaryCurrencyCode: string | null;
+  startDate: string | null;
+  offerDate: string | null;
+  source: 'accepted_offer' | 'exception_input' | 'none';
+  /** Offer pay period (the placement row stores no period; see report). */
+  period: string | null;
+};
+
+/**
+ * P0 — placements used to be created without salary or start date, so
+ * nothing downstream (fee, reports) had a basis. With an accepted offer
+ * the terms are copied from it as-is: amount + currency + proposed start
+ * date. The placement's `salary` column has no period, so the amount is
+ * NOT converted; the offer's period is kept in the audit context and is
+ * shown next to the salary in the lists. On the audited exception path
+ * the user may type the terms (both optional).
+ */
+async function resolvePlacementTerms(
+  tx: Parameters<typeof recordAudit>[0],
+  basis: PlacementBasis,
+  exceptionTerms: PlacementTerms | undefined,
+): Promise<ResolvedTerms> {
+  if (basis.kind === 'accepted_offer') {
+    return {
+      salary: basis.terms.amount,
+      salaryCurrencyCode: basis.terms.currencyCode,
+      startDate: basis.terms.startDate,
+      offerDate: basis.terms.offerDate,
+      source: 'accepted_offer',
+      period: basis.terms.period,
+    };
+  }
+  if (!exceptionTerms) {
+    return {
+      salary: null,
+      salaryCurrencyCode: null,
+      startDate: null,
+      offerDate: null,
+      source: 'none',
+      period: null,
+    };
+  }
+  const parsed = PlacementTermsSchema.safeParse(exceptionTerms);
+  if (!parsed.success) {
+    const fields: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      const key = String(issue.path[0] ?? 'salary');
+      fields[key] ??= issue.message;
+    }
+    throw new ValidationError(
+      Object.values(fields)[0] ?? 'Check the salary and start date',
+      fields,
+    );
+  }
+  const salary = blankToNull(parsed.data.salary);
+  let currency = salary ? (blankToNull(parsed.data.salaryCurrencyCode) ?? 'EUR') : null;
+  if (currency) {
+    const [known] = await tx
+      .select({ code: currencies.code })
+      .from(currencies)
+      .where(eq(currencies.code, currency))
+      .limit(1);
+    if (!known) {
+      throw new ValidationError(`Unknown currency ${currency}`, {
+        salaryCurrencyCode: `Unknown currency ${currency}`,
+      });
+    }
+    currency = known.code;
+  }
+  return {
+    salary,
+    salaryCurrencyCode: currency,
+    startDate: blankToNull(parsed.data.startDate),
+    offerDate: null,
+    source: salary || parsed.data.startDate ? 'exception_input' : 'none',
+    period: null,
+  };
+}
+
+function termsContext(t: ResolvedTerms): Record<string, unknown> {
+  return t.source === 'none'
+    ? { termsSource: 'none' }
+    : { termsSource: t.source, ...(t.period ? { salaryPeriod: t.period } : {}) };
+}
+
 export async function createPlacement(input: CreatePlacementInput): Promise<Placement> {
   const session = await requireRecruitment('placements', 'create');
   const parsed = CreatePlacementSchema.safeParse(input);
@@ -366,6 +499,8 @@ export async function createPlacement(input: CreatePlacementInput): Promise<Plac
   const d = parsed.data;
 
   return db.transaction(async (tx) => {
+    // P0 — no placements on draft, closed, cancelled or archived jobs.
+    await lockJobForPipelineWork(tx, d.jobRequisitionId, 'place');
     // R0 — direct creation used to accept any employer/requisition pair,
     // duplicates, and overfills. The guard locks the requisition row so
     // concurrent confirmations cannot both pass.
@@ -396,6 +531,7 @@ export async function createPlacement(input: CreatePlacementInput): Promise<Plac
         );
       }
     }
+    const offerTerms = basis?.kind === 'accepted_offer' ? basis.terms : null;
     const [created] = await tx
       .insert(placements)
       .values({
@@ -404,10 +540,14 @@ export async function createPlacement(input: CreatePlacementInput): Promise<Plac
         jobRequisitionId: d.jobRequisitionId,
         jobApplicationId: blankToNull(d.jobApplicationId) ?? undefined,
         status: d.status,
-        offerDate: blankToNull(d.offerDate),
-        startDate: blankToNull(d.startDate),
-        salary: blankToNull(d.salary),
-        salaryCurrencyCode: blankToNull(d.salaryCurrencyCode) ?? undefined,
+        // Typed values win; gaps are filled from the accepted offer (P0).
+        offerDate: blankToNull(d.offerDate) ?? offerTerms?.offerDate ?? null,
+        startDate: blankToNull(d.startDate) ?? offerTerms?.startDate ?? null,
+        salary: blankToNull(d.salary) ?? offerTerms?.amount ?? null,
+        salaryCurrencyCode:
+          (blankToNull(d.salary)
+            ? blankToNull(d.salaryCurrencyCode)
+            : (offerTerms?.currencyCode ?? blankToNull(d.salaryCurrencyCode))) ?? undefined,
         notes: blankToNull(d.notes),
       })
       .returning();
@@ -501,7 +641,17 @@ async function countSeatsFilled(
 
 /** Why a seat-taking placement was allowed. */
 type PlacementBasis =
-  | { kind: 'accepted_offer'; offerId: string }
+  | {
+      kind: 'accepted_offer';
+      offerId: string;
+      terms: {
+        amount: string;
+        currencyCode: string;
+        period: string;
+        startDate: string | null;
+        offerDate: string | null;
+      };
+    }
   | { kind: 'offer_exception'; reason: string };
 
 /**
@@ -516,8 +666,17 @@ async function assertAcceptedOfferOrException(
   tx: Parameters<typeof recordAudit>[0],
   opts: { personId: string; requisitionId: string; offerException?: PlacementOfferException },
 ): Promise<PlacementBasis> {
+  // Latest accepted offer wins if (unusually) there is more than one.
   const [accepted] = await tx
-    .select({ id: offers.id })
+    .select({
+      id: offers.id,
+      amount: offers.amount,
+      currencyCode: offers.currencyCode,
+      period: offers.period,
+      startDate: offers.startDate,
+      sentAt: offers.sentAt,
+      createdAt: offers.createdAt,
+    })
     .from(offers)
     .innerJoin(jobApplications, eq(jobApplications.id, offers.jobApplicationId))
     .where(
@@ -527,8 +686,21 @@ async function assertAcceptedOfferOrException(
         eq(jobApplications.jobRequisitionId, opts.requisitionId),
       ),
     )
+    .orderBy(sql`${offers.respondedAt} DESC NULLS LAST`, desc(offers.updatedAt))
     .limit(1);
-  if (accepted) return { kind: 'accepted_offer', offerId: accepted.id };
+  if (accepted) {
+    return {
+      kind: 'accepted_offer',
+      offerId: accepted.id,
+      terms: {
+        amount: accepted.amount,
+        currencyCode: accepted.currencyCode,
+        period: accepted.period,
+        startDate: accepted.startDate,
+        offerDate: todayInDublin(accepted.sentAt ?? accepted.createdAt),
+      },
+    };
+  }
 
   if (opts.offerException === undefined) {
     throw new BusinessRuleError(
@@ -722,6 +894,8 @@ export async function updatePlacementStatus(input: UpdatePlacementStatusInput): 
     // as every other confirmation path.
     let basis: PlacementBasis | null = null;
     if (before.status === 'PROPOSED' && parsed.status === 'CONFIRMED') {
+      // P0 — confirming takes a seat: same job-status rule as placing.
+      await lockJobForPipelineWork(tx, before.jobRequisitionId, 'place');
       await assertSeatAvailable(tx, {
         requisitionId: before.jobRequisitionId,
         forPersonId: before.personId,
@@ -734,11 +908,23 @@ export async function updatePlacementStatus(input: UpdatePlacementStatusInput): 
       });
     }
 
+    // P0 — confirming from an accepted offer fills salary / start gaps.
+    const confirmTerms = basis?.kind === 'accepted_offer' ? basis.terms : null;
     const [after] = await tx
       .update(placements)
       .set({
         status: parsed.status,
         endDate: blankToNull(parsed.endDate) ?? before.endDate,
+        ...(confirmTerms
+          ? {
+              salary: before.salary ?? confirmTerms.amount,
+              salaryCurrencyCode: before.salary
+                ? before.salaryCurrencyCode
+                : confirmTerms.currencyCode,
+              startDate: before.startDate ?? confirmTerms.startDate,
+              offerDate: before.offerDate ?? confirmTerms.offerDate,
+            }
+          : {}),
         updatedAt: sql`NOW()`,
       })
       .where(eq(placements.id, parsed.placementId))

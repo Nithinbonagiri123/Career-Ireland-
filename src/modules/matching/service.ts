@@ -9,14 +9,17 @@ import { candidateProfiles, persons } from '@/lib/db/schema/persons';
 import {
   type CandidateMatch,
   candidateMatches,
+  jobApplications,
   jobRequisitions,
+  placements,
   requisitionQualifications,
   requisitionSkills,
   shortlistEntries,
 } from '@/lib/db/schema/recruitment';
 import { qualifications, skills } from '@/lib/db/schema/reference';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
-import { BUSINESS_TIMEZONE, zonedLocalToUtc } from '@/lib/zoned-time';
+import { BUSINESS_TIMEZONE, formatZoned, zonedLocalToUtc } from '@/lib/zoned-time';
+import { lockJobForPipelineWork } from '@/modules/pipeline/job-guard';
 import {
   type RecordFeedbackInput,
   RecordFeedbackSchema,
@@ -379,7 +382,9 @@ export async function shortlistMatch(matchId: string) {
       .where(eq(candidateMatches.id, matchId))
       .limit(1);
     if (!m) throw new BusinessRuleError('MATCH_NOT_FOUND', 'Match not found');
-    await lockOpenRequisition(tx, m.jobRequisitionId);
+    // P0 — shortlisting is pipeline work: refused on draft, closed,
+    // cancelled, filled and archived jobs.
+    await lockJobForPipelineWork(tx, m.jobRequisitionId, 'add');
     await ensureShortlistEntry(
       tx,
       session.user.id,
@@ -437,19 +442,61 @@ export async function dismissMatch(matchId: string) {
   });
 }
 
+/** Where a person already sits on a job, in the pipeline wall's words. */
+export type PipelineStageLabel = 'Shortlisted' | 'Applied' | 'Interview' | 'Offer' | 'Placed';
+
+/**
+ * P0 — what "Add candidate" actually did, so the dialog can say the truth
+ * instead of always "added to Shortlisted".
+ *  - added             new shortlist (a fresh MANUAL match, or a suggested match)
+ *  - reactivated       a dismissed / removed-from-shortlist match put back
+ *  - already_at_stage  nothing changed; they are already on the job
+ *  - refused           nothing changed; `code` says why
+ */
+export type ManualAddResult =
+  | { ok: true; outcome: 'added'; matchId: string }
+  | { ok: true; outcome: 'reactivated'; matchId: string; previousStatus: 'DISMISSED' | 'REVIEWED' }
+  | { ok: true; outcome: 'already_at_stage'; stage: PipelineStageLabel }
+  | {
+      ok: true;
+      outcome: 'refused';
+      code: 'APPLICATION_CLOSED' | 'AVAILABILITY_CONFIRMATION_REQUIRED';
+      reason: string;
+    };
+
+const APPLICATION_STAGE: Record<string, PipelineStageLabel> = {
+  APPLIED: 'Applied',
+  UNDER_REVIEW: 'Applied',
+  SHORTLISTED: 'Applied',
+  INTERVIEW: 'Interview',
+  OFFER: 'Offer',
+  ACCEPTED: 'Offer',
+};
+
 /**
  * Manually add a candidate to a job's shortlist (staff already know the
  * right person). Leaves one SHORTLISTED match (MANUAL when new) and one
- * shortlist row; both audited. Refused on closed / cancelled jobs.
+ * shortlist row; both audited. Refused (thrown) on draft, closed,
+ * cancelled, filled or archived jobs and for draft / archived / merged
+ * people. Returns the real outcome (see ManualAddResult); a no-op writes
+ * no audit row. A placed or unavailable candidate needs
+ * `confirmAvailability` — legitimate manual assignment stays possible and
+ * the override is recorded in the audit context.
  */
-export async function manuallyShortlistPerson(personId: string, requisitionId: string) {
+export async function manuallyShortlistPerson(
+  personId: string,
+  requisitionId: string,
+  opts: { confirmAvailability?: boolean } = {},
+): Promise<ManualAddResult> {
   const session = await requireMatchingEdit();
   return db.transaction(async (tx) => {
-    await lockOpenRequisition(tx, requisitionId);
+    await lockJobForPipelineWork(tx, requisitionId, 'add');
 
     const [personRow] = await tx
       .select({
         id: persons.id,
+        firstName: persons.firstName,
+        lastName: persons.lastName,
         isDraft: persons.isDraft,
         archivedAt: persons.archivedAt,
         mergedIntoPersonId: persons.mergedIntoPersonId,
@@ -467,6 +514,109 @@ export async function manuallyShortlistPerson(personId: string, requisitionId: s
         'PERSON_MERGED',
         'Merged candidates cannot be shortlisted — use the canonical record',
       );
+    const name = `${personRow.firstName} ${personRow.lastName}`;
+
+    // Already further along on THIS job? Same precedence as the wall.
+    const [placedHere] = await tx
+      .select({ id: placements.id })
+      .from(placements)
+      .where(
+        and(
+          eq(placements.jobRequisitionId, requisitionId),
+          eq(placements.personId, personId),
+          inArray(placements.status, ['CONFIRMED', 'STARTED', 'COMPLETED']),
+          isNull(placements.archivedAt),
+        ),
+      )
+      .limit(1);
+    if (placedHere) return { ok: true, outcome: 'already_at_stage', stage: 'Placed' };
+
+    const [application] = await tx
+      .select({
+        status: jobApplications.status,
+        updatedAt: jobApplications.updatedAt,
+      })
+      .from(jobApplications)
+      .where(
+        and(
+          eq(jobApplications.jobRequisitionId, requisitionId),
+          eq(jobApplications.personId, personId),
+        ),
+      )
+      .limit(1);
+    if (application) {
+      if (application.status === 'REJECTED' || application.status === 'WITHDRAWN') {
+        return {
+          ok: true,
+          outcome: 'refused',
+          code: 'APPLICATION_CLOSED',
+          reason: `${name}'s application on this job was ${application.status === 'REJECTED' ? 'rejected' : 'withdrawn'} (last updated ${formatZoned(application.updatedAt)}). A closed application can't be reopened from here.`,
+        };
+      }
+      return {
+        ok: true,
+        outcome: 'already_at_stage',
+        stage: APPLICATION_STAGE[application.status] ?? 'Applied',
+      };
+    }
+
+    const [entry] = await tx
+      .select({ id: shortlistEntries.id })
+      .from(shortlistEntries)
+      .where(
+        and(
+          eq(shortlistEntries.jobRequisitionId, requisitionId),
+          eq(shortlistEntries.personId, personId),
+        ),
+      )
+      .limit(1);
+    if (entry) return { ok: true, outcome: 'already_at_stage', stage: 'Shortlisted' };
+
+    // Placed elsewhere or marked unavailable: legitimate, but deliberate.
+    const [profile] = await tx
+      .select({ availabilityStatus: candidateProfiles.availabilityStatus })
+      .from(candidateProfiles)
+      .where(eq(candidateProfiles.personId, personId))
+      .limit(1);
+    const [placedElsewhere] = await tx
+      .select({ id: placements.id })
+      .from(placements)
+      .where(
+        and(
+          eq(placements.personId, personId),
+          inArray(placements.status, ['CONFIRMED', 'STARTED']),
+          isNull(placements.archivedAt),
+        ),
+      )
+      .limit(1);
+    const availability =
+      profile?.availabilityStatus === 'PLACED' || placedElsewhere
+        ? 'PLACED'
+        : profile?.availabilityStatus === 'TEMPORARILY_UNAVAILABLE'
+          ? 'TEMPORARILY_UNAVAILABLE'
+          : 'AVAILABLE';
+    if (availability !== 'AVAILABLE' && !opts.confirmAvailability) {
+      return {
+        ok: true,
+        outcome: 'refused',
+        code: 'AVAILABILITY_CONFIRMATION_REQUIRED',
+        reason:
+          availability === 'PLACED'
+            ? `${name} is currently placed. Tick the confirmation to add them anyway — it is recorded in the audit log.`
+            : `${name} is marked temporarily unavailable. Tick the confirmation to add them anyway — it is recorded in the audit log.`,
+      };
+    }
+
+    const [prior] = await tx
+      .select({ id: candidateMatches.id, status: candidateMatches.status })
+      .from(candidateMatches)
+      .where(
+        and(
+          eq(candidateMatches.jobRequisitionId, requisitionId),
+          eq(candidateMatches.personId, personId),
+        ),
+      )
+      .limit(1);
 
     const [match] = await tx
       .insert(candidateMatches)
@@ -484,11 +634,7 @@ export async function manuallyShortlistPerson(personId: string, requisitionId: s
         target: [candidateMatches.jobRequisitionId, candidateMatches.personId],
         set: { status: 'SHORTLISTED', updatedAt: sql`NOW()` },
       })
-      .returning({
-        id: candidateMatches.id,
-        createdAt: candidateMatches.createdAt,
-        updatedAt: candidateMatches.updatedAt,
-      });
+      .returning({ id: candidateMatches.id });
     if (!match) throw new Error('candidate_matches upsert returned no row');
 
     await ensureShortlistEntry(
@@ -497,15 +643,31 @@ export async function manuallyShortlistPerson(personId: string, requisitionId: s
       { jobRequisitionId: requisitionId, personId, candidateMatchId: match.id },
       'manual_add',
     );
+    const reactivated = prior?.status === 'DISMISSED' || prior?.status === 'REVIEWED';
     await recordAudit(tx, {
       actorUserId: session.user.id,
       entityType: 'candidate_match',
       entityId: match.id,
       action: 'SHORTLISTED',
+      before: prior ? { status: prior.status } : undefined,
       after: { status: 'SHORTLISTED' },
-      context: { via: 'manual_add' },
+      context: {
+        via: 'manual_add',
+        outcome: reactivated ? 'reactivated' : 'added',
+        ...(availability !== 'AVAILABLE'
+          ? { overrideAvailability: true, availabilityStatus: availability }
+          : {}),
+      },
     });
-    return { ok: true, matchId: match.id };
+    if (reactivated && prior) {
+      return {
+        ok: true,
+        outcome: 'reactivated',
+        matchId: match.id,
+        previousStatus: prior.status as 'DISMISSED' | 'REVIEWED',
+      };
+    }
+    return { ok: true, outcome: 'added', matchId: match.id };
   });
 }
 

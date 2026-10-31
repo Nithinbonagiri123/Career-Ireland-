@@ -524,6 +524,7 @@ export function InterviewsOffersSection({
                             {canPlace && app && (
                               <PlaceCandidateDialog
                                 application={app}
+                                offer={o}
                                 trigger={<Button size="sm">Place candidate</Button>}
                               />
                             )}

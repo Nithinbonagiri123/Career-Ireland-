@@ -38,7 +38,7 @@ export function CampaignCard({ campaign: c }: { campaign: CampaignListRow }) {
           content:
             c.adCount > 0 ? (
               <>
-                {c.activeAdCount} of {c.adCount} advertisements running
+                {c.activeAdCount} of {c.adCount} advertisements marked live
               </>
             ) : null,
         },

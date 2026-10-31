@@ -45,11 +45,18 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { formatCurrency } from '@/lib/currency';
+import { cn } from '@/lib/utils';
 import {
   archivePlacementAction,
   restoreCandidateAvailabilityAction,
   updatePlacementStatusAction,
 } from '@/modules/placements/actions';
+import {
+  FINANCE_ISSUES_INVOICES,
+  isPlacementFeeRaisable,
+  raisePlacementFeeHref,
+  salaryPeriodSuffix,
+} from '@/modules/placements/fee';
 import type { PlacementListRow } from '@/modules/placements/service';
 
 /**
@@ -60,12 +67,15 @@ import type { PlacementListRow } from '@/modules/placements/service';
 export function PlacementsList({
   placements,
   canEdit = true,
+  canIssueInvoice = false,
   view = 'table',
   filtered = false,
 }: {
   placements: PlacementListRow[];
   /** R6 — recruitment.placements edit; status / restore / archive hidden when false. */
   canEdit?: boolean;
+  /** P0 — ISSUE finance authority; others see the fee action disabled. */
+  canIssueInvoice?: boolean;
   view?: 'table' | 'cards';
   /** True when the list is empty only because of filters. */
   filtered?: boolean;
@@ -133,6 +143,7 @@ export function PlacementsList({
     <PlacementActionsMenu
       p={p}
       canEdit={canEdit}
+      canIssueInvoice={canIssueInvoice}
       busy={busy === p.id}
       onStatus={(next) => setStatus(p, next)}
       onRestore={() => setRestoreTarget(p)}
@@ -168,7 +179,7 @@ export function PlacementsList({
       header: 'Fee invoice',
       id: 'latestInvoice',
       size: 190,
-      cell: ({ row }) => <InvoiceCell p={row.original} />,
+      cell: ({ row }) => <InvoiceCell p={row.original} canIssueInvoice={canIssueInvoice} />,
     },
     {
       header: 'Salary',
@@ -184,7 +195,7 @@ export function PlacementsList({
       size: 120,
       cell: ({ row }) => (
         <span className="text-xs">
-          {row.original.startDate ? format(new Date(row.original.startDate), 'd MMM yyyy') : '—'}
+          {row.original.startDate ? formatStart(row.original.startDate) : '—'}
         </span>
       ),
     },
@@ -229,7 +240,7 @@ export function PlacementsList({
       ) : view === 'cards' ? (
         <EntityCardGrid>
           {placements.map((p) => (
-            <PlacementCard key={p.id} p={p} menu={menu(p)} />
+            <PlacementCard key={p.id} p={p} menu={menu(p)} canIssueInvoice={canIssueInvoice} />
           ))}
         </EntityCardGrid>
       ) : (
@@ -241,7 +252,7 @@ export function PlacementsList({
           <div className="md:hidden">
             <EntityCardGrid>
               {placements.map((p) => (
-                <PlacementCard key={p.id} p={p} menu={menu(p)} />
+                <PlacementCard key={p.id} p={p} menu={menu(p)} canIssueInvoice={canIssueInvoice} />
               ))}
             </EntityCardGrid>
           </div>
@@ -292,27 +303,42 @@ export function PlacementsList({
 
 function salaryLabel(p: PlacementListRow): string | null {
   if (!p.salary) return null;
-  return p.salaryCurrencyCode
+  const amount = p.salaryCurrencyCode
     ? formatCurrency(p.salary, p.salaryCurrencyCode, { maximumFractionDigits: 0 })
     : p.salary;
+  const suffix = salaryPeriodSuffix(p.salaryPeriod);
+  return suffix ? `${amount} ${suffix}` : amount;
 }
 
-function raiseFeeHref(p: PlacementListRow) {
-  return `/employers/${p.employerId}?raisePlacement=${p.id}&raiseRequisition=${p.jobRequisitionId}`;
+/** `YYYY-MM-DD` (a calendar date, no time zone) → "1 Dec 2026". */
+function formatStart(d: string): string {
+  return format(new Date(`${d}T00:00:00`), 'd MMM yyyy');
 }
 
-/** Fee invoice: number + status pill + total, or a "Not invoiced" link. */
-function InvoiceCell({ p }: { p: PlacementListRow }) {
+/** Fee invoice: number + status pill + total; a "Not invoiced" link only
+ *  when a fee is actually raisable (P0); disabled for non-finance users. */
+function InvoiceCell({ p, canIssueInvoice }: { p: PlacementListRow; canIssueInvoice: boolean }) {
   const inv = p.latestInvoice;
-  if (!inv) {
+  if (isPlacementFeeRaisable(p)) {
+    if (!canIssueInvoice) {
+      return (
+        <span className="flex flex-col gap-0.5 text-xs">
+          <span className="font-medium text-amber-700 dark:text-amber-300">Not invoiced</span>
+          <span className="text-[11px] text-muted-foreground">{FINANCE_ISSUES_INVOICES}</span>
+        </span>
+      );
+    }
     return (
       <Link
-        href={raiseFeeHref(p)}
+        href={raisePlacementFeeHref(p)}
         className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 hover:underline dark:text-amber-300"
       >
         Not invoiced <ArrowRight className="size-3" aria-hidden />
       </Link>
     );
+  }
+  if (!inv) {
+    return <span className="text-xs text-muted-foreground">Not billable yet</span>;
   }
   return (
     <Link
@@ -330,7 +356,15 @@ function InvoiceCell({ p }: { p: PlacementListRow }) {
   );
 }
 
-function PlacementCard({ p, menu }: { p: PlacementListRow; menu: ReactNode }) {
+function PlacementCard({
+  p,
+  menu,
+  canIssueInvoice,
+}: {
+  p: PlacementListRow;
+  menu: ReactNode;
+  canIssueInvoice: boolean;
+}) {
   const created = new Date(p.createdAt);
   const pay = salaryLabel(p);
   return (
@@ -357,10 +391,14 @@ function PlacementCard({ p, menu }: { p: PlacementListRow; menu: ReactNode }) {
         {
           key: 'start',
           icon: CalendarDays,
-          content: p.startDate ? `Starts ${format(new Date(p.startDate), 'd MMM yyyy')}` : null,
+          content: p.startDate ? `Starts ${formatStart(p.startDate)}` : null,
         },
         { key: 'salary', icon: Coins, content: pay },
-        { key: 'invoice', icon: Receipt, content: <InvoiceCell p={p} /> },
+        {
+          key: 'invoice',
+          icon: Receipt,
+          content: <InvoiceCell p={p} canIssueInvoice={canIssueInvoice} />,
+        },
         {
           key: 'created',
           icon: Clock,
@@ -372,18 +410,28 @@ function PlacementCard({ p, menu }: { p: PlacementListRow; menu: ReactNode }) {
           <Link href={`/requisitions/${p.jobRequisitionId}?tab=seats`} className={CARD_ACTION}>
             Open job <ArrowRight className="size-3.5" aria-hidden />
           </Link>
-          {p.latestInvoice ? (
+          {isPlacementFeeRaisable(p) ? (
+            canIssueInvoice ? (
+              <Link href={raisePlacementFeeHref(p)} className={CARD_ACTION_TINT}>
+                <FileText className="size-3.5" aria-hidden /> Raise fee
+              </Link>
+            ) : (
+              <span
+                className={cn(CARD_ACTION_TINT, 'pointer-events-none opacity-60')}
+                aria-disabled="true"
+                title={FINANCE_ISSUES_INVOICES}
+              >
+                <FileText className="size-3.5" aria-hidden /> {FINANCE_ISSUES_INVOICES}
+              </span>
+            )
+          ) : p.latestInvoice ? (
             <Link
               href={`/employers/${p.employerId}/invoices/${p.latestInvoice.number}`}
               className={CARD_ACTION_TINT}
             >
               <Receipt className="size-3.5" aria-hidden /> View invoice
             </Link>
-          ) : (
-            <Link href={raiseFeeHref(p)} className={CARD_ACTION_TINT}>
-              <FileText className="size-3.5" aria-hidden /> Raise fee
-            </Link>
-          )}
+          ) : null}
         </>
       }
     />
@@ -394,6 +442,7 @@ function PlacementCard({ p, menu }: { p: PlacementListRow; menu: ReactNode }) {
 function PlacementActionsMenu({
   p,
   canEdit,
+  canIssueInvoice,
   busy,
   onStatus,
   onRestore,
@@ -401,6 +450,7 @@ function PlacementActionsMenu({
 }: {
   p: PlacementListRow;
   canEdit: boolean;
+  canIssueInvoice: boolean;
   busy: boolean;
   onStatus: (next: PlacementListRow['status']) => void;
   onRestore: () => void;
@@ -457,14 +507,22 @@ function PlacementActionsMenu({
             <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuItem
-          render={
-            <Link href={raiseFeeHref(p)}>
+        {isPlacementFeeRaisable(p) &&
+          (canIssueInvoice ? (
+            <DropdownMenuItem
+              render={
+                <Link href={raisePlacementFeeHref(p)}>
+                  <FileText className="mr-2 size-4" />
+                  Raise placement fee invoice…
+                </Link>
+              }
+            />
+          ) : (
+            <DropdownMenuItem disabled>
               <FileText className="mr-2 size-4" />
-              Raise placement fee invoice…
-            </Link>
-          }
-        />
+              Raise fee — {FINANCE_ISSUES_INVOICES}
+            </DropdownMenuItem>
+          ))}
         <DropdownMenuItem
           render={
             <Link href={`/immigration?raisePlacement=${p.id}`}>

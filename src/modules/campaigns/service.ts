@@ -21,6 +21,12 @@ import {
   CAMPAIGN_TRANSITIONS,
 } from '@/lib/state-machine';
 import {
+  CAMPAIGNABLE_JOB_STATUSES,
+  type JobIneligibility,
+  jobIneligibility,
+  jobIneligibleMessage,
+} from './job-eligibility';
+import {
   type ArchiveCampaignInput,
   ArchiveCampaignSchema,
   type ListProspectsInput,
@@ -62,7 +68,6 @@ export function parseOrThrow<T>(schema: ZodType<T>, input: unknown, message: str
 }
 
 const ENDED_CAMPAIGN = ['COMPLETED', 'CANCELLED'] as const;
-const CLOSED_JOB = ['CLOSED', 'CANCELLED'] as const;
 
 /* ─── Reads ────────────────────────────────────────────────────────── */
 
@@ -188,7 +193,12 @@ export async function fetchAdsForCampaign(campaignId: string): Promise<AdRow[]> 
   return rows.map((r) => ({ ...r.ad, prospectCount: r.prospectCount }));
 }
 
-/** Open jobs a campaign can be linked to, optionally for one employer. */
+/**
+ * Jobs a campaign can be linked to, optionally for one employer. Only jobs
+ * that pass the shared "can be advertised" rule (job-eligibility.ts):
+ * not archived, employer not archived, status OPEN / IN_PROGRESS /
+ * PARTIALLY_FILLED.
+ */
 export async function fetchJobsForCampaignPicker(
   employerId?: string,
 ): Promise<
@@ -196,7 +206,8 @@ export async function fetchJobsForCampaignPicker(
 > {
   await requireInternalStaff();
   const conds: SQL[] = [
-    sql`${jobRequisitions.status} NOT IN ('CLOSED','CANCELLED')`,
+    inArray(jobRequisitions.status, [...CAMPAIGNABLE_JOB_STATUSES]),
+    isNull(jobRequisitions.archivedAt),
     isNull(employers.archivedAt),
   ];
   if (employerId) conds.push(eq(jobRequisitions.employerId, employerId));
@@ -228,16 +239,27 @@ async function lockCampaign(tx: DbExecutor, id: string): Promise<RecruitmentCamp
   return row;
 }
 
-/** Validates the job (and optional employer) a campaign is linked to. */
+/**
+ * Validates the job a campaign is linked to. The campaign stores only the
+ * job; its employer is always the job's employer. An employerId sent by a
+ * client is accepted only as a cross-check: it must match the job's
+ * employer, and is refused without a job (owner decision 7 — there are no
+ * employer-only campaigns).
+ */
 async function resolveCampaignJob(
   tx: DbExecutor,
   jobRequisitionId: string | null,
   employerId: string | null,
-): Promise<{ id: string; status: string } | null> {
+): Promise<{
+  id: string;
+  status: string;
+  employerId: string;
+  ineligible: JobIneligibility | null;
+} | null> {
   if (!jobRequisitionId) {
     if (employerId) {
       throw new ValidationError('Choose the job for this employer', {
-        jobRequisitionId: 'Choose the job for this employer, or clear the employer',
+        jobRequisitionId: 'Choose the job for this employer, or make it a talent-pool campaign',
       });
     }
     return null;
@@ -247,8 +269,11 @@ async function resolveCampaignJob(
       id: jobRequisitions.id,
       employerId: jobRequisitions.employerId,
       status: jobRequisitions.status,
+      archivedAt: jobRequisitions.archivedAt,
+      employerArchivedAt: employers.archivedAt,
     })
     .from(jobRequisitions)
+    .innerJoin(employers, eq(employers.id, jobRequisitions.employerId))
     .where(eq(jobRequisitions.id, jobRequisitionId))
     .limit(1);
   if (!job) throw new BusinessRuleError('REQUISITION_NOT_FOUND', 'Job not found');
@@ -258,7 +283,19 @@ async function resolveCampaignJob(
       'That job belongs to a different employer',
     );
   }
-  return job;
+  return {
+    id: job.id,
+    status: job.status,
+    employerId: job.employerId,
+    ineligible: jobIneligibility(job),
+  };
+}
+
+/** Refuse a job that fails the shared "can be advertised" rule. */
+function assertJobAdvertisable(job: { ineligible: JobIneligibility | null } | null): void {
+  if (job?.ineligible) {
+    throw new BusinessRuleError(job.ineligible.code, jobIneligibleMessage(job.ineligible.reason));
+  }
 }
 
 /** Create (as DRAFT) or edit a campaign's details. Status changes go through transitionCampaign. */
@@ -271,13 +308,7 @@ export async function saveCampaign(input: SaveCampaignInput): Promise<Recruitmen
 
   return db.transaction(async (tx) => {
     if (!d.id) {
-      const job = await resolveCampaignJob(tx, jobId, employerId);
-      if (job && (CLOSED_JOB as readonly string[]).includes(job.status)) {
-        throw new BusinessRuleError(
-          'CAMPAIGN_JOB_CLOSED',
-          'That job is closed — campaigns can only target open jobs',
-        );
-      }
+      assertJobAdvertisable(await resolveCampaignJob(tx, jobId, employerId));
       const [created] = await tx
         .insert(recruitmentCampaigns)
         .values({ name: d.name, jobRequisitionId: jobId, notes, status: 'DRAFT' })
@@ -316,13 +347,7 @@ export async function saveCampaign(input: SaveCampaignInput): Promise<Recruitmen
           'This campaign already has prospects, so its job cannot be changed. Start a new campaign instead.',
         );
       }
-      const job = await resolveCampaignJob(tx, jobId, employerId);
-      if (job && (CLOSED_JOB as readonly string[]).includes(job.status)) {
-        throw new BusinessRuleError(
-          'CAMPAIGN_JOB_CLOSED',
-          'That job is closed — campaigns can only target open jobs',
-        );
-      }
+      assertJobAdvertisable(await resolveCampaignJob(tx, jobId, employerId));
     } else if (employerId) {
       await resolveCampaignJob(tx, jobId, employerId);
     }
@@ -372,15 +397,14 @@ export async function transitionCampaign(
     }
     assertTransition('campaign', before.status, d.to, CAMPAIGN_TRANSITIONS);
     if (d.to === 'ACTIVE' && before.jobRequisitionId) {
-      const [job] = await tx
-        .select({ status: jobRequisitions.status })
-        .from(jobRequisitions)
-        .where(eq(jobRequisitions.id, before.jobRequisitionId))
-        .limit(1);
-      if (job && (CLOSED_JOB as readonly string[]).includes(job.status)) {
+      // Activation and resume both need a job that can still be advertised.
+      const job = await resolveCampaignJob(tx, before.jobRequisitionId, null);
+      if (job?.ineligible) {
         throw new BusinessRuleError(
-          'CAMPAIGN_JOB_CLOSED',
-          'The job this campaign targets is closed, so the campaign cannot be activated',
+          job.ineligible.code,
+          `The job this campaign targets is ${job.ineligible.reason}, so the campaign cannot be ${
+            before.status === 'PAUSED' ? 'resumed' : 'activated'
+          }`,
         );
       }
     }

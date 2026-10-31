@@ -30,6 +30,7 @@ import { FadeUp } from '@/components/motion/motion-primitives';
 import { ReassignButton } from '@/components/reassign-button';
 import { RecordHeaderActions } from '@/components/record-header-actions';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { hasFinanceAuthority } from '@/lib/auth/finance-policy';
 import { checkPermission, requireInternalStaff } from '@/lib/auth/session';
 import { fetchTasksForRequisition } from '@/modules/activities/service';
 import {
@@ -37,11 +38,13 @@ import {
   listShortlistPromotionCandidates,
 } from '@/modules/applications/service';
 import { fetchRequisitionBillingHistory } from '@/modules/billing/read';
+import { isJobAdvertisable } from '@/modules/campaigns/job-eligibility';
 import { fetchCampaignsForRequisition } from '@/modules/campaigns/service';
 import { fetchCurrencies } from '@/modules/currencies/service';
 import { criteriaWarning } from '@/modules/matching/criteria';
 import { DEFAULT_MIN_SCORE } from '@/modules/matching/schemas';
 import { fetchOccupations } from '@/modules/occupations/service';
+import { DRAFT_JOB_MESSAGE, jobPipelineBlock } from '@/modules/pipeline/job-guard';
 import { fetchRequisitionPipeline } from '@/modules/pipeline/service';
 import { listPlacementsForRequisition } from '@/modules/placements/service';
 import { fetchQualifications } from '@/modules/qualifications/service';
@@ -151,6 +154,25 @@ export default async function RequisitionDetail({
   // R2 — seats are derived from placements by the R0 capacity rule.
   const seatModel = buildSeatModel(requisition.positionsRequired, requisitionPlacements);
   const isOpen = requisition.status !== 'CLOSED' && requisition.status !== 'CANCELLED';
+  // P0 — the same job-status rule the server applies to adding / moving /
+  // placing candidates, so the page shows the reason instead of buttons
+  // that fail. Rejecting / declining (close-out) stays available unless
+  // the job is archived.
+  const isDraft = requisition.status === 'DRAFT';
+  const pipelineLockMessage = jobPipelineBlock(requisition, 'move');
+  const pipelineLock = pipelineLockMessage
+    ? {
+        message: pipelineLockMessage,
+        openJobHref: isDraft && canEditJob ? `/requisitions/${id}?edit=1` : undefined,
+        allowCloseOut: jobPipelineBlock(requisition, 'close_out') === null,
+      }
+    : null;
+  const canAddCandidates = jobPipelineBlock(requisition, 'add') === null;
+  // P0 — finance authority, exactly as the server decides it (role ADMIN /
+  // FINANCE or the owner). Used for verify-now on payments and to show
+  // the placement-fee action disabled for everyone else.
+  const canVerifyPayments = hasFinanceAuthority(session.user, 'VERIFY');
+  const canIssueInvoice = hasFinanceAuthority(session.user, 'ISSUE');
   const today = new Date().toISOString().slice(0, 10);
   const overdue = Boolean(
     isOpen && requisition.targetFillDate && requisition.targetFillDate < today,
@@ -273,13 +295,14 @@ export default async function RequisitionDetail({
         canMatch={canMatch && isOpen}
         canMoveApplications={canEditJob}
         canPlace={canPlace}
+        lock={pipelineLock}
       />
     </FadeUp>
   );
 
   const seatsTab = (
     <FadeUp>
-      <SeatsSection model={seatModel} />
+      <SeatsSection model={seatModel} canIssueInvoice={canIssueInvoice} />
     </FadeUp>
   );
 
@@ -333,7 +356,7 @@ export default async function RequisitionDetail({
               profileHref={`/employers/${requisition.employerId}`}
               invoices={requisitionBilling.invoices}
               receipts={requisitionBilling.receipts}
-              canVerify={false}
+              canVerify={canVerifyPayments}
             />
           </>
         )}
@@ -441,8 +464,26 @@ export default async function RequisitionDetail({
           actions={
             <RecordHeaderActions
               primary={
-                canMatch && isOpen ? (
+                canMatch && canAddCandidates ? (
                   <AddCandidateDialog requisitionId={id} requisitionTitle={requisition.title} />
+                ) : canMatch && isDraft && !requisition.archivedAt ? (
+                  // P0 — a draft job can't take candidates yet; say so and
+                  // point at the fix instead of a button the server refuses.
+                  <span
+                    className="inline-flex items-center gap-2 text-xs text-muted-foreground"
+                    data-testid="add-candidate-draft-hint"
+                  >
+                    {DRAFT_JOB_MESSAGE}
+                    {canEditJob && (
+                      // Full navigation so the edit dialog's defaultOpen runs.
+                      <a
+                        href={`/requisitions/${id}?edit=1`}
+                        className={buttonVariants({ size: 'sm' })}
+                      >
+                        Open job
+                      </a>
+                    )}
+                  </span>
                 ) : undefined
               }
               secondary={[
@@ -488,7 +529,7 @@ export default async function RequisitionDetail({
                 ),
               ]}
               overflow={[
-                canMatch && isOpen && (
+                canMatch && canAddCandidates && (
                   <AddOutsourcedCandidateDialog
                     key="outsourced"
                     requisitionId={id}
@@ -516,13 +557,19 @@ export default async function RequisitionDetail({
                     }
                   />
                 ),
-                <Link
-                  key="advertisement"
-                  href={`/campaigns?requisitionId=${id}`}
-                  className={buttonVariants({ size: 'sm', variant: 'outline' })}
-                >
-                  <Megaphone className="mr-1.5 size-4" aria-hidden /> Start advertisement
-                </Link>,
+                // Same "job can be advertised" rule the campaign server enforces.
+                isJobAdvertisable({
+                  status: requisition.status,
+                  archivedAt: requisition.archivedAt,
+                }) && (
+                  <Link
+                    key="advertisement"
+                    href={`/campaigns?requisitionId=${id}`}
+                    className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                  >
+                    <Megaphone className="mr-1.5 size-4" aria-hidden /> Start advertisement
+                  </Link>
+                ),
                 canEditJob && (
                   <SetRequisitionReminderDialog
                     key="reminder"

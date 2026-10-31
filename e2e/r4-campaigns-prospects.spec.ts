@@ -183,15 +183,19 @@ test('R4: campaign lifecycle, prospect capture, screening, conversion hand-off',
     await dialog.getByRole('button', { name: /^Create campaign$/ }).click();
     await expect(dialog.getByText(/at least 2 characters/)).toBeVisible();
     await dialog.locator('#cm-name').fill(`R4 Spring intake ${stamp}`);
-    await dialog.locator('#cm-employer').click();
-    await dialog.getByLabel('Search employers').fill(`R4 Care Homes ${stamp}`);
-    await dialog.getByRole('button', { name: new RegExp(`R4 Care Homes ${stamp}`) }).click();
-    await expect(dialog.locator(`#cm-job option[value="${ids.jobId}"]`)).toHaveCount(1, {
-      timeout: 15_000,
-    });
-    await dialog.locator('#cm-job').selectOption(ids.jobId);
+    // P0 (owner decision 7): pick "For a job", then the job; the employer follows.
+    await dialog.getByRole('button', { name: 'For a job' }).click();
+    await dialog.locator('#cm-job-search').fill(`R4 Care Homes ${stamp}`);
+    await dialog
+      .getByTestId('campaign-job-results')
+      .getByRole('button', { name: new RegExp(`R4 Care Assistant ${stamp}`) })
+      .click();
+    await expect(dialog.getByTestId('campaign-employer-readonly')).toHaveText(
+      `R4 Care Homes ${stamp}`,
+    );
     await dialog.getByRole('button', { name: /^Create campaign$/ }).click();
     await expect(page.getByText('Campaign created').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveURL(/\/campaigns\/[0-9a-f-]{36}$/, { timeout: 15_000 });
     const [campaign] = await m.db
       .select()
       .from(m.s.recruitmentCampaigns)
@@ -205,7 +209,7 @@ test('R4: campaign lifecycle, prospect capture, screening, conversion hand-off',
     await expect(page.getByRole('heading', { name: `R4 Spring intake ${stamp}` })).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.getByText(/Add the first advertisement/)).toBeVisible();
+    await expect(page.getByText(/Record the first advertisement/)).toBeVisible();
     await page.getByRole('tab', { name: /Advertisements/ }).click();
     await expect(page).toHaveURL(/tab=ads/);
     await page.getByRole('button', { name: /New advertisement/ }).click();
@@ -233,7 +237,7 @@ test('R4: campaign lifecycle, prospect capture, screening, conversion hand-off',
     await dialog.locator('#ad-status').selectOption('ACTIVE');
     await dialog.getByRole('button', { name: /^Save$/ }).click();
     await expect(page.getByText('Advertisement updated').first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('ad-rows')).toContainText('Running');
+    await expect(page.getByTestId('ad-rows')).toContainText('Marked live');
 
     // ── Prospects: existing person.
     await page.getByRole('tab', { name: /Prospects/ }).click();
@@ -394,8 +398,13 @@ test('R4: "Start a campaign" from a job pre-selects it; workspace fits a phone',
     await page.goto(`/campaigns?requisitionId=${ids.jobId}`);
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByText('New recruitment campaign')).toBeVisible({ timeout: 20_000 });
-    await expect(dialog.locator('#cm-job')).toHaveValue(ids.jobId, { timeout: 15_000 });
-    await expect(dialog.locator('#cm-employer')).toContainText(`R4 Care Homes ${stamp}`);
+    await expect(dialog.getByTestId('campaign-selected-job')).toContainText(
+      `R4 Care Assistant ${stamp}`,
+      { timeout: 15_000 },
+    );
+    await expect(dialog.getByTestId('campaign-employer-readonly')).toHaveText(
+      `R4 Care Homes ${stamp}`,
+    );
     await dialog.locator('#cm-name').fill(`R4 Phone ${stamp}`);
     await dialog.getByRole('button', { name: /^Create campaign$/ }).click();
     await expect(page.getByText('Campaign created').first()).toBeVisible({ timeout: 15_000 });
@@ -504,7 +513,7 @@ test('R4: pause suspends ads and blocks capture; existing prospects continue; re
     await dialog.locator('#ad-status').selectOption('ACTIVE');
     await dialog.getByRole('button', { name: /^Save$/ }).click();
     await expect(page.getByText('Advertisement updated').first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('ad-rows')).toContainText('Running');
+    await expect(page.getByTestId('ad-rows')).toContainText('Marked live');
 
     await page.goto(`/campaigns/${c?.id}?tab=activity`);
     const activity = page.getByTestId('campaign-activity-rows');

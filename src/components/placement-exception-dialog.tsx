@@ -15,10 +15,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { ActionResult } from '@/lib/result';
-import type { PlacementOfferException } from '@/modules/placements/schemas';
+import type { PlacementOfferException, PlacementTerms } from '@/modules/placements/schemas';
 
 /** The server's refusal code when a seat is taken without an accepted offer. */
 export const PLACEMENT_OFFER_REQUIRED = 'PLACEMENT_OFFER_REQUIRED';
@@ -38,16 +39,26 @@ export function PlacementExceptionDialog({
   successMessage,
   onSubmit,
   onPlaced,
+  collectTerms = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   personName: string;
   successMessage: string;
-  onSubmit: (exception: PlacementOfferException) => Promise<ActionResult<unknown>>;
+  onSubmit: (
+    exception: PlacementOfferException,
+    terms?: PlacementTerms,
+  ) => Promise<ActionResult<unknown>>;
   onPlaced?: () => void;
+  /** P0 — also ask for the (optional) salary and start date, which have no
+   *  accepted offer to be copied from on this path. */
+  collectTerms?: boolean;
 }) {
   const [confirmed, setConfirmed] = useState(false);
   const [reason, setReason] = useState('');
+  const [salary, setSalary] = useState('');
+  const [currency, setCurrency] = useState('EUR');
+  const [startDate, setStartDate] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
@@ -55,6 +66,9 @@ export function PlacementExceptionDialog({
   const reset = () => {
     setConfirmed(false);
     setReason('');
+    setSalary('');
+    setCurrency('EUR');
+    setStartDate('');
     setFormError(null);
     setFields({});
   };
@@ -65,7 +79,16 @@ export function PlacementExceptionDialog({
       setFields({});
       let r: ActionResult<unknown>;
       try {
-        r = await onSubmit({ confirmed: true, reason });
+        r = await onSubmit(
+          { confirmed: true, reason },
+          collectTerms
+            ? {
+                salary: salary.trim().replace(/[,\s]/g, ''),
+                salaryCurrencyCode: currency.trim().toUpperCase(),
+                startDate,
+              }
+            : undefined,
+        );
       } catch {
         setFormError('The request did not complete. Check your connection and try again.');
         return;
@@ -94,7 +117,7 @@ export function PlacementExceptionDialog({
     >
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 pr-6">
             <AlertTriangle className="size-4 text-status-warning" aria-hidden />
             Place {personName} without an accepted offer?
           </DialogTitle>
@@ -126,8 +149,55 @@ export function PlacementExceptionDialog({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Offer agreed directly between the employer and the candidate"
+              autoComplete="off"
             />
           </FormField>
+          {collectTerms && (
+            <div className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">
+                Optional — there is no accepted offer to copy the pay and start date from.
+              </p>
+              <div className="flex gap-3">
+                <FormField
+                  id="pe-salary"
+                  label="Salary"
+                  error={fields.salary}
+                  className="min-w-0 flex-1"
+                >
+                  <Input
+                    id="pe-salary"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={salary}
+                    onChange={(e) => setSalary(e.target.value)}
+                    placeholder="e.g. 34000"
+                  />
+                </FormField>
+                <FormField
+                  id="pe-currency"
+                  label="Currency"
+                  error={fields.salaryCurrencyCode}
+                  className="w-24 shrink-0"
+                >
+                  <Input
+                    id="pe-currency"
+                    autoComplete="off"
+                    maxLength={3}
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                  />
+                </FormField>
+              </div>
+              <FormField id="pe-start" label="Start date" error={fields.startDate}>
+                <Input
+                  id="pe-start"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </FormField>
+            </div>
+          )}
           <div className="flex items-start gap-2">
             <Checkbox
               id="pe-confirm"

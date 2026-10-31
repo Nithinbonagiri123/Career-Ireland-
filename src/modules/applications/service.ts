@@ -10,11 +10,12 @@ import {
   type JobApplication,
   jobApplications,
   jobRequisitions,
-  placements,
   shortlistEntries,
 } from '@/lib/db/schema/recruitment';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { APPLICATION_TRANSITIONS, assertTransition } from '@/lib/state-machine';
+import { lockJobForPipelineWork } from '@/modules/pipeline/job-guard';
+import { markApplicationPlaced } from '@/modules/placements/service';
 import {
   type CreateApplicationInput,
   CreateApplicationSchema,
@@ -192,6 +193,9 @@ export async function createApplication(input: CreateApplicationInput): Promise<
   const d = parsed.data;
 
   return db.transaction(async (tx) => {
+    // P0 — no new applications on draft, closed, cancelled, filled or
+    // archived jobs.
+    await lockJobForPipelineWork(tx, d.jobRequisitionId, 'add');
     const [existing] = await tx
       .select()
       .from(jobApplications)
@@ -344,11 +348,50 @@ export async function updateApplicationStatus(
   const session = await requireInternalStaff();
   const parsed = UpdateApplicationStatusSchema.parse(input);
 
+  const [current] = await db
+    .select({
+      id: jobApplications.id,
+      status: jobApplications.status,
+      jobRequisitionId: jobApplications.jobRequisitionId,
+    })
+    .from(jobApplications)
+    .where(eq(jobApplications.id, parsed.applicationId))
+    .limit(1);
+  if (!current) throw new BusinessRuleError('APPLICATION_NOT_FOUND', 'Application not found');
+
+  // P0 — accepting an application on one of OUR jobs takes a seat, so it
+  // goes through the one guarded placement path (recruitment.placements
+  // create, job status, seat / duplicate checks, accepted offer or the
+  // audited exception). It used to create a PROPOSED placement under
+  // recruitment.requisitions edit only. External (job-board)
+  // applications keep the plain status change — no placement exists.
+  if (parsed.status === 'ACCEPTED' && current.jobRequisitionId && current.status !== 'ACCEPTED') {
+    try {
+      await markApplicationPlaced(current.id);
+    } catch (e) {
+      if (e instanceof BusinessRuleError && e.code === 'PLACEMENT_OFFER_REQUIRED') {
+        throw new BusinessRuleError(
+          'PLACEMENT_OFFER_REQUIRED',
+          'No offer has been accepted for this candidate in the CRM. Record the acceptance on the job’s Interviews & offers tab, or use “Mark placed” on the job’s pipeline to place them as an audited exception.',
+        );
+      }
+      throw e;
+    }
+    const [after] = await db
+      .select()
+      .from(jobApplications)
+      .where(eq(jobApplications.id, current.id))
+      .limit(1);
+    if (!after) throw new Error('application vanished after placement');
+    return after;
+  }
+
   return db.transaction(async (tx) => {
     const [before] = await tx
       .select()
       .from(jobApplications)
       .where(eq(jobApplications.id, parsed.applicationId))
+      .for('update')
       .limit(1);
     if (!before) throw new BusinessRuleError('APPLICATION_NOT_FOUND', 'Application not found');
     // R6 — moving an application on one of our jobs needs recruitment.requisitions;
@@ -357,6 +400,16 @@ export async function updateApplicationStatus(
     if (before.status === parsed.status) return before;
 
     assertTransition('application', before.status, parsed.status, APPLICATION_TRANSITIONS);
+
+    // P0 — moves need a live job; rejecting / withdrawing (close-out) is
+    // still allowed after a job fills or closes, but not once archived.
+    if (before.jobRequisitionId) {
+      await lockJobForPipelineWork(
+        tx,
+        before.jobRequisitionId,
+        parsed.status === 'REJECTED' || parsed.status === 'WITHDRAWN' ? 'close_out' : 'move',
+      );
+    }
 
     const [after] = await tx
       .update(jobApplications)
@@ -381,45 +434,6 @@ export async function updateApplicationStatus(
           ? { rejectionReason: parsed.rejectionReason }
           : undefined,
     });
-
-    // ACCEPTED → auto-create a Placement in PROPOSED (staff confirms with details later).
-    // Only for INTERNAL applications with a requisition — external offers don't materialise placements automatically.
-    if (parsed.status === 'ACCEPTED' && after.jobRequisitionId) {
-      const [existingPlacement] = await tx
-        .select({ id: placements.id })
-        .from(placements)
-        .where(eq(placements.jobApplicationId, after.id))
-        .limit(1);
-      if (!existingPlacement) {
-        const [req] = await tx
-          .select({ employerId: jobRequisitions.employerId })
-          .from(jobRequisitions)
-          .where(eq(jobRequisitions.id, after.jobRequisitionId))
-          .limit(1);
-        if (req) {
-          const [placement] = await tx
-            .insert(placements)
-            .values({
-              personId: after.personId,
-              employerId: req.employerId,
-              jobRequisitionId: after.jobRequisitionId,
-              jobApplicationId: after.id,
-              status: 'PROPOSED',
-            })
-            .returning();
-          if (placement) {
-            await recordAudit(tx, {
-              actorUserId: session.user.id,
-              entityType: 'placement',
-              entityId: placement.id,
-              action: 'CREATED',
-              after: { status: 'PROPOSED' },
-              context: { via: 'application_accepted', applicationId: after.id },
-            });
-          }
-        }
-      }
-    }
 
     return after;
   });

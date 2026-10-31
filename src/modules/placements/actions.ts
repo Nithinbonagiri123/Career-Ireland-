@@ -6,6 +6,7 @@ import type {
   ArchivePlacementInput,
   CreatePlacementInput,
   PlacementOfferException,
+  PlacementTerms,
   RestoreAvailabilityInput,
   UnarchivePlacementInput,
   UpdatePlacementStatusInput,
@@ -21,6 +22,7 @@ import {
 
 const rev = () => {
   revalidatePath('/placements');
+  revalidatePath('/employers');
   revalidatePath('/candidates');
   revalidatePath('/requisitions');
 };
@@ -34,8 +36,11 @@ export async function createPlacementAction(input: CreatePlacementInput) {
 export async function markApplicationPlacedAction(
   applicationId: string,
   offerException?: PlacementOfferException,
+  exceptionTerms?: PlacementTerms,
 ) {
-  const r = await toActionResult(() => markApplicationPlaced(applicationId, offerException));
+  const r = await toActionResult(() =>
+    markApplicationPlaced(applicationId, offerException, exceptionTerms),
+  );
   if (r.ok) {
     rev();
     revalidatePath('/interviews');

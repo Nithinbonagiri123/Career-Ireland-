@@ -22,7 +22,8 @@ export const CAMPAIGN_STATUS_LABEL: Record<CampaignStatus, string> = {
 
 export const AD_STATUS_LABEL: Record<AdStatus, string> = {
   DRAFT: 'Draft',
-  ACTIVE: 'Running',
+  // The CRM does not post adverts: the user marks one live after posting it.
+  ACTIVE: 'Marked live',
   PAUSED: 'Paused',
   EXPIRED: 'Expired',
   CLOSED: 'Closed',
@@ -83,5 +84,13 @@ export const AD_NEXT: Record<AdStatus, AdStatus[]> = {
 
 export const CONVERTIBLE: ProspectStatus[] = ['SCREENED', 'RETAINED_IN_POOL'];
 
-/** Ads that can still take new prospects. */
-export const AD_ACCEPTS_PROSPECTS: AdStatus[] = ['DRAFT', 'ACTIVE', 'EXPIRED'];
+/**
+ * Ads that can still take new prospects: ones that were marked live (live
+ * now, or expired after being live). Never a draft — nobody has responded
+ * to an advert that was never posted. Mirrors createProspect on the server.
+ */
+export const AD_ACCEPTS_PROSPECTS: AdStatus[] = ['ACTIVE', 'EXPIRED'];
+
+/** Helper text wherever an advert's status is set. */
+export const AD_HONESTY_HINT =
+  'The CRM does not post adverts; record where you posted it in notes.';

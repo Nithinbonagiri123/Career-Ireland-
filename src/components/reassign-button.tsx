@@ -147,6 +147,7 @@ export function ReassignButton({
             <Label htmlFor="rb-reason">Reason (audited)</Label>
             <Input
               id="rb-reason"
+              autoComplete="off"
               value={reason}
               onChange={(e) => setReason(e.currentTarget.value)}
               placeholder="e.g. Original owner on annual leave"

@@ -132,6 +132,7 @@ export function RemoveFromShortlistDialog({
         <FormField id="sl-reason" label="Reason" required error={fieldError(errors, 'reason')}>
           <Textarea
             id="sl-reason"
+            autoComplete="off"
             rows={3}
             value={reason}
             onChange={(e) => setReason(e.target.value)}

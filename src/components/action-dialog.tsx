@@ -42,6 +42,7 @@ export function ActionDialog<T>({
   wide,
   defaultOpen,
   submitDisabled,
+  onReset,
 }: {
   trigger: ReactElement;
   title: string;
@@ -56,6 +57,18 @@ export function ActionDialog<T>({
   defaultOpen?: boolean;
   /** Keep the submit button disabled (e.g. until a confirmation is ticked). */
   submitDisabled?: boolean;
+  /**
+   * Field state lives in the caller, so the caller resets it. Called each
+   * time the dialog opens (trigger click), before the form renders: put the
+   * fields back to their blank / current-record values here. Without it a
+   * create dialog reopens with the previous entry (after Cancel or a
+   * successful create). Not called for `defaultOpen` (state is fresh then).
+   *
+   *   const blank = { name: '', employerId: '' };
+   *   const [f, setF] = useState(blank);
+   *   <ActionDialog onReset={() => setF(blank)} …>
+   */
+  onReset?: () => void;
 }) {
   const [open, setOpen] = useState(Boolean(defaultOpen));
   const [pending, start] = useTransition();
@@ -92,11 +105,13 @@ export function ActionDialog<T>({
     <Dialog
       open={open}
       onOpenChange={(next) => {
+        // Every open is a fresh session: no leftover banner, field errors or
+        // values. Resetting on open (not close) avoids blanking the fields
+        // while the closing animation is still on screen.
+        if (next) onReset?.();
+        setFormError(null);
+        setErrors({});
         setOpen(next);
-        if (!next) {
-          setFormError(null);
-          setErrors({});
-        }
       }}
     >
       <DialogTrigger render={trigger} />

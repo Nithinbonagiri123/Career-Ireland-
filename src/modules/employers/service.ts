@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, or, type SQL, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, ne, or, type SQL, sql } from 'drizzle-orm';
 import { recordAudit } from '@/lib/audit/withAudit';
 import { createOrEdit, requireRecruitment } from '@/lib/auth/recruitment-guards';
 import { requireInternalStaff } from '@/lib/auth/session';
@@ -16,6 +16,7 @@ import {
 import { users } from '@/lib/db/schema/users';
 import { BusinessRuleError, ValidationError } from '@/lib/errors';
 import { type AssignmentScope, assignmentCondition } from '@/lib/scope';
+import { describeContactEvent } from './contact-activity';
 import {
   type ArchiveEmployerInput,
   ArchiveEmployerSchema,
@@ -422,14 +423,18 @@ export async function fetchEmployerActivity(
   const conds: SQL[] = [
     and(eq(auditEvents.entityType, 'employer'), eq(auditEvents.entityId, employerId)) as SQL,
   ];
-  if (contactIds.length > 0) {
-    conds.push(
-      and(
-        eq(auditEvents.entityType, 'employer_contact'),
-        inArray(auditEvents.entityId, contactIds),
-      ) as SQL,
-    );
-  }
+  // Contact events: live contacts by id, plus deleted contacts (and newer
+  // events) through the employerId the contact service records.
+  conds.push(
+    and(
+      eq(auditEvents.entityType, 'employer_contact'),
+      or(
+        contactIds.length > 0 ? inArray(auditEvents.entityId, contactIds) : undefined,
+        sql`${auditEvents.before} ->> 'employerId' = ${employerId}`,
+        sql`${auditEvents.context} ->> 'employerId' = ${employerId}`,
+      ),
+    ) as SQL,
+  );
   if (requisitionIds.length > 0) {
     conds.push(
       and(
@@ -445,6 +450,9 @@ export async function fetchEmployerActivity(
       occurredAt: auditEvents.occurredAt,
       entityType: auditEvents.entityType,
       action: auditEvents.action,
+      before: auditEvents.before,
+      after: auditEvents.after,
+      context: auditEvents.context,
       actorName: users.fullName,
     })
     .from(auditEvents)
@@ -459,7 +467,10 @@ export async function fetchEmployerActivity(
     actorName: r.actorName,
     entityType: r.entityType,
     action: r.action,
-    summary: `${r.entityType.replace(/_/g, ' ')} ${r.action.replace(/_/g, ' ').toLowerCase()}`,
+    summary:
+      r.entityType === 'employer_contact'
+        ? describeContactEvent(r.action, r.before, r.after, r.context)
+        : `${r.entityType.replace(/_/g, ' ')} ${r.action.replace(/_/g, ' ').toLowerCase()}`,
   }));
 }
 
@@ -473,6 +484,18 @@ export async function deleteEmployerContact(contactId: string): Promise<void> {
       .limit(1);
     if (!before) throw new BusinessRuleError('CONTACT_NOT_FOUND', 'Contact not found');
     await tx.delete(employerContacts).where(eq(employerContacts.id, contactId));
+    const [stillPrimary] = before.isPrimary
+      ? await tx
+          .select({ id: employerContacts.id })
+          .from(employerContacts)
+          .where(
+            and(
+              eq(employerContacts.employerId, before.employerId),
+              eq(employerContacts.isPrimary, true),
+            ),
+          )
+          .limit(1)
+      : [];
     await recordAudit(tx, {
       actorUserId: session.user.id,
       entityType: 'employer_contact',
@@ -486,11 +509,53 @@ export async function deleteEmployerContact(contactId: string): Promise<void> {
         phone: before.phone,
         isPrimary: before.isPrimary,
       },
+      context: {
+        employerId: before.employerId,
+        // Deleting the primary leaves the employer without one; the Activity
+        // line says so (removal is not refused — a contact can leave).
+        leftWithoutPrimary: before.isPrimary && !stillPrimary,
+      },
     });
   });
 }
 
-export async function upsertEmployerContact(input: UpsertContactInput): Promise<EmployerContact> {
+function contactSnapshot(c: EmployerContact) {
+  return {
+    employerId: c.employerId,
+    fullName: c.fullName,
+    jobTitle: c.jobTitle,
+    email: c.email,
+    phone: c.phone,
+    isPrimary: c.isPrimary,
+  };
+}
+
+export type ContactUpsertResult = EmployerContact & {
+  /** Contacts that lost primary status because this one became primary. */
+  replacedPrimary: Array<{ id: string; fullName: string }>;
+};
+
+/**
+ * The employer's current primary contact (for the "This replaces …" hint
+ * in the contact dialog). Null when the employer has none.
+ */
+export async function fetchPrimaryContact(
+  employerId: string,
+): Promise<{ id: string; fullName: string } | null> {
+  // Only people who can edit contacts open the dialog that asks.
+  await requireRecruitment('employers', 'edit');
+  const [row] = await db
+    .select({ id: employerContacts.id, fullName: employerContacts.fullName })
+    .from(employerContacts)
+    .where(and(eq(employerContacts.employerId, employerId), eq(employerContacts.isPrimary, true)))
+    .orderBy(asc(employerContacts.fullName))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function upsertEmployerContact(
+  input: UpsertContactInput,
+): Promise<ContactUpsertResult> {
   const session = await requireRecruitment('employers', 'edit');
   const parsed = UpsertContactSchema.safeParse(input);
   if (!parsed.success) {
@@ -510,18 +575,45 @@ export async function upsertEmployerContact(input: UpsertContactInput): Promise<
   };
 
   return db.transaction(async (tx) => {
-    // If this contact is being made primary, unset any other primary for the same employer.
+    // Serialise contact changes per employer (row lock on the employer), so
+    // two people ticking "Primary" at once cannot leave two primaries.
+    const [employer] = await tx
+      .select({ id: employers.id })
+      .from(employers)
+      .where(eq(employers.id, d.employerId))
+      .for('update');
+    if (!employer) throw new BusinessRuleError('EMPLOYER_NOT_FOUND', 'Employer not found');
+
+    let before: EmployerContact | undefined;
+    if (d.id) {
+      [before] = await tx
+        .select()
+        .from(employerContacts)
+        .where(eq(employerContacts.id, d.id))
+        .limit(1);
+      if (!before) throw new BusinessRuleError('CONTACT_NOT_FOUND', 'Contact not found');
+      if (before.employerId !== d.employerId) {
+        throw new BusinessRuleError(
+          'CONTACT_EMPLOYER_MISMATCH',
+          'This contact belongs to a different employer.',
+        );
+      }
+    }
+
+    // Making this contact primary demotes every other primary of the employer.
+    let replacedPrimary: Array<{ id: string; fullName: string }> = [];
     if (d.isPrimary) {
-      const demoted = await tx
+      const others = and(
+        eq(employerContacts.employerId, d.employerId),
+        eq(employerContacts.isPrimary, true),
+        d.id ? ne(employerContacts.id, d.id) : undefined,
+      );
+      replacedPrimary = await tx
         .update(employerContacts)
         .set({ isPrimary: false, updatedAt: sql`NOW()` })
-        .where(
-          and(eq(employerContacts.employerId, d.employerId), eq(employerContacts.isPrimary, true)),
-        )
+        .where(others)
         .returning({ id: employerContacts.id, fullName: employerContacts.fullName });
-      // R0 — the demotion used to leave no audit trace.
-      for (const c of demoted) {
-        if (d.id && c.id === d.id) continue;
+      for (const c of replacedPrimary) {
         await recordAudit(tx, {
           actorUserId: session.user.id,
           entityType: 'employer_contact',
@@ -529,22 +621,24 @@ export async function upsertEmployerContact(input: UpsertContactInput): Promise<
           action: 'UPDATED',
           before: { fullName: c.fullName, isPrimary: true },
           after: { fullName: c.fullName, isPrimary: false },
-          context: { via: 'primary_contact_change', employerId: d.employerId },
+          context: {
+            via: 'primary_contact_change',
+            employerId: d.employerId,
+            replacedBy: { id: d.id ?? null, fullName: values.fullName },
+          },
         });
       }
     }
+    const context = {
+      employerId: d.employerId,
+      ...(replacedPrimary.length > 0 && { replacedPrimary }),
+    };
 
-    if (d.id) {
-      const [before] = await tx
-        .select()
-        .from(employerContacts)
-        .where(eq(employerContacts.id, d.id))
-        .limit(1);
-      if (!before) throw new BusinessRuleError('CONTACT_NOT_FOUND', 'Contact not found');
+    if (before) {
       const [after] = await tx
         .update(employerContacts)
         .set({ ...values, updatedAt: sql`NOW()` })
-        .where(eq(employerContacts.id, d.id))
+        .where(eq(employerContacts.id, before.id))
         .returning();
       if (!after) throw new Error('update returned no row');
       await recordAudit(tx, {
@@ -552,10 +646,11 @@ export async function upsertEmployerContact(input: UpsertContactInput): Promise<
         entityType: 'employer_contact',
         entityId: after.id,
         action: 'UPDATED',
-        before: { fullName: before.fullName, isPrimary: before.isPrimary },
-        after: { fullName: after.fullName, isPrimary: after.isPrimary },
+        before: contactSnapshot(before),
+        after: contactSnapshot(after),
+        context,
       });
-      return after;
+      return { ...after, replacedPrimary };
     }
     const [created] = await tx.insert(employerContacts).values(values).returning();
     if (!created) throw new Error('insert returned no row');
@@ -564,9 +659,10 @@ export async function upsertEmployerContact(input: UpsertContactInput): Promise<
       entityType: 'employer_contact',
       entityId: created.id,
       action: 'CREATED',
-      after: { employerId: created.employerId, fullName: created.fullName },
+      after: contactSnapshot(created),
+      context,
     });
-    return created;
+    return { ...created, replacedPrimary };
   });
 }
 

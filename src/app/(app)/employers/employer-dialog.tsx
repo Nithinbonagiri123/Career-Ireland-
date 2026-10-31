@@ -74,7 +74,16 @@ export function EmployerDialog({ trigger, initial, appVatRegistered = true }: Pr
     control,
     formState: { errors, isSubmitting },
   } = form;
+  // Each open starts blank (New employer) or on the current record (Edit).
   const { open, onOpenChange, formError, submit } = useFormDialog(form);
+  const handleOpenChange = (next: boolean) => {
+    // The duplicate warning belongs to one session; never carry it over.
+    if (next) {
+      setSimilar([]);
+      setDismissed(false);
+    }
+    onOpenChange(next);
+  };
 
   const legalName = useWatch({ control, name: 'legalName' });
   const tradingName = useWatch({ control, name: 'tradingName' });
@@ -91,15 +100,21 @@ export function EmployerDialog({ trigger, initial, appVatRegistered = true }: Pr
       setSimilar([]);
       return;
     }
+    // A search still in flight when the inputs change (or the form resets
+    // after a save) must not land later and show stale matches.
+    let stale = false;
     const t = setTimeout(async () => {
       const r = await findSimilarEmployersAction({
         legalName: legalName ?? undefined,
         tradingName: tradingName ?? undefined,
         website: website ?? undefined,
       });
-      if (r.ok) setSimilar(r.data);
+      if (r.ok && !stale) setSimilar(r.data);
     }, 250);
-    return () => clearTimeout(t);
+    return () => {
+      stale = true;
+      clearTimeout(t);
+    };
   }, [isEdit, legalName, tradingName, website]);
 
   const onSubmit = handleSubmit((data) =>
@@ -109,7 +124,7 @@ export function EmployerDialog({ trigger, initial, appVatRegistered = true }: Pr
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger render={trigger} />
       <DialogContent className="max-w-lg">
         <DialogHeader>

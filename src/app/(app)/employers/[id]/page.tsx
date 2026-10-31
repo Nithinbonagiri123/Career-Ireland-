@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import {
   ArrowRight,
   BadgeCheck,
@@ -33,7 +33,6 @@ import { notFound } from 'next/navigation';
 import { AssignToMeButton } from '@/components/assign-to-me-button';
 import { BillingSection } from '@/components/billing/billing-section';
 import { FinancialSummaryCard } from '@/components/billing/financial-summary-card';
-import { GenerateInvoiceDialog } from '@/components/billing/generate-invoice-dialog';
 import { CampaignsPanel } from '@/components/campaigns-panel';
 import { initialsOf } from '@/components/ds/entity-card';
 import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
@@ -53,6 +52,7 @@ import { ImmigrationCasesPanel } from '@/components/immigration-cases-panel';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { RecordHeaderActions } from '@/components/record-header-actions';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { hasFinanceAuthority } from '@/lib/auth/finance-policy';
 import { checkPermission, requireInternalStaff } from '@/lib/auth/session';
 import { formatCurrency } from '@/lib/currency';
 import { db } from '@/lib/db/client';
@@ -76,6 +76,11 @@ import {
 import { fetchApplicationTypes } from '@/modules/immigration/application-types';
 import { listCasesForEmployer } from '@/modules/immigration/service';
 import { fetchPersons } from '@/modules/persons/service';
+import {
+  FINANCE_ISSUES_INVOICES,
+  isPlacementFeeRaisable,
+  raisePlacementFeeHref,
+} from '@/modules/placements/fee';
 import { fetchRequisitionsForEmployer } from '@/modules/requisitions/service';
 import { fetchAppSettings } from '@/modules/settings/service';
 import { fetchStaffUserOptions } from '@/modules/users/service';
@@ -87,6 +92,7 @@ import { EmployerDialog } from '../employer-dialog';
 import { CompleteOnboardingButton } from './complete-onboarding-button';
 import { ContactDialog } from './contact-dialog';
 import { DeleteContactButton } from './delete-contact-button';
+import { EmployerInvoiceLauncher, GenerateInvoiceMenuItem } from './employer-invoice-launcher';
 import { EmployerWorkspaceTabs } from './employer-workspace-tabs';
 
 export const dynamic = 'force-dynamic';
@@ -104,6 +110,9 @@ export default async function EmployerDetail({
   }>;
 }) {
   const session = await requireInternalStaff();
+  // P0 — issuing an invoice needs finance authority (same rule as the
+  // server's requireFinanceAuthority('ISSUE')); others see it disabled.
+  const canIssueInvoice = hasFinanceAuthority(session.user, 'ISSUE');
   // R6 — controls follow recruitment.employers / requisitions (actions re-check).
   const [canEditEmployer, canCreateJob, canEditJob] = await Promise.all([
     checkPermission('recruitment', 'employers', 'edit'),
@@ -182,7 +191,8 @@ export default async function EmployerDetail({
     })
     .from(placements)
     .innerJoin(persons, eq(persons.id, placements.personId))
-    .where(eq(placements.employerId, id))
+    // Archived placements are hidden everywhere else; never bill them.
+    .where(and(eq(placements.employerId, id), isNull(placements.archivedAt)))
     .orderBy(desc(placements.createdAt));
   const placementInvoiceRows =
     employerPlacementRows.length > 0
@@ -215,6 +225,17 @@ export default async function EmployerDetail({
       status: string;
     }
   >();
+  // P0 — any non-void invoice blocks a second placement fee.
+  const placementsWithLiveInvoice = new Set(
+    placementInvoiceRows
+      .filter((r) => r.placementId && r.status !== 'VOIDED')
+      .map((r) => r.placementId),
+  );
+  const feeRaisable = (p: (typeof employerPlacementRows)[number]) =>
+    isPlacementFeeRaisable({
+      status: p.status,
+      hasLiveInvoice: placementsWithLiveInvoice.has(p.id),
+    });
   for (const r of placementInvoiceRows) {
     if (!r.placementId || latestInvoiceByPlacement.has(r.placementId)) continue;
     const settled = r.status === 'PAID' || r.status === 'VOIDED';
@@ -241,18 +262,45 @@ export default async function EmployerDetail({
       personName: `${p.firstName} ${p.lastName}`,
       jobRequisitionId: p.jobRequisitionId,
       latestInvoice: latestInvoiceByPlacement.get(p.id) ?? null,
+      feeRaisable: feeRaisable(p),
     })),
+    canIssueInvoice,
   });
 
-  const firstRaisablePlacement =
-    employerPlacementRows.find((p) => !latestInvoiceByPlacement.get(p.id)) ??
-    employerPlacementRows.find((p) => {
-      const inv = latestInvoiceByPlacement.get(p.id);
-      return inv && Number.parseFloat(inv.outstandingAmount) > 0;
-    }) ??
-    null;
+  // P0 — the header "Raise placement fee" only points at a placement whose
+  // fee can actually be raised (confirmed / started / completed, no live
+  // invoice). It used to include outstanding-invoice and proposed /
+  // terminated placements, inviting a double bill.
+  const firstRaisablePlacement = employerPlacementRows.find(feeRaisable) ?? null;
+  // The placement named by ?raisePlacement=… — opened in the invoice
+  // dialog only when it belongs to this employer and is still raisable.
+  const requestedPlacement = raisePlacement
+    ? (employerPlacementRows.find((p) => p.id === raisePlacement) ?? null)
+    : null;
+  const raiseTarget =
+    requestedPlacement && feeRaisable(requestedPlacement)
+      ? {
+          placementId: requestedPlacement.id,
+          requisitionId:
+            raiseRequisition && raiseRequisition === requestedPlacement.jobRequisitionId
+              ? raiseRequisition
+              : requestedPlacement.jobRequisitionId,
+          personName: `${requestedPlacement.firstName} ${requestedPlacement.lastName}`,
+        }
+      : null;
+  const raiseNotice = !raisePlacement
+    ? null
+    : !canIssueInvoice
+      ? `${FINANCE_ISSUES_INVOICES} — ask Finance or an Admin to raise this placement fee.`
+      : !requestedPlacement
+        ? 'That placement was not found for this employer, so no fee invoice was opened.'
+        : !raiseTarget
+          ? placementsWithLiveInvoice.has(requestedPlacement.id)
+            ? `The placement fee for ${requestedPlacement.firstName} ${requestedPlacement.lastName} has already been invoiced (${latestInvoiceByPlacement.get(requestedPlacement.id)?.number ?? 'see Billing'}).`
+            : `The placement for ${requestedPlacement.firstName} ${requestedPlacement.lastName} is ${requestedPlacement.status.toLowerCase().replace(/_/g, ' ')} — a fee can be raised once it is confirmed.`
+          : null;
 
-  const canVerifyPayments = session.user.role === 'ADMIN' || session.user.role === 'FINANCE';
+  const canVerifyPayments = hasFinanceAuthority(session.user, 'VERIFY');
   const location = [employer.city, employer.country].filter(Boolean).join(', ');
 
   // KPI strip — active requirements only (CLOSED/CANCELLED excluded) so
@@ -663,7 +711,7 @@ export default async function EmployerDetail({
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <DsEnumPill status={p.status} />
-                    {inv ? (
+                    {inv && !feeRaisable(p) ? (
                       <Link
                         href={`/employers/${employer.id}/invoices/${inv.number}`}
                         className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-primary hover:bg-muted"
@@ -674,15 +722,24 @@ export default async function EmployerDetail({
                           ? `${formatCurrency(inv.outstandingAmount, inv.currencyCode)} due`
                           : 'settled'}
                       </Link>
-                    ) : p.status === 'CONFIRMED' ||
-                      p.status === 'STARTED' ||
-                      p.status === 'COMPLETED' ? (
-                      <Link
-                        href={`/employers/${employer.id}?raisePlacement=${p.id}&raiseRequisition=${p.jobRequisitionId}`}
-                        className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                      >
-                        <Coins className="mr-1.5 size-3.5" aria-hidden /> Raise fee
-                      </Link>
+                    ) : feeRaisable(p) ? (
+                      canIssueInvoice ? (
+                        <Link
+                          href={raisePlacementFeeHref({ ...p, employerId: employer.id })}
+                          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                        >
+                          <Coins className="mr-1.5 size-3.5" aria-hidden /> Raise fee
+                        </Link>
+                      ) : (
+                        <span className="flex flex-col items-end gap-0.5">
+                          <Button size="sm" variant="outline" disabled>
+                            <Coins className="mr-1.5 size-3.5" aria-hidden /> Raise fee
+                          </Button>
+                          <span className="text-[11px] text-muted-foreground">
+                            {FINANCE_ISSUES_INVOICES}
+                          </span>
+                        </span>
+                      )
                     ) : (
                       <span className="text-xs text-muted-foreground">Not billable yet</span>
                     )}
@@ -856,88 +913,110 @@ export default async function EmployerDetail({
             },
           ]}
           actions={
-            <RecordHeaderActions
-              primary={
-                canCreateJob ? (
-                  <RequisitionDialog
+            <EmployerInvoiceLauncher
+              payerId={employer.id}
+              payerLabel={employer.legalName}
+              services={invoiceableServices}
+              canIssue={canIssueInvoice}
+              raise={raiseTarget}
+            >
+              <RecordHeaderActions
+                primary={
+                  canCreateJob ? (
+                    <RequisitionDialog
+                      employers={employersAll}
+                      currencies={currencies}
+                      occupations={occupationList}
+                      defaultEmployerId={employer.id}
+                      defaultOpen={newRequisition === '1'}
+                      trigger={
+                        <Button size="sm">
+                          <Plus className="mr-1.5 size-4" /> New requisition
+                        </Button>
+                      }
+                    />
+                  ) : undefined
+                }
+                secondary={[
+                  <AssignToMeButton
+                    key="assign"
+                    entity="employer"
+                    id={employer.id}
+                    currentUserId={session.user.id}
+                    currentAssignedUserId={employer.assignedUserId}
+                    canReassign={session.user.isOwner}
+                  />,
+                  canEditEmployer && (
+                    <EmployerDialog
+                      key="edit"
+                      initial={employer}
+                      appVatRegistered={appSettings.vatRegistered}
+                      trigger={
+                        <Button size="sm" variant="outline">
+                          <Pencil className="mr-1.5 size-4" /> Edit
+                        </Button>
+                      }
+                    />
+                  ),
+                  firstRaisablePlacement &&
+                    (canIssueInvoice ? (
+                      <Link
+                        key="raise-fee"
+                        href={raisePlacementFeeHref({
+                          ...firstRaisablePlacement,
+                          employerId: employer.id,
+                        })}
+                        className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                        data-testid="header-raise-fee"
+                      >
+                        <Coins className="mr-1.5 size-4" aria-hidden /> Raise placement fee
+                      </Link>
+                    ) : (
+                      <Button
+                        key="raise-fee"
+                        size="sm"
+                        variant="outline"
+                        disabled
+                        title={FINANCE_ISSUES_INVOICES}
+                        data-testid="header-raise-fee"
+                      >
+                        <Coins className="mr-1.5 size-4" aria-hidden /> Raise placement fee ·{' '}
+                        {FINANCE_ISSUES_INVOICES}
+                      </Button>
+                    )),
+                ]}
+                overflow={[
+                  <GenerateInvoiceMenuItem key="generate-invoice" />,
+                  <CaseDialog
+                    key="immigration-case"
+                    persons={allPersons}
                     employers={employersAll}
-                    currencies={currencies}
-                    occupations={occupationList}
-                    defaultEmployerId={employer.id}
-                    defaultOpen={newRequisition === '1'}
+                    applicationTypes={allApplicationTypes}
+                    prefill={{ sponsorEmployerId: employer.id }}
                     trigger={
-                      <Button size="sm">
-                        <Plus className="mr-1.5 size-4" /> New requisition
-                      </Button>
+                      <button
+                        type="button"
+                        className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                      >
+                        <PlaneTakeoff className="size-4" /> Start immigration case
+                      </button>
                     }
-                  />
-                ) : undefined
-              }
-              secondary={[
-                <AssignToMeButton
-                  key="assign"
-                  entity="employer"
-                  id={employer.id}
-                  currentUserId={session.user.id}
-                  currentAssignedUserId={employer.assignedUserId}
-                  canReassign={session.user.isOwner}
-                />,
-                canEditEmployer && (
-                  <EmployerDialog
-                    key="edit"
-                    initial={employer}
-                    appVatRegistered={appSettings.vatRegistered}
-                    trigger={
-                      <Button size="sm" variant="outline">
-                        <Pencil className="mr-1.5 size-4" /> Edit
-                      </Button>
-                    }
-                  />
-                ),
-                firstRaisablePlacement && !raisePlacement && (
-                  <Link
-                    key="raise-fee"
-                    href={`/employers/${employer.id}?raisePlacement=${firstRaisablePlacement.id}`}
-                    className={buttonVariants({ size: 'sm', variant: 'outline' })}
-                  >
-                    <Coins className="mr-1.5 size-4" aria-hidden /> Raise placement fee
-                  </Link>
-                ),
-              ]}
-              overflow={[
-                <GenerateInvoiceDialog
-                  key="generate-invoice"
-                  payerMode="EMPLOYER"
-                  payerId={employer.id}
-                  payerLabel={employer.legalName}
-                  services={invoiceableServices}
-                  triggerVariant="outline"
-                  triggerLabel={raisePlacement ? 'Raise placement fee invoice' : 'Generate invoice'}
-                  contextLinks={{
-                    placementId: raisePlacement || undefined,
-                    jobRequisitionId: raiseRequisition || undefined,
-                  }}
-                  defaultOpen={Boolean(raisePlacement)}
-                />,
-                <CaseDialog
-                  key="immigration-case"
-                  persons={allPersons}
-                  employers={employersAll}
-                  applicationTypes={allApplicationTypes}
-                  prefill={{ sponsorEmployerId: employer.id }}
-                  trigger={
-                    <button
-                      type="button"
-                      className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <PlaneTakeoff className="size-4" /> Start immigration case
-                    </button>
-                  }
-                />,
-              ]}
-            />
+                  />,
+                ]}
+              />
+            </EmployerInvoiceLauncher>
           }
         />
+
+        {raiseNotice && (
+          <p
+            className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+            role="status"
+            data-testid="raise-fee-notice"
+          >
+            {raiseNotice}
+          </p>
+        )}
 
         {/* KPI strip — live demand only, from R0-corrected counters. */}
         <StatTileGrid className="mt-6">

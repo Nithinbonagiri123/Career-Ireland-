@@ -13,7 +13,8 @@ import {
 const COPY = {
   ACTIVE: {
     title: 'Activate this campaign?',
-    description: 'Marks the campaign as live from now. Advertisements can then be set to running.',
+    description:
+      'Marks the campaign active from now. Advertisements you have posted can then be marked live.',
     submit: 'Activate',
     success: 'Campaign activated',
     needsReason: false,
@@ -22,7 +23,7 @@ const COPY = {
   PAUSED: {
     title: 'Pause this campaign?',
     description:
-      'Running advertisements are suspended and no new prospects can be recorded. Existing prospects can still be screened, noted, followed up and converted.',
+      'Advertisements marked live are suspended and no new prospects can be recorded. Existing prospects can still be screened, noted, followed up and converted.',
     submit: 'Pause campaign',
     success: 'Campaign paused',
     needsReason: false,
@@ -31,7 +32,7 @@ const COPY = {
   RESUME: {
     title: 'Resume this campaign?',
     description:
-      'The campaign becomes active again. Suspended advertisements stay paused — reactivate each one you want running from the Advertisements tab.',
+      'The campaign becomes active again. Suspended advertisements stay paused — mark each one live again from the Advertisements tab.',
     submit: 'Resume campaign',
     success: 'Campaign resumed',
     needsReason: false,
@@ -71,6 +72,7 @@ export function CampaignTransitionDialog({
   return (
     <ActionDialog
       trigger={trigger}
+      onReset={() => setReason('')}
       title={copy.title}
       description={copy.description}
       submitLabel={copy.submit}
@@ -90,6 +92,7 @@ export function CampaignTransitionDialog({
           <Textarea
             id="cm-reason"
             rows={3}
+            autoComplete="off"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
@@ -112,6 +115,7 @@ export function ArchiveCampaignDialog({
   return (
     <ActionDialog
       trigger={trigger}
+      onReset={() => setReason('')}
       title={restore ? 'Restore this campaign?' : 'Archive this campaign?'}
       description={
         restore
@@ -137,6 +141,7 @@ export function ArchiveCampaignDialog({
           <Textarea
             id="cm-archive-reason"
             rows={3}
+            autoComplete="off"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder={

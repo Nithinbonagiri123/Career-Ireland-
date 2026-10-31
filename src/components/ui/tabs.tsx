@@ -60,7 +60,10 @@ export function TabsTrigger({
       className={cn(
         'relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-t-md px-3 text-sm text-muted-foreground transition-colors',
         'hover:text-foreground',
-        'data-[selected]:font-medium data-[selected]:text-foreground',
+        // base-ui 1.7 marks the active tab with `data-active` + aria-selected
+        // (there is no `data-selected`). aria-selected keeps the same variant
+        // as DS_TAB_TRIGGER so tailwind-merge lets the DS weight override this.
+        'aria-selected:font-medium aria-selected:text-foreground',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
         className,
       )}

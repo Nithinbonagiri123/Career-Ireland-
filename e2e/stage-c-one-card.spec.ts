@@ -214,9 +214,16 @@ test('one-card journey: lead → quote → single-click payment → activation �
     };
     await advance(/move to interview/i, /moved to interview/i);
     await advance(/record offer|move to offer/i, /moved to offer/i);
-    await advance(/mark accepted|move to accepted/i, /moved to accepted/i);
-    // R3 — the status ladder records no CRM offer, so placing goes through
-    // the audited exception (reason + confirmation).
+    // P0 — on our own jobs "accepted" is no longer a bare status change: the
+    // menu doesn't offer it, and placing goes through the guarded placement
+    // path. The status ladder records no CRM offer, so it uses the audited
+    // exception (reason + confirmation).
+    await expect(async () => {
+      await internalRow.getByRole('button', { name: 'Update application status' }).click();
+      await expect(page.getByRole('menuitem').first()).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
+    await expect(page.getByRole('menuitem', { name: /move to accepted/i })).toHaveCount(0);
+    await page.keyboard.press('Escape');
     const exception = page.getByRole('dialog');
     await expect(async () => {
       await internalRow.getByRole('button', { name: 'Record placement' }).click();
@@ -229,8 +236,7 @@ test('one-card journey: lead → quote → single-click payment → activation �
     await exception.getByRole('button', { name: 'Place without offer' }).click();
     await expect(page.getByText(/Placement recorded/).first()).toBeVisible({ timeout: 15_000 });
 
-    // DB truth: the placement is CONFIRMED (the PROPOSED row created at
-    // ACCEPTED was confirmed, not duplicated) and availability flipped.
+    // DB truth: exactly one CONFIRMED placement and availability flipped.
     const placementRows = await m.db
       .select({ id: m.schemas.placements.id, status: m.schemas.placements.status })
       .from(m.schemas.placements)

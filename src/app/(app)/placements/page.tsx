@@ -6,8 +6,10 @@ import { Pagination, paginate } from '@/components/ds/pagination';
 import { StatTile, StatTileGrid } from '@/components/ds/stat-tile';
 import { FadeUp } from '@/components/motion/motion-primitives';
 import { PageHeader } from '@/components/page-header';
+import { canFinance } from '@/lib/auth/finance-policy';
 import { checkPermission, requirePermission } from '@/lib/auth/session';
 import { parseDateRangeParams } from '@/lib/date-range';
+import { isPlacementFeeRaisable } from '@/modules/placements/fee';
 import { fetchPlacements, type PlacementListRow } from '@/modules/placements/service';
 import { PlacementsList } from './placements-table';
 
@@ -55,6 +57,12 @@ function invoiceState(p: PlacementListRow): 'none' | 'outstanding' | 'paid' | 'v
   return 'outstanding';
 }
 
+/** P0 — "Not invoiced" means a fee is actually due to be raised: a
+ *  confirmed / started / completed placement with no non-void invoice. */
+function awaitingFee(p: PlacementListRow): boolean {
+  return isPlacementFeeRaisable(p);
+}
+
 /**
  * Stage 6G — Placements list (approved mockups 01 / 03 language): header,
  * KPI tiles, date / view row, filter toolbar, status tabs + sort, table
@@ -66,18 +74,18 @@ export default async function PlacementsPage({ searchParams }: { searchParams: P
   const createdRange = parseDateRangeParams({ created: sp.created, from: sp.from, to: sp.to });
   // Table stays the default; `view=grid` opts into cards.
   const cardView = sp.view === 'grid';
-  const [placements, canEdit] = await Promise.all([
+  const [placements, canEdit, canIssueInvoice] = await Promise.all([
     fetchPlacements(createdRange),
     // R6 — status / restore / archive need recruitment.placements edit.
     checkPermission('recruitment', 'placements', 'edit'),
+    // P0 — only finance authority may issue the fee invoice (server rule).
+    canFinance('ISSUE'),
   ]);
 
   // ── KPI tiles (current date range).
   const active = placements.filter((p) => p.status === 'CONFIRMED' || p.status === 'STARTED');
   const completed = placements.filter((p) => p.status === 'COMPLETED').length;
-  const notInvoiced = placements.filter(
-    (p) => p.status !== 'TERMINATED_EARLY' && invoiceState(p) === 'none',
-  ).length;
+  const notInvoiced = placements.filter(awaitingFee).length;
 
   // ── Filters, then status tab, sort, page.
   const q = (sp.q ?? '').trim().toLowerCase();
@@ -89,7 +97,7 @@ export default async function PlacementsPage({ searchParams }: { searchParams: P
           .toLowerCase()
           .includes(q)) &&
       (!sp.employer || p.employerId === sp.employer) &&
-      (!sp.invoice || invoiceState(p) === sp.invoice),
+      (!sp.invoice || (sp.invoice === 'none' ? awaitingFee(p) : invoiceState(p) === sp.invoice)),
   );
   const tab = STATUS_TABS.find((t) => t.key === sp.status) ?? STATUS_TABS[0];
   const sorted = sortPlacements(
@@ -142,7 +150,7 @@ export default async function PlacementsPage({ searchParams }: { searchParams: P
             tone="amber"
             label="Not invoiced"
             value={notInvoiced}
-            hint="No placement fee raised yet"
+            hint="Confirmed, no live fee invoice"
           />
         </StatTileGrid>
       </FadeUp>
@@ -198,6 +206,7 @@ export default async function PlacementsPage({ searchParams }: { searchParams: P
             placements={pageData.items}
             view={cardView ? 'cards' : 'table'}
             canEdit={canEdit}
+            canIssueInvoice={canIssueInvoice}
             filtered={placements.length > 0}
           />
           <Pagination

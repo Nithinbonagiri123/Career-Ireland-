@@ -231,6 +231,7 @@ export function CancelInterviewDialog({
         >
           <Textarea
             id="iv-cancel-reason"
+            autoComplete="off"
             rows={3}
             value={reason}
             onChange={(e) => setReason(e.target.value)}

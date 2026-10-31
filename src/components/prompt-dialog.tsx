@@ -86,6 +86,9 @@ export function PromptDialog({
             <Label htmlFor="prompt-dialog-reason">{label ?? 'Reason'}</Label>
             <Input
               id="prompt-dialog-reason"
+              // An audited reason is written fresh each time — never offer
+              // the browser's saved entries from earlier reasons.
+              autoComplete="off"
               autoFocus
               value={reason}
               onChange={(e) => setReason(e.target.value)}

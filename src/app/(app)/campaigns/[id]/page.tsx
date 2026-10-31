@@ -110,8 +110,12 @@ export default async function CampaignWorkspace({
 
   const archived = Boolean(campaign.archivedAt);
   const ended = campaign.status === 'COMPLETED' || campaign.status === 'CANCELLED';
-  // New prospects only while the campaign is not cancelled, archived or paused.
-  const campaignOpen = !archived && campaign.status !== 'CANCELLED' && campaign.status !== 'PAUSED';
+  // New prospects only on a live campaign: not draft, cancelled, archived or paused.
+  const campaignOpen =
+    !archived &&
+    campaign.status !== 'DRAFT' &&
+    campaign.status !== 'CANCELLED' &&
+    campaign.status !== 'PAUSED';
   const canChangeAds = canEditCampaign && !archived && !ended;
   const now = new Date();
   const newProspects = prospects.filter((p) => p.status === 'NEW').length;
@@ -149,7 +153,7 @@ export default async function CampaignWorkspace({
       icon={Megaphone}
       title="Advertisements"
       count={ads.length}
-      description="One advertisement per country or job board. Prospects are recorded against the ad they responded to."
+      description="One record per advert you post (per country or job board). The CRM does not post adverts; record where you posted it in notes. Prospects are recorded against the advert they responded to."
       action={
         canChangeAds && (canCreateCampaign || canEditCampaign) ? (
           <AdDialog
@@ -411,6 +415,7 @@ export default async function CampaignWorkspace({
                       notes: campaign.notes,
                       jobRequisitionId: campaign.jobRequisitionId,
                       requisitionTitle: campaign.requisitionTitle,
+                      requisitionStatus: campaign.requisitionStatus,
                       employerId: campaign.employerId,
                       employerName: campaign.employerName,
                       jobLocked: campaign.prospectCount > 0 || ended,
@@ -473,7 +478,7 @@ export default async function CampaignWorkspace({
             icon={Megaphone}
             label="Ads"
             value={ads.length}
-            hint={`${ads.filter((a) => a.status === 'ACTIVE').length} running`}
+            hint={`${ads.filter((a) => a.status === 'ACTIVE').length} marked live`}
             tone="blue"
           />
           <StatTile
@@ -520,6 +525,7 @@ export default async function CampaignWorkspace({
                 canEdit={canEditProspect}
                 campaignOpen={campaignOpen}
                 paused={campaign.status === 'PAUSED' && !archived}
+                draft={campaign.status === 'DRAFT' && !archived}
                 jobTitle={jobOpen ? campaign.requisitionTitle : null}
                 assignees={assignees}
                 nowIso={now.toISOString()}

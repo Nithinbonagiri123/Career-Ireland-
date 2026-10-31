@@ -49,6 +49,7 @@ export function ProspectsPanel({
   canEdit,
   campaignOpen,
   paused,
+  draft,
   jobTitle,
   assignees,
   nowIso,
@@ -59,6 +60,8 @@ export function ProspectsPanel({
   canEdit: boolean;
   campaignOpen: boolean;
   paused?: boolean;
+  /** Draft campaign: nothing is live yet, so no prospects can be recorded. */
+  draft?: boolean;
   jobTitle: string | null;
   assignees: Array<{ id: string; fullName: string }>;
   nowIso: string;
@@ -114,9 +117,21 @@ export function ProspectsPanel({
           screened, noted, followed up and converted.
         </p>
       )}
+      {canCreate && draft && (
+        <p
+          className="rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground"
+          data-testid="prospects-unavailable"
+        >
+          This campaign is still a draft. Activate it and mark an advertisement live before
+          recording prospects — a prospect is someone who responded to a live advert.
+        </p>
+      )}
       {canCreate && campaignOpen && !ads.some((a) => a.open) && (
-        <p className="rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-          Add or reactivate an advertisement first — every prospect responds to one.
+        <p
+          className="rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground"
+          data-testid="prospects-unavailable"
+        >
+          Mark an advertisement live first — every prospect responds to a live advert.
         </p>
       )}
       <fieldset className={cn(SEG_TRAY, 'm-0')}>

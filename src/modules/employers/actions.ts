@@ -11,6 +11,7 @@ import type {
 import {
   archiveEmployer,
   deleteEmployerContact,
+  fetchPrimaryContact,
   findSimilarEmployers,
   markEmployerOnboardingComplete,
   unarchiveEmployer,
@@ -40,6 +41,11 @@ export async function upsertEmployerContactAction(input: UpsertContactInput) {
   const r = await toActionResult(() => upsertEmployerContact(input));
   if (r.ok) revalidatePath(`/employers/${input.employerId}`);
   return r;
+}
+
+/** Current primary contact, for the contact dialog's "This replaces …" hint. */
+export async function fetchPrimaryContactAction(employerId: string) {
+  return toActionResult(() => fetchPrimaryContact(employerId));
 }
 
 export async function deleteEmployerContactAction(input: {

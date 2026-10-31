@@ -1,11 +1,13 @@
 'use client';
 
+import { format } from 'date-fns';
 import { type ReactElement, useState } from 'react';
 import { ActionDialog, fieldError } from '@/components/action-dialog';
 import { FormField } from '@/components/form-field';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { formatCurrency } from '@/lib/currency';
 import {
   createOfferAction,
   transitionOfferAction,
@@ -276,7 +278,13 @@ export function OfferTransitionDialog({
           required={copy.needsReason}
           error={fieldError(errors, 'note')}
         >
-          <Textarea id="of-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
+          <Textarea
+            id="of-note"
+            rows={3}
+            autoComplete="off"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
         </FormField>
       )}
     </ActionDialog>
@@ -284,19 +292,32 @@ export function OfferTransitionDialog({
 }
 
 /** Hand-off to R0's guarded placement action — capacity, duplicate and
- *  employer checks all run there; nothing is bypassed. */
+ *  employer checks all run there; nothing is bypassed. P0 — the accepted
+ *  offer's pay and start date are copied onto the placement (server side);
+ *  the dialog says so. */
 export function PlaceCandidateDialog({
   trigger,
   application,
+  offer,
 }: {
   trigger: ReactElement;
   application: RequisitionApplicationOption;
+  /** The accepted offer whose terms the placement will carry. */
+  offer?: RequisitionOfferRow;
 }) {
+  const terms = offer
+    ? [
+        `${formatCurrency(offer.amount, offer.currencyCode, { maximumFractionDigits: 0 })} ${offer.period.toLowerCase()}`,
+        offer.startDate
+          ? `starting ${format(new Date(`${offer.startDate}T00:00:00`), 'd MMM yyyy')}`
+          : 'no start date yet',
+      ].join(', ')
+    : null;
   return (
     <ActionDialog
       trigger={trigger}
       title={`Place ${application.personName}?`}
-      description="Creates a confirmed placement on this job. Seat limits, duplicate and employer checks apply, and no invoice is raised automatically."
+      description={`Creates a confirmed placement on this job${terms ? ` with the accepted offer's terms (${terms})` : ''}. Seat limits, duplicate and employer checks apply, and no invoice is raised automatically.`}
       submitLabel="Place candidate"
       successMessage={`${application.personName} placed`}
       onSubmit={() => markApplicationPlacedAction(application.applicationId)}

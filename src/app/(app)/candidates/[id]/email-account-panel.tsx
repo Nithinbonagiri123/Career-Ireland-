@@ -251,6 +251,7 @@ function RevealButton({ personId }: { personId: string }) {
               <Label htmlFor="reason">Reason</Label>
               <Input
                 id="reason"
+                autoComplete="off"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="e.g. Handing off account to candidate"

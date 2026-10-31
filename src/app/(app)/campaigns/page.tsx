@@ -90,10 +90,17 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
   ]);
 
   // "Start a campaign" from a job: open the dialog with that job chosen.
+  // A job that cannot be advertised (draft, filled, closed, archived) is
+  // not preselected; the dialog still opens and says why.
   let prefillJob = null;
+  let prefillNotice: string | null = null;
   if (sp.requisitionId && canCreate) {
     const jobs = await fetchJobsForCampaignPicker();
     prefillJob = jobs.find((j) => j.id === sp.requisitionId) ?? null;
+    if (!prefillJob) {
+      prefillNotice =
+        'That job can’t be advertised yet — only open jobs can (not draft, filled, closed or archived). Open the job first, or choose another one below.';
+    }
   }
 
   // ── KPI tiles (live campaigns in the date range).
@@ -143,7 +150,8 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
             canCreate ? (
               <CampaignFormDialog
                 prefillJob={prefillJob}
-                defaultOpen={Boolean(prefillJob)}
+                prefillNotice={prefillNotice}
+                defaultOpen={Boolean(prefillJob || prefillNotice)}
                 trigger={
                   <Button>
                     <Plus className="mr-1.5 size-4" /> New campaign
@@ -167,7 +175,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
           <StatTile
             icon={Megaphone}
             tone="blue"
-            label="Running ads"
+            label="Ads marked live"
             value={runningAds}
             hint="Across all campaigns"
           />

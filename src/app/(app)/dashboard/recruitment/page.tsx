@@ -59,7 +59,7 @@ export default async function RecruitmentDashboard() {
             icon={Trophy}
           />
           <StatChip
-            label="Ads active"
+            label="Ads marked live"
             value={m.ads.active}
             hint={`${m.ads.expired} expired`}
             href="/campaigns"

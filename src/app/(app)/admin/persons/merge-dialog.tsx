@@ -105,6 +105,7 @@ export function MergePersonsDialog({ persons }: { persons: Person[] }) {
           <FormField id="mp-reason" label="Reason (audited)" error={errors.reason?.message}>
             <Input
               id="mp-reason"
+              autoComplete="off"
               placeholder="e.g. Same person, entered twice via lead + campaign"
               aria-invalid={Boolean(errors.reason)}
               {...register('reason')}

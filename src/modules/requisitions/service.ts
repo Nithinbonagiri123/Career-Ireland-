@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
-import { recordAudit } from '@/lib/audit/withAudit';
+import { type DbExecutor, recordAudit } from '@/lib/audit/withAudit';
 import { createOrEdit, requireRecruitment } from '@/lib/auth/recruitment-guards';
 import { requireInternalStaff } from '@/lib/auth/session';
 import { type DateRange, dateRangeWhere } from '@/lib/date-range';
@@ -193,6 +193,74 @@ export async function fetchRequisition(id: string): Promise<RequisitionListRow |
   return row ? { ...row.requisition, employerName: row.employerName } : null;
 }
 
+/**
+ * P0 — what already hangs off a job. Once a job has any of these, its
+ * employer can no longer be changed: moving it would silently re-parent
+ * the campaign, shortlists, applications, placements and invoices to
+ * another employer. Returns the kinds present (empty = none).
+ */
+export type RequisitionActivityKind =
+  | 'campaign'
+  | 'match'
+  | 'shortlist'
+  | 'application'
+  | 'interview'
+  | 'offer'
+  | 'placement'
+  | 'invoice';
+
+export async function requisitionActivityKinds(
+  tx: DbExecutor,
+  requisitionId: string,
+): Promise<RequisitionActivityKind[]> {
+  const rows = await tx.execute<Record<RequisitionActivityKind, boolean>>(sql`
+    SELECT
+      EXISTS (SELECT 1 FROM recruitment_campaigns WHERE job_requisition_id = ${requisitionId}) AS campaign,
+      EXISTS (SELECT 1 FROM candidate_matches WHERE job_requisition_id = ${requisitionId}) AS match,
+      EXISTS (SELECT 1 FROM shortlist_entries WHERE job_requisition_id = ${requisitionId}) AS shortlist,
+      EXISTS (SELECT 1 FROM job_applications WHERE job_requisition_id = ${requisitionId}) AS application,
+      EXISTS (
+        SELECT 1 FROM interviews i JOIN job_applications a ON a.id = i.job_application_id
+        WHERE a.job_requisition_id = ${requisitionId}
+      ) AS interview,
+      EXISTS (
+        SELECT 1 FROM offers o JOIN job_applications a ON a.id = o.job_application_id
+        WHERE a.job_requisition_id = ${requisitionId}
+      ) AS offer,
+      EXISTS (SELECT 1 FROM placements WHERE job_requisition_id = ${requisitionId}) AS placement,
+      EXISTS (
+        SELECT 1 FROM invoices
+        WHERE job_requisition_id = ${requisitionId}
+           OR placement_id IN (SELECT id FROM placements WHERE job_requisition_id = ${requisitionId})
+      ) AS invoice
+  `);
+  const row = rows[0];
+  if (!row) return [];
+  return (Object.keys(row) as RequisitionActivityKind[]).filter((k) => row[k] === true);
+}
+
+export type RequisitionEmployerLock = {
+  locked: boolean;
+  employerName: string;
+  activity: RequisitionActivityKind[];
+};
+
+/** Whether the job's employer can still be changed (edit dialog). */
+export async function fetchRequisitionEmployerLock(
+  requisitionId: string,
+): Promise<RequisitionEmployerLock> {
+  await requireInternalStaff();
+  const [job] = await db
+    .select({ employerName: employers.legalName })
+    .from(jobRequisitions)
+    .innerJoin(employers, eq(employers.id, jobRequisitions.employerId))
+    .where(eq(jobRequisitions.id, requisitionId))
+    .limit(1);
+  if (!job) throw new BusinessRuleError('REQUISITION_NOT_FOUND', 'Requisition not found');
+  const activity = await requisitionActivityKinds(db, requisitionId);
+  return { locked: activity.length > 0, employerName: job.employerName, activity };
+}
+
 export async function upsertRequisition(input: UpsertRequisitionInput): Promise<JobRequisition> {
   const session = await requireRecruitment('requisitions', createOrEdit(input));
   const parsed = UpsertRequisitionSchema.safeParse(input);
@@ -233,6 +301,24 @@ export async function upsertRequisition(input: UpsertRequisitionInput): Promise<
         .for('update')
         .limit(1);
       if (!before) throw new BusinessRuleError('REQUISITION_NOT_FOUND', 'Requisition not found');
+
+      // P0 — the employer of a job with any activity is fixed: changing it
+      // would silently move the job's campaign, shortlists, applications,
+      // placements and invoices to another employer.
+      if (d.employerId !== before.employerId) {
+        const activity = await requisitionActivityKinds(tx, before.id);
+        if (activity.length > 0) {
+          const [current] = await tx
+            .select({ legalName: employers.legalName })
+            .from(employers)
+            .where(eq(employers.id, before.employerId))
+            .limit(1);
+          throw new BusinessRuleError(
+            'REQUISITION_EMPLOYER_LOCKED',
+            `This job already has activity for ${current?.legalName ?? 'its employer'}. Create a new job for the other employer.`,
+          );
+        }
+      }
 
       // R0 — the edit form used to write any status straight through,
       // bypassing the requisition state machine entirely.
@@ -275,6 +361,7 @@ export async function upsertRequisition(input: UpsertRequisitionInput): Promise<
         action: 'UPDATED',
         // R0 — audit the fields that matter, not just title/status.
         before: {
+          employerId: before.employerId,
           title: before.title,
           status: before.status,
           positionsRequired: before.positionsRequired,
@@ -283,6 +370,7 @@ export async function upsertRequisition(input: UpsertRequisitionInput): Promise<
           targetFillDate: before.targetFillDate,
         },
         after: {
+          employerId: after.employerId,
           title: after.title,
           status: after.status,
           positionsRequired: after.positionsRequired,
@@ -313,6 +401,7 @@ export async function upsertRequisition(input: UpsertRequisitionInput): Promise<
       after: {
         employerId: created.employerId,
         title: created.title,
+        status: created.status,
         positionsRequired: created.positionsRequired,
       },
     });

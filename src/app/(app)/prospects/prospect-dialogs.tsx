@@ -45,24 +45,45 @@ export function AddProspectDialog({
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
+  // Same-name match: the server warns; the user may confirm a different person.
+  const [nameMatch, setNameMatch] = useState(false);
+  const [differentPerson, setDifferentPerson] = useState(false);
   const search = useServerSearch(searchPersonsForPickerAction, { enabled: mode === 'existing' });
+  // Each open starts blank: no leftover person, phone or note from the last capture.
+  const reset = () => {
+    setAdId(defaultAdId ?? openAds[0]?.id ?? '');
+    setMode('existing');
+    setSelected(null);
+    setFirstName('');
+    setLastName('');
+    setEmail('');
+    setPhone('');
+    setNotes('');
+    setNameMatch(false);
+    setDifferentPerson(false);
+    search.setQuery('');
+  };
 
   return (
     <ActionDialog
       trigger={trigger}
       wide
+      onReset={reset}
       title="Record a prospect"
-      description="Someone who responded to an advertisement. A person can be a prospect once per campaign."
+      description="Someone who responded to an advertisement marked live. A person can be a prospect once per campaign."
       submitLabel="Record prospect"
       successMessage="Prospect recorded"
-      onSubmit={() =>
-        createProspectAction({
+      onSubmit={async () => {
+        const r = await createProspectAction({
           advertisementId: adId,
           personId: mode === 'existing' ? (selected?.id ?? '') : '',
           newPerson: mode === 'new' ? { firstName, lastName, email, phone } : undefined,
+          confirmDifferentPerson: mode === 'new' && nameMatch && differentPerson,
           notes,
-        })
-      }
+        });
+        if (!r.ok && r.error.code === 'PROSPECT_NAME_MATCH') setNameMatch(true);
+        return r;
+      }}
     >
       {(errors) => (
         <>
@@ -188,7 +209,12 @@ export function AddProspectDialog({
                 <Input
                   id="pr-first"
                   value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
+                  autoComplete="off"
+                  onChange={(e) => {
+                    setFirstName(e.target.value);
+                    setNameMatch(false);
+                    setDifferentPerson(false);
+                  }}
                 />
               </FormField>
               <FormField
@@ -200,7 +226,12 @@ export function AddProspectDialog({
                 <Input
                   id="pr-last"
                   value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
+                  autoComplete="off"
+                  onChange={(e) => {
+                    setLastName(e.target.value);
+                    setNameMatch(false);
+                    setDifferentPerson(false);
+                  }}
                 />
               </FormField>
               <FormField id="pr-email" label="Email" error={fieldError(errors, 'newPerson.email')}>
@@ -215,8 +246,26 @@ export function AddProspectDialog({
                 <Input id="pr-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
               </FormField>
               <p className="text-xs text-muted-foreground sm:col-span-2">
-                Checked against existing people by email, phone and name before anyone is created.
+                Checked against existing people before anyone is created. The same email or phone is
+                refused; the same name is a warning you can override.
               </p>
+              {nameMatch && (
+                <div
+                  className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 sm:col-span-2 dark:border-amber-900/60 dark:bg-amber-500/10"
+                  data-testid="prospect-name-match"
+                >
+                  <Checkbox
+                    id="pr-different"
+                    checked={differentPerson}
+                    onCheckedChange={(v) => setDifferentPerson(v === true)}
+                    className="mt-0.5"
+                  />
+                  <Label htmlFor="pr-different" className="text-sm leading-snug font-normal">
+                    This is a different person — create a new record anyway (recorded in the audit
+                    trail).
+                  </Label>
+                </div>
+              )}
             </div>
           )}
 
@@ -253,6 +302,7 @@ export function ProspectStatusDialog({
   return (
     <ActionDialog
       trigger={trigger}
+      onReset={() => setNotes('')}
       title={`Mark ${personName} ${label}?`}
       submitLabel={`Mark ${label}`}
       successMessage={`${personName} marked ${label}`}
@@ -269,6 +319,7 @@ export function ProspectStatusDialog({
           <Textarea
             id="ps-note"
             rows={3}
+            autoComplete="off"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
@@ -289,6 +340,7 @@ export function ProspectNoteDialog({
   return (
     <ActionDialog
       trigger={trigger}
+      onReset={() => setNote('')}
       title="Add a note"
       description="Saved with your name and the time."
       submitLabel="Add note"
@@ -297,7 +349,13 @@ export function ProspectNoteDialog({
     >
       {(errors) => (
         <FormField id="pn-note" label="Note" required error={fieldError(errors, 'note')}>
-          <Textarea id="pn-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
+          <Textarea
+            id="pn-note"
+            rows={3}
+            autoComplete="off"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
         </FormField>
       )}
     </ActionDialog>
@@ -320,6 +378,10 @@ export function FollowUpDialog({
   return (
     <ActionDialog
       trigger={trigger}
+      onReset={() => {
+        setDueOn(currentDueOn ?? '');
+        setAssignee('');
+      }}
       title={currentDueOn ? 'Change follow-up' : 'Set a follow-up'}
       description="Creates a task due at 09:00 Irish time on that day. Clear the date to remove it."
       submitLabel={dueOn ? 'Save follow-up' : 'Clear follow-up'}
@@ -374,6 +436,11 @@ export function ConvertProspectDialog({
   return (
     <ActionDialog
       trigger={trigger}
+      onReset={() => {
+        setConfirmed(false);
+        setShortlist(false);
+        setNotes('');
+      }}
       title={`Convert ${personName} to a candidate?`}
       description={
         hasCandidateProfile
@@ -417,6 +484,7 @@ export function ConvertProspectDialog({
             <Textarea
               id="cv-note"
               rows={2}
+              autoComplete="off"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />

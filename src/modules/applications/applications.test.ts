@@ -71,17 +71,17 @@ describe('job applications', () => {
     expect(audit?.before).toEqual({ status: 'APPLIED' });
   });
 
-  it('ACCEPTED proposes exactly one placement (a seat is not taken until confirmed)', async () => {
+  it('ACCEPTED goes through the guarded placement path (P0): no accepted offer → refused, nothing created', async () => {
     const [, , cara] = ids.people as [string, string, string];
     const app = await svc.createApplication({ jobRequisitionId: ids.jobId, personId: cara });
     await svc.updateApplicationStatus({ applicationId: app.id, status: 'INTERVIEW' });
     await svc.updateApplicationStatus({ applicationId: app.id, status: 'OFFER' });
-    await svc.updateApplicationStatus({ applicationId: app.id, status: 'ACCEPTED' });
-    // Repeating the same status is a no-op, not a second placement.
-    await svc.updateApplicationStatus({ applicationId: app.id, status: 'ACCEPTED' });
+    // It used to create a PROPOSED placement under requisitions.edit only.
+    await expect(
+      svc.updateApplicationStatus({ applicationId: app.id, status: 'ACCEPTED' }),
+    ).rejects.toMatchObject({ code: 'PLACEMENT_OFFER_REQUIRED' });
     const rows = await db.select().from(placements).where(eq(placements.jobApplicationId, app.id));
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.status).toBe('PROPOSED');
+    expect(rows).toHaveLength(0);
   });
 
   it('external job-board applications are recorded per person without a job', async () => {

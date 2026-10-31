@@ -138,13 +138,22 @@ test('04 · Employer invoice — dialog + manual price flow', async ({ page }) =
     .waitFor({ state: 'visible', timeout: 5000 })
     .then(() => true)
     .catch(() => false);
+  // P0 — the dialog is mounted outside the lazy menu (so ?raisePlacement
+  // deep links open it); the menu entry is now a plain menu item.
   if (hasOverflow) {
-    await moreActions.click();
+    await expect(async () => {
+      await moreActions.click();
+      await expect(page.getByRole('menuitem', { name: /generate invoice/i })).toBeVisible({
+        timeout: 2_000,
+      });
+    }).toPass({ timeout: 20_000 });
+    await page.getByRole('menuitem', { name: /generate invoice/i }).click();
+  } else {
+    await page
+      .getByRole('button', { name: /generate invoice/i })
+      .first()
+      .click();
   }
-  await page
-    .getByRole('button', { name: /generate invoice/i })
-    .first()
-    .click();
   await expect(page.getByRole('heading', { name: /generate invoice/i })).toBeVisible();
   await fullShot(page, 'e2e__employer-invoice-dialog');
 

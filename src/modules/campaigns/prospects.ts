@@ -126,6 +126,21 @@ export async function createProspect(input: CreateProspectInput): Promise<Recrui
         'This campaign is paused — new prospects can be recorded again once it is resumed',
       );
     }
+    // A prospect is someone who responded to an advert that was live. A
+    // draft campaign or a draft (never marked live) advert has had no
+    // responses yet (P0 — owner saw prospects logged on drafts).
+    if (campaign.status === 'DRAFT') {
+      throw new BusinessRuleError(
+        'CAMPAIGN_NOT_LIVE',
+        'This campaign is still a draft — activate it and mark an advertisement live before recording prospects',
+      );
+    }
+    if (ad.status === 'DRAFT') {
+      throw new BusinessRuleError(
+        'AD_NOT_LIVE',
+        'This advertisement was never marked live — mark it live before recording prospects who responded to it',
+      );
+    }
     if (ad.status === 'CLOSED') {
       throw new BusinessRuleError('AD_CLOSED', 'This advertisement is closed');
     }
@@ -159,36 +174,64 @@ export async function createProspect(input: CreateProspectInput): Promise<Recrui
     } else {
       const np = d.newPerson;
       if (!np) throw new ValidationError('Enter the new person', { personId: 'Required' });
-      // Duplicate check on email, phone or exact name. Compares the raw
-      // columns: persons.normalized_email / normalized_phone are not
-      // populated for most existing rows, so they cannot be relied on.
+      // Duplicate check. Compares the raw columns: persons.normalized_email /
+      // normalized_phone are not populated for most existing rows, so they
+      // cannot be relied on.
+      //  - Same email or phone → hard block (it is the same person).
+      //  - Same first + last name only → a warning; common names are not
+      //    proof, so the user may confirm "This is a different person"
+      //    (audited on the new person).
       const nEmail = blankToNull(np.email)?.toLowerCase() ?? null;
       const nPhone = blankToNull(np.phone)?.replace(/[^0-9+]/g, '') || null;
-      const similar = await tx
-        .select({ firstName: persons.firstName, lastName: persons.lastName })
+      const active = and(isNull(persons.archivedAt), isNull(persons.mergedIntoPersonId));
+      const contactMatches =
+        nEmail || nPhone
+          ? await tx
+              .select({ firstName: persons.firstName, lastName: persons.lastName })
+              .from(persons)
+              .where(
+                and(
+                  active,
+                  or(
+                    nEmail ? sql`lower(trim(${persons.email})) = ${nEmail}` : undefined,
+                    nPhone
+                      ? sql`regexp_replace(coalesce(${persons.phone}, ''), '[^0-9+]', '', 'g') = ${nPhone}`
+                      : undefined,
+                  ),
+                ),
+              )
+              .limit(3)
+          : [];
+      if (contactMatches.length > 0) {
+        const names = contactMatches.map((m) => `${m.firstName} ${m.lastName}`).join(', ');
+        throw new BusinessRuleError(
+          'PROSPECT_POSSIBLE_DUPLICATE',
+          `This person may already exist (${names}) — same email or phone. Search for them and pick the existing record.`,
+        );
+      }
+      const nameMatches = await tx
+        .select({
+          id: persons.id,
+          firstName: persons.firstName,
+          lastName: persons.lastName,
+          email: persons.email,
+        })
         .from(persons)
         .where(
           and(
-            isNull(persons.archivedAt),
-            isNull(persons.mergedIntoPersonId),
-            or(
-              nEmail ? sql`lower(trim(${persons.email})) = ${nEmail}` : undefined,
-              nPhone
-                ? sql`regexp_replace(coalesce(${persons.phone}, ''), '[^0-9+]', '', 'g') = ${nPhone}`
-                : undefined,
-              and(
-                sql`lower(trim(${persons.firstName})) = ${np.firstName.toLowerCase()}`,
-                sql`lower(trim(${persons.lastName})) = ${np.lastName.toLowerCase()}`,
-              ),
-            ),
+            active,
+            sql`lower(trim(${persons.firstName})) = ${np.firstName.trim().toLowerCase()}`,
+            sql`lower(trim(${persons.lastName})) = ${np.lastName.trim().toLowerCase()}`,
           ),
         )
         .limit(3);
-      if (similar.length > 0) {
-        const names = similar.map((m) => `${m.firstName} ${m.lastName}`).join(', ');
+      if (nameMatches.length > 0 && !d.confirmDifferentPerson) {
+        const list = nameMatches
+          .map((m) => `${m.firstName} ${m.lastName} (${m.email ?? 'no email'})`)
+          .join(', ');
         throw new BusinessRuleError(
-          'PROSPECT_POSSIBLE_DUPLICATE',
-          `This person may already exist (${names}). Search for them and pick the existing record.`,
+          'PROSPECT_NAME_MATCH',
+          `Possible match: ${list}. If it is them, switch to “Existing person” and pick the record. If not, tick “This is a different person” and record again.`,
         );
       }
       const created = await insertPerson(tx, {
@@ -211,7 +254,16 @@ export async function createProspect(input: CreateProspectInput): Promise<Recrui
           email: created.email,
           source: created.source,
         },
-        context: { via: 'prospect_capture', advertisementId: ad.id },
+        context: {
+          via: 'prospect_capture',
+          advertisementId: ad.id,
+          ...(nameMatches.length > 0
+            ? {
+                nameMatchOverridden: true,
+                nameMatchPersonIds: nameMatches.map((m) => m.id),
+              }
+            : {}),
+        },
       });
       personId = created.id;
       personCreated = true;
@@ -258,6 +310,42 @@ export async function createProspect(input: CreateProspectInput): Promise<Recrui
   });
 }
 
+/**
+ * Cancel the prospect's open follow-up task(s). Used when the follow-up is
+ * replaced or cleared, and when the prospect is closed (converted or not
+ * suitable) so nobody is reminded to chase a closed prospect.
+ */
+async function cancelProspectFollowUps(
+  tx: DbExecutor,
+  prospect: { id: string; personId: string },
+  actorUserId: string,
+  via: 'prospect_follow_up_replaced' | 'prospect_closed',
+): Promise<number> {
+  const cancelled = await tx
+    .update(tasks)
+    .set({ status: 'CANCELLED', completedAt: new Date(), updatedAt: sql`NOW()` })
+    .where(
+      and(
+        eq(tasks.personId, prospect.personId),
+        inArray(tasks.status, ['OPEN', 'IN_PROGRESS']),
+        isNull(tasks.archivedAt),
+        like(tasks.description, `%${followUpMarker(prospect.id)}%`),
+      ),
+    )
+    .returning({ id: tasks.id });
+  for (const t of cancelled) {
+    await recordAudit(tx, {
+      actorUserId,
+      entityType: 'task',
+      entityId: t.id,
+      action: 'STATUS_CHANGED',
+      after: { status: 'CANCELLED' },
+      context: { via, prospectId: prospect.id },
+    });
+  }
+  return cancelled.length;
+}
+
 /* ─── Status, notes, follow-up ─────────────────────────────────────── */
 
 export async function updateProspectStatus(
@@ -301,6 +389,9 @@ export async function updateProspectStatus(
       after: { status: after.status },
       context: note ? { note } : undefined,
     });
+    if (after.status === 'NOT_SUITABLE') {
+      await cancelProspectFollowUps(tx, after, session.user.id, 'prospect_closed');
+    }
     return after;
   });
 }
@@ -370,29 +461,13 @@ export async function setProspectFollowUp(
         });
       }
     }
+    const cancelledCount = await cancelProspectFollowUps(
+      tx,
+      prospect,
+      session.user.id,
+      'prospect_follow_up_replaced',
+    );
     const marker = followUpMarker(prospect.id);
-    const cancelled = await tx
-      .update(tasks)
-      .set({ status: 'CANCELLED', completedAt: new Date(), updatedAt: sql`NOW()` })
-      .where(
-        and(
-          eq(tasks.personId, prospect.personId),
-          inArray(tasks.status, ['OPEN', 'IN_PROGRESS']),
-          isNull(tasks.archivedAt),
-          like(tasks.description, `%${marker}%`),
-        ),
-      )
-      .returning({ id: tasks.id });
-    for (const t of cancelled) {
-      await recordAudit(tx, {
-        actorUserId: session.user.id,
-        entityType: 'task',
-        entityId: t.id,
-        action: 'STATUS_CHANGED',
-        after: { status: 'CANCELLED' },
-        context: { via: 'prospect_follow_up_replaced', prospectId: prospect.id },
-      });
-    }
 
     let dueAt: Date | null = null;
     if (d.dueOn) {
@@ -426,7 +501,7 @@ export async function setProspectFollowUp(
         context: { via: 'prospect_follow_up', prospectId: prospect.id },
       });
     }
-    if (dueAt || cancelled.length > 0) {
+    if (dueAt || cancelledCount > 0) {
       await recordAudit(tx, {
         actorUserId: session.user.id,
         entityType: 'recruitment_prospect',
@@ -586,6 +661,7 @@ export async function convertProspectToCandidate(
         ...(note ? { note } : {}),
       },
     });
+    await cancelProspectFollowUps(tx, after, session.user.id, 'prospect_closed');
     return { prospect: after, candidateProfileId, created, jobId: row.campaignJobId };
   });
 

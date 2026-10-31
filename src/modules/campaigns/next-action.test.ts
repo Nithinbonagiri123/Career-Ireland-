@@ -33,7 +33,9 @@ describe('computeCampaignNextAction', () => {
     expect(computeCampaignNextAction({ ...base, status: 'DRAFT' })?.label).toBe('Ready to launch');
   });
   it('active with nothing running is flagged', () => {
-    expect(computeCampaignNextAction({ ...base, activeAdCount: 0 })?.label).toBe('Nothing running');
+    expect(computeCampaignNextAction({ ...base, activeAdCount: 0 })?.label).toBe(
+      'Nothing marked live',
+    );
   });
   it('screened prospects prompt conversion; otherwise nothing', () => {
     expect(computeCampaignNextAction({ ...base, readyToConvert: 2 })?.label).toBe('Convert');

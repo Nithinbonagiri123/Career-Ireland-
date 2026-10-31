@@ -18,6 +18,7 @@ import {
   attachRequisitionSkill,
   detachRequisitionQualification,
   detachRequisitionSkill,
+  fetchRequisitionEmployerLock,
   unarchiveRequisition,
   updateRequisitionStatus,
   upsertRequisition,
@@ -85,4 +86,9 @@ export async function unarchiveRequisitionAction(input: UnarchiveRequisitionInpu
     revalidatePath(`/requisitions/${input.requisitionId}`);
   }
   return r;
+}
+
+/** Edit dialog: is this job's employer locked by existing activity? */
+export async function fetchRequisitionEmployerLockAction(requisitionId: string) {
+  return toActionResult(() => fetchRequisitionEmployerLock(requisitionId));
 }

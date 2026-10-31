@@ -8,11 +8,17 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { Advertisement } from '@/lib/db/schema/campaigns';
 import { upsertAdvertisementAction } from '@/modules/campaigns/actions';
-import { AD_NEXT, AD_STATUS_LABEL, type AdStatus } from '@/modules/campaigns/labels';
+import {
+  AD_HONESTY_HINT,
+  AD_NEXT,
+  AD_STATUS_LABEL,
+  type AdStatus,
+} from '@/modules/campaigns/labels';
 
 /**
  * R4 — create / edit an advertisement. Only the statuses the server allows
- * from the current one are offered; "Running" needs an active campaign.
+ * from the current one are offered; "Marked live" needs an active campaign.
+ * The CRM does not post adverts — the user records one they posted.
  */
 export function AdDialog({
   trigger,
@@ -34,7 +40,18 @@ export function AdDialog({
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const current = (initial?.status ?? 'DRAFT') as AdStatus;
   const [status, setStatus] = useState<AdStatus>(current);
-  // Running an ad needs an active campaign (paused campaigns keep ads suspended).
+  // Each open starts from the record (edit) or blank (new).
+  const reset = () => {
+    setCountry(initial?.country ?? '');
+    setPlatform(initial?.platform ?? '');
+    setTarget(String(initial?.targetApplicants ?? 10));
+    setStartDate(initial?.startDate ?? '');
+    setExpiryDate(initial?.expiryDate ?? '');
+    setReminderOn(initial?.reminderOn ?? '');
+    setNotes(initial?.notes ?? '');
+    setStatus(current);
+  };
+  // Marking an ad live needs an active campaign (paused campaigns keep ads suspended).
   const options: AdStatus[] = initial
     ? [current, ...AD_NEXT[current].filter((s) => s !== 'ACTIVE' || campaignActive)]
     : campaignActive
@@ -45,6 +62,7 @@ export function AdDialog({
     <ActionDialog
       trigger={trigger}
       wide
+      onReset={reset}
       title={initial ? 'Edit advertisement' : 'New advertisement'}
       description={
         !campaignActive && !initial
@@ -100,7 +118,12 @@ export function AdDialog({
               onChange={(e) => setTarget(e.target.value)}
             />
           </FormField>
-          <FormField id="ad-status" label="Status" error={fieldError(errors, 'status')}>
+          <FormField
+            id="ad-status"
+            label="Status"
+            hint={AD_HONESTY_HINT}
+            error={fieldError(errors, 'status')}
+          >
             <Select
               id="ad-status"
               value={status}
@@ -155,6 +178,7 @@ export function AdDialog({
           <FormField
             id="ad-notes"
             label="Notes"
+            hint="Where you posted it, e.g. the link to the job-board listing."
             className="sm:col-span-2"
             error={fieldError(errors, 'notes')}
           >

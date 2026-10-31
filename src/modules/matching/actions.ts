@@ -38,9 +38,20 @@ export async function shortlistMatchAction(matchId: string, requisitionId?: stri
   return r;
 }
 
-export async function manuallyShortlistPersonAction(personId: string, requisitionId: string) {
-  const r = await toActionResult(() => manuallyShortlistPerson(personId, requisitionId));
-  if (r.ok) rev(requisitionId);
+/** P0 — returns the real outcome (added / reactivated / already_at_stage /
+ *  refused); `confirmAvailability` is the audited "add a placed or
+ *  unavailable candidate anyway" confirmation. */
+export async function manuallyShortlistPersonAction(
+  personId: string,
+  requisitionId: string,
+  opts?: { confirmAvailability?: boolean },
+) {
+  const r = await toActionResult(() =>
+    manuallyShortlistPerson(personId, requisitionId, {
+      confirmAvailability: opts?.confirmAvailability === true,
+    }),
+  );
+  if (r.ok && (r.data.outcome === 'added' || r.data.outcome === 'reactivated')) rev(requisitionId);
   return r;
 }
 

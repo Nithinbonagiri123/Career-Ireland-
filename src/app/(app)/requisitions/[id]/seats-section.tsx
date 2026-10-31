@@ -1,3 +1,4 @@
+import { format } from 'date-fns';
 import { AlertTriangle, Armchair, ArrowRight, FileText, History } from 'lucide-react';
 import Link from 'next/link';
 import { initialsOf } from '@/components/ds/entity-card';
@@ -5,7 +6,15 @@ import { DsEnumPill, DsStatusPill } from '@/components/ds/status-pill';
 import { DS_SOFT } from '@/components/ds/tones';
 import { SectionCard } from '@/components/ds/workspace';
 import { Timestamp } from '@/components/timestamp';
+import { Button } from '@/components/ui/button';
+import { formatCurrency } from '@/lib/currency';
 import { cn } from '@/lib/utils';
+import {
+  FINANCE_ISSUES_INVOICES,
+  isPlacementFeeRaisable,
+  raisePlacementFeeHref,
+  salaryPeriodSuffix,
+} from '@/modules/placements/fee';
 import type { PlacementListRow } from '@/modules/placements/service';
 import type { NonSeatRow, SeatModel, SeatRow } from '@/modules/requisitions/seats';
 
@@ -19,7 +28,15 @@ import type { NonSeatRow, SeatModel, SeatRow } from '@/modules/requisitions/seat
  *
  * Stage 6G — section cards, pastel pills, initials avatars.
  */
-export function SeatsSection({ model }: { model: SeatModel<PlacementListRow> }) {
+export function SeatsSection({
+  model,
+  canIssueInvoice = false,
+}: {
+  model: SeatModel<PlacementListRow>;
+  /** P0 — ISSUE finance authority (server rule); others see the fee
+   *  action disabled with "Finance issues invoices". */
+  canIssueInvoice?: boolean;
+}) {
   return (
     <div className="space-y-5">
       {model.overfilledBy > 0 && (
@@ -56,7 +73,7 @@ export function SeatsSection({ model }: { model: SeatModel<PlacementListRow> }) 
             data-testid="seat-rows"
           >
             {model.seats.map((row) => (
-              <SeatListItem key={seatKey(row)} row={row} />
+              <SeatListItem key={seatKey(row)} row={row} canIssueInvoice={canIssueInvoice} />
             ))}
           </ul>
         )}
@@ -74,7 +91,7 @@ export function SeatsSection({ model }: { model: SeatModel<PlacementListRow> }) 
             data-testid="non-seat-rows"
           >
             {model.notHoldingSeat.map((row) => (
-              <NonSeatListItem key={row.placement.id} row={row} />
+              <NonSeatListItem key={row.placement.id} row={row} canIssueInvoice={canIssueInvoice} />
             ))}
           </ul>
         </SectionCard>
@@ -90,7 +107,13 @@ function seatKey(row: SeatRow<PlacementListRow>): string {
 const ROW = 'flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-3 sm:px-4';
 const LEAD = 'w-[6.5rem] shrink-0';
 
-function SeatListItem({ row }: { row: SeatRow<PlacementListRow> }) {
+function SeatListItem({
+  row,
+  canIssueInvoice,
+}: {
+  row: SeatRow<PlacementListRow>;
+  canIssueInvoice: boolean;
+}) {
   if (row.kind === 'open') {
     return (
       <li className={cn(ROW, 'text-sm text-muted-foreground')} data-seat-kind="open">
@@ -117,12 +140,18 @@ function SeatListItem({ row }: { row: SeatRow<PlacementListRow> }) {
         )}
       </span>
       <PlacementSummary p={p} startPending={row.startPending} />
-      <FeeCell p={p} />
+      <FeeCell p={p} canIssueInvoice={canIssueInvoice} />
     </li>
   );
 }
 
-function NonSeatListItem({ row }: { row: NonSeatRow<PlacementListRow> }) {
+function NonSeatListItem({
+  row,
+  canIssueInvoice,
+}: {
+  row: NonSeatRow<PlacementListRow>;
+  canIssueInvoice: boolean;
+}) {
   const label =
     row.reason === 'proposed'
       ? 'Proposed'
@@ -135,7 +164,7 @@ function NonSeatListItem({ row }: { row: NonSeatRow<PlacementListRow> }) {
         <DsStatusPill tone="slate">{label}</DsStatusPill>
       </span>
       <PlacementSummary p={row.placement} startPending={false} />
-      <FeeCell p={row.placement} />
+      <FeeCell p={row.placement} canIssueInvoice={canIssueInvoice} />
     </li>
   );
 }
@@ -161,8 +190,18 @@ function PlacementSummary({ p, startPending }: { p: PlacementListRow; startPendi
         </Link>
         <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <DsEnumPill status={p.status} />
+          {p.salary && (
+            <span className="tabular-nums" data-testid="seat-salary">
+              {p.salaryCurrencyCode
+                ? formatCurrency(p.salary, p.salaryCurrencyCode, { maximumFractionDigits: 0 })
+                : p.salary}
+              {p.salaryPeriod ? ` ${salaryPeriodSuffix(p.salaryPeriod)}` : ''}
+            </span>
+          )}
           {p.startDate ? (
-            <span>Starts {p.startDate}</span>
+            <span data-testid="seat-start">
+              Starts {format(new Date(`${p.startDate}T00:00:00`), 'd MMM yyyy')}
+            </span>
           ) : startPending ? (
             <span data-testid="start-pending">
               <DsStatusPill tone="amber" className="normal-case tracking-normal">
@@ -179,9 +218,10 @@ function PlacementSummary({ p, startPending }: { p: PlacementListRow; startPendi
   );
 }
 
-function FeeCell({ p }: { p: PlacementListRow }) {
+function FeeCell({ p, canIssueInvoice }: { p: PlacementListRow; canIssueInvoice: boolean }) {
   const inv = p.latestInvoice;
-  if (inv) {
+  // A live invoice (anything but VOIDED) is the fee: link to it.
+  if (inv && (p.hasLiveInvoice || !isPlacementFeeRaisable(p))) {
     return (
       <Link
         href={`/employers/${p.employerId}/invoices/${inv.number}`}
@@ -194,16 +234,28 @@ function FeeCell({ p }: { p: PlacementListRow }) {
         <span className="flex items-center gap-1.5">
           <DsEnumPill status={inv.status} />
           <span className="tabular-nums text-xs text-muted-foreground">
-            {inv.totalAmount} {inv.currencyCode}
+            {formatCurrency(inv.totalAmount, inv.currencyCode)}
           </span>
         </span>
       </Link>
     );
   }
-  if (p.status === 'PROPOSED' || p.status === 'TERMINATED_EARLY') return null;
+  if (!isPlacementFeeRaisable(p)) return null;
+  if (!canIssueInvoice) {
+    return (
+      <span className="ml-auto flex shrink-0 flex-col items-end gap-0.5">
+        <Button size="sm" variant="outline" disabled aria-describedby={`fee-hint-${p.id}`}>
+          Raise fee
+        </Button>
+        <span id={`fee-hint-${p.id}`} className="text-[11px] text-muted-foreground">
+          {FINANCE_ISSUES_INVOICES}
+        </span>
+      </span>
+    );
+  }
   return (
     <Link
-      href={`/employers/${p.employerId}?raisePlacement=${p.id}&raiseRequisition=${p.jobRequisitionId}`}
+      href={raisePlacementFeeHref(p)}
       className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border/70 bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
     >
       Raise fee <ArrowRight className="size-3.5" aria-hidden />

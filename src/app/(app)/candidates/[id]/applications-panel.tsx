@@ -320,7 +320,10 @@ export function ApplicationsPanel({
                   {/* Placements exist only on OUR requisitions — the
                       Recruitment rule. External-board hires stay
                       ACCEPTED without a placement record. */}
-                  {r.status === 'ACCEPTED' && r.jobRequisitionId && (
+                  {/* P0 — on our own jobs, accepting means placing: the
+                      guarded placement path (seat guard + accepted offer
+                      or audited exception), never a bare status change. */}
+                  {(r.status === 'ACCEPTED' || r.status === 'OFFER') && r.jobRequisitionId && (
                     <RecordPlacementButton applicationId={r.id} />
                   )}
                   <StatusMenu row={r} />
@@ -348,7 +351,11 @@ const NEXT_STATUS: Record<string, Array<CandidateApplicationRow['status']>> = {
 function StatusMenu({ row }: { row: CandidateApplicationRow }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const nexts = NEXT_STATUS[row.status] ?? [];
+  // Internal applications are placed through "Record placement", not by
+  // moving the status to Accepted (the server refuses that without an offer).
+  const nexts = (NEXT_STATUS[row.status] ?? []).filter(
+    (s) => !(s === 'ACCEPTED' && row.jobRequisitionId),
+  );
   if (nexts.length === 0) return null;
   const advance = (status: CandidateApplicationRow['status']) =>
     startTransition(async () => {

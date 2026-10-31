@@ -71,9 +71,15 @@ export function PipelineWall({
   canMatch = true,
   canMoveApplications = true,
   canPlace = true,
+  lock = null,
 }: {
   requisition: RequisitionListRow;
   data: PipelineData;
+  /** P0 — why this job can't take pipeline work right now (draft, closed,
+   *  filled, archived), from the same rule the server applies. When set,
+   *  add / move / place buttons are replaced by this hint; rejecting or
+   *  declining stays available (close-out) unless the job is archived. */
+  lock?: { message: string; openJobHref?: string; allowCloseOut: boolean } | null;
   /** R5 — shortlist / dismiss on matched + reviewed cards needs recruitment.matching
    *  and an open job (the server re-checks both). */
   canMatch?: boolean;
@@ -200,6 +206,25 @@ export function PipelineWall({
         ))}
       </div>
 
+      {lock && (
+        <div
+          className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+          role="status"
+          data-testid="pipeline-lock"
+        >
+          <span>{lock.message}</span>
+          {lock.openJobHref && (
+            // Full navigation so the edit dialog's defaultOpen runs.
+            <a
+              href={lock.openJobHref}
+              className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white/70 px-3 py-1.5 text-xs font-semibold hover:bg-white dark:border-amber-800 dark:bg-amber-900/40"
+            >
+              Open job <ArrowRight className="size-3.5" aria-hidden />
+            </a>
+          )}
+        </div>
+      )}
+
       {/* ── Bands ─────────────────────────────────────────────── */}
       {STAGE_ORDER.map((stage) => (
         <PipelineBand
@@ -211,17 +236,19 @@ export function PipelineWall({
           onDismiss={dismiss}
           busyPersonId={busyPersonId}
           canAdvance={
-            stage === 'source' || stage === 'review'
-              ? canMatch
-              : stage === 'offer'
-                ? canPlace
-                : canMoveApplications
+            lock
+              ? false
+              : stage === 'source' || stage === 'review'
+                ? canMatch
+                : stage === 'offer'
+                  ? canPlace
+                  : canMoveApplications
           }
           canDismiss={
             stage === 'source' || stage === 'review'
-              ? canMatch
+              ? canMatch && (!lock || lock.allowCloseOut)
               : stage === 'offer'
-                ? canMoveApplications
+                ? canMoveApplications && (!lock || lock.allowCloseOut)
                 : false
           }
         />
@@ -234,8 +261,9 @@ export function PipelineWall({
         }}
         personName={exceptionFor?.personName ?? ''}
         successMessage={`${exceptionFor?.personName ?? 'Candidate'} placed`}
-        onSubmit={(exception) =>
-          markApplicationPlacedAction(exceptionFor?.entryId ?? '', exception)
+        collectTerms
+        onSubmit={(exception, terms) =>
+          markApplicationPlacedAction(exceptionFor?.entryId ?? '', exception, terms)
         }
         onPlaced={() => router.refresh()}
       />
