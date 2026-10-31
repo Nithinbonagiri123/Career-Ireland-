@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
 import { e2eAdminId } from './helpers/owner';
 
@@ -12,11 +14,13 @@ import { e2eAdminId } from './helpers/owner';
  *      picked; lands on the campaign, which shows the job's employer;
  *   3. reopening "New campaign" is blank;
  *   4. editing that job shows its employer read-only (it has a campaign).
- * Screenshots (1440 + 390) go to the P0 scratchpad.
+ * Screenshots (1440 + 390) go to playwright/stage-rec-p0-camp-screenshots
+ * (git-ignored, repo convention;
+ * the folder is created here so the spec runs on any machine, including CI).
  */
 
-const SHOTS =
-  '/private/tmp/claude-501/-Users-nikkibonagiri-Desktop-ireland-careers/ef882c87-e379-43b4-97b5-595de7f74c1b/scratchpad/p0/shots/camp';
+const SHOTS = path.resolve('playwright/stage-rec-p0-camp-screenshots');
+fs.mkdirSync(SHOTS, { recursive: true });
 
 async function dbModules() {
   const { config: loadEnv } = await import('dotenv');

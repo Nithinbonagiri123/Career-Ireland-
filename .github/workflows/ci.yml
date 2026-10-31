@@ -23,10 +23,18 @@ env:
   LOG_LEVEL: warn
   NODE_ENV: test
 
+# A newer push to the same PR supersedes the older run. Runs on main are
+# never cancelled: every main commit keeps its own complete Verify + E2E
+# result, which Vercel Deployment Checks read before promoting it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   verify:
     name: Verify
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     services:
       postgres:
@@ -137,16 +145,31 @@ jobs:
             exit 1
           fi
 
-  # End-to-end tests run in a parallel job so a `verify` failure fails the PR
-  # fast without waiting for playwright. The e2e stack needs Postgres (same
-  # as verify). The upload flow is exercised locally against docker-compose
-  # MinIO; in CI it's skipped via E2E_SKIP_UPLOAD because both quay.io and
-  # Docker Hub have started refusing anonymous pulls for the MinIO image.
-  # The rest of candidate-onboarding.spec.ts (form validation, redirect,
-  # invoice + receipt) still runs — only the setInputFiles branch is gated.
-  e2e:
-    name: E2E
+  # End-to-end tests, split across parallel shards.
+  #
+  # Isolation: every shard is its own job with its OWN Postgres service
+  # container, migrated and seeded from scratch, so shards never share
+  # database rows. Inside a shard the suite still runs one test at a time
+  # (playwright.config: workers 1, fullyParallel false), exactly as before.
+  # Playwright's --shard splits the 592 tests by file; every test runs in
+  # exactly one shard.
+  #
+  # Server: each shard runs `next dev` exactly as before, so the tests run
+  # unchanged. (Running E2E against a production build is a measured
+  # follow-up: it needs ~6 tests' dev-mode timing assumptions fixed first.)
+  #
+  # The upload flow is exercised locally against docker-compose MinIO; in CI
+  # it's skipped via E2E_SKIP_UPLOAD because both quay.io and Docker Hub have
+  # started refusing anonymous pulls for the MinIO image.
+  e2e-shard:
+    name: E2E shard ${{ matrix.shard }}/${{ strategy.job-total }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # Let every shard finish so one failure doesn't hide others.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
 
     services:
       postgres:
@@ -173,7 +196,8 @@ jobs:
       EMAIL_CRED_ENC_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       E2E_SKIP_UPLOAD: '1'
       # qa-supplement.spec.ts hr test resets state via Clock out →
-      # Clock in. Disables the once-per-day guard in modules/hr/service.
+      # Clock in. Disables the once-per-day guard in modules/hr/service
+      # (the rule itself is covered by src/modules/hr/daily-limit.test.ts).
       E2E_SKIP_HR_DAILY_LIMIT: '1'
 
     steps:
@@ -236,17 +260,35 @@ jobs:
         # rows to interact with.
         run: pnpm db:seed:e2e-minimal
 
-      - name: Run Playwright
-        # S3_BUCKET_DOCUMENTS must be set at boot so env.ts validation
-        # passes even though E2E_SKIP_UPLOAD gates every upload.
-        env:
-          S3_BUCKET_DOCUMENTS: ci-placeholder-bucket
-        run: pnpm test:e2e
+      - name: Run Playwright (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7
+
+  # The single required check. Vercel Deployment Checks (and any GitHub
+  # ruleset) require the exact name "E2E". It passes ONLY when every shard
+  # succeeded: a failed, cancelled, timed-out or skipped shard fails it.
+  # `if: always()` makes it run (and fail) instead of being skipped when a
+  # shard fails — a skipped required check could otherwise count as passing.
+  e2e:
+    name: E2E
+    needs: [e2e-shard]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every E2E shard to pass
+        env:
+          SHARDS_RESULT: ${{ needs.e2e-shard.result }}
+        run: |
+          echo "E2E shards result: $SHARDS_RESULT"
+          if [ "$SHARDS_RESULT" != "success" ]; then
+            echo "::error::One or more E2E shards did not succeed ($SHARDS_RESULT)."
+            exit 1
+          fi

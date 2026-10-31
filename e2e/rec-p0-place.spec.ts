@@ -30,6 +30,9 @@ async function dbModules() {
 
 async function expand(page: Page, rowsTestId: string, text: RegExp) {
   const row = page.getByTestId(rowsTestId).locator('li').filter({ hasText: text }).first();
+  // The row appears after the list refreshes; on a slow CI runner that can
+  // exceed the 8s action timeout (seen as a retry-pass flake in CI).
+  await expect(row).toBeVisible({ timeout: 20_000 });
   const isOpen = await row.locator('details').evaluate((d) => (d as HTMLDetailsElement).open);
   if (!isOpen) await row.locator('summary').click();
   return row;
