@@ -75,11 +75,21 @@ test('placing without an accepted offer needs confirmation + reason, and is audi
     await page.setViewportSize({ width: 1440, height: 1000 });
 
     // ── Pipeline: Ann is at Offer with no CRM offer.
-    await page.goto(`/requisitions/${req.id}`);
+    await page.goto(`/requisitions/${req.id}`, { waitUntil: 'networkidle' });
     const card = page.locator('article', { hasText: `Ann${stamp}` });
-    await card.getByRole('button', { name: /accept offer|mark placed/i }).click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText(/without an accepted offer/i)).toBeVisible({ timeout: 15_000 });
+    // A click before hydration is a no-op (CI's slower dev server showed the
+    // button, no request, no dialog). Retry only while the dialog is absent;
+    // each click that does reach the server is refused and places nothing,
+    // which the DB check below still proves.
+    await expect(async () => {
+      if (!(await dialog.isVisible())) {
+        await card.getByRole('button', { name: /accept offer|mark placed/i }).click();
+      }
+      await expect(dialog.getByText(/without an accepted offer/i)).toBeVisible({
+        timeout: 5_000,
+      });
+    }).toPass({ timeout: 30_000 });
     // Nothing was placed by the first click.
     const none = await m.db
       .select()
@@ -133,7 +143,13 @@ test('placing without an accepted offer needs confirmation + reason, and is audi
     await page.goto('/placements');
     const row = page.locator('tr', { hasText: `Ben${stamp}` }).first();
     await expect(row).toBeVisible({ timeout: 20_000 });
-    await row.getByRole('button', { name: 'Actions' }).click();
+    // Retry until hydrated: a click before hydration never opens the menu.
+    await expect(async () => {
+      await row.getByRole('button', { name: 'Actions' }).click();
+      await expect(page.getByRole('menuitem', { name: /^Confirm/ })).toBeVisible({
+        timeout: 2_000,
+      });
+    }).toPass({ timeout: 20_000 });
     await page.getByRole('menuitem', { name: /^Confirm/ }).click();
     await expect(dialog.getByText(/without an accepted offer/i)).toBeVisible({ timeout: 15_000 });
     await dialog.locator('#pe-reason').fill('Placed via partner agency, offer held by employer');

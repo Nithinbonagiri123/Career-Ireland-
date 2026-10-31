@@ -293,13 +293,22 @@ test('mobile: workspace renders long names + handles the quote composer dialog',
 
     // Switch to Billing + open the quote composer dialog. Mobile dialog
     // must be scrollable + readable; take a focused screenshot.
-    await page.getByRole('tab', { name: 'Billing' }).click();
+    // The tab switch is a soft navigation (router.replace(?tab=…)) whose
+    // server render replaces the tab content. Wait for it to finish before
+    // opening a dialog inside that content — a dialog opened mid-navigation
+    // is legitimately replaced when the new content lands (seen on CI's
+    // slower dev server). Retry the tab click until hydration has attached it.
+    await expect(async () => {
+      if (!/[?&]tab=services-billing\b/.test(page.url())) {
+        await page.getByRole('tab', { name: 'Billing' }).click();
+      }
+      await expect(page).toHaveURL(/[?&]tab=services-billing\b/, { timeout: 3_000 });
+    }).toPass({ timeout: 30_000 });
+    await page.waitForLoadState('networkidle');
     const dialog = page.getByRole('dialog');
-    // Re-click until hydration has attached the trigger (slow CI runners).
-    // On CI's dev server a late streamed re-render of the Billing tab can
-    // unmount a dialog that already opened, so the loop (a) reopens it if
-    // it vanished and (b) only settles once the composer's own content
-    // ("Add line") is rendered, not just the dialog shell.
+    // Open the composer; settle only once the page is idle AND the dialog is
+    // still open with its own content ("Add line"). A dialog that closes by
+    // itself on an idle, fully loaded page would still fail here.
     await expect(async () => {
       if (!(await dialog.isVisible())) {
         await page
@@ -309,6 +318,10 @@ test('mobile: workspace renders long names + handles the quote composer dialog',
       }
       await expect(dialog.getByRole('button', { name: /add line/i })).toBeVisible({
         timeout: 2_000,
+      });
+      await page.waitForLoadState('networkidle');
+      await expect(dialog.getByRole('button', { name: /add line/i })).toBeVisible({
+        timeout: 1_000,
       });
     }).toPass({ timeout: 30_000 });
     await page.screenshot({
